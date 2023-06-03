@@ -1,6 +1,7 @@
+import os
 import math
+import numpy as np
 
-from matplotlib import patches
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
@@ -15,61 +16,46 @@ class Plotter:
         self.y_min = float('inf')
         self.y_max = float('-inf')
         self.fname = ''
+        self.title = ''
+        self.dir_tags = None
         self.dtype = data_type if data_type is not None else opts['data_type']
         self.opts = opts
         self.equal_y_scales = equal_y_scales
         self.labels = {'psth': ('Time (s)', 'Firing Rate (Hz'), 'autocorr': ('Lags (s)',  'Autocorrelation'),
                        'spectrum': ('Frequencies (Hz)',  'One-Sided Spectrum')}
 
-    def plot_animals(self, group, neuron_type=None):
+    def plot_animals(self, group, neuron_type=None, ac_info=None, legend=True):
         num_animals = len(group.animals)
         nrows = math.ceil(num_animals / 3)
-        self.fig, self.axs = plt.subplots(nrows, 3, figsize=(15, nrows * 5))
+        self.fig, self.axs = plt.subplots(nrows, 4 if legend else 3, figsize=(15, nrows * 5))
         self.fig.subplots_adjust(top=0.9)
 
         for i in range(nrows * 3):  # iterate over all subplots
             row = i // 3  # index based on 3 columns
             col = i % 3  # index based on 3 columns
             if i < num_animals:
-                animal = group.animals[i]
-                subplotter = Subplotter(self.axs[row, col])
-                avg = animal.get_average(self.dtype, self.opts, neuron_type=neuron_type)
-                if np.all(np.isnan(avg)):
-                    self.axs[row, col].axis('off')  # hide this subplot
-                else:
-                    getattr(subplotter, f"plot_{self.dtype}")(avg, self.opts)
-                    self.prettify_subplot(row, col, title=f"{animal.name}")
+                self.make_subplot(group.animals[i], row, col, neuron_type=neuron_type, ac_info=ac_info)
             else:  # if there's no animal for this subplot
                 self.axs[row, col].axis('off')  # hide this subplot
 
         self.prettify_plot()
-        neuron_str = '' if neuron_type is None else f"{neuron_type}_"
-        self.fname = f"{group.name}_animals_{neuron_str}{self.dtype}.png"
-        self.save_and_close_fig(subdirs=[f"{self.dtype}_{'_'.join([str(t) for t in self.opts['trials']])}"])
+        self.set_dir_and_filename(group.identifier, neuron_type=neuron_type, ac_info=ac_info)
+        self.save_and_close_fig()
 
-    def plot_groups(self, groups, neuron_types):
-        self.fig, self.axs = plt.subplots(2, 2, figsize=(15, 15))  # Create a 2x2 subplot grid
-
+    def plot_groups(self, groups, neuron_types, ac_info=None, legend=True):
+        self.fig, self.axs = plt.subplots(2, 3 if legend else 2, figsize=(15, 15))  # Create a 2x2 subplot grid
         for row, group in enumerate(groups):
             for col, neuron_type in enumerate(neuron_types):
-                subplotter = Subplotter(self.axs[row, col])
-                avg = group.get_average(self.dtype, self.opts, neuron_type=neuron_type)
-                if np.all(np.isnan(avg)):
-                    self.axs[row, col].axis('off')  # hide this subplot
-                else:
-                    getattr(subplotter, f"plot_{self.dtype}")(avg, self.opts)
-                    self.prettify_subplot(row, col, title=f"{group.name} {neuron_type} {self.dtype}")
-
+                self.make_subplot(group, row, col, neuron_type=neuron_type, ac_info=ac_info)
+        self.set_dir_and_filename('groups', neuron_type=None, ac_info=ac_info)
         self.prettify_plot()
-        self.fname = f"Groups_{self.dtype}.png"
-        self.save_and_close_fig(subdirs=[f"{self.dtype}_{'_'.join([str(t) for t in self.opts['trials']])}"])
+        self.save_and_close_fig()
 
-    def plot_units(self, animal):
-        opts = self.opts
+    def plot_units(self, animal, ac_info=None):
         multi = 2 if self.dtype == 'psth' else 1
 
-        for i in range(0, len(animal.units['good']), opts['units_in_fig']):
-            n_subplots = min(opts['units_in_fig'], len(animal.units['good']) - i)
+        for i in range(0, len(animal.units['good']), self.opts['units_in_fig']):
+            n_subplots = min(self.opts['units_in_fig'], len(animal.units['good']) - i)
             self.fig = plt.figure(figsize=(10, 3 * multi * n_subplots))
             gs = GridSpec(n_subplots * multi, 1, figure=self.fig)
 
@@ -78,23 +64,35 @@ class Plotter:
                     axes = [self.fig.add_subplot(gs[2 * (j - i), 0]), self.fig.add_subplot(gs[2 * (j - i) + 1, 0])]
                 elif self.dtype in ['autocorr', 'spectrum']:
                     axes = [self.fig.add_subplot(gs[j - i, 0])]
-                self.plot_unit(animal.units['good'][j], axes)
+                self.plot_unit(animal.units['good'][j], axes, ac_info=ac_info)
 
             # Add a big subplot without frame and set the x and y labels for this subplot
             big_subplot = self.fig.add_subplot(111, frame_on=False)
             big_subplot.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-            big_subplot.set_xlabel(self.labels[opts['data_type']][0], labelpad=30)
-            big_subplot.set_ylabel(self.labels[opts['data_type']][1], labelpad=30)
+            big_subplot.set_xlabel(self.labels[self.opts['data_type']][0], labelpad=30)
+            big_subplot.set_ylabel(self.labels[self.opts['data_type']][1], labelpad=30)
 
             plt.subplots_adjust(hspace=0.5)  # Add space between subplots
-            self.fname = f"{animal.name}_unit_{i + 1}_to_{min(i + opts['units_in_fig'], len(animal.units['good']))}.png"
-            self.save_and_close_fig(subdirs=[f"{self.dtype}_{'_'.join([str(t) for t in opts['trials']])}"])
+            marker2 = min(i + self.opts['units_in_fig'], len(animal.units['good']))
+            self.fname = f"{animal.identifier}_unit_{i + 1}_to_{marker2}.png"
+            self.set_dir_and_filename(f"{animal.identifier}_unit_{i + 1}_to_{marker2}", ac_info=ac_info)
+            self.save_and_close_fig(subdirs=[f"{self.dtype}_{'_'.join([str(t) for t in self.opts['trials']])}"])
 
     def plot_unit(self, unit, axes):
         if self.opts['data_type'] == 'psth':
             Subplotter(axes[0]).plot_raster(unit.get_trials_spikes(self.opts), self.opts)
         subplotter = Subplotter(axes[-1])
         getattr(subplotter, f"plot_{self.dtype}")(getattr(unit, f"get_{self.dtype}")(self.opts), self.opts)
+
+    def make_subplot(self, data_source, row, col, neuron_type=None, ac_info=None):
+        subplotter = Subplotter(self.axs[row, col])
+        data = data_source.get_data(self.opts, self.dtype, neuron_type=neuron_type, ac_info=ac_info)
+        if np.all(np.isnan(data)):
+            self.axs[row, col].axis('off')  # hide this subplot
+        else:
+            getattr(subplotter, f"plot_{self.dtype}")(data, self.opts)
+            self.prettify_subplot(row, col, title=f"{data_source.identifier}")
+        return data
 
     def set_labels(self, row, col):
         [getattr(self.axs[row, col], f"set_{dim}label")(self.labels[self.dtype][i]) for i, dim in enumerate(['x', 'y'])]
@@ -117,11 +115,24 @@ class Plotter:
         # plt.subplots_adjust(hspace=0.5)  # Add space between subplots
         # self.fig.tight_layout()
 
-    def save_and_close_fig(self, subdirs=None):
-        self.fig.suptitle(smart_title_case(self.fname[:-4]), weight='bold', y=1)
+    def set_dir_and_filename(self, basename, neuron_type=None, ac_info=None):
+        tags = [self.dtype]
+        self.dir_tags = tags + [f"trials_{'_'.join([str(t) for t in self.opts['trials']])}"]
+        tags.insert(0, basename)
+        if neuron_type:
+            tags += [neuron_type]
+        self.title = smart_title_case('_'.join(tags))
+        for (old, new) in [('pd', 'Pandas'), ('np', 'NumPy')]:
+            self.title = self.title.relace(old, new)
+        self.fig.suptitle(self.title, weight='bold', y=.95)
+        if ac_info:
+            tags += [val for val in ac_info.values]
+        self.fname = f"{'_'.join(tags)}.png"
+
+    def save_and_close_fig(self):
         dirs = [self.opts['graph_dir']]
-        if subdirs is not None:
-            dirs += subdirs
+        if self.dir_tags is not None:
+            dirs += self.dir_tags
         path = os.path.join(*dirs)
         os.makedirs(path, exist_ok=True)
         self.fig.savefig(os.path.join(path, self.fname))
@@ -166,7 +177,7 @@ class Subplotter:
 
     def plot_autocorr(self, data, opts):
         self.plot_bar(data, width=opts['bin_size']*.95, x_min=opts['bin_size'],
-                      x_max=opts['lags']*opts['bin_size'], num=opts['lags'], x_tick_min=0,
+                      x_max=opts['max_lag']*opts['bin_size'], num=opts['max_lag'], x_tick_min=0,
                       x_step=opts['tick_step'], y_min=0, y_max=max(data) + .05)
 
     # TODO: fix "up to Hz" code

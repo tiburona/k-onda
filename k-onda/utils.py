@@ -1,5 +1,6 @@
 import functools
 import re
+import numpy as np
 
 
 def smart_title_case(s):
@@ -13,8 +14,6 @@ def smart_title_case(s):
                   lambda mo: mo.group(0)[0].upper() + mo.group(0)[1:].lower() if not mo.group(0).isupper() else mo.group(0),
                   title)
 
-
-import numpy as np
 
 def cache_method(method):
     cache_name = "_cache_" + method.__name__

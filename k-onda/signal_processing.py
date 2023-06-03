@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def compute_one_sided_spectrum(fft_values):
     """
     Computes the one-sided spectrum of a signal given its FFT.

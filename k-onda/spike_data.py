@@ -1,7 +1,6 @@
 from bisect import bisect_left as bs_left, bisect_right as bs_right
 from collections import defaultdict as dd
 
-import numpy as np
 import pandas as pd
 
 from plotters import *
@@ -9,12 +8,24 @@ from utils import cache_method
 from signal_processing import compute_one_sided_spectrum
 
 
-class FamilyTree:
+class FamilyTreeMixin:
+
+    def get_data(self, opts, data_type, neuron_type=None, ac_info=None):
+        if data_type == 'autocorr':
+            ac_result = self.get_all_autocorrelations(opts, method=ac_info['method'], neuron_type=neuron_type)
+            return ac_result[ac_info['tag']]
+        elif data_type == 'psth':
+            return self.get_average(opts, 'get_psth', neuron_type=neuron_type)
+        else:
+            pass
 
     @cache_method
     def get_average(self, opts, base_method, neuron_type=None):
         if isinstance(self, Unit):
-            child_vals = getattr(self, base_method)(opts) if neuron_type is None or self.neuron_type == neuron_type else np.array([])
+            if neuron_type is None or self.neuron_type == neuron_type:
+                child_vals = getattr(self, base_method)(opts)
+            else:
+                child_vals = np.array([])
         else:
             child_vals = []
             for child in self.children:
@@ -23,11 +34,9 @@ class FamilyTree:
                     child_vals.append(average)
         return np.nanmean(child_vals, axis=0) if len(child_vals) else np.array([])
 
-    def plot_children(self, opts):
-        pass
 
+class AutocorrelationNode:
 
-class AutocorrelationCalculator:
     def __init__(self):
         pass
 
@@ -46,27 +55,29 @@ class AutocorrelationCalculator:
             return np.array([])
         return getattr(self, f"_autocorr_{method}")(rates, opts['max_lag'])
 
-    def calculate_all_autocorrelations(self, opts, method=None, neuron_type=None):
-        result = {}
-        if isinstance(self, Unit):
-            result['self_over_children'] = np.mean([self._calculate_autocorrelation(rates, opts, method)
-                                                    for rates in self.get_trials_rates(opts)], axis=0)
-        else:
-            child_autocorr = {child.name: child.calculate_all_autocorrelations(opts, method, neuron_type) for child in
-                              self.children}
-            for key, value in child_autocorr.items():
-                result[key + '_over_children'] = value['self_over_children']
-                result[key + '_over_rates'] = value['self_over_rates']
-            child_vals = [self._calculate_autocorrelation(
-                child.get_average(opts, base_method='get_trials_rates', neuron_type=neuron_type), opts, method)
-                for child in self.children]
-            result['self_over_children'] = np.mean([arr for arr in child_vals if arr.size > 0], axis=0)
-        result['self_over_rates'] = self._calculate_autocorrelation(self.get_average(
-            opts, base_method='get_trials_rates', neuron_type=neuron_type), opts, method)
-        return result
+    @staticmethod
+    def _avg_autocorrs(autocorrs):
+        return np.mean([autocorr for autocorr in autocorrs if autocorr.size > 0], axis=0)
+
+    def get_all_autocorrelations(self, opts, method, neuron_type=None):
+        ac_results = {}
+        # Calculate the autocorrelation over rates for this node
+        rates = self.get_average(opts, 'get_trials_rates', neuron_type=neuron_type)
+        ac_results[f"{self.name}_by_rates"] = self._calculate_autocorrelation(rates, opts, method)
+
+        # Calculate the autocorrelation over children for this node
+        # Remember that the type of autocorrelation computed over children depends on the type of the children,
+        # so we need to ask each child to calculate its autocorrelations first.
+        children_autocorrs = [child.get_all_autocorrelations(opts, method) for child in self.children]
+        for key in children_autocorrs[0]:  # Assuming all children have the same autocorrelation keys
+            ac_results[f"{self.name}_by_{key}"] = self._avg_autocorrs(
+                [child_autocorrs[key] for child_autocorrs in children_autocorrs])
+        return ac_results
 
 
-class Experiment(FamilyTree, AutocorrelationCalculator):
+class Experiment(FamilyTreeMixin, AutocorrelationNode):
+    name = 'experiment'
+
     def __init__(self, conditions=None):
         if conditions is not None:
             self.conditions, self.groups = conditions.keys(), conditions.values()
@@ -74,12 +85,14 @@ class Experiment(FamilyTree, AutocorrelationCalculator):
         self.children_name = 'groups'
 
     def plot_groups(self, opts, data_type=None):
-        Plotter(opts, data_type=data_type).plot_groups(self.groups, ['PN', 'IN'])
+        Plotter(self, opts, data_type=data_type).plot_groups()
 
 
-class Group(FamilyTree, AutocorrelationCalculator):
+class Group(FamilyTreeMixin, AutocorrelationNode):
+    name = 'group'
+
     def __init__(self, name, animals=None):
-        self.name = name
+        self.identifier = name
         self.animals = animals if animals else []
         self.children_name = 'animals'
         self.children = self.animals
@@ -88,9 +101,11 @@ class Group(FamilyTree, AutocorrelationCalculator):
         [Plotter(opts, data_type=data_type).plot_animals(self, neuron_type=neuron_type) for neuron_type in ['PN', 'IN']]
 
 
-class Animal(FamilyTree, AutocorrelationCalculator):
+class Animal(FamilyTreeMixin, AutocorrelationNode):
+    name = 'animal'
+
     def __init__(self, name, condition, tone_period_onsets=None, tone_onsets_expanded=None, units=None):
-        self.name = name
+        self.identifier = name
         self.condition = condition
         self.units = units if units is not None else dd(list)
         self.children = self.units['good']
@@ -102,22 +117,24 @@ class Animal(FamilyTree, AutocorrelationCalculator):
     def get_spectrum(self, autocorr_key, opts):
         autocorr = self.calculate_all_autocorrelations[autocorr_key]
         fft = np.fft.fft(autocorr)
-        return SignalProcessing.compute_one_sided_spectrum(fft, opts['lags'])
+        return compute_one_sided_spectrum(fft, opts['lags'])
 
     def plot_units(self, opts):
         Plotter(opts).plot_units(self)
 
 
-class Unit(FamilyTree, AutocorrelationCalculator):
+class Unit(FamilyTreeMixin, AutocorrelationNode):
+    name = 'unit'
+
     def __init__(self, animal, category, spike_times, neuron_type=None):
         self.animal = animal
         self.category = category
         self.spike_times = spike_times
         self.animal.units[category].append(self)
         self.index = self.animal.units[category].index(self)
-        self.name = str(self.index + 1)
+        self.identifier = str(self.index + 1)
         self.neuron_type = neuron_type
-        self.children = None
+        self.children = []
 
     @cache_method
     def find_spikes(self, start, stop):
@@ -162,6 +179,17 @@ class Unit(FamilyTree, AutocorrelationCalculator):
         trials_rates = self.get_trials_rates(opts)
         rate_set = [trials_rates[i] - pretone_means[trial_index // 30] for i, trial_index in enumerate(trial_indices)]
         return np.mean(np.array(rate_set), axis=0).flatten()
+
+    def get_all_autocorrelations(self, opts, method, neuron_type=None):
+        if neuron_type is not None and self.neuron_type != neuron_type:
+            return {f'{self.name}_by_rates': np.array([]), f'{self.name}_over_trials': np.array([])}
+        else:
+            results = {}
+            rates = self.get_average(opts, 'get_trials_rates', neuron_type=neuron_type)
+            results[f'{self.name}_by_rates'] = self._calculate_autocorrelation(rates, opts, method)
+            results[f'{self.name}_by_trials'] = np.nanmean([self._calculate_autocorrelation(rates, opts, method)
+                                                             for rates in self.get_trials_rates(opts)], axis=0)
+        return results
 
     @cache_method
     def get_fft(self, opts):
