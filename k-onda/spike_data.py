@@ -129,9 +129,10 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
             demeaned_rates = rates - (np.mean(rates))
             results[f'{self.name}_by_rates'] = self._calculate_autocorrelation(demeaned_rates, opts, method,
                                                                                demean=demean)
+            demeaned_rates = [rates - np.mean(rates) for rates in self.get_trials_rates(opts)]
             results[f'{self.name}_by_trials'] = np.nanmean([
                 self._calculate_autocorrelation(rates, opts, method, demean=demean)
-                for rates in self.get_trials_rates(opts)], axis=0)
+                for rates in demeaned_rates], axis=0)
         return results
 
 

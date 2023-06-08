@@ -6,7 +6,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
-from signal_processing import get_positive_frequencies
+from signal_processing import get_positive_frequencies, get_spectrum_fenceposts
 from utils import smart_title_case
 
 
@@ -28,14 +28,15 @@ class Plotter:
     def plot_animals(self, group, neuron_type=None, ac_info=None, footer=True):
         num_animals = len(group.animals)
         nrows = math.ceil(num_animals / 3)
-        self.fig, self.axs = plt.subplots(3, 3, figsize=(15, nrows * 5))
+        self.fig, self.axs = plt.subplots(nrows, 3, figsize=(15, nrows * 5))
         self.fig.subplots_adjust(top=0.9)
 
         for i in range(nrows * 3):  # iterate over all subplots
             row = i // 3  # index based on 3 columns
             col = i % 3  # index based on 3 columns
             if i < num_animals:
-                self.make_subplot(group.animals[i], row, col, title=f"{self.identifier} {neuron_type}",
+                animal = group.animals[i]
+                self.make_subplot(animal, row, col, title=f"{animal.identifier} {neuron_type}",
                                   neuron_type=neuron_type, ac_info=ac_info)
             else:  # if there's no animal for this subplot
                 self.axs[row, col].axis('off')  # hide this subplot
@@ -82,13 +83,16 @@ class Plotter:
             marker2 = min(i + self.opts['units_in_fig'], len(animal.units['good']))
             self.fname = f"{animal.identifier}_unit_{i + 1}_to_{marker2}.png"
             self.set_dir_and_filename(f"{animal.identifier}_unit_{i + 1}_to_{marker2}", ac_info=ac_info)
-            self.save_and_close_fig(subdirs=[f"{self.dtype}_{'_'.join([str(t) for t in self.opts['trials']])}"])
+            self.save_and_close_fig()
 
-    def plot_unit(self, unit, axes):
-        if self.opts['data_type'] == 'psth':
+    def plot_unit(self, unit, axes, ac_info=None):
+        if self.dtype == 'psth':
             Subplotter(axes[0]).plot_raster(unit.get_trials_spikes(self.opts), self.opts)
         subplotter = Subplotter(axes[-1])
-        getattr(subplotter, f"plot_{self.dtype}")(getattr(unit, f"get_{self.dtype}")(self.opts), self.opts)
+        if self.dtype == 'autocorr':
+            subplotter.plot_autocorr(unit.get_autocorr(self.opts,  ac_info=ac_info), self.opts)
+        if self.dtype == 'spectrum':
+            subplotter.plot_spectrum(unit.get_spectrum(self.opts, ac_info=ac_info), self.opts)
 
     def make_subplot(self, data_source, row, col, title='', neuron_type=None, ac_info=None):
         subplotter = Subplotter(self.axs[row, col])
@@ -118,7 +122,7 @@ class Plotter:
 
     def prettify_plot(self):
         self.set_y_scales()
-        # plt.subplots_adjust(hspace=0.5)  # Add space between subplots
+        plt.subplots_adjust(hspace=0.7)  # Add space between subplots
         # self.fig.tight_layout()
 
     def make_footer(self, ac_info):
@@ -186,8 +190,8 @@ class Subplotter:
         self.ax.add_patch(plt.Rectangle((0, self.ax.get_ylim()[0]), 0.05, self.ax.get_ylim()[1] - self.ax.get_ylim()[0],
                                         facecolor='gray', alpha=0.3))
 
-    def plot_bar(self, data, width, x_min, x_max, num, x_tick_min, x_step, y_min=None, y_max=None, x_label='', y_label='',
-                 color='k', title=''):
+    def plot_bar(self, data, width, x_min, x_max, num, x_tick_min, x_step, y_min=None, y_max=None, x_label='',
+                 y_label='', color='k', title=''):
         x = np.linspace(x_min, x_max, num=num)
         self.ax.bar(x, data, width=width, color=color)
         self.set_limits_and_ticks(x_min, x_max, x_tick_min, x_step, y_min, y_max)
@@ -203,19 +207,7 @@ class Subplotter:
                       x_max=opts['max_lag']*opts['bin_size'], num=opts['max_lag'], x_tick_min=0,
                       x_step=opts['tick_step'], y_min=0, y_max=max(data) + .01)
 
-    # TODO: fix "up to Hz" code
     def plot_spectrum(self, data, opts):
-        # last_index: resolution of the positive spectrum = lags/2 (the number of points in the spectrum)/
-        # sampling rate/2 (the range of frequencies in the spectrum).  If up_to_Hz is greater than the highest frequency
-        # available, this won't do anything.
-        last_index = int(opts['up_to_hz'] * opts['max_lag'] * opts['bin_size'] * 2 + 1)
-        x = get_positive_frequencies(opts['max_lag'], opts['bin_size'])[:last_index]
-        y = data[:last_index]
-        self.ax.plot(x, y)
+        first, last = get_spectrum_fenceposts(opts)
+        self.ax.plot(get_positive_frequencies(opts['max_lag'], opts['bin_size'])[first:last], data)
 
-        # if bin size is .01, there are 50 hz avail
-        # max lag is 100, there are 100 points available.
-        # resolution is thus 2 pts per hz
-
-        # the amount of points we want is hz we want * resolution
-        # up to hz * (max lag * bin size * 2)

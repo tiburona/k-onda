@@ -1,5 +1,5 @@
 import numpy as np
-from signal_processing import compute_one_sided_spectrum
+from signal_processing import compute_one_sided_spectrum, get_spectrum_fenceposts
 from utils import cache_method
 
 
@@ -22,9 +22,15 @@ class FamilyTreeMixin:
         return result
 
     def get_spectrum(self, opts, neuron_type=None, ac_info=None):
-        demean = ac_info['mean_correction'] == 'demean'
-        fft = np.fft.fft(self.get_autocorr(opts, neuron_type=neuron_type, ac_info=ac_info))
-        return compute_one_sided_spectrum(fft)
+        result = self.get_autocorr(opts, neuron_type=neuron_type, ac_info=ac_info)
+        if not np.all(np.isnan(result)):
+            demean = ac_info['mean_correction'] == 'demean'
+            fft = np.fft.fft(self.get_autocorr(opts, neuron_type=neuron_type, ac_info=ac_info))
+            oss = compute_one_sided_spectrum(fft)
+            first, last = get_spectrum_fenceposts(opts)
+            return oss[first:last]
+        else:
+            return np.array([])
 
     @cache_method
     def get_average(self, opts, base_method, neuron_type=None):

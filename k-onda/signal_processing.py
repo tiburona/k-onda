@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 
 def compute_one_sided_spectrum(fft_values):
@@ -23,3 +24,11 @@ def get_positive_frequencies(N, T):
     frequencies = np.fft.fftfreq(N, T)  # Compute frequencies associated with FFT components
     positive_frequencies = frequencies[:N // 2]  # Get only positive frequencies
     return positive_frequencies
+
+
+def get_spectrum_fenceposts(opts):
+    first, last = opts['freq_range']
+    multi = opts['max_lag'] * opts['bin_size']
+    first_index = round(first * multi)
+    last_index = math.ceil(last * multi)
+    return first_index, last_index
