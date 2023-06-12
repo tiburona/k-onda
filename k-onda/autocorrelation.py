@@ -74,31 +74,27 @@ class AutocorrelationNode:
         mid = result.size // 2
         return result[mid + 1:mid + max_lag + 1] / result[mid]
 
-    def _calculate_autocorrelation(self, rates, opts, method, demean=False):
+    def _calculate_autocorrelation(self, rates, opts):
         if not len(rates):
             return np.array([])
-        result = getattr(self, f"_autocorr_{method}")(rates, opts['max_lag'])
-        if demean:
-            result = result - np.mean(result)
-        return result
+        return getattr(self, f"_autocorr_{opts['ac_program']}")(rates, opts['max_lag'])
 
     @staticmethod
     def _avg_autocorrs(autocorrs):
         return np.mean([autocorr for autocorr in autocorrs if not np.all(np.isnan(autocorr))], axis=0)
 
-    def get_all_autocorrelations(self, opts, method, neuron_type=None, demean=False):
+    @cache_method
+    def get_all_autocorrelations(self, opts, neuron_type=None):
         ac_results = {}
         # Calculate the autocorrelation over rates for this node
         rates = self.get_average(opts, 'get_trials_rates', neuron_type=neuron_type)
         demeaned_rates = rates - np.mean(rates)
 
-        ac_results[f"{self.name}_by_rates"] = self._calculate_autocorrelation(demeaned_rates, opts, method,
-                                                                              demean=demean)
+        ac_results[f"{self.name}_by_rates"] = self._calculate_autocorrelation(demeaned_rates, opts)
 
-        # Calculate the autocorrelation over children for this node
-        # Remember that the type of autocorrelation computed over children depends on the type of the children,
-        # so we need to ask each child to calculate its autocorrelations first.
-        children_autocorrs = [child.get_all_autocorrelations(opts, method, neuron_type=neuron_type, demean=demean)
+        # Calculate the autocorrelation by children for this node
+        # We need to ask each child to calculate its autocorrelations first.
+        children_autocorrs = [child.get_all_autocorrelations(opts, neuron_type=neuron_type)
                               for child in self.children]
         for key in children_autocorrs[0]:  # Assuming all children have the same autocorrelation keys
             ac_results[f"{self.name}_by_{key}"] = self._avg_autocorrs(

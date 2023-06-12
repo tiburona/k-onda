@@ -1,5 +1,6 @@
 from bisect import bisect_left as bs_left, bisect_right as bs_right
 from collections import defaultdict as dd
+from copy import deepcopy
 
 from family_tree import FamilyTreeMixin
 from plotters import *
@@ -48,6 +49,8 @@ class Animal(FamilyTreeMixin, AutocorrelationNode):
         self.children = self.units['good']
         self.children_name = 'units'
         self.parent = None
+        for nt in ['PN', 'IN']:
+            setattr(self, nt, [unit for unit in self.units['good'] if unit.neuron_type == nt])
         self.tone_onsets_expanded = tone_onsets_expanded if tone_onsets_expanded is not None else []
         self.tone_period_onsets = tone_period_onsets if tone_period_onsets is not None else []
 
@@ -63,7 +66,6 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
         self.category = category
         self.spike_times = spike_times
         self.animal.units[category].append(self)
-        # self.index = self.animal.units[category].index(self)
         self.parent = self.animal
         self.identifier = str(self.animal.units[category].index(self) + 1)
         self.neuron_type = neuron_type
@@ -107,11 +109,14 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
 
     @cache_method
     def get_psth(self, opts):
+        return np.mean(np.array(self.get_pretone_corrected_trials(opts)), axis=0).flatten()
+
+    @cache_method
+    def get_pretone_corrected_trials(self, opts):
         pretone_means = self.get_pretone_means(opts)
         trial_indices = list(range(150))[slice(*opts['trials'])]  # select only the trials indicated in opts
         trials_rates = self.get_trials_rates(opts)
-        rate_set = [trials_rates[i] - pretone_means[trial_index // 30] for i, trial_index in enumerate(trial_indices)]
-        return np.mean(np.array(rate_set), axis=0).flatten()
+        return [trials_rates[i] - pretone_means[trial_index // 30] for i, trial_index in enumerate(trial_indices)]
 
     def get_average(self, opts, base_method, neuron_type=None):
         if neuron_type is None or self.neuron_type == neuron_type:
@@ -120,19 +125,28 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
             child_vals = np.array([])
         return np.nanmean(child_vals, axis=0) if len(child_vals) else np.array([])
 
-    def get_all_autocorrelations(self, opts, method, neuron_type=None, demean=False):
+    def get_all_autocorrelations(self, opts, neuron_type=None):
         if neuron_type is not None and self.neuron_type != neuron_type:
             return {f'{self.name}_by_rates': float('nan'), f'{self.name}_by_trials': float('nan')}
         else:
             results = {}
             rates = self.get_average(opts, 'get_trials_rates', neuron_type=neuron_type)
             demeaned_rates = rates - (np.mean(rates))
-            results[f'{self.name}_by_rates'] = self._calculate_autocorrelation(demeaned_rates, opts, method,
-                                                                               demean=demean)
+            results[f'{self.name}_by_rates'] = self._calculate_autocorrelation(demeaned_rates, opts)
             demeaned_rates = [rates - np.mean(rates) for rates in self.get_trials_rates(opts)]
-            results[f'{self.name}_by_trials'] = np.nanmean([
-                self._calculate_autocorrelation(rates, opts, method, demean=demean)
-                for rates in demeaned_rates], axis=0)
+            results[f'{self.name}_by_trials'] = np.nanmean([self._calculate_autocorrelation(rates, opts)
+                                                            for rates in demeaned_rates], axis=0)
         return results
 
-
+    @cache_method
+    def get_sem(self, opts, neuron_type=None):
+        if opts['data_type'] == 'psth':
+            trial_vals = self.get_pretone_corrected_trials(opts)
+        elif opts['data_type'] in ['autocorr', 'spectrum']:
+            unit_opts = deepcopy(opts)
+            unit_opts['ac_key'] = 'unit_by_trials'
+            if opts['data_type'] == 'autocorr':
+                trial_vals = self.get_all_autocorrelations(unit_opts, neuron_type=neuron_type)
+            elif opts['data_type'] == 'spectrum':
+                trial_vals = self.get_spectrum(unit_opts, neuron_type=neuron_type)
+        return self.sem(trial_vals)

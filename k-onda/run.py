@@ -12,28 +12,27 @@ spectrum_opts = {**autocorr_opts, **{'data_type': 'spectrum', 'bin_size': 0.01, 
 
 
 def main():
-    all_group_tags = ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates',
+    all_group_keys = ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates',
                       'group_by_animal_by_rates', 'group_by_rates']
-    all_animal_tags = ['animal_by_unit_by_trials', 'animal_by_unit_by_rates', 'animal_by_rates']
-    all_unit_tags = ['unit_by_trials', 'unit_by_rates']
-    all_methods = ['np', 'ml', 'pd']
-    opts_list = [spectrum_opts]
+    all_animal_keys = ['animal_by_unit_by_trials', 'animal_by_unit_by_rates', 'animal_by_rates']
+    all_unit_keys = ['unit_by_trials', 'unit_by_rates']
+    all_methods = ['np']
+    opts_list = [autocorr_opts, spectrum_opts]
     neuron_types = ['PN', 'IN']
-    for meth in all_methods:
-        for opts in opts_list:
-            # for group in experiment.groups:
-            #     for neuron_type in neuron_types:
-            #         for tag in all_animal_tags:
-            #             Plotter(opts).plot_animals(
-            #                 group, neuron_type=neuron_type,
-            #                 ac_info={'method': meth, 'mean_correction': 'none', 'tag': tag})
-            #     for animal in group.animals:
-            #         for tag in all_unit_tags:
-            #             Plotter(opts).plot_units(animal,
-            #                                      ac_info={'method': meth, 'mean_correction': 'none', 'tag': tag})
-            for tag in all_group_tags:
-                Plotter(opts).plot_groups(
-                    experiment.groups, neuron_types, ac_info={'method': meth, 'mean_correction': 'none', 'tag': tag})
+    for opts in opts_list:
+        for meth in all_methods:
+            for group in experiment.groups:
+                for neuron_type in neuron_types:
+                    for key in all_animal_keys:
+                        opts_with_ac = {**opts, **{'ac_program': meth, 'ac_key': key}}
+                        Plotter(opts_with_ac).plot_animals(group, neuron_type=neuron_type, sem=True)
+                for animal in group.animals:
+                    for key in all_unit_keys:
+                        opts_with_ac = {**opts, **{'ac_program': meth, 'ac_key': key}}
+                        Plotter(opts_with_ac).plot_units(animal, sem=True)
+            for key in all_group_keys:
+                opts_with_ac = {**opts, **{'ac_program': meth, 'ac_key': key}}
+                Plotter(opts_with_ac).plot_groups(experiment.groups, neuron_types, sem=True)
 
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
