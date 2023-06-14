@@ -108,7 +108,9 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
         return np.mean(np.array(rate_set), axis=1)
 
     @cache_method
-    def get_psth(self, opts):
+    def get_psth(self, opts, neuron_type=None):
+        if neuron_type is not None and self.neuron_type != neuron_type:
+            return np.array([])
         return np.mean(np.array(self.get_pretone_corrected_trials(opts)), axis=0).flatten()
 
     @cache_method
@@ -143,10 +145,11 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
         if opts['data_type'] == 'psth':
             trial_vals = self.get_pretone_corrected_trials(opts)
         elif opts['data_type'] in ['autocorr', 'spectrum']:
-            unit_opts = deepcopy(opts)
-            unit_opts['ac_key'] = 'unit_by_trials'
             if opts['data_type'] == 'autocorr':
-                trial_vals = self.get_all_autocorrelations(unit_opts, neuron_type=neuron_type)
+                trial_vals = [self._calculate_autocorrelation(trial, opts) for trial in self.get_trials_rates(opts)]
             elif opts['data_type'] == 'spectrum':
-                trial_vals = self.get_spectrum(unit_opts, neuron_type=neuron_type)
+                trial_vals = [self.spectrum(self._calculate_autocorrelation(trial, opts), opts)
+                              for trial in self.get_trials_rates(opts)]
         return self.sem(trial_vals)
+
+

@@ -15,9 +15,8 @@ def main():
     all_group_keys = ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates',
                       'group_by_animal_by_rates', 'group_by_rates']
     all_animal_keys = ['animal_by_unit_by_trials', 'animal_by_unit_by_rates', 'animal_by_rates']
-    all_unit_keys = ['unit_by_trials', 'unit_by_rates']
     all_methods = ['np']
-    opts_list = [autocorr_opts, spectrum_opts]
+    opts_list = [psth_opts, autocorr_opts, spectrum_opts]
     neuron_types = ['PN', 'IN']
     for opts in opts_list:
         for meth in all_methods:
@@ -27,9 +26,10 @@ def main():
                         opts_with_ac = {**opts, **{'ac_program': meth, 'ac_key': key}}
                         Plotter(opts_with_ac).plot_animals(group, neuron_type=neuron_type, sem=True)
                 for animal in group.animals:
-                    for key in all_unit_keys:
+                    for key in ['unit_by_trials', 'unit_by_rates']:
                         opts_with_ac = {**opts, **{'ac_program': meth, 'ac_key': key}}
-                        Plotter(opts_with_ac).plot_units(animal, sem=True)
+                        sem = True if 'trials' in key else False
+                        Plotter(opts_with_ac).plot_units(animal, sem=sem)
             for key in all_group_keys:
                 opts_with_ac = {**opts, **{'ac_program': meth, 'ac_key': key}}
                 Plotter(opts_with_ac).plot_groups(experiment.groups, neuron_types, sem=True)

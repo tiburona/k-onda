@@ -89,7 +89,9 @@ class Plotter:
 
     def plot_unit(self, unit, axes, sem=False):
         if self.dtype == 'psth':
-            Subplotter(axes[0]).plot_raster(unit.get_trials_spikes(self.opts), self.opts)
+            subplotter = Subplotter(axes[0])
+            subplotter.y = unit.get_trials_spikes(self.opts)
+            subplotter.plot_raster(self.opts)
         subplotter = Subplotter(axes[-1])
         plotting_func = getattr(subplotter, f"plot_{self.dtype}")
         data_func = getattr(unit, f"get_{self.dtype}")
@@ -192,7 +194,7 @@ class Subplotter:
         for i, spiketrain in enumerate(self.y):
             for spike in spiketrain:
                 self.ax.vlines(spike, i + .5, i + 1.5)
-        self.set_labels_and_titles(y_label='Trial')
+        self.set_labels(y_label='Trial')
         self.set_limits_and_ticks(-opts['pre_stim'], opts['post_stim'], opts['tick_step'], .5, len(self.y) + .5)
         self.ax.add_patch(plt.Rectangle((0, self.ax.get_ylim()[0]), 0.05, self.ax.get_ylim()[1] - self.ax.get_ylim()[0],
                                         facecolor='gray', alpha=0.3))
@@ -219,5 +221,8 @@ class Subplotter:
         self.ax.plot(self.x, self.y)
 
     def add_sem(self, data_source, opts, neuron_type=None):
+        if opts['data_type'] in ['autocorr', 'spectrum'] and opts['ac_key'] == data_source.name + '_by_rates':
+            print("It doesn't make sense to add standard error to this kind of graph.  Skipping.")
+            return
         sem = data_source.get_sem(opts, neuron_type=neuron_type)
         self.ax.fill_between(self.x, self.y - sem, self.y + sem, color='blue', alpha=0.2)

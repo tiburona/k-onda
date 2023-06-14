@@ -10,24 +10,23 @@ class FamilyTreeMixin:
         if data_type in ['autocorr', 'spectrum']:
             return getattr(self, f"get_{data_type}")(opts, neuron_type=neuron_type)
         else:  # data_type is psth
-            return self.get_average(opts, 'get_psth', neuron_type=neuron_type)
+            return self.get_average(opts, 'get_pretone_corrected_trials', neuron_type=neuron_type)
 
     def get_autocorr(self, opts, neuron_type=None):
-        try:
-            return self.get_all_autocorrelations(opts, neuron_type=neuron_type)[opts['ac_key']]
-        except KeyError as e:
-            if str(e) == "'rates'":
-                print("You probably tried to print a graph with an SEM where the unit autocorrelation was calculated "
-                      "over rates. You can't do that, because there's only one value per unit in that calculation.")
-        raise
+        return self.get_all_autocorrelations(opts, neuron_type=neuron_type)[opts['ac_key']]
 
+    @staticmethod
+    def spectrum(series, opts):
+        fft = np.fft.fft(series)
+        oss = compute_one_sided_spectrum(fft)
+        first, last = get_spectrum_fenceposts(opts)
+        return oss[first:last]
+
+    @cache_method
     def get_spectrum(self, opts, neuron_type=None):
         result = self.get_autocorr(opts, neuron_type=neuron_type)
         if not np.all(np.isnan(result)):
-            fft = np.fft.fft(self.get_autocorr(opts, neuron_type=neuron_type))
-            oss = compute_one_sided_spectrum(fft)
-            first, last = get_spectrum_fenceposts(opts)
-            return oss[first:last]
+            return self.spectrum(result, opts)
         else:
             return np.array([])
 
@@ -39,6 +38,10 @@ class FamilyTreeMixin:
             if average.size > 0:
                 child_vals.append(average)
         return np.nanmean(child_vals, axis=0) if len(child_vals) else np.array([])
+
+    @cache_method
+    def get_psth(self, opts, neuron_type=None):
+        return self.get_average(opts, 'get_pretone_corrected_trials', neuron_type=neuron_type)
 
     @staticmethod
     def sem(children_vals):

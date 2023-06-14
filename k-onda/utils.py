@@ -38,8 +38,6 @@ def cache_method(method):
         if cache_key not in cache:
             cache[cache_key] = method(self, *args, **kwargs)
             setattr(self, cache_name, cache)
-        else:
-            print('used cache! yay!')
         return cache[cache_key]
 
     return wrapper

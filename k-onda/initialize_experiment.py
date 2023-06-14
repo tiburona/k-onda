@@ -15,7 +15,7 @@ def init_animal(entry):
              for cat in cat_names}
     [Unit(animal, cat, unit['spikes']) for cat in units for unit in units[cat]]
     for i, unit in enumerate(animal.units['good']):
-        unit.neuron_type = 'PN' if cat_units['good'][i][8][0][0] < 2 else 'IN'
+        unit.neuron_type = 'IN' if cat_units['good'][i][8][0][0] < 2 else 'PN'
     return animal
 
 
