@@ -121,11 +121,9 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
         return [trials_rates[i] - pretone_means[trial_index // 30] for i, trial_index in enumerate(trial_indices)]
 
     def get_average(self, opts, base_method, neuron_type=None):
-        if neuron_type is None or self.neuron_type == neuron_type:
-            child_vals = getattr(self, base_method)(opts)
-        else:
-            child_vals = np.array([])
-        return np.nanmean(child_vals, axis=0) if len(child_vals) else np.array([])
+        if neuron_type is not None and self.neuron_type != neuron_type:
+            return np.array([])
+        return np.nanmean(getattr(self, base_method)(opts), axis=0)
 
     def get_all_autocorrelations(self, opts, neuron_type=None):
         if neuron_type is not None and self.neuron_type != neuron_type:
@@ -142,6 +140,8 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
 
     @cache_method
     def get_sem(self, opts, neuron_type=None):
+        if neuron_type is not None and self.neuron_type != neuron_type:
+            return np.array([])
         if opts['data_type'] == 'psth':
             trial_vals = self.get_pretone_corrected_trials(opts)
         elif opts['data_type'] in ['autocorr', 'spectrum']:
@@ -151,5 +151,3 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
                 trial_vals = [self.spectrum(self._calculate_autocorrelation(trial, opts), opts)
                               for trial in self.get_trials_rates(opts)]
         return self.sem(trial_vals)
-
-
