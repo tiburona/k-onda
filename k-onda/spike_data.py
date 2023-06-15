@@ -2,7 +2,7 @@ from bisect import bisect_left as bs_left, bisect_right as bs_right
 from collections import defaultdict as dd
 from copy import deepcopy
 
-from family_tree import FamilyTreeMixin
+from relationships import FamilyTreeMixin, SpikeRateMixin
 from plotters import *
 from autocorrelation import AutocorrelationNode
 from utils import cache_method
@@ -58,44 +58,37 @@ class Animal(FamilyTreeMixin, AutocorrelationNode):
         Plotter(opts).plot_units(self)
 
 
-class Unit(FamilyTreeMixin, AutocorrelationNode):
+class Unit(FamilyTreeMixin, AutocorrelationNode, SpikeRateMixin):
     name = 'unit'
 
-    def __init__(self, animal, category, spike_times, neuron_type=None):
+    def __init__(self, context, animal, category, spike_times, neuron_type=None):
+        self.context = context
+        context.subscribe(self)
+        self.trials = []
         self.animal = animal
-        self.category = category
-        self.spike_times = spike_times
-        self.animal.units[category].append(self)
         self.parent = self.animal
+        self.category = category
+        self.animal.units[category].append(self)
         self.identifier = str(self.animal.units[category].index(self) + 1)
+        self.trials = None
+        self.children = self.trials
+        self.spike_times = spike_times
         self.neuron_type = neuron_type
-        self.children = []
+
+    def update(self, context):
+        self.trials = []
+        trials_slice = slice(*context.opts.get('trials'))
+        pre_stim = context.opts.get('pre_stim')
+        post_stim = context.opts.get('post_stim')
+        for start in self.animal.tone_onsets_expanded[trials_slice]:
+            spikes = self.find_spikes(start - pre_stim * 30000, start + post_stim * 30000)
+            self.trials.append([(spike-start)/30000 for spike in spikes])
+        self.children = self.trials
 
     @cache_method
     def find_spikes(self, start, stop):
         return self.spike_times[bs_left(self.spike_times, start): bs_right(self.spike_times, stop)]
-    
-    @cache_method
-    def get_trials_spikes(self, opts):
-        return [[(spike - start)/30000 for spike in
-                 self.find_spikes(start - opts['pre_stim'] * 30000, start + opts['post_stim'] * 30000)]
-                for start in self.animal.tone_onsets_expanded[slice(*opts['trials'])]]
 
-    @cache_method
-    def get_hist(self, spikes, opts, num_bins=None, spike_range=None):
-        num_bins = num_bins if num_bins is not None else int((opts['post_stim'] + opts['pre_stim']) / opts['bin_size'])
-        spike_range = spike_range if spike_range is not None else (-opts['pre_stim'], opts['post_stim'])
-        hist = np.histogram(spikes, bins=num_bins, range=spike_range)
-        return hist
-
-    @cache_method
-    def get_rates(self, spikes, opts, num_bins=None, spike_range=None):
-        return self.get_hist(spikes, opts, num_bins=num_bins, spike_range=spike_range)[0] / opts['bin_size']
-
-    @cache_method
-    def get_trials_rates(self, opts, num_bins=None, spike_range=None):
-        return [self.get_rates(trial_spikes, opts, num_bins=num_bins, spike_range=spike_range)
-                for trial_spikes in self.get_trials_spikes(opts)]
 
     @cache_method
     def get_pretone_means(self, opts):
@@ -125,29 +118,28 @@ class Unit(FamilyTreeMixin, AutocorrelationNode):
             return np.array([])
         return np.nanmean(getattr(self, base_method)(opts), axis=0)
 
-    def get_all_autocorrelations(self, opts, neuron_type=None):
-        if neuron_type is not None and self.neuron_type != neuron_type:
-            return {f'{self.name}_by_rates': float('nan'), f'{self.name}_by_trials': float('nan')}
-        else:
-            results = {}
-            rates = self.get_average(opts, 'get_trials_rates', neuron_type=neuron_type)
-            demeaned_rates = rates - (np.mean(rates))
-            results[f'{self.name}_by_rates'] = self._calculate_autocorrelation(demeaned_rates, opts)
-            demeaned_rates = [rates - np.mean(rates) for rates in self.get_trials_rates(opts)]
-            results[f'{self.name}_by_trials'] = np.nanmean([self._calculate_autocorrelation(rates, opts)
-                                                            for rates in demeaned_rates], axis=0)
-        return results
 
-    @cache_method
-    def get_sem(self, opts, neuron_type=None):
-        if neuron_type is not None and self.neuron_type != neuron_type:
-            return np.array([])
-        if opts['data_type'] == 'psth':
-            trial_vals = self.get_pretone_corrected_trials(opts)
-        elif opts['data_type'] in ['autocorr', 'spectrum']:
-            if opts['data_type'] == 'autocorr':
-                trial_vals = [self._calculate_autocorrelation(trial, opts) for trial in self.get_trials_rates(opts)]
-            elif opts['data_type'] == 'spectrum':
-                trial_vals = [self.spectrum(self._calculate_autocorrelation(trial, opts), opts)
-                              for trial in self.get_trials_rates(opts)]
-        return self.sem(trial_vals)
+class Trial(FamilyTreeMixin, SpikeRateMixin, AutocorrelationNode):
+
+    name = 'trial'
+
+    def __init__(self, unit):
+        self.parent = unit
+        self.context = self.parent.context
+        self.demeaned = []
+        self.id = None
+
+
+
+    def get_psth(self):
+
+
+    def get_all_autocorrelations(self, opts):
+        return {'trials': self.get_autocorrelation(opts)}
+
+    def get_autocorr(self, opts):
+        return self._calculate_autocorrelation(self.demeaned, opts)
+
+
+
+

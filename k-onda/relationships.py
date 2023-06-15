@@ -20,6 +20,22 @@ class Context:
         for observer in self.observers:
             observer.update(self)
 
+
+class SpikeRateMixin:
+
+    @cache_method
+    def get_hist(self, spikes, num_bins=None, spike_range=None):
+        pre_stim, post_stim, bin_size = (self.context.opts.get(v) for v in ['pre_stim', 'post_stim', 'bin_size'])
+        num_bins = num_bins if num_bins is not None else int((post_stim + pre_stim) / bin_size)
+        spike_range = spike_range if spike_range is not None else (-pre_stim, post_stim)
+        hist = np.histogram(spikes, bins=num_bins, range=spike_range)
+        return hist
+
+    @cache_method
+    def get_rates(self, spikes, num_bins=None, spike_range=None):
+        return self.get_hist(spikes, num_bins=num_bins, spike_range=spike_range)[0] / self.context.opts.get('bin_size')
+
+
 class FamilyTreeMixin:
 
     @cache_method
