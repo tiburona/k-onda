@@ -28,13 +28,15 @@ def cache_method(method):
             return tuple(to_hashable(i, max_depth - 1) for i in item)
         elif isinstance(item, np.ndarray):
             return tuple(to_hashable(i, max_depth - 1) for i in item.tolist())
+        elif hasattr(item, '__dict__'):  # Check if item is an object
+            return id(item)  # return the memory address of the object
         else:
             return item
 
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         cache = getattr(self, cache_name, {})
-        cache_key = (tuple(to_hashable(arg) for arg in args), tuple(sorted(kwargs.items())))
+        cache_key = (id(self), method.__name__, tuple(to_hashable(arg) for arg in args), tuple(sorted(kwargs.items())))
         if cache_key not in cache:
             cache[cache_key] = method(self, *args, **kwargs)
             setattr(self, cache_name, cache)

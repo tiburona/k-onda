@@ -20,6 +20,7 @@ class Context:
         for observer in self.observers:
             observer.update(self)
 
+
 class FamilyTreeMixin:
 
     @cache_method

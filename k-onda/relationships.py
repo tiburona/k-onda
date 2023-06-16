@@ -1,24 +1,7 @@
 from copy import deepcopy
 import numpy as np
 from signal_processing import compute_one_sided_spectrum, get_spectrum_fenceposts
-from utils import cache_method
-
-
-class Context:
-    def __init__(self, opts):
-        self.observers = []
-        self.opts = opts
-
-    def subscribe(self, observer):
-        self.observers.append(observer)
-
-    def set_opts(self, new_opts):
-        self.opts = new_opts
-        self.notify()
-
-    def notify(self):
-        for observer in self.observers:
-            observer.update(self)
+from contexts import cache_method
 
 
 class SpikeRateMixin:
@@ -38,41 +21,46 @@ class SpikeRateMixin:
 
 class FamilyTreeMixin:
 
-    @cache_method
-    def get_data(self, opts, data_type, neuron_type=None):
-        return getattr(self, f"get_{data_type}")(opts, neuron_type=neuron_type)
+    def subscribe(self, context):
+        setattr(self, 'context', context)
+        context.subscribe(self)
 
     @cache_method
-    def get_average(self, opts, base_method, neuron_type=None):
+    def get_data(self, data_type):
+        return getattr(self, f"get_{data_type}")()
+
+    @cache_method
+    def get_average(self, base_method):
         child_vals = []
         for child in self.children:
-            average = child.get_average(opts, base_method, neuron_type)
+            average = child.get_average(base_method)
             if average.size > 0:
                 child_vals.append(average)
         return np.nanmean(child_vals, axis=0) if len(child_vals) else np.array([])
 
     @cache_method
-    def get_psth(self, opts, neuron_type=None):
-        return self.get_average(opts, 'get_pretone_corrected_trials', neuron_type=neuron_type)
+    def get_demeaned_rates(self):
+        rates = self.get_average('get_rates')
+        return rates - np.mean(rates)
 
     @cache_method
-    def get_autocorr(self, opts, neuron_type=None):
-        return self.get_all_autocorrelations(opts, neuron_type=neuron_type)[opts['ac_key']]
+    def get_psth(self):
+        return self.get_average('get_psth')
 
-    @staticmethod
-    def spectrum(series, opts):
+    @cache_method
+    def get_autocorr(self):
+        return self.get_all_autocorrelations()
+
+    def spectrum(self, series):
         fft = np.fft.fft(series)
         oss = compute_one_sided_spectrum(fft)
-        first, last = get_spectrum_fenceposts(opts)
+        first, last = get_spectrum_fenceposts(self.context.opts)
         return oss[first:last]
 
     @cache_method
-    def get_spectrum(self, opts, neuron_type=None):
-        result = self.get_autocorr(opts, neuron_type=neuron_type)
-        if not np.all(np.isnan(result)):
-            return self.spectrum(result, opts)
-        else:
-            return np.array([])
+    def get_spectrum(self):
+        result = self.get_autocorr()
+        return self.spectrum(result)
 
     @staticmethod
     def sem(children_vals):
@@ -84,15 +72,16 @@ class FamilyTreeMixin:
         return sem
 
     @cache_method
-    def get_sem(self, opts, neuron_type=None):
+    def get_sem(self):
         children_vals = []
-        child_opts = deepcopy(opts)
-        if opts['data_type'] in ['autocorr', 'spectrum']:
+        child_opts = deepcopy(self.context.opts)
+        if child_opts['data_type'] in ['autocorr', 'spectrum']:
             key_index = len(self.name + '_by_')
-            child_opts['ac_key'] = opts['ac_key'][key_index:]
+            child_opts['ac_key'] = self.context.opts['ac_key'][key_index:]
         for child in self.children:
-            child_vals = getattr(child, f"get_{opts['data_type']}")(child_opts, neuron_type=neuron_type)
+            child_vals = getattr(child, f"get_{self.context.opts['data_type']}")()
             if np.any(~np.isnan(child_vals)):
                 children_vals.append(child_vals)
         return self.sem(children_vals)
+
 

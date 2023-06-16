@@ -102,7 +102,7 @@ class Plotter:
 
     def make_subplot(self, data_source, row, col, title='', neuron_type=None, sem=False):
         subplotter = Subplotter(self.axs[row, col])
-        subplotter.y = data_source.get_data(self.opts, self.dtype, neuron_type=neuron_type)
+        subplotter.y = data_source.get_data(self.dtype)
         if np.all(np.isnan(subplotter.y)):
             self.axs[row, col].axis('off')  # hide this subplot
         else:
