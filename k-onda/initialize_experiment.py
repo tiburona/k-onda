@@ -1,4 +1,5 @@
 import scipy.io as sio
+import numpy as np
 from spike_data import Experiment, Group, Animal, Unit
 
 
@@ -11,7 +12,7 @@ def init_animal(entry):
     categories = entry[3][0][0]
     cat_names = [k for k in categories.dtype.fields.keys()]
     cat_units = dict(zip(cat_names, [category[0] for category in categories]))
-    units = {cat: [{'spikes': [spike_time[0] for spike_time in unit[0]]} for unit in cat_units[cat]] 
+    units = {cat: [{'spikes': [spike_time[0].astype(np.int64) for spike_time in unit[0]]} for unit in cat_units[cat]]
              for cat in cat_names}
     [Unit(animal, cat, unit['spikes']) for cat in units for unit in units[cat]]
     for i, unit in enumerate(animal.units['good']):
@@ -23,3 +24,5 @@ mat_contents = sio.loadmat('/Users/katie/likhtik/data/single_cell_data.mat')['si
 animals = [init_animal(entry) for entry in mat_contents[0]]
 experiment = Experiment({name: Group(name=name, animals=[animal for animal in animals if animal.condition == name])
                          for name in ['control', 'stressed']})
+all_units = [child for group in experiment.groups for animal in group.animals for child in animal.children]
+
