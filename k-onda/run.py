@@ -1,6 +1,7 @@
-from initialize_experiment import experiment
+from initialize_experiment import experiment, all_units
 from logger import log_directory_contents
 from plotters import Plotter
+from spreadsheet import Spreadsheet
 
 base_opts = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4}
 psth_opts = {**base_opts, **{'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01,
@@ -9,6 +10,8 @@ autocorr_opts = {**base_opts, **{'data_type': 'autocorr', 'pre_stim': 0.0, 'post
                                  'trials': (0, 150, 30), 'max_lag': 99, 'tick_step': .1}}
 spectrum_opts = {**autocorr_opts, **{'data_type': 'spectrum', 'bin_size': 0.01, 'max_lag': 99, 'freq_range': (3, 60),
                                      'tick_step': .1}}
+spreadsheet_opts = {**base_opts, **{'data_type': 'psth', 'pre_stim': 0.0, 'post_stim': 1.00, 'bin_size': 0.01,
+                                    'trials': (0, 150), 'tick_step': 0.1}}
 
 
 def main():
@@ -35,6 +38,10 @@ def main():
                 Plotter(opts_with_ac).plot_groups(experiment.groups, neuron_types, sem=True)
 
     log_directory_contents('/Users/katie/likhtik/data/logdir')
+
+# def main():
+#     sheet = Spreadsheet()
+#     sheet.make_spreadsheet(spreadsheet_opts, all_units, '/Users/katie/likhtik/data/firing_rates_by_unit.csv')
 
 
 if __name__ == '__main__':
