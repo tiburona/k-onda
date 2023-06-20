@@ -1,6 +1,7 @@
 import scipy.io as sio
 import numpy as np
 from spike_data import Experiment, Group, Animal, Unit
+from contexts import NeuronTypeContext, DataTypeContext
 
 
 def init_animal(entry):
@@ -22,7 +23,32 @@ def init_animal(entry):
 
 mat_contents = sio.loadmat('/Users/katie/likhtik/data/single_cell_data.mat')['single_cell_data']
 animals = [init_animal(entry) for entry in mat_contents[0]]
+for animal in animals:
+    for neuron_type in ['PN', 'IN']:
+        for unit in animal.units['good']:
+            if unit.neuron_type == neuron_type:
+                getattr(animal, neuron_type).append(unit)
+
 experiment = Experiment({name: Group(name=name, animals=[animal for animal in animals if animal.condition == name])
                          for name in ['control', 'stressed']})
-all_units = [child for group in experiment.groups for animal in group.animals for child in animal.children]
+experiment.all_units = [unit for group in experiment.groups for animal in group.animals for unit in animal.units['good']]
+
+neuron_type_context = NeuronTypeContext()
+data_type_context = DataTypeContext()
+
+for unit in experiment.all_units:
+    unit.subscribe(data_type_context)
+
+for animal in animals:
+    animal.subscribe(data_type_context)
+    animal.subscribe(neuron_type_context)
+
+for group in experiment.groups:
+    group.subscribe(data_type_context)
+    group.subscribe(neuron_type_context)
+
+
+
+
+
 

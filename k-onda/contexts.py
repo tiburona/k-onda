@@ -31,25 +31,33 @@ class Context:
             observer.update(self)
 
 
-class OptsContext(Context):
+class DataTypeContext(Context):
+    name = 'data_type_context'
+
     def __init__(self):
         super().__init__()
         self.opts = None
         self.selected_trial_indices = None
 
     def set_opts(self, new_opts):
+        if new_opts == self.opts:
+            return
         self.opts = new_opts
-        self.selected_trial_indices = list(range(150))[slice(*self.opts.get.trials)]  # select only the trials indicated in opts
+        self.selected_trial_indices = list(range(150))[slice(*new_opts['trials'])]  # select only the trials in opts
         self.cache_id = to_hashable(new_opts)
         self.notify()
 
 
 class NeuronTypeContext(Context):
+    name = 'neuron_type_context'
+
     def __init__(self):
         super().__init__()
         self.neuron_type = None
 
-    def set_opts(self, neuron_type):
+    def set_neuron_type(self, neuron_type):
+        if neuron_type == self.neuron_type:
+            return
         self.neuron_type = neuron_type
         self.cache_id = neuron_type
         self.notify()
@@ -61,7 +69,9 @@ def cache_method(method):
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         cache = getattr(self, cache_name, {})
-        cache_key = (id(self), method.__name__, tuple(to_hashable(arg) for arg in args), tuple(sorted(kwargs.items())))
+        context_keys = (c.cache_id for c in ['neuron_type_context', 'data_type_context'] if hasattr(self, c))
+        cache_key = (id(self), context_keys, method.__name__, tuple(to_hashable(arg) for arg in args),
+                     tuple(sorted(kwargs.items())))
         if cache_key not in cache:
             cache[cache_key] = method(self, *args, **kwargs)
             setattr(self, cache_name, cache)

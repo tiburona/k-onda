@@ -19,3 +19,6 @@ def smart_title_case(s):
                   title)
 
 
+def ac_str(s):
+    for (old, new) in [('pd', 'Pandas'), ('np', 'NumPy'), ('ml', 'Matlab')]:
+        s = s.replace(old, new)
