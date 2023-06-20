@@ -74,9 +74,8 @@ class Level:
     def get_sem(self):
         return sem([child.data_func() for child in self.children])
 
-    def _calculate_autocorrelation(self):
+    def _calculate_autocorrelation(self, x):
         opts = self.data_opts
-        x = self.get_demeaned_rates()
         max_lag = opts['max_lag']
         if not len(x):
             return np.array([])
@@ -93,7 +92,7 @@ class Level:
     def get_all_autocorrelations(self):
 
         # Calculate the autocorrelation over rates for this node
-        ac_results = {f"{self.name}_by_rates": self._calculate_autocorrelation()}
+        ac_results = {f"{self.name}_by_rates": self._calculate_autocorrelation(self.get_demeaned_rates())}
 
         # Calculate the autocorrelation by children for this node
         # We need to ask each child to calculate its autocorrelations first.
@@ -283,7 +282,7 @@ class Trial(Level):
 
     @cache_method
     def get_all_autocorrelations(self):
-        return {'trials': self._calculate_autocorrelation()}
+        return {'trials': self._calculate_autocorrelation(self.get_demeaned_rates())}
 
 
 

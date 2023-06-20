@@ -23,7 +23,7 @@ class Plotter:
         self.dir_tags = None
         self.graph_opts = graph_opts
         self.neuron_types = ['PN', 'IN']
-        self.labels = {'psth': ('Time (s)', 'Firing Rate (Hz'), 'autocorr': ('Lags (s)',  'Autocorrelation'),
+        self.labels = {'psth': ('Time (s)', 'Relative Firing Rate (Hz)'), 'autocorr': ('Lags (s)',  'Autocorrelation'),
                        'spectrum': ('Frequencies (Hz)',  'One-Sided Spectrum')}
 
     @property
@@ -41,13 +41,15 @@ class Plotter:
     def set_neuron_type(self, nt):
         self.neuron_type_context.set_neuron_type(nt)
 
-    def initialize_opts_and_contexts(self, data_opts, graph_opts, neuron_type):
+    def initialize(self, data_opts, graph_opts, neuron_type):
+        self.y_min = float('inf')
+        self.y_max = float('-inf')
         self.graph_opts = graph_opts
         self.data_type_context.set_opts(data_opts)
         self.set_neuron_type(neuron_type)
 
     def plot(self, data_opts, graph_opts, level, neuron_type=None):
-        self.initialize_opts_and_contexts(data_opts, graph_opts, neuron_type)
+        self.initialize(data_opts, graph_opts, neuron_type)
         if level == 'group':
             self.plot_groups(self.experiment.groups)
         elif level == 'animal':
@@ -66,20 +68,26 @@ class Plotter:
                 self.set_neuron_type(neuron_type)
                 self.make_subplot(group, row, col, title=f"{group.identifier} {neuron_type}")
         self.set_neuron_type(None)
+        self.set_y_scales()
         self.close_plot('groups')
 
     def plot_animals(self, group):
         num_animals = len(group.children)
         nrows = math.ceil(num_animals / 3)
-        self.fig, self.axs = plt.subplots(nrows, 3, figsize=(15, nrows * 5))
-        self.fig.subplots_adjust(top=0.9)
+        self.fig, self.axs = plt.subplots(nrows, 3, figsize=(15, nrows * 6))
+        self.fig.subplots_adjust(top=0.85, hspace=0.3, wspace=0.4)
 
-        for i in range(num_animals):  # iterate over all subplots
-            row = i // 3  # index based on 3 columns
-            col = i % 3  # index based on 3 columns
-            animal = group.children[i]
-            self.make_subplot(animal, row, col, f"{animal.identifier} {animal.selected_neuron_type}")
+        for i in range(nrows * 3):  # iterate over all subplots
+            if i < num_animals:
+                row = i // 3  # index based on 3 columns
+                col = i % 3  # index based on 3 columns
+                animal = group.children[i]
+                self.make_subplot(animal, row, col, f"{animal.identifier} {animal.selected_neuron_type}")
+            else:
+                # Get the axes for the extra subplot and make it invisible
+                self.axs[i // 3, i % 3].set_visible(False)
 
+        self.set_y_scales()
         self.close_plot(group.identifier)
 
     def plot_units(self, animal):
@@ -88,6 +96,7 @@ class Plotter:
         for i in range(0, len(animal.children), self.graph_opts['units_in_fig']):
             n_subplots = min(self.graph_opts['units_in_fig'], len(animal.children) - i)
             self.fig = plt.figure(figsize=(10, 3 * multi * n_subplots))
+            self.fig.subplots_adjust(bottom=0.14)
             gs = GridSpec(n_subplots * multi, 1, figure=self.fig)
 
             for j in range(i, i + n_subplots):
@@ -100,14 +109,13 @@ class Plotter:
             self.set_units_plot_frame_and_spacing()
 
             marker2 = min(i + self.graph_opts['units_in_fig'], len(animal.children))
-            self.close_plot(f"{animal.identifier}_unit_{i + 1}_to_{marker2}")
+            self.close_plot(f"{animal.identifier} unit {i + 1} to {marker2}")
 
     def set_units_plot_frame_and_spacing(self):
         # Add a big subplot without frame and set the x and y labels for this subplot
         big_subplot = self.fig.add_subplot(111, frame_on=False)
         big_subplot.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        big_subplot.set_xlabel(self.labels[self.dtype][0], labelpad=30)
-        big_subplot.set_ylabel(self.labels[self.dtype][1], labelpad=30)
+        big_subplot.set_xlabel(self.labels[self.dtype][0], labelpad=30, fontsize=14)
         plt.subplots_adjust(hspace=0.5)  # Add space between subplots
 
     def plot_unit(self, unit, axes):
@@ -135,7 +143,6 @@ class Plotter:
         self.set_dir_and_filename(basename)
         if self.graph_opts.get('footer'):
             self.make_footer()
-        self.prettify_plot()
         self.save_and_close_fig()
 
     def set_labels(self, row, col):
@@ -153,10 +160,6 @@ class Plotter:
         self.get_ylim(row, col, y_min, y_max)
         self.set_labels(row, col)
         self.axs[row, col].set_title(title)
-
-    def prettify_plot(self):
-        self.set_y_scales()
-        plt.subplots_adjust(hspace=0.7)  # Add space between subplots
 
     def make_footer(self):
         text_vals = [('bin size', self.data_opts['bin_size']), ('selected trials', self.join_trials(' ')),
@@ -176,7 +179,6 @@ class Plotter:
         if self.neuron_type:
             tags += [self.neuron_type]
         self.title = smart_title_case(' '.join(tags))
-        self.title = self.title.replace('_', ' ')
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
         if self.dtype in ['autocorr', 'spectrum']:
             for key in ['ac_program', 'ac_key']:
@@ -212,9 +214,9 @@ class Subplotter:
         if y_min is not None and y_max is not None:
             self.ax.set_ylim(y_min, y_max)
 
-    def set_labels(self, x_label='', y_label=''):
-        self.ax.set_xlabel(x_label)
-        self.ax.set_ylabel(y_label)
+    def set_labels(self, x_label='', y_label='', fontsize=13):
+        self.ax.set_xlabel(x_label, fontsize=fontsize)
+        self.ax.set_ylabel(y_label, fontsize=fontsize)
 
     def plot_raster(self):
         opts = self.d_opts
