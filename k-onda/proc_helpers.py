@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 from plotters import Plotter
 from initialize_experiment import experiment, data_type_context, neuron_type_context
 
