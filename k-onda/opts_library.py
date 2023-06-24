@@ -1,5 +1,9 @@
 
-PSTH_OPTS = {'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'trials': (0, 150)}
+PSTH_OPTS = {'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'trials': (0, 150),
+             'adjustment': 'normalized', 'average_method': 'mean'}
+
+PROPORTION_OPTS = {'data_type': 'proportion_score', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01,
+                   'trials': (0, 150), 'adjustment': 'normalized'}
 
 AUTOCORR_OPTS = {'data_type': 'autocorr', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
                  'max_lag': 99}

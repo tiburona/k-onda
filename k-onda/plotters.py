@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts
-from plot_utils import smart_title_case, formatted_now, ac_str
+from utils import smart_title_case, formatted_now, dynamic_property
 
 
 class Plotter:
@@ -23,30 +23,21 @@ class Plotter:
         self.dir_tags = None
         self.graph_opts = graph_opts
         self.neuron_types = ['PN', 'IN']
-        self.labels = {'psth': ('Time (s)', 'Relative Firing Rate (Hz)'), 'autocorr': ('Lags (s)',  'Autocorrelation'),
-                       'spectrum': ('Frequencies (Hz)',  'One-Sided Spectrum')}
 
-    @property
-    def neuron_type(self):
-        return self.neuron_type_context.neuron_type
-
-    @property
-    def data_opts(self):
-        return self.data_type_context.opts
-
-    @property
-    def dtype(self):
-        return self.data_opts.get('data_type')
-
-    def set_neuron_type(self, nt):
-        self.neuron_type_context.set_neuron_type(nt)
+    neuron_type = dynamic_property('neuron_type',
+                                   getter=lambda self: self.neuron_type_context.val,
+                                   setter=lambda self, neuron_type: self.neuron_type_context.set_val(neuron_type))
+    data_opts = dynamic_property('data_opts',
+                                 getter=lambda self: self.data_type_context.val,
+                                 setter=lambda self, opts: self.data_type_context.set_val(opts))
+    dtype = dynamic_property('dtype', lambda self: self.data_opts.get('data_type'))
 
     def initialize(self, data_opts, graph_opts, neuron_type):
         self.y_min = float('inf')
         self.y_max = float('-inf')
         self.graph_opts = graph_opts
-        self.data_type_context.set_opts(data_opts)
-        self.set_neuron_type(neuron_type)
+        self.data_opts = data_opts
+        self.neuron_type = neuron_type
 
     def plot(self, data_opts, graph_opts, level, neuron_type=None):
         self.initialize(data_opts, graph_opts, neuron_type)
@@ -65,9 +56,9 @@ class Plotter:
         self.fig.subplots_adjust(wspace=0.2, hspace=0.2)
         for row, group in enumerate(groups):
             for col, neuron_type in enumerate(self.neuron_types):
-                self.set_neuron_type(neuron_type)
+                self.neuron_type = neuron_type
                 self.make_subplot(group, row, col, title=f"{group.identifier} {neuron_type}")
-        self.set_neuron_type(None)
+        self.neuron_type = None
         self.set_y_scales()
         self.close_plot('groups')
 
@@ -95,7 +86,7 @@ class Plotter:
 
         for i in range(0, len(animal.children), self.graph_opts['units_in_fig']):
             n_subplots = min(self.graph_opts['units_in_fig'], len(animal.children) - i)
-            self.fig = plt.figure(figsize=(10, 3 * multi * n_subplots))
+            self.fig = plt.figure(figsize=(15, 3 * multi * n_subplots))
             self.fig.subplots_adjust(bottom=0.14)
             gs = GridSpec(n_subplots * multi, 1, figure=self.fig)
 
@@ -111,13 +102,6 @@ class Plotter:
             marker2 = min(i + self.graph_opts['units_in_fig'], len(animal.children))
             self.close_plot(f"{animal.identifier} unit {i + 1} to {marker2}")
 
-    def set_units_plot_frame_and_spacing(self):
-        # Add a big subplot without frame and set the x and y labels for this subplot
-        big_subplot = self.fig.add_subplot(111, frame_on=False)
-        big_subplot.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        big_subplot.set_xlabel(self.labels[self.dtype][0], labelpad=30, fontsize=14)
-        plt.subplots_adjust(hspace=0.5)  # Add space between subplots
-
     def plot_unit(self, unit, axes):
         if self.dtype == 'psth':
             self.add_raster(unit, axes)
@@ -132,12 +116,19 @@ class Plotter:
         subplotter.y = unit.get_spikes_by_trials()  # overwrites subplotter.y defined by data_type, which is psth
         subplotter.plot_raster()
 
+    def set_units_plot_frame_and_spacing(self):
+        # Add a big subplot without frame and set the x and y labels for this subplot
+        big_subplot = self.fig.add_subplot(111, frame_on=False)
+        big_subplot.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+        big_subplot.set_xlabel(self.get_labels('unit')[self.dtype][0], labelpad=30, fontsize=14)
+        plt.subplots_adjust(hspace=0.5)  # Add space between subplots
+
     def make_subplot(self, data_source, row, col, title=''):
         subplotter = Subplotter(data_source, self.data_opts, self.graph_opts, self.axs[row, col])
-        getattr(subplotter, f"plot_{self.dtype}")()
+        subplotter.plot_data()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
-        self.prettify_subplot(row, col, title=title, y_min=min(subplotter.y), y_max=max(subplotter.y))
+        self.prettify_subplot(row, col, data_source.name, title=title, y_min=min(subplotter.y), y_max=max(subplotter.y))
 
     def close_plot(self, basename):
         self.set_dir_and_filename(basename)
@@ -145,8 +136,18 @@ class Plotter:
             self.make_footer()
         self.save_and_close_fig()
 
-    def set_labels(self, row, col):
-        [getattr(self.axs[row, col], f"set_{dim}label")(self.labels[self.dtype][i]) for i, dim in enumerate(['x', 'y'])]
+    def get_labels(self, level):
+        adjustment = self.data_opts.get('adjustment')
+        Hz = '' if adjustment == 'normalized' else ' Hz'
+
+        return {'psth': ('Time (s)', f'{adjustment.capitalize()} Firing Rate{Hz}'),
+                'proportion_score': ('Time (s)', 'Mean Proportion Positive Normalized Rate'),
+                'autocorr': ('Lags (s)', 'Autocorrelation'),
+                'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum')}
+
+    def set_labels(self, row, col, level):
+        [getattr(self.axs[row, col], f"set_{dim}label")(self.get_labels(level)[self.dtype][i])
+         for i, dim in enumerate(['x', 'y'])]
 
     def get_ylim(self, row, col, y_min, y_max):
         self.y_min = min(self.y_min, self.axs[row, col].get_ylim()[0], y_min)
@@ -156,14 +157,15 @@ class Plotter:
         if self.graph_opts['equal_y_scales']:
             [ax.set_ylim(self.y_min, self.y_max) for ax in self.axs.flatten()]
 
-    def prettify_subplot(self, row, col, title, y_min, y_max):
+    def prettify_subplot(self, row, col, level, title, y_min, y_max):
         self.get_ylim(row, col, y_min, y_max)
-        self.set_labels(row, col)
+        self.set_labels(row, col, level)
         self.axs[row, col].set_title(title)
 
     def make_footer(self):
         text_vals = [('bin size', self.data_opts['bin_size']), ('selected trials', self.join_trials(' ')),
                      ('time generated', formatted_now())]
+        [text_vals.append((k, self.data_opts[k])) for k in ['adjustment, average_method'] if k in self.data_opts]
         text = '  '.join([f"{k}: {v}" for k, v in text_vals])
         if self.dtype in ['autocorr', 'spectrum']:
             ac_vals = [('program', self.data_opts['ac_program']),
@@ -178,7 +180,7 @@ class Plotter:
         tags.insert(0, basename)
         if self.neuron_type:
             tags += [self.neuron_type]
-        self.title = smart_title_case(' '.join(tags))
+        self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
         if self.dtype in ['autocorr', 'spectrum']:
             for key in ['ac_program', 'ac_key']:
@@ -206,7 +208,7 @@ class Subplotter:
         self.g_opts = graph_opts
         self.ax = ax
         self.x = None
-        self.y = data_source.data_func()
+        self.y = data_source.data
 
     def set_limits_and_ticks(self, x_min, x_max, x_tick_min, x_step, y_min=None, y_max=None):
         self.ax.set_xlim(x_min, x_max)
@@ -241,10 +243,13 @@ class Subplotter:
                       x_tick_min=0, x_step=self.g_opts['tick_step'], y_label='Relative Spike Rate (Hz)')
         self.ax.fill_betweenx([min(self.y), max(self.y)], 0, 0.05, color='k', alpha=0.2)
 
+    def plot_proportion_score(self):
+        self.plot_psth()
+
     def plot_autocorr(self):
         opts = self.d_opts
         self.plot_bar(width=opts['bin_size']*.95, x_min=opts['bin_size'],  x_max=opts['max_lag']*opts['bin_size'],
-                      num=opts['max_lag'], x_tick_min=0, x_step=self.g_opts['tick_step'], y_min=0,
+                      num=opts['max_lag'], x_tick_min=0, x_step=self.g_opts['tick_step'], y_min=min(self.y) - .01,
                       y_max=max(self.y) + .01)
 
     def plot_spectrum(self):
@@ -252,6 +257,9 @@ class Subplotter:
         first, last = get_spectrum_fenceposts(freq_range, max_lag, bin_size)
         self.x = get_positive_frequencies(max_lag, bin_size)[first:last]
         self.ax.plot(self.x, self.y)
+
+    def plot_data(self):
+        getattr(self, f"plot_{self.dtype}")()
 
     def add_sem(self):
         opts = self.d_opts

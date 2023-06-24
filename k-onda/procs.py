@@ -1,4 +1,5 @@
-from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, GRAPH_OPTS, AC_KEYS, AC_METHODS
+from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
+    AC_KEYS, AC_METHODS
 from initialize_experiment import experiment
 from proc_helpers import add_ac_keys_and_plot, assign_vars, plot
 from spreadsheet import Spreadsheet
@@ -26,6 +27,11 @@ def plot_autocorr(levels, autocorr_opts=None, graph_opts=None, ac_methods=None, 
 
 def plot_spectrum(levels, spectrum_opts=None, graph_opts=None, ac_methods=None, ac_keys=None):
     plot_autocorr_or_spectrum(levels, spectrum_opts, graph_opts, ac_methods, ac_keys, SPECTRUM_OPTS)
+
+
+def plot_proportion_score(levels, proportion_opts=None, graph_opts=None):
+    proportion_opts, graph_opts = assign_vars([proportion_opts, graph_opts], [PROPORTION_OPTS, GRAPH_OPTS])
+    plot(proportion_opts, graph_opts, levels)
 
 
 def make_spreadsheet(spreadsheet_opts=None):

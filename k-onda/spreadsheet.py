@@ -22,8 +22,8 @@ class Spreadsheet:
     def get_row(self, unit):
         time = self.opts.get('time')
         unit_num = unit.identifier
-        animal = unit.parent.identifier
-        condition = unit.parent.parent.identifier
+        animal = unit.animal.identifier
+        condition = unit.animal.condition
         category = unit.neuron_type
         psth = unit.get_psth()
         row_dict = {'unit_num': unit_num, 'animal': animal, 'condition': condition, 'category': category}

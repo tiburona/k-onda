@@ -3,53 +3,43 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 
-from contexts import cache_method
 from matlab_interface import xcorr
+from utils import dynamic_property, cache_method
 from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
 
 
 """
-This module defines Level, a base class, and Experiment, Group, Animal, Unit, and Trial, the latter four of which 
-inherit from Level. Most calculations are handled by Level and Trial. Several of Level's methods are recursive, and are overwritten by 
-Trial, the base case.  
+This module defines Level, a base class, and Experiment, Group, Animal, Unit, and Trial. Group and Unit inherit
+from Level, and Animal and Trial both inherit from one level up in the hierarchy because they need one method each from
+their parent. Most calculations are handled by Level and Trial. Several of Level's methods are recursive, and are 
+overwritten by the base case, most frequently Trial.  
 """
 
 SAMPLES_PER_SECOND = 30000
 TONES_PER_PERIOD = 30  # The pip sounds 30 times in a tone period
+TONE_PERIOD_DURATION = 30
 INTER_TONE_INTERVAL = 30  # number of seconds between tones
 
 
 class Level:
+    # Create data_opts, data_type, data, and autocorr key properties on all the data objects.  All these values
+    # change when the data_type_context changes
+    data_opts = dynamic_property('data_opts', lambda self: (self.data_type_context.val
+                                                            if self.data_type_context is not None else {}) or {})
+    data_type = dynamic_property('data_type', lambda self: self.data_opts['data_type'])
+    data = dynamic_property('data', lambda self: getattr(self, f"get_{self.data_type}")())
+    autocorr_key = dynamic_property('autocorr_key', lambda self: self.get_autocorr_key())
 
     def subscribe(self, context):
         setattr(self, context.name, context)
         context.subscribe(self)
 
-    @property
-    def data_opts(self):
-        return (self.data_type_context.opts if self.data_type_context is not None else {}) or {}
-
-    @property
-    def data_type(self):
-        return self.data_opts['data_type']
-
-    @property
-    def data_func(self):
-        return getattr(self, f"get_{self.data_type}")
-
-    @property
-    def autocorr_key(self):
-        key = self.data_type_context.opts.get('ac_key')
-        if key is None:
-            return key
-        else:
-            # if self is level being plotted, this will return the key in opts, else it will return the appropriate key
-            # for the child, the latter portion of the parent's key
-            return key[key.find(self.name):]
-
     @cache_method
-    def get_average(self, base_method):
-        child_vals = [child.get_average(base_method) for child in self.children]
+    def get_average(self, base_method, stop_at='trial'):  # Trial is the default base case, but not always
+        if self.name == stop_at:
+            return getattr(self, base_method)()
+        else:
+            child_vals = [child.get_average(base_method, stop_at=stop_at) for child in self.children]
         return np.mean(child_vals, axis=0)
 
     @cache_method
@@ -72,7 +62,16 @@ class Level:
 
     @cache_method
     def get_sem(self):
-        return sem([child.data_func() for child in self.children])
+        return sem([child.data for child in self.children])
+
+    def get_autocorr_key(self):
+        key = self.data_opts.get('ac_key')
+        if key is None:
+            return key
+        else:
+            # if self is the level being plotted, this will return the key in opts, or else it will return the
+            # appropriate key for the child, the latter portion of the parent's key
+            return key[key.find(self.name):]
 
     def _calculate_autocorrelation(self, x):
         opts = self.data_opts
@@ -91,10 +90,10 @@ class Level:
     @cache_method
     def get_all_autocorrelations(self):
 
-        # Calculate the autocorrelation over rates for this node
+        # Calculate the autocorrelation of the rates for this node
         ac_results = {f"{self.name}_by_rates": self._calculate_autocorrelation(self.get_demeaned_rates())}
 
-        # Calculate the autocorrelation by children for this node
+        # Calculate the autocorrelation by children for this node, i.e. the average of the children's autocorrelations
         # We need to ask each child to calculate its autocorrelations first.
         children_autocorrs = [child.get_all_autocorrelations() for child in self.children]
 
@@ -112,7 +111,6 @@ class Experiment:
     def __init__(self, conditions):
         self.conditions, self.groups = conditions.keys(), conditions.values()
         self.children = self.groups
-        self.children_name = 'groups'
         for group in self.groups:
             group.parent = self
         self.all_units = None
@@ -129,19 +127,19 @@ class Group(Level):
     def __init__(self, name, animals=None):
         self.identifier = name
         self.animals = animals if animals else []
-        self.children_name = 'animals'
         self.children = self.animals
-        for child in self.children:
-            child.parent = self
-        self.parent = None
         self.data_type_context = None
         self.neuron_type_context = None
         self.selected_neuron_type = None
 
-    def update(self, _):
-        if self.selected_neuron_type != self.neuron_type_context.neuron_type:
-            self.selected_neuron_type = self.neuron_type_context.neuron_type
-            self.update_neuron_type()
+    def update(self, context):
+        self.check_for_new_neuron_type(context)
+
+    def check_for_new_neuron_type(self, context):
+        if context.name == 'neuron_type_context':
+            if self.selected_neuron_type != context.val:
+                self.selected_neuron_type = context.val
+                self.update_neuron_type()
 
     def update_neuron_type(self):
         if self.selected_neuron_type is None:
@@ -149,8 +147,11 @@ class Group(Level):
         else:
             self.children = [animal for animal in self.animals if len(getattr(animal, self.selected_neuron_type))]
 
+    def get_proportion_score(self):
+        return self.get_average('get_proportion_score', stop_at='trial')
 
-class Animal(Level):
+
+class Animal(Group):
     """An animal in the experiment, the child of a Group, parent of Units. Subscribes to neuron_type_context that
     defines which neuron type, PN or IN, is currently active. Updates its children, i.e., the active units for analysis,
     when the context changes. Also subscribes to the data_type_context but doesn't need to update its children property
@@ -167,8 +168,6 @@ class Animal(Level):
         self.condition = condition
         self.units = units if units else defaultdict(list)
         self.children = None
-        self.children_name = 'units'
-        self.parent = None
         self.tone_onsets_expanded = tone_onsets_expanded if tone_onsets_expanded is not None else []
         self.tone_period_onsets = tone_period_onsets if tone_period_onsets is not None else []
         self.data_type_context = None
@@ -177,12 +176,10 @@ class Animal(Level):
         self.IN = []
         self.selected_neuron_type = None
 
-    def update(self, _):
-        if self.selected_neuron_type != self.neuron_type_context.neuron_type:
-            self.selected_neuron_type = self.neuron_type_context.neuron_type
+    def update(self, context):
+        if self.children is None:
             self.update_neuron_type()
-        elif self.children is None:
-            self.update_neuron_type()
+        self.check_for_new_neuron_type(context)
 
     def update_neuron_type(self):
         if self.selected_neuron_type is None:
@@ -200,7 +197,6 @@ class Unit(Level):
     def __init__(self, animal, category, spike_times, neuron_type=None, data_type_context=None):
         self.trials = []
         self.animal = animal
-        self.parent = self.animal
         self.category = category
         self.animal.units[category].append(self)
         self.identifier = str(self.animal.units[category].index(self) + 1)
@@ -209,18 +205,20 @@ class Unit(Level):
         self.children = self.trials
         self.spike_times = spike_times
         self.data_type_context = data_type_context
-        self.trials_data = None
+        self.trials_opts = None
+        self.selected_trial_indices = None
 
     def update(self, _):
-        trials_data = (self.data_opts.get(opt) for opt in ['trials', 'post_stim', 'pre_stim'])
-        if self.trials_data != trials_data:
-            self.trials_data = trials_data
+        trials_opts = (self.data_opts.get(opt) for opt in ['trials', 'post_stim', 'pre_stim'])
+        if self.trials_opts != trials_opts:
+            self.trials_opts = trials_opts
             self.update_trials()
 
     def update_trials(self):
         self.trials = []
         pre_stim, post_stim = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim'])
         trials_slice = slice(*self.data_opts.get('trials'))
+        self.selected_trial_indices = list(range(150))[slice(*self.data_opts.get('trials'))]
         for i, start in enumerate(self.animal.tone_onsets_expanded[trials_slice]):
             spikes = self.find_spikes(
                 start - pre_stim * SAMPLES_PER_SECOND, start + post_stim * SAMPLES_PER_SECOND)
@@ -243,12 +241,24 @@ class Unit(Level):
         for onset in self.animal.tone_period_onsets:
             start = onset - INTER_TONE_INTERVAL * SAMPLES_PER_SECOND
             stop = onset - 1
-            rate_set.append(calc_rates(self.find_spikes(start, stop), spike_range=(start, stop), num_bins=num_bins,
-                                       bin_size=bin_size))
-        return np.mean(np.array(rate_set), axis=1)
+            rate_set.append(calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size))
+        return np.mean(rate_set, axis=1)
+
+    @cache_method
+    def get_global_std_dev(self):
+        bin_size = self.data_opts.get('bin_size')
+        start = self.animal.tone_period_onsets[0] - INTER_TONE_INTERVAL * SAMPLES_PER_SECOND
+        stop = self.animal.tone_period_onsets[-1] + TONE_PERIOD_DURATION
+        num_bins = int(len(self.animal.tone_period_onsets) * (INTER_TONE_INTERVAL + TONE_PERIOD_DURATION) / bin_size)
+        std = np.std(calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size))
+        return std
+
+    @cache_method
+    def get_proportion_score(self):
+        return [1 if rate > 0 else 0 for rate in self.get_psth()]
 
 
-class Trial(Level):
+class Trial(Unit):
     """A single trial in the experiment, the child of a unit. Aspects of a trial, for instance, the start and end of
     relevant data, can change when the parent unit's data_type_context is updated. All methods on Trial are the base
     case of the recursive methods on Level."""
@@ -257,21 +267,20 @@ class Trial(Level):
 
     def __init__(self, unit, spikes, index):
         self.unit = unit
-        self.parent = self.unit
         self.data_type_context = self.unit.data_type_context
         self.spikes = spikes
         self.index = index
-        self.identifier = self.data_type_context.selected_trial_indices[self.index]
-
-    @cache_method
-    def get_average(self, base_method):
-        return getattr(self, base_method)()
+        self.identifier = self.unit.selected_trial_indices[self.index]
 
     @cache_method
     def get_psth(self):
         # self.identifier is a pip's index in the original full series of pips. self.identifier // TONES_PER_PERIOD can
         # have one of five values; it's the index of the tone period
-        return self.get_rates() - self.unit.get_pretone_means()[self.identifier // TONES_PER_PERIOD]
+        relative_rates = self.get_rates() - self.unit.get_pretone_means()[self.identifier // TONES_PER_PERIOD]
+        if self.data_opts.get('adjustment') == 'relative':
+            return relative_rates
+        else:
+            return relative_rates / self.unit.get_global_std_dev()  # same as dividing unit psth by std dev
 
     @cache_method
     def get_rates(self):
