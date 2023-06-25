@@ -7,7 +7,6 @@ plotter = Plotter(experiment, data_type_context, neuron_type_context)
 Helpers for procs.py
 '''
 
-
 def plot(data_opts, graph_opts, levels, n_types=None):
 
     for level in levels:

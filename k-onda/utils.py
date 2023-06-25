@@ -4,22 +4,6 @@ import numpy as np
 from datetime import datetime
 
 
-"""Property Utils"""
-
-
-def dynamic_property(name, getter, setter=None):
-    @property
-    def prop(self):
-        return getter(self)
-
-    if setter is not None:
-        @prop.setter
-        def prop(self, value):
-            return setter(self, value)
-
-    return prop
-
-
 """Cache Utils"""
 
 

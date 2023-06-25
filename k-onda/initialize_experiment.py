@@ -50,16 +50,12 @@ experiment.all_units = [unit for group in experiment.groups for animal in group.
 neuron_type_context = Context('neuron_type_context')
 data_type_context = Context('data_type_context')
 
-for unit in experiment.all_units:
-    unit.subscribe(data_type_context)
+for entity in [g for g in experiment.groups] + [a for a in animals] + [u for u in experiment.all_units]:
+    entity.subscribe(data_type_context)
 
-for animal in animals:
-    animal.subscribe(data_type_context)
-    animal.subscribe(neuron_type_context)
+for entity in [g for g in experiment.groups] + [a for a in animals]:
+    entity.subscribe(neuron_type_context)
 
-for group in experiment.groups:
-    group.subscribe(data_type_context)
-    group.subscribe(neuron_type_context)
 
 
 

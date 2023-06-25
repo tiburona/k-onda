@@ -1,6 +1,6 @@
 from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
     AC_KEYS, AC_METHODS
-from initialize_experiment import experiment
+from initialize_experiment import experiment, data_type_context
 from proc_helpers import add_ac_keys_and_plot, assign_vars, plot
 from spreadsheet import Spreadsheet
 
@@ -36,8 +36,8 @@ def plot_proportion_score(levels, proportion_opts=None, graph_opts=None):
 
 def make_spreadsheet(spreadsheet_opts=None):
     spreadsheet_opts, = assign_vars([spreadsheet_opts], [SPREADSHEET_OPTS])
-    sheet = Spreadsheet(spreadsheet_opts)
-    sheet.make_spreadsheet(experiment.all_units)
+    sheet = Spreadsheet(experiment, data_type_context, spreadsheet_opts)
+    sheet.make_spreadsheet()
 
 
 

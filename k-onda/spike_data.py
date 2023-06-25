@@ -3,16 +3,17 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 
+from context import Base
 from matlab_interface import xcorr
-from utils import dynamic_property, cache_method
+from utils import cache_method
 from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
 
 
 """
-This module defines Level, a base class, and Experiment, Group, Animal, Unit, and Trial. Group and Unit inherit
-from Level, and Animal and Trial both inherit from one level up in the hierarchy because they need one method each from
-their parent. Most calculations are handled by Level and Trial. Several of Level's methods are recursive, and are 
-overwritten by the base case, most frequently Trial.  
+This module defines Experiment, Group, Animal, Unit, and Trial. Experiment inherits from Base, which defines a few 
+common properties. Group, Unit, and Trial inherit from Experiment, but Animal shares a unique method with Group, and 
+inherits from it. Several of Experiment's methods are recursive, and are overwritten by the base case, most frequently 
+Trial.  
 """
 
 SAMPLES_PER_SECOND = 30000
@@ -21,14 +22,25 @@ TONE_PERIOD_DURATION = 30
 INTER_TONE_INTERVAL = 30  # number of seconds between tones
 
 
-class Level:
-    # Create data_opts, data_type, data, and autocorr key properties on all the data objects.  All these values
-    # change when the data_type_context changes
-    data_opts = dynamic_property('data_opts', lambda self: (self.data_type_context.val
-                                                            if self.data_type_context is not None else {}) or {})
-    data_type = dynamic_property('data_type', lambda self: self.data_opts['data_type'])
-    data = dynamic_property('data', lambda self: getattr(self, f"get_{self.data_type}")())
-    autocorr_key = dynamic_property('autocorr_key', lambda self: self.get_autocorr_key())
+class Experiment(Base):
+    """The experiment. Parent of groups."""
+
+    name = 'experiment'
+
+    def __init__(self, conditions):
+        self.conditions, self.groups = conditions.keys(), conditions.values()
+        self.children = self.groups
+        for group in self.groups:
+            group.parent = self
+        self.all_units = None
+
+    @property
+    def data(self):
+        return getattr(self, f"get_{self.data_type}")()
+
+    @property
+    def autocorr_key(self):
+        return self.get_autocorr_key()
 
     def subscribe(self, context):
         setattr(self, context.name, context)
@@ -50,6 +62,14 @@ class Level:
     @cache_method
     def get_psth(self):
         return self.get_average('get_psth')
+
+    @cache_method
+    def proportion_score(self):
+        return [1 if rate > 0 else 0 for rate in self.get_psth()]
+
+    @cache_method
+    def get_proportion_score(self):
+        return self.get_average('proportion_score', stop_at=self.data_opts.get('base'))
 
     @cache_method
     def get_autocorr(self):
@@ -103,20 +123,7 @@ class Level:
         return ac_results
 
 
-class Experiment:
-    """The experiment. Parent of groups."""
-
-    name = 'experiment'
-
-    def __init__(self, conditions):
-        self.conditions, self.groups = conditions.keys(), conditions.values()
-        self.children = self.groups
-        for group in self.groups:
-            group.parent = self
-        self.all_units = None
-
-
-class Group(Level):
+class Group(Experiment):
     """A group in the experiment, i.e., a collection of animals assigned to a condition, the child of an Experiment,
     parent of Animals. Subscribes to neuron_type_context that defines which neuron type, PN or IN, is currently active.
     Limits its children to animals who have neurons of that type.  Also subscribes to data_type_context but doesn't need
@@ -130,15 +137,15 @@ class Group(Level):
         self.children = self.animals
         self.data_type_context = None
         self.neuron_type_context = None
-        self.selected_neuron_type = None
+        self.last_neuron_type = None
 
     def update(self, context):
         self.check_for_new_neuron_type(context)
 
     def check_for_new_neuron_type(self, context):
         if context.name == 'neuron_type_context':
-            if self.selected_neuron_type != context.val:
-                self.selected_neuron_type = context.val
+            if self.last_neuron_type != context.val:
+                self.last_neuron_type = context.val
                 self.update_neuron_type()
 
     def update_neuron_type(self):
@@ -146,9 +153,6 @@ class Group(Level):
             self.children = self.animals
         else:
             self.children = [animal for animal in self.animals if len(getattr(animal, self.selected_neuron_type))]
-
-    def get_proportion_score(self):
-        return self.get_average('get_proportion_score', stop_at='trial')
 
 
 class Animal(Group):
@@ -174,7 +178,7 @@ class Animal(Group):
         self.neuron_type_context = None
         self.PN = []
         self.IN = []
-        self.selected_neuron_type = None
+        self.last_neuron_type = None
 
     def update(self, context):
         if self.children is None:
@@ -182,13 +186,13 @@ class Animal(Group):
         self.check_for_new_neuron_type(context)
 
     def update_neuron_type(self):
-        if self.selected_neuron_type is None:
+        if self.last_neuron_type is None:
             self.children = self.units['good']
         else:
             self.children = getattr(self, self.selected_neuron_type)
 
 
-class Unit(Level):
+class Unit(Experiment):
     """A unit that was recorded from in the experiment, the child of an Animal, parent of Trials. Subscribes to
     data_type_context with an opts property and updates its trials when the trial definitions in the context change."""
 
@@ -253,12 +257,8 @@ class Unit(Level):
         std = np.std(calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size))
         return std
 
-    @cache_method
-    def get_proportion_score(self):
-        return [1 if rate > 0 else 0 for rate in self.get_psth()]
 
-
-class Trial(Unit):
+class Trial(Experiment):
     """A single trial in the experiment, the child of a unit. Aspects of a trial, for instance, the start and end of
     relevant data, can change when the parent unit's data_type_context is updated. All methods on Trial are the base
     case of the recursive methods on Level."""

@@ -25,7 +25,7 @@ def make(levels=('group', 'animal', 'unit'), to_run=('psth', 'autocorr', 'spectr
 
 def main():
 
-    make(to_run='psth')
+    make(to_run='spreadsheet')
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

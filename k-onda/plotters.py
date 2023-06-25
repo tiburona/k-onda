@@ -6,10 +6,11 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts
-from utils import smart_title_case, formatted_now, dynamic_property
+from utils import smart_title_case, formatted_now
+from context import Base
 
 
-class Plotter:
+class Plotter(Base):
     def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None):
         self.experiment = experiment
         self.data_type_context = data_type_context
@@ -24,20 +25,12 @@ class Plotter:
         self.graph_opts = graph_opts
         self.neuron_types = ['PN', 'IN']
 
-    neuron_type = dynamic_property('neuron_type',
-                                   getter=lambda self: self.neuron_type_context.val,
-                                   setter=lambda self, neuron_type: self.neuron_type_context.set_val(neuron_type))
-    data_opts = dynamic_property('data_opts',
-                                 getter=lambda self: self.data_type_context.val,
-                                 setter=lambda self, opts: self.data_type_context.set_val(opts))
-    dtype = dynamic_property('dtype', lambda self: self.data_opts.get('data_type'))
-
     def initialize(self, data_opts, graph_opts, neuron_type):
         self.y_min = float('inf')
         self.y_max = float('-inf')
         self.graph_opts = graph_opts
         self.data_opts = data_opts
-        self.neuron_type = neuron_type
+        self.selected_neuron_type = neuron_type
 
     def plot(self, data_opts, graph_opts, level, neuron_type=None):
         self.initialize(data_opts, graph_opts, neuron_type)
@@ -56,9 +49,9 @@ class Plotter:
         self.fig.subplots_adjust(wspace=0.2, hspace=0.2)
         for row, group in enumerate(groups):
             for col, neuron_type in enumerate(self.neuron_types):
-                self.neuron_type = neuron_type
+                self.selected_neuron_type = neuron_type
                 self.make_subplot(group, row, col, title=f"{group.identifier} {neuron_type}")
-        self.neuron_type = None
+        self.selected_neuron_type = None
         self.set_y_scales()
         self.close_plot('groups')
 
@@ -82,7 +75,7 @@ class Plotter:
         self.close_plot(group.identifier)
 
     def plot_units(self, animal):
-        multi = 2 if self.dtype == 'psth' else 1
+        multi = 2 if self.data_type == 'psth' else 1
 
         for i in range(0, len(animal.children), self.graph_opts['units_in_fig']):
             n_subplots = min(self.graph_opts['units_in_fig'], len(animal.children) - i)
@@ -91,9 +84,9 @@ class Plotter:
             gs = GridSpec(n_subplots * multi, 1, figure=self.fig)
 
             for j in range(i, i + n_subplots):
-                if self.dtype == 'psth':
+                if self.data_type == 'psth':
                     axes = [self.fig.add_subplot(gs[2 * (j - i), 0]), self.fig.add_subplot(gs[2 * (j - i) + 1, 0])]
-                elif self.dtype in ['autocorr', 'spectrum']:
+                elif self.data_type in ['autocorr', 'spectrum']:
                     axes = [self.fig.add_subplot(gs[j - i, 0])]
                 self.plot_unit(animal.children[j], axes)
 
@@ -103,10 +96,10 @@ class Plotter:
             self.close_plot(f"{animal.identifier} unit {i + 1} to {marker2}")
 
     def plot_unit(self, unit, axes):
-        if self.dtype == 'psth':
+        if self.data_type == 'psth':
             self.add_raster(unit, axes)
         subplotter = Subplotter(unit, self.data_opts, self.graph_opts, axes[-1])
-        plotting_func = getattr(subplotter, f"plot_{self.dtype}")
+        plotting_func = getattr(subplotter, f"plot_{self.data_type}")
         plotting_func()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
@@ -120,7 +113,7 @@ class Plotter:
         # Add a big subplot without frame and set the x and y labels for this subplot
         big_subplot = self.fig.add_subplot(111, frame_on=False)
         big_subplot.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        big_subplot.set_xlabel(self.get_labels('unit')[self.dtype][0], labelpad=30, fontsize=14)
+        big_subplot.set_xlabel(self.get_labels('unit')[self.data_type][0], labelpad=30, fontsize=14)
         plt.subplots_adjust(hspace=0.5)  # Add space between subplots
 
     def make_subplot(self, data_source, row, col, title=''):
@@ -146,7 +139,7 @@ class Plotter:
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum')}
 
     def set_labels(self, row, col, level):
-        [getattr(self.axs[row, col], f"set_{dim}label")(self.get_labels(level)[self.dtype][i])
+        [getattr(self.axs[row, col], f"set_{dim}label")(self.get_labels(level)[self.data_type][i])
          for i, dim in enumerate(['x', 'y'])]
 
     def get_ylim(self, row, col, y_min, y_max):
@@ -167,7 +160,7 @@ class Plotter:
                      ('time generated', formatted_now())]
         [text_vals.append((k, self.data_opts[k])) for k in ['adjustment, average_method'] if k in self.data_opts]
         text = '  '.join([f"{k}: {v}" for k, v in text_vals])
-        if self.dtype in ['autocorr', 'spectrum']:
+        if self.data_type in ['autocorr', 'spectrum']:
             ac_vals = [('program', self.data_opts['ac_program']),
                        ('method', self.data_opts['ac_key'])]
             ac_text = '  '.join([f"{k}: {v}" for k, v in ac_vals])
@@ -175,14 +168,14 @@ class Plotter:
         self.fig.text(0.5, 0.02, text, ha='center', va='bottom', fontsize=15)
 
     def set_dir_and_filename(self, basename):
-        tags = [self.dtype]
+        tags = [self.data_type]
         self.dir_tags = tags + [f"trials_{self.join_trials('_')}"]
         tags.insert(0, basename)
-        if self.neuron_type:
-            tags += [self.neuron_type]
+        if self.selected_neuron_type:
+            tags += [self.selected_neuron_type]
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
-        if self.dtype in ['autocorr', 'spectrum']:
+        if self.data_type in ['autocorr', 'spectrum']:
             for key in ['ac_program', 'ac_key']:
                 tags += [self.data_opts[key]]
         self.fname = f"{'_'.join(tags)}.png"
@@ -204,7 +197,7 @@ class Subplotter:
     def __init__(self, data_source, data_opts, graph_opts, ax):
         self.data_source = data_source
         self.d_opts = data_opts
-        self.dtype = data_opts['data_type']
+        self.data_type = data_opts['data_type']
         self.g_opts = graph_opts
         self.ax = ax
         self.x = None
@@ -259,7 +252,7 @@ class Subplotter:
         self.ax.plot(self.x, self.y)
 
     def plot_data(self):
-        getattr(self, f"plot_{self.dtype}")()
+        getattr(self, f"plot_{self.data_type}")()
 
     def add_sem(self):
         opts = self.d_opts
