@@ -11,6 +11,7 @@ from context import Base
 
 
 class Plotter(Base):
+    """Opens, structure, and closes a plot."""
     def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None):
         self.experiment = experiment
         self.data_type_context = data_type_context
@@ -26,11 +27,12 @@ class Plotter(Base):
         self.neuron_types = ['PN', 'IN']
 
     def initialize(self, data_opts, graph_opts, neuron_type):
+        """Both initializes values on self and sets values for the contexts and all the contexts' subscribers."""
         self.y_min = float('inf')
         self.y_max = float('-inf')
         self.graph_opts = graph_opts
-        self.data_opts = data_opts
-        self.selected_neuron_type = neuron_type
+        self.data_opts = data_opts  # Sets data_opts for all subscribers to data_type_context
+        self.selected_neuron_type = neuron_type  # Sets neuron type for all subscribers to neuron_type_context
 
     def plot(self, data_opts, graph_opts, level, neuron_type=None):
         self.initialize(data_opts, graph_opts, neuron_type)
@@ -55,6 +57,15 @@ class Plotter(Base):
         self.set_y_scales()
         self.close_plot('groups')
 
+    def plot_group_stats(self, groups):
+        self.fig, self.axs = plt.subplots(2, 1, figsize=(15, 15))
+        for row, neuron_type in enumerate(self.neuron_types):
+            self.selected_neuron_type = neuron_type
+            for group in groups:
+                color = 'orange' if group.identifier == 'stressed' else 'green'
+                self.axs[row].plot(group.data, label=group.identifier, color=color)
+        self.close_plot('stats_plot')
+
     def plot_animals(self, group):
         num_animals = len(group.children)
         nrows = math.ceil(num_animals / 3)
@@ -73,6 +84,13 @@ class Plotter(Base):
 
         self.set_y_scales()
         self.close_plot(group.identifier)
+
+    def make_subplot(self, data_source, row, col, title=''):
+        subplotter = Subplotter(data_source, self.data_opts, self.graph_opts, self.axs[row, col])
+        subplotter.plot_data()
+        if self.graph_opts.get('sem'):
+            subplotter.add_sem()
+        self.prettify_subplot(row, col, data_source.name, title=title, y_min=min(subplotter.y), y_max=max(subplotter.y))
 
     def plot_units(self, animal):
         multi = 2 if self.data_type == 'psth' else 1
@@ -115,13 +133,6 @@ class Plotter(Base):
         big_subplot.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         big_subplot.set_xlabel(self.get_labels('unit')[self.data_type][0], labelpad=30, fontsize=14)
         plt.subplots_adjust(hspace=0.5)  # Add space between subplots
-
-    def make_subplot(self, data_source, row, col, title=''):
-        subplotter = Subplotter(data_source, self.data_opts, self.graph_opts, self.axs[row, col])
-        subplotter.plot_data()
-        if self.graph_opts.get('sem'):
-            subplotter.add_sem()
-        self.prettify_subplot(row, col, data_source.name, title=title, y_min=min(subplotter.y), y_max=max(subplotter.y))
 
     def close_plot(self, basename):
         self.set_dir_and_filename(basename)
@@ -194,6 +205,7 @@ class Plotter(Base):
 
 
 class Subplotter:
+    """Constructs a subplot."""
     def __init__(self, data_source, data_opts, graph_opts, ax):
         self.data_source = data_source
         self.d_opts = data_opts

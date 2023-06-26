@@ -8,6 +8,8 @@ from datetime import datetime
 
 
 def to_hashable(item, max_depth=5):
+    """Converts a non hashable input into a hashable type for the purpose of using it as a part of the key in an
+    instance's cache of calculated values."""
     if max_depth < 0:
         raise ValueError("Max recursion depth exceeded while trying to convert to hashable")
 
@@ -24,6 +26,9 @@ def to_hashable(item, max_depth=5):
 
 
 def cache_method(method):
+    """
+    Decorator that allows the results of a method's calculation to be stored in the instance cache.
+    """
     cache_name = "_cache_" + method.__name__
 
     @functools.wraps(method)
@@ -50,7 +55,8 @@ def formatted_now():
 
 
 def smart_title_case(s):
-    lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 'as', 'but', 'or', 'nor', 'is'}
+    lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 'as', 'but', 'or',
+                       'nor', 'is'}
     acronyms = {'psth'}
     words = re.split(r'(\W+)', s)  # Split string on non-alphanumeric characters, preserving delimiters
     title_words = []

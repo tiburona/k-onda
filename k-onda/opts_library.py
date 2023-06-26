@@ -15,6 +15,9 @@ SPREADSHEET_OPTS = {'path': '/Users/katie/likhtik/data', 'data_type': 'proportio
                     'adjustment': 'normalized', 'time': 'continuous', 'pre_stim': 0.0, 'post_stim': 1.00,
                     'bin_size': 0.01, 'trials': (0, 150)}
 
+POST_HOC_OPTS = {'data_type': 'proportion_score', 'base': 'trial', 'adjustment': 'normalized', 'time': 'continuous',
+                 'pre_stim': 0.0, 'post_stim': 1.00, 'bin_size': 0.01, 'trials': (0, 150), 'num_bins': 65}
+
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'tick_step': 0.1, 'sem': True,
               'footer': True, 'equal_y_scales': True}
 

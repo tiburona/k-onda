@@ -1,8 +1,9 @@
 from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
-    AC_KEYS, AC_METHODS
+    POST_HOC_OPTS, AC_KEYS, AC_METHODS
 from initialize_experiment import experiment, data_type_context
 from proc_helpers import add_ac_keys_and_plot, assign_vars, plot
 from spreadsheet import Spreadsheet
+from r_interface import Stats
 
 """
 Functions in this module, with the assistance of functions imported from proc_helpers, read in values of opts or other 
@@ -38,6 +39,13 @@ def make_spreadsheet(spreadsheet_opts=None):
     spreadsheet_opts, = assign_vars([spreadsheet_opts], [SPREADSHEET_OPTS])
     sheet = Spreadsheet(experiment, data_type_context, spreadsheet_opts)
     sheet.make_spreadsheet()
+
+
+def run_post_hocs(post_hoc_opts=None):
+    post_hoc_opts, = assign_vars([post_hoc_opts], [POST_HOC_OPTS])
+    stats = Stats(experiment, data_type_context, post_hoc_opts)
+    stats.get_post_hoc_results()
+
 
 
 

@@ -254,8 +254,7 @@ class Unit(Experiment):
         start = self.animal.tone_period_onsets[0] - INTER_TONE_INTERVAL * SAMPLES_PER_SECOND
         stop = self.animal.tone_period_onsets[-1] + TONE_PERIOD_DURATION
         num_bins = int(len(self.animal.tone_period_onsets) * (INTER_TONE_INTERVAL + TONE_PERIOD_DURATION) / bin_size)
-        std = np.std(calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size))
-        return std
+        return np.std(calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size))
 
 
 class Trial(Experiment):
