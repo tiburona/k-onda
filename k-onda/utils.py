@@ -3,6 +3,8 @@ import functools
 import numpy as np
 from datetime import datetime
 
+DEBUG_MODE = 0
+
 
 """Cache Utils"""
 
@@ -29,10 +31,18 @@ def cache_method(method):
     """
     Decorator that allows the results of a method's calculation to be stored in the instance cache.
     """
+
+    if DEBUG_MODE == 2:
+        return method
+
     cache_name = "_cache_" + method.__name__
 
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
+        # If debug_mode is set to 2, the decorator will do nothing and just call the method.
+        if self.data_opts.get('debug_mode') == 2:
+            return method(self, *args, **kwargs)
+
         cache = getattr(self, cache_name, {})
         context_keys = (getattr(self, c).cache_id for c in ['neuron_type_context', 'data_type_context'] if
                         hasattr(self, c))
@@ -49,30 +59,6 @@ def cache_method(method):
 """Plot Utils"""
 
 
-def formatted_now():
-    now = datetime.now()
-    return now.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def smart_title_case(s):
-    lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 'as', 'but', 'or',
-                       'nor', 'is'}
-    acronyms = {'psth'}
-    words = re.split(r'(\W+)', s)  # Split string on non-alphanumeric characters, preserving delimiters
-    title_words = []
-    for i, word in enumerate(words):
-        if word.lower() in lowercase_words and i != 0 and i != len(words) - 1:
-            title_words.append(word.lower())
-        elif word.lower() in acronyms:
-            title_words.append(word.upper())
-        elif not word.isupper():
-            title_words.append(word.capitalize())
-        else:
-            title_words.append(word)
-    title = ''.join(title_words)
-    return title
 
-
-def ac_str(s):
-    for (old, new) in [('pd', 'Pandas'), ('np', 'NumPy'), ('ml', 'Matlab')]:
-        s = s.replace(old, new)

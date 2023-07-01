@@ -1,5 +1,5 @@
 from logger import log_directory_contents
-from procs import plot_psth, plot_autocorr, plot_spectrum, make_spreadsheet, plot_proportion_score, run_post_hocs
+from procs import *
 
 
 """
@@ -14,20 +14,23 @@ def make(levels=('group', 'animal', 'unit'), to_run=('psth', 'autocorr', 'spectr
     if 'psth' in to_run:
         plot_psth(levels)
     if 'proportion' in to_run:
-        plot_proportion_score(levels=('group', 'animal'))
+        plot_proportion_score(levels=('group', 'animal', 'unit'))
     if 'autocorr' in to_run:
         plot_autocorr(levels)
     if 'spectrum' in to_run:
         plot_spectrum(levels)
     if 'spreadsheet' in to_run:
         make_spreadsheet()
-    if 'post_hocs' in to_run:
-        run_post_hocs()
+    if 'group_stats' in to_run:
+        #  plot_group_stats()
+        pass
+    if 'pie_chart' in to_run:
+        plot_pie_chart()
 
 
 def main():
 
-    make(to_run='post_hocs')
+    make(to_run='make_spreadsheet')
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

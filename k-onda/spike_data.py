@@ -20,20 +20,10 @@ SAMPLES_PER_SECOND = 30000
 TONES_PER_PERIOD = 30  # The pip sounds 30 times in a tone period
 TONE_PERIOD_DURATION = 30
 INTER_TONE_INTERVAL = 30  # number of seconds between tones
+PIP_DURATION = .05
 
 
-class Experiment(Base):
-    """The experiment. Parent of groups."""
-
-    name = 'experiment'
-
-    def __init__(self, conditions):
-        self.conditions, self.groups = conditions.keys(), conditions.values()
-        self.children = self.groups
-        for group in self.groups:
-            group.parent = self
-        self.all_units = None
-
+class Level(Base):
     @property
     def data(self):
         return getattr(self, f"get_{self.data_type}")()
@@ -123,7 +113,20 @@ class Experiment(Base):
         return ac_results
 
 
-class Group(Experiment):
+class Experiment(Level):
+    """The experiment. Parent of groups."""
+
+    name = 'experiment'
+
+    def __init__(self, conditions):
+        self.conditions, self.groups = conditions.keys(), conditions.values()
+        self.children = self.groups
+        for group in self.groups:
+            group.parent = self
+        self.all_units = None
+
+
+class Group(Level):
     """A group in the experiment, i.e., a collection of animals assigned to a condition, the child of an Experiment,
     parent of Animals. Subscribes to neuron_type_context that defines which neuron type, PN or IN, is currently active.
     Limits its children to animals who have neurons of that type.  Also subscribes to data_type_context but doesn't need
@@ -192,7 +195,7 @@ class Animal(Group):
             self.children = getattr(self, self.selected_neuron_type)
 
 
-class Unit(Experiment):
+class Unit(Level):
     """A unit that was recorded from in the experiment, the child of an Animal, parent of Trials. Subscribes to
     data_type_context with an opts property and updates its trials when the trial definitions in the context change."""
 
@@ -252,12 +255,36 @@ class Unit(Experiment):
     def get_global_std_dev(self):
         bin_size = self.data_opts.get('bin_size')
         start = self.animal.tone_period_onsets[0] - INTER_TONE_INTERVAL * SAMPLES_PER_SECOND
-        stop = self.animal.tone_period_onsets[-1] + TONE_PERIOD_DURATION
+        stop = self.animal.tone_period_onsets[-1] + TONE_PERIOD_DURATION * SAMPLES_PER_SECOND
         num_bins = int(len(self.animal.tone_period_onsets) * (INTER_TONE_INTERVAL + TONE_PERIOD_DURATION) / bin_size)
         return np.std(calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size))
 
+    @cache_method
+    def get_tone_period_std_dev(self):
+        bin_size = self.data_opts.get('bin_size')
+        num_bins = int(TONE_PERIOD_DURATION/bin_size)
+        rates = []
+        for start in self.animal.tone_period_onsets:
+            stop = start + TONE_PERIOD_DURATION * SAMPLES_PER_SECOND
+            p_rates = calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size)
+            rates.append(p_rates)
+        return np.std([rate for period in rates for rate in period])
 
-class Trial(Experiment):
+    @cache_method
+    def upregulated_to_pip(self):
+        if self.data_type == 'psth':
+            first_pip_bin_ind = int(self.data_opts['pre_stim']/self.data_opts['bin_size'])
+            last_pip_bin_ind = int(first_pip_bin_ind + .05/self.data_opts['bin_size'])
+            pip_activity = np.mean(self.data[first_pip_bin_ind:last_pip_bin_ind])
+            if pip_activity > .5 * np.std(self.data):
+                return 1
+            elif pip_activity < -.5 * np.std(self.data):
+                return -1
+            else:
+                return 0
+
+
+class Trial(Level):
     """A single trial in the experiment, the child of a unit. Aspects of a trial, for instance, the start and end of
     relevant data, can change when the parent unit's data_type_context is updated. All methods on Trial are the base
     case of the recursive methods on Level."""
@@ -279,7 +306,7 @@ class Trial(Experiment):
         if self.data_opts.get('adjustment') == 'relative':
             return relative_rates
         else:
-            return relative_rates / self.unit.get_global_std_dev()  # same as dividing unit psth by std dev
+            return relative_rates / self.unit.get_tone_period_std_dev()  # same as dividing unit psth by std dev
 
     @cache_method
     def get_rates(self):

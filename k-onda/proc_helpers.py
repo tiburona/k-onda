@@ -7,7 +7,12 @@ plotter = Plotter(experiment, data_type_context, neuron_type_context)
 Helpers for procs.py
 '''
 
-def plot(data_opts, graph_opts, levels, n_types=None):
+
+def plot(data_opts, graph_opts, levels=None, n_types=None):
+
+    if levels is None:
+        plotter.plot(data_opts, graph_opts)
+        return
 
     for level in levels:
         if level == 'animal':
