@@ -3,7 +3,7 @@ from datetime import datetime
 
 
 class PlottingMixin:
-    def get_labels(self, level=None):
+    def get_labels(self):
         adjustment = self.data_opts.get('adjustment')
         Hz = '' if adjustment == 'normalized' else ' Hz'
 
@@ -12,6 +12,21 @@ class PlottingMixin:
                                      f'Proportion Positive {self.data_opts.get("base").capitalize() + "s"}'),
                 'autocorr': ('Lags (s)', 'Autocorrelation'),
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum')}
+
+    def set_labels(self, x_and_y_labels=(None, None)):
+        canonical_labels = self.get_labels()[self.data_type]
+        labels = [canonical_labels[i] if label is None else label for i, label in enumerate(x_and_y_labels)]
+        if self.plot_type == 'standalone':
+            object_to_label = self.fig
+        elif self.plot_type == 'subplot':
+            object_to_label = self.ax
+        else:
+            object_to_label = self.invisible_ax
+            object_to_label.xaxis.set_label_coords(0.5, -0.2)  # For the x-axis
+            object_to_label.yaxis.set_label_coords(-.2, 0.5)  # For the y-axis
+
+        [getattr(object_to_label, f"set_{dim}label")(labels[i])
+         for i, dim in enumerate(['x', 'y'])]
 
 
 def formatted_now():

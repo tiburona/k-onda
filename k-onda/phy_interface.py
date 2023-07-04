@@ -3,7 +3,7 @@ from phylib.io.model import load_model
 from phylib.utils import Bunch
 from pathlib import Path
 import numpy as np
-
+from scipy.signal import medfilt
 
 animal_path = Path('/Users/katie/likhtik/data/single_cell_data/IG158')
 model = load_model(animal_path / 'params.py')
@@ -13,7 +13,7 @@ spike_clusters = np.load(animal_path / 'spike_clusters.npy')
 
 class PhyInterface:
 
-    def __init__(self, animal, path):
+    def __init__(self, path, animal):
         self.animal = animal
         path = Path(path)
         self.path = path / animal
@@ -44,18 +44,29 @@ class PhyInterface:
                         axs[row, col].scatter(times, features, color=colors[i], alpha=0.5)
                     axs[row, col].legend()
                 else:
-                    pc_inds = (int(row > 1), row % 2)
-                    el_inds = (row % 2, int(not bool(row % 2)))
+                    pc_inds = (int(col > 1), int(row > 1))
+                    el_inds = (col % 2, row % 2)
                     for i, id in enumerate(cluster_ids):
-                        x, y = (self.get_features(id, electrodes)[:, el, pc] for el, pc in zip(el_inds, pc_inds))
+                        x, y = (self.one_feature_view(id, electrodes, el_inds, pc_inds))
                         axs[row, col].scatter(x, y, alpha=0.5, color=colors[i])
                     axs[row, col].legend()
 
         plt.show()
 
+    def one_feature_view(self, id, electrodes, el_inds, pc_inds):
+        return (self.get_features(id, electrodes)[:, el, pc] for el, pc in zip(el_inds, pc_inds))
 
-phy_interface = PhyInterface('IG158', '/Users/katie/likhtik/data/single_cell_data')
-phy_interface.plot_features([33, 39], [9, 11])
+    def get_mean_waveforms(self, cluster_id, electrodes):
+        channels_used = self.model.get_cluster_channels(cluster_id)
+        indices = np.where(np.isin(channels_used, electrodes))[0]
+        waveforms = self.model.get_cluster_spike_waveforms(cluster_id)
+        filtered_waveforms = medfilt(waveforms, kernel_size=[1, 5, 1])
+        averaged_waveforms = np.mean(filtered_waveforms[::100, :, indices], axis=(0, 2))
+        return averaged_waveforms
+
+
+phy_interface = PhyInterface('/Users/katie/likhtik/data/single_cell_data', 'IG158')
+# phy_interface.plot_features([33, 39], [9, 11])
 
 
 

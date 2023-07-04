@@ -54,4 +54,11 @@ class Context:
         self.notify()
 
 
+class NeuronTypeMixin:
+
+    def check_for_new_neuron_type(self, context):
+        if context.name == 'neuron_type_context':
+            if self.last_neuron_type != context.val:
+                self.last_neuron_type = context.val
+                self.update_neuron_type()
 

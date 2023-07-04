@@ -3,7 +3,7 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 
-from context import Base
+from context import Base, NeuronTypeMixin
 from matlab_interface import xcorr
 from utils import cache_method
 from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
@@ -16,7 +16,7 @@ inherits from it. Several of Experiment's methods are recursive, and are overwri
 Trial.  
 """
 
-SAMPLES_PER_SECOND = 30000
+SAMPLING_RATE = 30000
 TONES_PER_PERIOD = 30  # The pip sounds 30 times in a tone period
 TONE_PERIOD_DURATION = 30
 INTER_TONE_INTERVAL = 30  # number of seconds between tones
@@ -126,7 +126,7 @@ class Experiment(Level):
         self.all_units = None
 
 
-class Group(Level):
+class Group(Level, NeuronTypeMixin):
     """A group in the experiment, i.e., a collection of animals assigned to a condition, the child of an Experiment,
     parent of Animals. Subscribes to neuron_type_context that defines which neuron type, PN or IN, is currently active.
     Limits its children to animals who have neurons of that type.  Also subscribes to data_type_context but doesn't need
@@ -145,12 +145,6 @@ class Group(Level):
     def update(self, context):
         self.check_for_new_neuron_type(context)
 
-    def check_for_new_neuron_type(self, context):
-        if context.name == 'neuron_type_context':
-            if self.last_neuron_type != context.val:
-                self.last_neuron_type = context.val
-                self.update_neuron_type()
-
     def update_neuron_type(self):
         if self.selected_neuron_type is None:
             self.children = self.animals
@@ -158,7 +152,7 @@ class Group(Level):
             self.children = [animal for animal in self.animals if len(getattr(animal, self.selected_neuron_type))]
 
 
-class Animal(Group):
+class Animal(Level, NeuronTypeMixin):
     """An animal in the experiment, the child of a Group, parent of Units. Subscribes to neuron_type_context that
     defines which neuron type, PN or IN, is currently active. Updates its children, i.e., the active units for analysis,
     when the context changes. Also subscribes to the data_type_context but doesn't need to update its children property
@@ -210,10 +204,13 @@ class Unit(Level):
         self.neuron_type = neuron_type
         self.trials = None
         self.children = self.trials
-        self.spike_times = spike_times
+        self.spike_times = np.array(spike_times)
         self.data_type_context = data_type_context
         self.trials_opts = None
         self.selected_trial_indices = None
+        spikes_for_fr = self.spike_times[self.spike_times > 15000]
+        self.firing_rate = SAMPLING_RATE * len(spikes_for_fr) / float(spikes_for_fr[-1] - spikes_for_fr[0])
+        self.fwhm_microseconds = None
 
     def update(self, _):
         trials_opts = (self.data_opts.get(opt) for opt in ['trials', 'post_stim', 'pre_stim'])
@@ -228,8 +225,8 @@ class Unit(Level):
         self.selected_trial_indices = list(range(150))[slice(*self.data_opts.get('trials'))]
         for i, start in enumerate(self.animal.tone_onsets_expanded[trials_slice]):
             spikes = self.find_spikes(
-                start - pre_stim * SAMPLES_PER_SECOND, start + post_stim * SAMPLES_PER_SECOND)
-            self.trials.append(Trial(self, [(spike - start) / SAMPLES_PER_SECOND for spike in spikes], i))
+                start - pre_stim * SAMPLING_RATE, start + post_stim * SAMPLING_RATE)
+            self.trials.append(Trial(self, [(spike - start) / SAMPLING_RATE for spike in spikes], i))
         self.children = self.trials
 
     @cache_method
@@ -246,7 +243,7 @@ class Unit(Level):
         num_bins = int(INTER_TONE_INTERVAL / bin_size)
         rate_set = []
         for onset in self.animal.tone_period_onsets:
-            start = onset - INTER_TONE_INTERVAL * SAMPLES_PER_SECOND
+            start = onset - INTER_TONE_INTERVAL * SAMPLING_RATE
             stop = onset - 1
             rate_set.append(calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size))
         return np.mean(rate_set, axis=1)
@@ -254,8 +251,8 @@ class Unit(Level):
     @cache_method
     def get_global_std_dev(self):
         bin_size = self.data_opts.get('bin_size')
-        start = self.animal.tone_period_onsets[0] - INTER_TONE_INTERVAL * SAMPLES_PER_SECOND
-        stop = self.animal.tone_period_onsets[-1] + TONE_PERIOD_DURATION * SAMPLES_PER_SECOND
+        start = self.animal.tone_period_onsets[0] - INTER_TONE_INTERVAL * SAMPLING_RATE
+        stop = self.animal.tone_period_onsets[-1] + TONE_PERIOD_DURATION * SAMPLING_RATE
         num_bins = int(len(self.animal.tone_period_onsets) * (INTER_TONE_INTERVAL + TONE_PERIOD_DURATION) / bin_size)
         return np.std(calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size))
 
@@ -265,7 +262,7 @@ class Unit(Level):
         num_bins = int(TONE_PERIOD_DURATION/bin_size)
         rates = []
         for start in self.animal.tone_period_onsets:
-            stop = start + TONE_PERIOD_DURATION * SAMPLES_PER_SECOND
+            stop = start + TONE_PERIOD_DURATION * SAMPLING_RATE
             p_rates = calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size)
             rates.append(p_rates)
         return np.std([rate for period in rates for rate in period])
