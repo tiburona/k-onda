@@ -1,7 +1,5 @@
-from plotters import Plotter
+from plotters import Plotter, PeriStimulusPlotter, GroupStatsPlotter
 from initialize_experiment import experiment, data_type_context, neuron_type_context
-
-plotter = Plotter(experiment, data_type_context, neuron_type_context)
 
 '''
 Helpers for procs.py
@@ -11,9 +9,11 @@ Helpers for procs.py
 def plot(data_opts, graph_opts, levels=None, n_types=None):
 
     if levels is None:
-        plotter.plot(data_opts, graph_opts)
+        plotter = GroupStatsPlotter(experiment, data_type_context, neuron_type_context)
+        plotter.initialize(data_opts, graph_opts)
+        plotter.plot_group_stats()
         return
-
+    plotter = PeriStimulusPlotter(experiment, data_type_context, neuron_type_context)
     for level in levels:
         if level == 'animal':
             n_types = n_types or ['PN', 'IN']

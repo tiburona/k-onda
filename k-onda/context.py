@@ -10,7 +10,7 @@ class Base:
 
     @property
     def data_opts(self):
-        return (self.data_type_context.val if self.data_type_context is not None else {}) or {}
+        return (self.data_type_context.val if self.data_type_context is not None else None) or None
 
     @data_opts.setter
     def data_opts(self, opts):
@@ -27,6 +27,10 @@ class Base:
     @selected_neuron_type.setter
     def selected_neuron_type(self, neuron_type):
         self.neuron_type_context.set_val(neuron_type)
+
+    @property
+    def neuron_types(self):
+        return ['IN', 'PN']
 
 
 class Context:

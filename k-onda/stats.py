@@ -1,8 +1,8 @@
 import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
 from rpy2.robjects import pandas2ri
-from rpy2.robjects import DataFrame
 import subprocess
+import pickle
 import pandas as pd
 import numpy as np
 import csv
@@ -28,14 +28,12 @@ class Stats(Base):
         pre_stim, post_stim, bin_size = (self.data_opts[k] for k in ('pre_stim', 'post_stim', 'bin_size'))
         self.num_time_points = int((pre_stim + post_stim)/bin_size)
         self.spreadsheet_fname = None
+        self.bootstrap_sems = None
 
     def make_df(self):
-        if self.data_opts['row_type'] == 'unit':
-            rows = [row for unit in self.experiment.all_units for row in self.get_row(unit)]
-        elif self.data_opts['row_type'] == 'trial':
-            rows = [row for unit in self.experiment.all_units for trial in unit.trials for row in self.get_row(trial)]
+        rows = self.get_rows()
         df = pd.DataFrame(rows)
-        for var in ['unit_num', 'animal', 'category', 'condition']:
+        for var in ['unit_num', 'animal', 'category', 'condition', 'two_way_split', 'three_way_split']:
             df[var] = df[var].astype('category')
         self.df = df
 
@@ -45,15 +43,17 @@ class Stats(Base):
         fname = os.path.join(path, '_'.join([self.data_type, self.time_type, row_type + 's']) + '.csv')
         self.spreadsheet_fname = fname
 
+        header = ['unit_num', 'animal', 'condition', 'category', 'two_way_split', 'three_way_split', 'time_bin',
+                  'grouped_time_bin', self.data_col]
+        if row_type == 'trial':
+            header.insert(0, 'trial')
+
         with open(fname, 'w', newline='') as f:
-            writer = csv.writer(f)
-            header = ['unit_num', 'animal', 'condition', 'category', 'time_bin', self.data_col]
-            if row_type == 'trial':
-                header.insert(0, 'trial')
-            writer.writerow(header)
+            writer = csv.DictWriter(f, fieldnames=header)
+            writer.writeheader()
 
             for row in self.get_rows():
-                writer.writerow(row.values())
+                writer.writerow(row)
 
     def get_rows(self):
         if self.data_opts['row_type'] == 'unit':
@@ -67,15 +67,30 @@ class Stats(Base):
 
     def get_row_dict(self, data_source):
         row_dict = {}
+        post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size', 1)  # Default to 1 if not present
+
         if data_source.name == 'unit':
             unit = data_source
         elif data_source.name == 'trial':
             trial = data_source
             unit = trial.unit
             row_dict['trial'] = trial.identifier
-        return {**row_dict,
-                **{'unit_num': unit.identifier, 'animal': unit.animal.identifier, 'condition': unit.animal.condition,
-                   'category': unit.neuron_type}}
+
+        row_dict = {**row_dict,
+                    **{'unit_num': unit.identifier, 'animal': unit.animal.identifier,
+                       'condition': unit.animal.condition, 'category': unit.neuron_type}}
+        return row_dict
+
+    def two_way_split(self, time_bin):
+        return 'early' if time_bin < 30 else 'late'
+
+    def three_way_split(self, time_bin):
+        if time_bin < 5:
+            return 'pip'
+        elif time_bin < 30:
+            return 'early'
+        else:
+            return 'late'
 
     @staticmethod
     def calculate_rate(data, bin_slice):
@@ -91,7 +106,13 @@ class Stats(Base):
         return rows
 
     def continuous_rows(self, data, row_dict):
-        return [{**row_dict, **{'time_bin': time_bin, self.data_col: data[time_bin]}}
+        post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size', 1)  # Default to 1 if not present
+        return [{**row_dict,
+                 **{'two_way_split': self.two_way_split(time_bin),
+                    'three_way_split': self.three_way_split(time_bin),
+                    'time_bin': time_bin,
+                    'grouped_time_bin': time_bin // post_hoc_bin_size,  # Calculate 'grouped_time_bin'
+                    self.data_col: data[time_bin]}}
                 for time_bin in range(self.num_time_points)]
 
     def get_post_hoc_results(self):
@@ -138,7 +159,75 @@ class Stats(Base):
         else:
             return lmerTest.lmer(model_def, data=r_df)
 
+    def bootstrap_standard_errors(self, n_bootstrap_samples=1000, force_recalculation=False):
+
+        filepath = os.path.join(self.data_opts['path'], 'bootstrap_sems.pkl')
+
+        if not force_recalculation and os.path.exists(filepath):
+            with open(filepath, 'rb') as f:
+                self.bootstrap_sems = pickle.load(f)
+        else:
+            if self.df is None:
+                self.make_df()
+            categories = self.df['category'].unique()
+            conditions = self.df['condition'].unique()
+            time_bins = self.df['time_bin'].unique()
+            bootstrap_results = []
+
+            for category in categories:
+                for condition in conditions:
+                    condition_data = self.df[(self.df['category'] == category) & (self.df['condition'] == condition)]
+                    for time_bin in time_bins:
+                        bin_data = condition_data[condition_data['time_bin'] == time_bin]
+                        animals = bin_data['animal'].unique()
+                        bootstrap_ses = []
+                        for _ in range(n_bootstrap_samples):
+                            animal_ses = []
+                            # Bootstrap sample of animals
+                            bootstrap_animals = np.random.choice(animals, size=len(animals), replace=True)
+                            for animal in bootstrap_animals:
+                                animal_data = bin_data[bin_data['animal'] == animal]
+                                # Bootstrap sample of unit_nums within each animal
+                                bootstrap_unit_nums = np.random.choice(animal_data['unit_num'],
+                                                                       size=len(animal_data['unit_num']), replace=True)
+                                bootstrap_samples = [animal_data[animal_data['unit_num'] == num] for num in
+                                                     bootstrap_unit_nums]
+                                bootstrap_sample = pd.concat(bootstrap_samples)
+                                if len(bootstrap_sample) > 1:
+                                    animal_se = bootstrap_sample[self.data_col].std() / np.sqrt(len(bootstrap_sample))
+                                    animal_ses.append(animal_se)
+                                elif len(bootstrap_sample) == 1:
+                                    animal_se = bin_data[self.data_col].std() / np.sqrt(len(bin_data))
+                                    animal_ses.append(animal_se)
+                            # Compute overall standard error considering the standard errors of all animals
+                            se = np.median(animal_ses)
+                            bootstrap_ses.append(se)
+                        # Compute the median of the bootstrap standard errors
+                        med_bootstrap_se = np.median(bootstrap_ses) if bootstrap_ses else np.nan
+                        bootstrap_results.append({
+                            'category': category,
+                            'condition': condition,
+                            'time_bin': time_bin,
+                            'se': med_bootstrap_se,
+                        })
+            # Convert the results to a DataFrame
+            self.bootstrap_sems = pd.DataFrame(bootstrap_results)
+            # Save the results
+            with open(filepath, 'wb') as f:
+                pickle.dump(self.bootstrap_sems, f)
+        return self.bootstrap_sems
+
+    def get_sem_array(self, condition, category):
+        if self.bootstrap_sems is None:
+            self.bootstrap_standard_errors()
+        filtered_data = self.bootstrap_sems.loc[(self.bootstrap_sems['category'] == category) &
+                                                (self.bootstrap_sems['condition'] == condition)]
+        return filtered_data['se'].values
+
     def write_r_script(self):
+
+        error_suffix = '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else ''
+
         self.results_path = os.path.join(self.data_opts['path'], 'r_results.csv')
         r_script = fr'''
         library(glmmTMB)
@@ -159,7 +248,7 @@ class Stats(Base):
         perform_regression <- function(data, category){{
             # Perform beta regression with mixed effects
             mixed_beta <- glmmTMB(
-                formula = {self.data_col} ~ condition + (1|animal/unit_num), 
+                formula = {self.data_col} ~ condition +  (1|animal/unit_num{error_suffix}), 
                 family = beta_family(link = "logit"), 
                 data = data
             )
@@ -170,13 +259,13 @@ class Stats(Base):
         }}
 
         # Iterate over the time bins
-        for (time_bin in unique(df$time_bin)) {{
+        for (time_bin in unique(df$grouped_time_bin)) {{
             # Subset the data for the current time bin
-            sub_df <- df[df$time_bin == time_bin,]
+            sub_df <- df[df$grouped_time_bin == time_bin,]
 
             # Perform the interaction analysis
             interaction_model <- glmmTMB(
-                formula = {self.data_col} ~ condition * category + (1|animal/unit_num),
+                formula = {self.data_col} ~ condition * category + (1|animal/unit_num{error_suffix}),
                 family = beta_family(link = "logit"),
                 data = sub_df
             )

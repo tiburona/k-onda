@@ -213,12 +213,16 @@ class Unit(Level):
         self.fwhm_microseconds = None
 
     def update(self, _):
+        if self.data_opts is None:
+            return
         trials_opts = (self.data_opts.get(opt) for opt in ['trials', 'post_stim', 'pre_stim'])
         if self.trials_opts != trials_opts:
             self.trials_opts = trials_opts
             self.update_trials()
 
     def update_trials(self):
+        if self.data_opts is None:
+            return
         self.trials = []
         pre_stim, post_stim = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim'])
         trials_slice = slice(*self.data_opts.get('trials'))

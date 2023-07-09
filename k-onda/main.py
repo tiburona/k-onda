@@ -22,15 +22,14 @@ def make(levels=('group', 'animal', 'unit'), to_run=('psth', 'autocorr', 'spectr
     if 'spreadsheet' in to_run:
         make_spreadsheet()
     if 'group_stats' in to_run:
-        #  plot_group_stats()
-        pass
+        plot_group_stats()
     if 'pie_chart' in to_run:
         plot_pie_chart()
 
 
 def main():
 
-    make(to_run='make_spreadsheet')
+    make(to_run='group_stats')
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

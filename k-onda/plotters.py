@@ -12,12 +12,15 @@ from context import Base
 from stats import Stats
 
 
-class Plotter(Base, PlottingMixin):
-    """Opens, structures, and closes a plot."""
+class Plotter(Base):
     def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
         self.experiment = experiment
         self.data_type_context = data_type_context
+        self.data_opts = None
         self.neuron_type_context = neuron_type_context
+        self.selected_neuron_type = None
+        self.graph_opts = graph_opts
+        self.plot_type = plot_type
         self.fig = None
         self.axs = None
         self.y_min = float('inf')
@@ -25,29 +28,26 @@ class Plotter(Base, PlottingMixin):
         self.fname = ''
         self.title = ''
         self.dir_tags = None
-        self.graph_opts = graph_opts
-        self.neuron_types = ['IN', 'PN']
         self.stats = None
         self.full_axes = None
-        self.plot_type = plot_type
         self.invisible_ax = None
         self.grid = None
 
-    def initialize(self, data_opts, graph_opts, neuron_type):
+    def initialize(self, data_opts, graph_opts, neuron_type=None):
         """Both initializes values on self and sets values for the contexts and all the contexts' subscribers."""
-        self.y_min = float('inf')
-        self.y_max = float('-inf')
         self.graph_opts = graph_opts
         self.data_opts = data_opts  # Sets data_opts for all subscribers to data_type_context
         self.selected_neuron_type = neuron_type  # Sets neuron type for all subscribers to neuron_type_context
 
+
+class PeriStimulusPlotter(Plotter, PlottingMixin):
+    """Makes plots where the x-axis is time around the stimulus, and y can be a variety of types of data."""
+    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
+        self.multiplier = 1 if self.plot_type == 'standalone' else 0.5
+
     def plot(self, data_opts, graph_opts, level=None, neuron_type=None):
         self.initialize(data_opts, graph_opts, neuron_type)
-
-        if level is None:
-            self.plot_group_stats()
-            return
-
         if level == 'group':
             self.plot_groups()
         elif level == 'animal':
@@ -65,98 +65,14 @@ class Plotter(Base, PlottingMixin):
         self.close_plot('groups')
 
     def plot_groups_data(self):
-        for col, group in enumerate(self.experiment.groups):
-            for row, neuron_type in enumerate(self.neuron_types):
-                self.selected_neuron_type = neuron_type
+        for row, neuron_type in enumerate(self.neuron_types):
+            self.selected_neuron_type = neuron_type
+            for col, group in enumerate(self.experiment.groups):
                 self.make_subplot(group, row, col, title=f"{group.identifier} {neuron_type}")
         self.selected_neuron_type = None
         self.set_y_scales()
+        self.set_pip_patches()
         self.set_labels()
-
-    def plot_group_stats(self):
-        self.fig, self.axs = plt.subplots(2, 1, figsize=(15, 15))
-        self.plot_groups_data(container=self.fig)
-        self.close_plot('stats_plot')
-
-    def plot_group_stats_data(self):
-        self.stats = Stats(self.experiment, self.data_type_context, self.data_opts)
-        interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
-        bin_size = self.data_opts.get('bin_size')
-        max_y = -float('inf')
-        for row, neuron_type in enumerate(self.neuron_types):
-            self.selected_neuron_type = neuron_type
-            for group in self.experiment.groups:
-                color = 'orange' if group.identifier == 'stressed' else 'green'
-                x = np.arange(len(group.data)) * bin_size
-                y = group.data
-                if max(y) > max_y:
-                    max_y = max(y)
-                self.axs[row].plot(x, y, label=group.identifier, color=color)
-                self.axs[row].set_title(f"{neuron_type}", fontsize=17)
-                self.axs[row].set_xticks(np.arange(self.data_opts['pre_stim'], self.data_opts['post_stim'],
-                                                   step=self.graph_opts['tick_step']))
-                # Set y limit based on the neuron type specific max_y
-            [self.axs[row].set_ylim(0, max_y * 1.1) for row in range(len(self.neuron_types))]
-
-            # Annotate significant points within conditions
-            self.add_significance_markers(neuron_type_specific_ps[neuron_type], 'within_condition', row=row,
-                                          y=max_y * 1.05)
-
-        self.selected_neuron_type = None
-        self.add_significance_markers(interaction_ps, 'interaction')
-        self.set_labels()
-        self.place_legend()
-
-    def add_significance_markers(self, p_values, p_type, row=None, y=None):
-        bin_size = self.data_opts.get('bin_size')
-        post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size')
-        for time_bin, p_value in enumerate(p_values):
-            if p_value < .05:
-                if self.data_opts.get('post_hoc_bin_size') == 1:
-                    if p_type == 'within_condition':
-                        self.axs[row].annotate('*', (time_bin * bin_size, y), fontsize=20, ha='center')
-                    else:
-                        self.get_interaction_text()
-                else:
-                    start = time_bin * post_hoc_bin_size * bin_size
-                    end = (time_bin + 1) * post_hoc_bin_size * bin_size
-                    if p_type == 'within_condition':
-                        line = mlines.Line2D([start, end], [y * 1.05, y], color='red')
-                        self.axs[row].add_line(line)
-                    else:
-                        line = mlines.Line2D(
-                            [(start + end) / 2, (start + end) / 2],
-                            # This positions the line in the middle of start and end
-                            [0, 1],  # This stretches the line from the bottom to the top of the figure
-                            transform=self.fig.transFigure,
-                            # This ensures that the coordinates are treated as figure fractions
-                            color='black',
-                            clip_on=False)  # This allows the line to extend outside of the axes if necessary
-                        self.fig.add_artist(line)
-
-    def get_interaction_text(self):
-        if self.plot_type == 'standalone':
-            self.fig.text(0.5, 0.5, "*", fontsize=20, ha='center')
-        else:
-            gridspec_position = self.grid.get_subplot_params(self.fig)
-            x = (gridspec_position.left + gridspec_position.right) / 2
-            y = (gridspec_position.bottom + gridspec_position.top) / 2
-            self.fig.text(x, y, "*", fontsize=20, ha='center')
-
-    def place_legend(self):
-        if self.plot_type == 'standalone':
-            x, y = 1, 1
-            size = 16
-            linewidth = 3
-        else:
-            gridspec_position = self.grid.get_subplot_params(self.fig)
-            x = gridspec_position.right
-            y = gridspec_position.top
-            size = 8
-            linewidth = 1
-        lines = [mlines.Line2D([], [], color=color, label=condition, linewidth=linewidth)
-                 for color, condition in zip(['green', 'orange'], ['Control', 'Stressed'])]
-        self.fig.legend(handles=lines, loc='upper right', bbox_to_anchor=(x, y), prop={'size': size})
 
     def plot_animals(self, group):
         num_animals = len(group.children)
@@ -175,10 +91,12 @@ class Plotter(Base, PlottingMixin):
                 self.axs[i // 3, i % 3].set_visible(False)
 
         self.set_y_scales()
+        self.set_pip_patches()
         self.close_plot(group.identifier)
 
     def make_subplot(self, data_source, row, col, title=''):
-        subplotter = Subplotter(data_source, self.data_opts, self.graph_opts, self.axs[row, col], self.plot_type)
+        subplotter = Subplotter(data_source, self.data_opts, self.graph_opts, self.axs[row, col], self.plot_type,
+                                multiplier=self.multiplier)
         subplotter.plot_data()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
@@ -232,26 +150,6 @@ class Plotter(Base, PlottingMixin):
             self.make_footer()
         self.save_and_close_fig()
 
-    def plot_unit_pie_chart(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts, neuron_type=None)
-        labels = ['Up', 'Down', 'No Change']
-        colors = ['red', 'yellow', 'orange']
-
-        for nt in [None, 'PN', 'IN']:
-            self.selected_neuron_type = nt
-            for group in self.experiment.groups:
-                if nt:
-                    units = [unit for unit in self.experiment.all_units
-                             if (unit.neuron_type == nt and unit.animal.condition == group.identifier)]
-                else:
-                    units = self.experiment.all_units
-                sizes = [len([unit for unit in units if unit.upregulated_to_pip() == num]) for num in [1, -1, 0]]
-
-                self.fig = plt.figure()
-                plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%')
-                plt.axis('equal')
-                self.close_plot(f'{group.identifier}_during_pip')
-
     def get_ylim(self, row, col, y_min, y_max):
         self.y_min = min(self.y_min, self.axs[row, col].get_ylim()[0], y_min)
         self.y_max = max(self.y_max, self.axs[row, col].get_ylim()[1], y_max)
@@ -260,9 +158,12 @@ class Plotter(Base, PlottingMixin):
         if self.graph_opts['equal_y_scales']:
             [ax.set_ylim(self.y_min, self.y_max) for ax in self.axs.flatten()]
 
+    def set_pip_patches(self):
+        [ax.fill_betweenx([self.y_min, self.y_max], 0, 0.05, color='k', alpha=0.2) for ax in self.axs.flatten()]
+
     def prettify_subplot(self, row, col, title, y_min, y_max):
         self.get_ylim(row, col, y_min, y_max)
-        self.axs[row, col].set_title(title)
+        self.axs[row, col].set_title(title, fontsize=17*self.multiplier)
 
     def make_footer(self):
         text_vals = [('bin size', self.data_opts['bin_size']), ('selected trials', self.join_trials(' ')),
@@ -325,7 +226,7 @@ class Plotter(Base, PlottingMixin):
 
 class Subplotter(PlottingMixin):
     """Constructs a subplot."""
-    def __init__(self, data_source, data_opts, graph_opts, ax, parent_type):
+    def __init__(self, data_source, data_opts, graph_opts, ax, parent_type, multiplier=1):
         self.data_source = data_source
         self.data_opts = data_opts
         self.data_type = data_opts['data_type']
@@ -334,10 +235,14 @@ class Subplotter(PlottingMixin):
         self.x = None
         self.y = data_source.data
         self.parent_type = parent_type
+        self.multiplier = multiplier
 
     def set_limits_and_ticks(self, x_min, x_max, x_tick_min, x_step, y_min=None, y_max=None):
         self.ax.set_xlim(x_min, x_max)
         self.ax.set_xticks(np.arange(x_tick_min, x_max, step=x_step))
+        self.ax.tick_params(axis='both', which='major', labelsize=10*self.multiplier, length=5*self.multiplier,
+                            width=2*self.multiplier)
+
         if y_min is not None and y_max is not None:
             self.ax.set_ylim(y_min, y_max)
 
@@ -352,11 +257,13 @@ class Subplotter(PlottingMixin):
                                         facecolor='gray', alpha=0.3))
 
     def plot_bar(self, width, x_min, x_max, num, x_tick_min, x_step, y_min=None, y_max=None, x_label='', y_label='',
-                 color='k'):
-        if 'neuron_type_colors' in self.g_opts:
-            color = self.g_opts['neuron_type_colors'][self.data_source.selected_neuron_type]
+                 color='k', facecolor='white'):
+        if 'group_colors' in self.g_opts:
+            color = self.g_opts['group_colors'][self.data_source.identifier]
         self.x = np.linspace(x_min, x_max, num=num)
         self.ax.bar(self.x, self.y, width=width, color=color)
+        self.ax.set_facecolor(facecolor)
+        self.ax.patch.set_alpha(0.2)
         self.set_limits_and_ticks(x_min, x_max, x_tick_min, x_step, y_min, y_max)
         if self.parent_type == 'standalone':
             self.set_labels(x_label=x_label, y_label=y_label)
@@ -366,7 +273,6 @@ class Subplotter(PlottingMixin):
         xlabel, ylabel = self.get_labels()[self.data_opts['data_type']]
         self.plot_bar(width=opts['bin_size'], x_min=-opts['pre_stim'], x_max=opts['post_stim'], num=len(self.y),
                       x_tick_min=0, x_step=self.g_opts['tick_step'], y_label=ylabel)
-        self.ax.fill_betweenx([min(self.y), max(self.y)], 0, 0.05, color='k', alpha=0.2)
 
     def plot_proportion_score(self):
         self.plot_psth()
@@ -394,3 +300,143 @@ class Subplotter(PlottingMixin):
         sem = self.data_source.get_sem()
         self.ax.fill_between(self.x, self.y - sem, self.y + sem, color='blue', alpha=0.2)
 
+
+class GroupStatsPlotter(PeriStimulusPlotter):
+
+    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
+
+    def plot_group_stats(self):
+        self.fig, self.axs = plt.subplots(2, 1, figsize=(15, 15))
+        self.current_ax = None
+        self.plot_group_stats_data()
+        self.close_plot('stats_plot')
+
+    def plot_group_stats_data(self):
+        self.stats = Stats(self.experiment, self.data_type_context, self.data_opts)
+        interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
+
+        bin_size = self.data_opts.get('bin_size')
+        for row, neuron_type in enumerate(self.neuron_types):
+            self.selected_neuron_type = neuron_type
+            for group in self.experiment.groups:
+                color = self.graph_opts['group_colors'][group.identifier]
+                x = np.arange(len(group.data)) * bin_size
+                y = group.data
+                if max(y) > self.y_max:
+                    self.y_max = max(y)
+                self.axs[row].plot(x, y, label=group.identifier, color=color)
+                sem = self.stats.get_sem_array(condition=group.identifier, category=neuron_type)
+                self.axs[row].fill_between(x, y - sem, y + sem, color=color, alpha=0.2)
+
+            self.axs[row].set_title(f"{neuron_type}", fontsize=17*self.multiplier, loc='left')
+            self.axs[row].set_xticks(np.arange(self.data_opts['pre_stim'], self.data_opts['post_stim'],
+                                                   step=self.graph_opts['tick_step']))
+            self.axs[row].tick_params(axis='both', which='major', labelsize=10*self.multiplier,
+                                      length=5*self.multiplier, width=2*self.multiplier)
+            self.current_ax = self.axs[row]
+            self.set_labels()
+
+            # Annotate significant points within conditions
+            self.add_significance_markers(neuron_type_specific_ps[neuron_type], 'within_condition', row=row,
+                                          y=self.y_max * 1.05)
+        [self.axs[row].set_ylim(0, self.y_max * 1.1) for row in range(len(self.neuron_types))]
+        self.selected_neuron_type = None
+        self.add_significance_markers(interaction_ps, 'interaction')
+        self.place_legend()
+
+    def add_significance_markers(self, p_values, p_type, row=None, y=None):
+        bin_size = self.data_opts.get('bin_size')
+        post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size')
+        for time_bin, p_value in enumerate(p_values):
+            if p_value < .05:
+                if post_hoc_bin_size == 1:
+                    self.get_one_bin_significance_markers(row, p_type, time_bin, bin_size, y, p_values)
+                else:
+                    self.get_multi_bin_significance_markers(time_bin, post_hoc_bin_size, bin_size, p_type, row, y)
+
+    def get_one_bin_significance_markers(self, row, p_type, time_bin, bin_size, y, p_values):
+        if p_type == 'within_condition':
+            self.axs[row].annotate('*', (time_bin * bin_size, y * 0.85), fontsize=20 * self.multiplier,
+                                   ha='center', color='black')
+        else:
+            self.get_interaction_text(time_bin, p_values)
+
+    def get_multi_bin_significance_markers(self, time_bin, post_hoc_bin_size, bin_size, p_type, row, y):
+        start = time_bin * post_hoc_bin_size * bin_size
+        end = (time_bin + 1) * post_hoc_bin_size * bin_size
+        if p_type == 'within_condition':
+            line = mlines.Line2D([start, end], [y * 1.05, y], color='red')
+            self.axs[row].add_line(line)
+        else:
+            line = mlines.Line2D(
+            [(start + end) / 2, (start + end) / 2],
+            # This positions the line in the middle of start and end
+            [0, 1],  # This stretches the line from the bottom to the top of the figure
+            transform=self.fig.transFigure,
+            # This ensures that the coordinates are treated as figure fractions
+            color='black',
+            clip_on=False)  # This allows the line to extend outside of the axes if necessary
+            self.fig.add_artist(line)
+
+    def get_interaction_text(self, time_bin, p_values):
+        # calculate the x position as a fraction of the plot width
+        x = time_bin / len(p_values)
+        y = 0.485
+        margin = 0.007
+
+        if self.plot_type == 'standalone':
+            fontsize = 20
+            top = self.axs[0].get_position().ymin - margin
+            bottom = self.axs[1].get_position().ymax + margin
+            y_positions = ([y + margin * 2.5, top], [bottom, y + margin * .6])
+
+        else:
+            fontsize = 15
+            gridspec_position = self.grid.get_subplot_params(self.fig)
+            x = gridspec_position.left + (gridspec_position.right - gridspec_position.left) * x
+            y_positions = ([y, gridspec_position.top - margin], [y, gridspec_position.bottom + margin])
+
+        self.fig.text(x, y, "*", fontsize=fontsize * self.multiplier, ha='center', color='black')
+
+        for positions in y_positions:
+            line = mlines.Line2D([x, x], positions, color='black', transform=self.fig.transFigure, clip_on=False)
+            self.fig.add_artist(line)
+
+    def place_legend(self):
+        if self.plot_type == 'standalone':
+            x, y = 1, 1
+            lines = [mlines.Line2D([], [], color=color, label=condition, linewidth=2 * self.multiplier)
+                     for color, condition in zip(['green', 'orange'], ['Control', 'Stressed'])]
+            self.fig.legend(handles=lines, loc='upper left', bbox_to_anchor=(x, y), prop={'size': 14 * self.multiplier})
+
+        else:
+            gridspec_position = self.grid.get_subplot_params(self.fig)
+            x = gridspec_position.right - .1
+            y = (gridspec_position.top + gridspec_position.bottom) / 2 + .03
+
+
+class PiePlotter(Plotter):
+
+    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
+
+    def plot_unit_pie_chart(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts, neuron_type=None)
+        labels = ['Up', 'Down', 'No Change']
+        colors = ['red', 'yellow', 'orange']
+
+        for nt in [None, 'PN', 'IN']:
+            self.selected_neuron_type = nt
+            for group in self.experiment.groups:
+                if nt:
+                    units = [unit for unit in self.experiment.all_units
+                             if (unit.neuron_type == nt and unit.animal.condition == group.identifier)]
+                else:
+                    units = self.experiment.all_units
+                sizes = [len([unit for unit in units if unit.upregulated_to_pip() == num]) for num in [1, -1, 0]]
+
+                self.fig = plt.figure()
+                plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%')
+                plt.axis('equal')
+                self.close_plot(f'{group.identifier}_during_pip')

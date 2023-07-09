@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 from phylib.io.model import load_model
-from phylib.utils import Bunch
 from pathlib import Path
 import numpy as np
 from scipy.signal import medfilt
