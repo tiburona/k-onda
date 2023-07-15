@@ -68,7 +68,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         for row, neuron_type in enumerate(self.neuron_types):
             self.selected_neuron_type = neuron_type
             for col, group in enumerate(self.experiment.groups):
-                self.make_subplot(group, row, col, title=f"{group.identifier} {neuron_type}")
+                self.make_subplot(group, row, col, title=f"{group.identifier.capitalize()} {neuron_type}")
         self.selected_neuron_type = None
         self.set_y_scales()
         self.set_pip_patches()
@@ -114,7 +114,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             for j in range(i, i + n_subplots):
                 if self.data_type == 'psth':
                     axes = [self.fig.add_subplot(gs[2 * (j - i), 0]), self.fig.add_subplot(gs[2 * (j - i) + 1, 0])]
-                elif self.data_type in ['autocorr', 'spectrum', 'proportion_score']:
+                elif self.data_type in ['autocorr', 'spectrum', 'proportion']:
                     axes = [self.fig.add_subplot(gs[j - i, 0])]
                 self.plot_unit(animal.children[j], axes)
 
@@ -274,7 +274,7 @@ class Subplotter(PlottingMixin):
         self.plot_bar(width=opts['bin_size'], x_min=-opts['pre_stim'], x_max=opts['post_stim'], num=len(self.y),
                       x_tick_min=0, x_step=self.g_opts['tick_step'], y_label=ylabel)
 
-    def plot_proportion_score(self):
+    def plot_proportion(self):
         self.plot_psth()
 
     def plot_autocorr(self):
@@ -325,8 +325,11 @@ class GroupStatsPlotter(PeriStimulusPlotter):
                 y = group.data
                 if max(y) > self.y_max:
                     self.y_max = max(y)
+                if min(y) < self.y_min:
+                    self.y_min = min(y)
                 self.axs[row].plot(x, y, label=group.identifier, color=color)
-                sem = self.stats.get_sem_array(condition=group.identifier, category=neuron_type)
+                # sem = self.stats.get_sem_array(condition=group.identifier, category=neuron_type)
+                sem = group.get_sem()
                 self.axs[row].fill_between(x, y - sem, y + sem, color=color, alpha=0.2)
 
             self.axs[row].set_title(f"{neuron_type}", fontsize=17*self.multiplier, loc='left')
@@ -340,7 +343,11 @@ class GroupStatsPlotter(PeriStimulusPlotter):
             # Annotate significant points within conditions
             self.add_significance_markers(neuron_type_specific_ps[neuron_type], 'within_condition', row=row,
                                           y=self.y_max * 1.05)
-        [self.axs[row].set_ylim(0, self.y_max * 1.1) for row in range(len(self.neuron_types))]
+        for row in range(len(self.neuron_types)):
+            self.axs[row].set_ylim(self.y_min * 1.1, self.y_max * 1.1)
+            self.axs[row].set_xlim(self.data_opts['pre_stim'], self.data_opts['post_stim'])
+            [self.axs[row].spines[side].set_visible(False) for side in ['top', 'right']]
+
         self.selected_neuron_type = None
         self.add_significance_markers(interaction_ps, 'interaction')
         self.place_legend()
@@ -384,24 +391,29 @@ class GroupStatsPlotter(PeriStimulusPlotter):
         x = time_bin / len(p_values)
         y = 0.485
         margin = 0.007
+        fontsize = 20
 
         if self.plot_type == 'standalone':
-            fontsize = 20
+
             top = self.axs[0].get_position().ymin - margin
             bottom = self.axs[1].get_position().ymax + margin
+            left = self.axs[0].get_position().xmin
+            right = self.axs[0].get_position().xmax
+            x = left + (right-left) * x
             y_positions = ([y + margin * 2.5, top], [bottom, y + margin * .6])
 
         else:
-            fontsize = 15
             gridspec_position = self.grid.get_subplot_params(self.fig)
             x = gridspec_position.left + (gridspec_position.right - gridspec_position.left) * x
+            y = gridspec_position.bottom + (gridspec_position.top - gridspec_position.bottom) / 2 - .01
             y_positions = ([y, gridspec_position.top - margin], [y, gridspec_position.bottom + margin])
 
-        self.fig.text(x, y, "*", fontsize=fontsize * self.multiplier, ha='center', color='black')
+        self.fig.text(x, y, "\u2020", fontsize=15 * self.multiplier, ha='center', color='black')
 
         for positions in y_positions:
-            line = mlines.Line2D([x, x], positions, color='black', transform=self.fig.transFigure, clip_on=False)
-            self.fig.add_artist(line)
+            pass
+            # line = mlines.Line2D([x, x], positions, color='black', transform=self.fig.transFigure, clip_on=False)
+            # self.fig.add_artist(line)
 
     def place_legend(self):
         if self.plot_type == 'standalone':

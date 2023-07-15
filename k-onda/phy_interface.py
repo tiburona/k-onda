@@ -3,6 +3,7 @@ from phylib.io.model import load_model
 from pathlib import Path
 import numpy as np
 from scipy.signal import medfilt
+from collections import defaultdict
 
 animal_path = Path('/Users/katie/likhtik/data/single_cell_data/IG158')
 model = load_model(animal_path / 'params.py')
@@ -34,23 +35,37 @@ class PhyInterface:
     def plot_features(self, cluster_ids, electrodes):
         colors = ['red', 'blue']
         fig, axs = plt.subplots(4, 4, figsize=(15, 15))
+        feature_vals = self.get_all_pairwise_feature_views(cluster_ids, electrodes)
+        for row in range(4):
+            for col in range(4):
+                for i, id in enumerate(cluster_ids):
+                    x, y = feature_vals[i][row][col]
+                    axs[row, col].scatter(x, y, color=colors[i], alpha=0.5)
+                    if row == col:
+                        axs[row, col].set_xlabel('time')
+                    else:
+                        axs[row, col].set_xlabel(f"{electrodes[col % 2]}{['A', 'B'][col > 1]}")
+                    axs[row, col].set_ylabel(f"{electrodes[row % 2]}{['A', 'B'][int(row > 1)]}")
+
+        plt.show()
+
+
+    def get_all_pairwise_feature_views(self, cluster_ids, electrodes):
+        vals_to_return = defaultdict(lambda: [[] for _ in range(4)])
         for row in range(4):
             for col in range(4):
                 if row == col:
                     for i, id in enumerate(cluster_ids):
                         times = self.get_spike_times_for_cluster(id)
                         features = self.get_features(id, electrodes)[:, row % 2, int(row > 1)]
-                        axs[row, col].scatter(times, features, color=colors[i], alpha=0.5)
-                    axs[row, col].legend()
+                        vals_to_return[i][row].append((times, features))
                 else:
                     pc_inds = (int(col > 1), int(row > 1))
                     el_inds = (col % 2, row % 2)
                     for i, id in enumerate(cluster_ids):
                         x, y = (self.one_feature_view(id, electrodes, el_inds, pc_inds))
-                        axs[row, col].scatter(x, y, alpha=0.5, color=colors[i])
-                    axs[row, col].legend()
-
-        plt.show()
+                        vals_to_return[i][row].append((x, y))
+        return vals_to_return
 
     def one_feature_view(self, id, electrodes, el_inds, pc_inds):
         return (self.get_features(id, electrodes)[:, el, pc] for el, pc in zip(el_inds, pc_inds))
@@ -60,12 +75,29 @@ class PhyInterface:
         indices = np.where(np.isin(channels_used, electrodes))[0]
         waveforms = self.model.get_cluster_spike_waveforms(cluster_id)
         filtered_waveforms = medfilt(waveforms, kernel_size=[1, 5, 1])
-        averaged_waveforms = np.mean(filtered_waveforms[::100, :, indices], axis=(0, 2))
+        averaged_waveforms = np.mean(filtered_waveforms[:, :, indices], axis=(0, 2))
         return averaged_waveforms
 
 
-phy_interface = PhyInterface('/Users/katie/likhtik/data/single_cell_data', 'IG158')
-# phy_interface.plot_features([33, 39], [9, 11])
+#phy_interface = PhyInterface('/Users/katie/likhtik/data/single_cell_data', 'IG156')
+# phy_interface.plot_features([21, 27], [10, 8])
+#waveform = phy_interface.get_mean_waveforms(27, [10])
+# plt.plot(waveform)
+# plt.show()
+
+# colors = ['red', 'blue']
+#
+# vals = phy_interface.plot_features([21, 27], [6, 8])
+#
+# for i, cluster in enumerate(vals.values()):
+#     x, y = cluster[7]
+#     plt.scatter(x, y, alpha=0.3, color=colors[i], s=5)
+#
+# plt.show()
+
+# for 21, 27, cluster 7 is good
+#
+
 
 
 

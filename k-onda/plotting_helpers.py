@@ -6,10 +6,10 @@ class PlottingMixin:
     def get_labels(self):
         adjustment = self.data_opts.get('adjustment')
         Hz = '' if adjustment == 'normalized' else ' Hz'
+        base = self.data_opts.get('base') if self.data_opts.get('base') else ''
 
         return {'psth': ('Time (s)', f'{adjustment.capitalize()} Firing Rate{Hz}'),
-                'proportion_score': ('Time (s)',''
-                                     f'Proportion Positive {self.data_opts.get("base").capitalize() + "s"}'),
+                'proportion': ('Time (s)', ''f'Proportion Positive {base.capitalize() + "s"}'),
                 'autocorr': ('Lags (s)', 'Autocorrelation'),
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum')}
 
@@ -29,12 +29,14 @@ class PlottingMixin:
             object_to_label = self.ax
         else:
             object_to_label = self.invisible_ax
+            #gridspec_position = self.grid.get_subplot_params(self.fig)
+
             if self.__class__.__name__ == 'PeriStimulusPlotter':
                 x_coord_of_y_label = -0.08
             else:
                 x_coord_of_y_label = -0.15
 
-            object_to_label.xaxis.set_label_coords(0.5, -0.1)  # For the x-axis
+            object_to_label.xaxis.set_label_coords(0.5, -0.15)  # For the x-axis
             object_to_label.yaxis.set_label_coords(x_coord_of_y_label, 0.5)  # For the y-axis
 
         [getattr(object_to_label, f"set_{dim}label")(labels[i], fontsize=15 * self.multiplier)
@@ -80,7 +82,6 @@ class PlottingMixin:
 #     return wrapper
 
 
-
 def formatted_now():
     now = datetime.now()
     return now.strftime("%Y-%m-%d %H:%M:%S")
@@ -108,3 +109,16 @@ def smart_title_case(s):
 def ac_str(s):
     for (old, new) in [('pd', 'Pandas'), ('np', 'NumPy'), ('ml', 'Matlab')]:
         s = s.replace(old, new)
+
+
+def annotate_subplot(ax, label, xy=(-0.1, 1.02), xycoords="axes fraction", **kwargs):
+    """
+    Annotate the subplot with a label at a specific position.
+
+    :param ax: The axes to annotate.
+    :param label: The text of the annotation.
+    :param xy: A tuple specifying the position of the annotation.
+    :param xycoords: A string specifying what coordinates to use for the position.
+    :param kwargs: Additional keyword arguments for the annotate function.
+    """
+    ax.annotate(label, xy=xy, xycoords=xycoords, **kwargs)

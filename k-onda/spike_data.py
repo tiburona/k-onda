@@ -58,7 +58,7 @@ class Level(Base):
         return [1 if rate > 0 else 0 for rate in self.get_psth()]
 
     @cache_method
-    def get_proportion_score(self):
+    def get_proportion(self):
         return self.get_average('proportion_score', stop_at=self.data_opts.get('base'))
 
     @cache_method

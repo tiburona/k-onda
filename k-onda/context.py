@@ -1,4 +1,5 @@
 from utils import to_hashable
+from copy import deepcopy
 
 
 class Base:
@@ -20,6 +21,12 @@ class Base:
     def data_type(self):
         return self.data_opts['data_type']
 
+    @data_type.setter
+    def data_type(self, data_type):
+        data_opts = deepcopy(self.data_opts)
+        data_opts['data_type'] = data_type
+        self.data_opts = data_opts
+
     @property
     def selected_neuron_type(self):
         return self.neuron_type_context.val
@@ -31,6 +38,7 @@ class Base:
     @property
     def neuron_types(self):
         return ['IN', 'PN']
+
 
 
 class Context:

@@ -29,6 +29,8 @@ class Stats(Base):
         self.num_time_points = int((pre_stim + post_stim)/bin_size)
         self.spreadsheet_fname = None
         self.bootstrap_sems = None
+        self.results_path = None
+        self.script_path = None
 
     def make_df(self):
         rows = self.get_rows()
@@ -65,9 +67,9 @@ class Stats(Base):
         row_dict = self.get_row_dict(data_source)
         return getattr(self, f"{self.time_type}_rows")(data_source.data, row_dict)
 
-    def get_row_dict(self, data_source):
+    @staticmethod
+    def get_row_dict(data_source):
         row_dict = {}
-        post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size', 1)  # Default to 1 if not present
 
         if data_source.name == 'unit':
             unit = data_source
@@ -81,10 +83,12 @@ class Stats(Base):
                        'condition': unit.animal.condition, 'category': unit.neuron_type}}
         return row_dict
 
-    def two_way_split(self, time_bin):
+    @staticmethod
+    def two_way_split(time_bin):
         return 'early' if time_bin < 30 else 'late'
 
-    def three_way_split(self, time_bin):
+    @staticmethod
+    def three_way_split(time_bin):
         if time_bin < 5:
             return 'pip'
         elif time_bin < 30:
@@ -115,49 +119,12 @@ class Stats(Base):
                     self.data_col: data[time_bin]}}
                 for time_bin in range(self.num_time_points)]
 
-    def get_post_hoc_results(self):
-        if self.data_opts['post_hoc_type'] == 'beta':
-            return self.beta_regression()
-        else:
-            return self.lmer_or_logit()
-
-    def lmer_or_logit(self):
-        self.make_df()
-        divide_by = self.data_opts['post_hoc_bin_size']
-        self.df['time_bin'] = self.df['time_point'].apply(lambda x: int(x / divide_by))
-        time_bins = list(range(int(self.num_time_points / divide_by)))
-        if divide_by == 1 or self.data_opts['row_type'] == 'unit':
-            random = '(1|animal/unit_num)'
-        else:
-            random = '(1|animal/unit_num/trial)'
-        interaction_p_vals = [self.interaction_p_val(self.df, time_bin, random) for time_bin in time_bins]
-        within_neuron_type_p_vals = {
-            neuron_type: [self.within_neuron_type_p_val(self.df.query(f"category == '{neuron_type}'"), time_bin, random)
-                          for time_bin in time_bins]
-            for neuron_type in ['PN', 'IN']}
-        return interaction_p_vals, within_neuron_type_p_vals
-
-    def interaction_p_val(self, df, time_bin, random):
-        interaction_model = self.get_model(df, f"{self.data_col} ~ condition * category + {random}",
-                                           time_bin)
-        summary = base.summary(interaction_model)
-        if self.data_opts['row_type'] == 'trial':
-            return summary.rx('coefficients')[0][3][3]  # Adjust the indexing according to your summary structure
-        else:
-            return summary.rx('coefficients')[0][3][4]
-
-    def within_neuron_type_p_val(self, df, time_bin, random):
-        model = self.get_model(df, f"{self.data_col} ~ condition + {random}", time_bin)
-        summary = base.summary(model)
-        last_col = 3 if self.data_opts['row_type'] == 'trial' else 4
-        return summary.rx('coefficients')[0][1][last_col]
-
     def get_model(self, df, model_def, time_bin):
         r_df = pandas2ri.py2rpy(df.query(f"time_bin == {time_bin}"))
-        if self.data_opts['row_type'] == 'trial':
-            return lme4.glmer(model_def, data=r_df, family=ro.r['binomial'](link="logit"))
-        else:
+        if self.data_opts['data_type'] == 'psth':
             return lmerTest.lmer(model_def, data=r_df)
+        elif self.data_opts['data_type'] == 'proportion' and self.data_opts['row_type'] == 'trial':
+            return lme4.glmer(model_def, data=r_df, family=ro.r['binomial'](link="logit"))
 
     def bootstrap_standard_errors(self, n_bootstrap_samples=1000, force_recalculation=False):
 
@@ -226,11 +193,27 @@ class Stats(Base):
 
     def write_r_script(self):
 
-        error_suffix = '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else ''
+        error_suffix = '/unit_num' if self.data_opts['row_type'] == 'trial' else ''
+        error_suffix = error_suffix + '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else error_suffix
+
+        if self.data_opts['post_hoc_type'] == 'beta':
+            model_formula = f'glmmTMB(formula = {self.data_col} ~ condition +  (1|animal{error_suffix}), family = beta_family(link = "logit"), data = data)'
+            interaction_model_formula = f'glmmTMB(formula = {self.data_col} ~ condition * category + (1|animal{error_suffix}), family = beta_family(link = "logit"), data = sub_df)'
+            p_val_index = 'coefficients$cond[2, 4]'
+            interaction_p_val_index = 'coefficients$cond["conditionstressed:categoryPN", 4]'
+            zero_adjustment_line = f'df$"{self.data_col}"[df$"{self.data_col}" == 0] <- df$"{self.data_col}"[df$"{self.data_col}" == 0] + 1e-6'
+        elif self.data_opts['post_hoc_type'] == 'lmer':
+            model_formula = f'lmer({self.data_col} ~ condition +  (1|animal{error_suffix}), data = data)'
+            interaction_model_formula = f'lmer({self.data_col} ~ condition * category + (1|animal{error_suffix}), data = sub_df)'
+            p_val_index = 'coefficients[2, 5]'
+            interaction_p_val_index = 'coefficients[4, 5]'
+            zero_adjustment_line = ''
 
         self.results_path = os.path.join(self.data_opts['path'], 'r_results.csv')
         r_script = fr'''
         library(glmmTMB)
+        library(lme4)
+        library(lmerTest)  # for lmer p-values
         library(readr)
 
         df <- read_csv('{self.spreadsheet_fname}')
@@ -239,22 +222,18 @@ class Stats(Base):
         factor_vars <- c('unit_num', 'animal', 'category', 'condition')
         df[factor_vars] <- lapply(df[factor_vars], factor)
 
-        # Add small constant to 0s in the data column
-        df$"{self.data_col}"[df$"{self.data_col}" == 0] <- df$"{self.data_col}"[df$"{self.data_col}" == 0] + 1e-6
+        # Add small constant to 0s in the data column, if necessary
+        {zero_adjustment_line}
 
         # Create an empty data frame to store results
         results <- data.frame()
 
         perform_regression <- function(data, category){{
-            # Perform beta regression with mixed effects
-            mixed_beta <- glmmTMB(
-                formula = {self.data_col} ~ condition +  (1|animal/unit_num{error_suffix}), 
-                family = beta_family(link = "logit"), 
-                data = data
-            )
+            # Perform regression with mixed effects
+            mixed_model <- {model_formula}
 
             # Extract p-value
-            p_val <- summary(mixed_beta)$coefficients$cond[2, 4]
+            p_val <- summary(mixed_model)${p_val_index}
             return(p_val)
         }}
 
@@ -264,12 +243,8 @@ class Stats(Base):
             sub_df <- df[df$grouped_time_bin == time_bin,]
 
             # Perform the interaction analysis
-            interaction_model <- glmmTMB(
-                formula = {self.data_col} ~ condition * category + (1|animal/unit_num{error_suffix}),
-                family = beta_family(link = "logit"),
-                data = sub_df
-            )
-            p_val_interact <- summary(interaction_model)$coefficients$cond["conditionstressed:categoryPN", 4]
+            interaction_model <- {interaction_model_formula}
+            p_val_interact <- summary(interaction_model)${interaction_p_val_index}
 
             # Perform the within-category analyses
             p_val_PN <- perform_regression(sub_df[sub_df$category == 'PN', ], 'PN')
@@ -288,7 +263,11 @@ class Stats(Base):
         write_csv(results, '{self.results_path}')
         '''
 
-        self.script_path = os.path.join(self.data_opts['path'], 'r_script.r')
+        self.script_path = os.path.join(self.data_opts['path'], self.data_type + '_r_script.r')
+        with open(self.script_path, 'w') as f:
+            f.write(r_script)
+
+        self.script_path = os.path.join(self.data_opts['path'], self.data_type + '_r_script.r')
         with open(self.script_path, 'w') as f:
             f.write(r_script)
 
@@ -299,12 +278,10 @@ class Stats(Base):
         within_neuron_type_p_vals = {nt: results[f'{nt}_p_val'].tolist() for nt in ('PN', 'IN')}
         return interaction_p_vals, within_neuron_type_p_vals
 
-    def beta_regression(self):
+    def get_post_hoc_results(self):
         self.make_spreadsheet()
         self.write_r_script()
         return self.execute_r_script()
-
-
 
     # def get_animal_rows(self, animal):
     #     rows = []
