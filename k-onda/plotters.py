@@ -13,6 +13,9 @@ from stats import Stats
 
 
 class Plotter(Base):
+    """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple plots of multiple
+    kinds of data, see the figure module."""
+
     def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
         self.experiment = experiment
         self.data_type_context = data_type_context
@@ -42,6 +45,7 @@ class Plotter(Base):
 
 class PeriStimulusPlotter(Plotter, PlottingMixin):
     """Makes plots where the x-axis is time around the stimulus, and y can be a variety of types of data."""
+
     def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
         self.multiplier = 1 if self.plot_type == 'standalone' else 0.5
@@ -328,7 +332,6 @@ class GroupStatsPlotter(PeriStimulusPlotter):
                 if min(y) < self.y_min:
                     self.y_min = min(y)
                 self.axs[row].plot(x, y, label=group.identifier, color=color)
-                # sem = self.stats.get_sem_array(condition=group.identifier, category=neuron_type)
                 sem = group.get_sem()
                 self.axs[row].fill_between(x, y - sem, y + sem, color=color, alpha=0.2)
 
@@ -354,66 +357,33 @@ class GroupStatsPlotter(PeriStimulusPlotter):
 
     def add_significance_markers(self, p_values, p_type, row=None, y=None):
         bin_size = self.data_opts.get('bin_size')
-        post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size')
         for time_bin, p_value in enumerate(p_values):
             if p_value < .05:
-                if post_hoc_bin_size == 1:
-                    self.get_one_bin_significance_markers(row, p_type, time_bin, bin_size, y, p_values)
-                else:
-                    self.get_multi_bin_significance_markers(time_bin, post_hoc_bin_size, bin_size, p_type, row, y)
+                self.get_significance_markers(row, p_type, time_bin, bin_size, y, p_values)
 
-    def get_one_bin_significance_markers(self, row, p_type, time_bin, bin_size, y, p_values):
+    def get_significance_markers(self, row, p_type, time_bin, bin_size, y, p_values):
         if p_type == 'within_condition':
             self.axs[row].annotate('*', (time_bin * bin_size, y * 0.85), fontsize=20 * self.multiplier,
                                    ha='center', color='black')
         else:
             self.get_interaction_text(time_bin, p_values)
 
-    def get_multi_bin_significance_markers(self, time_bin, post_hoc_bin_size, bin_size, p_type, row, y):
-        start = time_bin * post_hoc_bin_size * bin_size
-        end = (time_bin + 1) * post_hoc_bin_size * bin_size
-        if p_type == 'within_condition':
-            line = mlines.Line2D([start, end], [y * 1.05, y], color='red')
-            self.axs[row].add_line(line)
-        else:
-            line = mlines.Line2D(
-            [(start + end) / 2, (start + end) / 2],
-            # This positions the line in the middle of start and end
-            [0, 1],  # This stretches the line from the bottom to the top of the figure
-            transform=self.fig.transFigure,
-            # This ensures that the coordinates are treated as figure fractions
-            color='black',
-            clip_on=False)  # This allows the line to extend outside of the axes if necessary
-            self.fig.add_artist(line)
-
     def get_interaction_text(self, time_bin, p_values):
         # calculate the x position as a fraction of the plot width
         x = time_bin / len(p_values)
         y = 0.485
-        margin = 0.007
-        fontsize = 20
 
         if self.plot_type == 'standalone':
-
-            top = self.axs[0].get_position().ymin - margin
-            bottom = self.axs[1].get_position().ymax + margin
             left = self.axs[0].get_position().xmin
             right = self.axs[0].get_position().xmax
             x = left + (right-left) * x
-            y_positions = ([y + margin * 2.5, top], [bottom, y + margin * .6])
 
         else:
             gridspec_position = self.grid.get_subplot_params(self.fig)
             x = gridspec_position.left + (gridspec_position.right - gridspec_position.left) * x
             y = gridspec_position.bottom + (gridspec_position.top - gridspec_position.bottom) / 2 - .01
-            y_positions = ([y, gridspec_position.top - margin], [y, gridspec_position.bottom + margin])
 
         self.fig.text(x, y, "\u2020", fontsize=15 * self.multiplier, ha='center', color='black')
-
-        for positions in y_positions:
-            pass
-            # line = mlines.Line2D([x, x], positions, color='black', transform=self.fig.transFigure, clip_on=False)
-            # self.fig.add_artist(line)
 
     def place_legend(self):
         if self.plot_type == 'standalone':
@@ -421,11 +391,6 @@ class GroupStatsPlotter(PeriStimulusPlotter):
             lines = [mlines.Line2D([], [], color=color, label=condition, linewidth=2 * self.multiplier)
                      for color, condition in zip(['green', 'orange'], ['Control', 'Stressed'])]
             self.fig.legend(handles=lines, loc='upper left', bbox_to_anchor=(x, y), prop={'size': 14 * self.multiplier})
-
-        else:
-            gridspec_position = self.grid.get_subplot_params(self.fig)
-            x = gridspec_position.right - .1
-            y = (gridspec_position.top + gridspec_position.bottom) / 2 + .03
 
 
 class PiePlotter(Plotter):

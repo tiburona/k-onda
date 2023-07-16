@@ -1,5 +1,5 @@
 from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
-    GROUP_STAT_OPTS, AC_KEYS, AC_METHODS
+    GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS, AC_KEYS, AC_METHODS, FIGURE_1_OPTS
 from initialize_experiment import experiment, data_type_context, neuron_type_context
 from proc_helpers import add_ac_keys_and_plot, assign_vars, plot
 from stats import Stats

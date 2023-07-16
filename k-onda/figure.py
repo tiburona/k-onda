@@ -3,7 +3,6 @@ from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 import numpy as np
 
 from plotters import Plotter, PeriStimulusPlotter, GroupStatsPlotter
-from plotting_helpers import annotate_subplot
 from phy_interface import PhyInterface
 from initialize_experiment import experiment as expt, data_type_context as dt_context, neuron_type_context as nt_context
 from opts_library import FIGURE_1_OPTS, PSTH_OPTS, PROPORTION_OPTS, GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS
@@ -17,7 +16,7 @@ class Figure(Plotter):
         self.fig = plt.figure()
         self.grid = GridSpec(3, 1, height_ratios=[3, 4, 4])
         self.rows = []
-        self.annot_coords = (-0.11, 1.1)
+        self.scatterplot = None
 
     def spike_data_figure(self):
         self.grid.update(hspace=0.4)
@@ -35,9 +34,9 @@ class Figure(Plotter):
     def phy_graphs(self):
         ax1, ax2 = (self.get_subplot_ax(self.rows[0][i]) for i in range(2))
         keys = ['data_path', 'animal_id', 'cluster_ids', 'electrodes_for_feature', 'electrodes_for_waveform',
-                'el_inds', 'pc_inds', 'neuron_type_colors']
-        data_path, animal_id, cluster_ids, electrodes_for_feature, electrodes_for_waveform, el_inds, pc_inds, colors = (
-            self.graph_opts[key] for key in keys)
+                'el_inds', 'pc_inds', 'neuron_type_colors', 'annot_coords']
+        (data_path, animal_id, cluster_ids, electrodes_for_feature, electrodes_for_waveform, el_inds, pc_inds, colors, 
+         annot_coords) = (self.graph_opts[key] for key in keys)
         colors = list(colors.values())
         phy_interface = PhyInterface(data_path, animal_id)
         for i, cluster_id in enumerate(cluster_ids):
@@ -45,48 +44,39 @@ class Figure(Plotter):
             ax1.scatter(x, y, alpha=0.3, color=colors[i], s=5)
             waveform = phy_interface.get_mean_waveforms(cluster_id, electrodes_for_waveform[i])
             ax2.plot(np.arange(len(waveform)), waveform, color=colors[i])
-            if i == 1:  # Assume the second line is red (indexed at 1)
+            if i == 1:  # We're only putting the FWHM markers on the second line
                 min_y, max_y = np.min(waveform), np.max(waveform)
-                max_x = np.argmax(waveform)  # find indices of min and max
+                max_x = np.argmax(waveform)  # find index of max
                 half_min = (min_y + max_y) / 2
-
-                # Draw short horizontal lines
+                # Draw lines indicating amplitude
                 ax2.hlines([min_y, max_y], xmin=[max_x - 2, max_x - 2], xmax=[max_x + 2, max_x + 2], color='.2', lw=.7)
-
-                # Draw vertical line connecting min and max
                 ax2.vlines(max_x, ymin=min_y, ymax=max_y, color='.2', lw=.7)
-
                 # Find indices where waveform is equal to half_min
-                half_min_indices = np.where(np.isclose(waveform, half_min, rtol=3e-2))  # adjust tolerance as needed
-
+                half_min_indices = np.where(np.isclose(waveform, half_min, rtol=3e-2))
                 # Draw line connecting points at FWHM
                 if half_min_indices[0].size > 0:
-                    # Identify the starting and ending x-coordinates for the FWHM
                     fwhm_start = half_min_indices[0][0]
                     fwhm_end = half_min_indices[0][-1]
-
-                    # Draw a horizontal line representing the FWHM
                     ax2.hlines(half_min, xmin=fwhm_start, xmax=fwhm_end, color='.2', lw=.7)
+                    ax2.text(fwhm_start - 5, half_min, 'FWHM', fontsize=7, ha='right')
 
-                    # Position FWHM label to the left of the FWHM line
-                    ax2.text(fwhm_start - 5, half_min, 'FWHM', fontsize=8, ha='right')
+        self.label_phy_graph(ax1, 'Electrode 10, PC 1', 'Electrode 10, PC 2', '(a)', annot_coords)
+        self.label_phy_graph(ax2, 'Samples (30k Hz)', '\u03BCV', '(b)', annot_coords)
 
-        ax1.set_xlabel('Electrode 10, PC 1', fontsize=8)
-        ax1.set_ylabel('Electrode 10, PC 2', fontsize=8)
-        ax2.set_xlabel('Samples (30k Hz)', fontsize=8)
-        ax2.set_ylabel('\u03BCV', fontsize=8)
-        annotate_subplot(ax1, '(a)', xy=self.annot_coords, xycoords="axes fraction")
-        annotate_subplot(ax2, '(b)', xy=self.annot_coords, xycoords="axes fraction")
+    def label_phy_graph(self, ax, xlabel, ylabel, letter, annot_coords):
+        ax.set_xlabel(xlabel, fontsize=7)
+        ax.set_ylabel(ylabel, fontsize=7)
+        ax.annotate(letter, xy=annot_coords, xycoords='axes fraction')
+        ax.tick_params(axis='both', which='major', labelsize=5, length=1.25)
 
     def pn_in_scatterplot(self):
-        gs0 = GridSpec(100, 100)
-        # Use the slice from row 7 to 10 and column 7 to 10 for overlay_ax
-        overlay_ax = self.get_subplot_ax(gs0[0:30, 65:95], invisible=True)
-        annotate_subplot(overlay_ax, '(c)', self.annot_coords, xycoords="axes fraction")
 
-        # Create a 3x3 GridSpec within the SubplotSpec of the custom positioned axes
-        scatterplot = GridSpecFromSubplotSpec(3, 3, subplot_spec=overlay_ax.get_subplotspec(), wspace=1, hspace=1)
-        ax1 = self.get_subplot_ax(scatterplot[:2, 1:])
+        gs0 = GridSpec(100, 100) # scatterplot needs custom position to take advantage of whitespace below
+        overlay_ax = self.get_subplot_ax(gs0[0:30, 65:95], invisible=True)
+        overlay_ax.annotate('(c)', self.graph_opts['annot_coords'], xycoords="axes fraction")
+
+        self.scatterplot = GridSpecFromSubplotSpec(3, 3, subplot_spec=overlay_ax.get_subplotspec(), wspace=1, hspace=1)
+        ax1 = self.get_subplot_ax(self.scatterplot[:2, 1:])
         x = [unit.fwhm_microseconds for unit in self.experiment.all_units]
         y = [unit.firing_rate for unit in self.experiment.all_units]
         colors = [self.graph_opts['neuron_type_colors'][unit.neuron_type] for unit in self.experiment.all_units]
@@ -94,26 +84,31 @@ class Figure(Plotter):
         ax1.set_xlabel('FWHM (\u03BCs)', fontsize=7)
         ax1.set_ylabel('Firing Rate (Hz)', fontsize=7)
 
-        ax2 = self.fig.add_subplot(scatterplot[:2, 0])
-        ax2.hist(y, bins=30, orientation='horizontal', color='#9678D3', alpha=.8)
-        ax2.set_xlim(ax2.get_xlim()[::-1])
-        ax2.tick_params(axis='y', left=False, labelleft=False, right=False, labelright=False)
-        ax2.tick_params(axis='x', bottom=True, labelbottom=True, right=False, labelright=False)
-        ax2.set_xlabel('Count', fontsize=7)
-        ax2.spines['left'].set_visible(False)
-        ax2.spines['top'].set_visible(False)
+        ax2 = self.make_neuron_hist(x, position=np.s_[:2, 0], rotate=True, lim_to_flip='xlim', ticks_axes=('y', 'x'),
+                                    invisible_spines=('left', 'top'), count_axis='x')
+        ax3 = self.make_neuron_hist(x, position=np.s_[2, 1:], rotate=False, lim_to_flip='ylim', ticks_axes=('x', 'y'),
+                                    invisible_spines=('right', 'bottom'), count_axis='y')
 
-        ax3 = self.get_subplot_ax(scatterplot[2, 1:])
-        ax3.hist(x, bins=30, color='#9678D3', alpha=.8)
-        ax3.set_ylim(ax3.get_ylim()[::-1])
-        ax3.spines['right'].set_visible(False)
-        ax3.spines['bottom'].set_visible(False)
-        ax3.tick_params(axis='x', left=False, labelleft=False, right=False, labelright=False)
         ax3.xaxis.set_ticks([])
         ax3.xaxis.set_ticklabels([])
-        ax3.tick_params(axis='y', left=True, labelleft=True, right=False, labelright=False)
 
         [ax.tick_params(axis='both', which='major', labelsize=5, length=1.25) for ax in [ax1, ax2, ax3]]
+
+    def make_neuron_hist(self, x, position, rotate, lim_to_flip, ticks_axes, invisible_spines, count_axis):
+        ax = self.fig.add_subplot(self.scatterplot[position])
+        kwargs = {'bins': 30, 'color': self.graph_opts['hist_color'], 'alpha': 0.8}
+        if rotate:
+            kwargs['orientation'] = 'horizontal'
+        ax.hist(x, **kwargs)
+        flipped_lim = getattr(ax, f'get_{lim_to_flip}')()[::-1]
+        getattr(ax, f'set_{lim_to_flip}')(flipped_lim)
+        [ax.spines[spine].set_visible(False) for spine in invisible_spines]
+        ax.tick_params(axis=ticks_axes[0], left=False, labelleft=False, right=False, labelright=False)
+        ax.tick_params(axis=ticks_axes[1], left=True, labelleft=True, right=False, labelright=False)
+        getattr(ax, f"set_{count_axis}label")('Count', fontsize=7)
+
+
+        return ax
 
     def results_row(self, data_opts, group_stat_opts, grid_position):
         letters = [('(d)', '(e)'), ('(f)', '(g)')]
@@ -132,7 +127,7 @@ class Figure(Plotter):
         plotter.data_opts = data_opts
         gridspec = GridSpecFromSubplotSpec(rows, cols, subplot_spec=self.rows[-1][position_in_row], hspace=0.9)
         invisible_ax = self.get_subplot_ax(self.rows[-1][position_in_row], invisible=True)
-        invisible_ax.annotate(letter, xycoords="axes fraction", xy=self.annot_coords)
+        invisible_ax.annotate(letter, xycoords="axes fraction", xy=self.graph_opts['annot_coords'])
         plotter.set_gridspec_axes(self.fig, gridspec, rows, cols, invisible_ax=invisible_ax)
         return plotter
 
@@ -144,6 +139,7 @@ class Figure(Plotter):
             for position in ['top', 'right', 'bottom', 'left']:
                 ax1.spines[position].set_visible(False)
         return ax1
+
 
 figure = Figure(expt, dt_context, nt_context, FIGURE_1_OPTS)
 figure.spike_data_figure()

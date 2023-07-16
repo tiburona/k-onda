@@ -22,7 +22,7 @@ def init_units(entry, animal):
     ]
 
     for i, unit in enumerate(animal.units['good']):
-        unit.neuron_type = 'IN' if categorized_unit_data['good'][i][8][0][0] < 2 else 'PN'
+        unit.neuron_type = 'IN' if categorized_unit_data['good'][i][8][0][0] > 1 else 'PN'
         unit.fwhm_microseconds = categorized_unit_data['good'][i][6][0][0]
         getattr(animal, unit.neuron_type).append(unit)
 
@@ -56,6 +56,8 @@ for entity in [g for g in experiment.groups] + [a for a in animals] + [u for u i
 
 for entity in [g for g in experiment.groups] + [a for a in animals]:
     entity.subscribe(neuron_type_context)
+
+# experiment.categorize_neurons()
 
 
 

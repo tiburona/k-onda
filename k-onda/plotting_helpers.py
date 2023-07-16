@@ -14,7 +14,7 @@ class PlottingMixin:
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum')}
 
     def set_labels(self, x_and_y_labels=(None, None)):
-        canonical_labels = self.get_labels()[self.data_type]
+        canonical_labels = self.get_labels().get(self.data_type)
         labels = [canonical_labels[i] if label is None else label for i, label in enumerate(x_and_y_labels)]
 
         if self.plot_type == 'standalone':
@@ -29,7 +29,6 @@ class PlottingMixin:
             object_to_label = self.ax
         else:
             object_to_label = self.invisible_ax
-            #gridspec_position = self.grid.get_subplot_params(self.fig)
 
             if self.__class__.__name__ == 'PeriStimulusPlotter':
                 x_coord_of_y_label = -0.08
@@ -41,45 +40,6 @@ class PlottingMixin:
 
         [getattr(object_to_label, f"set_{dim}label")(labels[i], fontsize=15 * self.multiplier)
          for i, dim in enumerate(['x', 'y'])]
-
-
-# def iterate_and_track(func):
-#     def wrapper(self, *args, **kwargs):
-#         # initialize y_min and y_max
-#         self.y_min = float('inf')
-#         self.y_max = -float('inf')
-#
-#         # Iterate over neuron types and groups
-#         for row, neuron_type in enumerate(self.neuron_types):
-#             self.selected_neuron_type = neuron_type
-#             for col, group in enumerate(self.experiment.groups):
-#                 color = 'orange' if group.identifier == 'stressed' else 'green'
-#                 y = group.data
-#
-#                 # Call the provided method
-#                 if 'row' in func.__code__.co_varnames and 'col' in func.__code__.co_varnames:
-#                     result = func(self, row, col, *args, **kwargs)
-#                 elif 'row' in func.__code__.co_varnames:
-#                     result = func(self, row, *args, **kwargs)
-#                 elif 'col' in func.__code__.co_varnames:
-#                     result = func(self, col, *args, **kwargs)
-#                 else:
-#                     result = func(self, *args, **kwargs)
-#
-#                 # Update y_min and y_max
-#                 if result is not None:
-#                     self.y_min = min(self.y_min, min(result))
-#                     self.y_max = max(self.y_max, max(result))
-#
-#                 # Rest of the plotting logic remains the same
-#                 self.axs[row].plot(x, y, label=group.identifier, color=color)
-#                 self.axs[row].set_title(f"{neuron_type}", fontsize=17)
-#                 self.axs[row].set_xticks(np.arange(self.data_opts['pre_stim'], self.data_opts['post_stim'],
-#                                                    step=self.graph_opts['tick_step']))
-#
-#         return self.y_min, self.y_max
-#
-#     return wrapper
 
 
 def formatted_now():
@@ -110,15 +70,3 @@ def ac_str(s):
     for (old, new) in [('pd', 'Pandas'), ('np', 'NumPy'), ('ml', 'Matlab')]:
         s = s.replace(old, new)
 
-
-def annotate_subplot(ax, label, xy=(-0.1, 1.02), xycoords="axes fraction", **kwargs):
-    """
-    Annotate the subplot with a label at a specific position.
-
-    :param ax: The axes to annotate.
-    :param label: The text of the annotation.
-    :param xy: A tuple specifying the position of the annotation.
-    :param xycoords: A string specifying what coordinates to use for the position.
-    :param kwargs: Additional keyword arguments for the annotate function.
-    """
-    ax.annotate(label, xy=xy, xycoords=xycoords, **kwargs)

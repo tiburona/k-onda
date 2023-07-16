@@ -67,3 +67,7 @@ def sem(children_vals):
     std_dev = np.std(all_series, axis=0, ddof=1)  # ddof=1 to compute sample standard deviation
     return std_dev / np.sqrt(len(all_series))
 
+
+def normalize(vals):
+    return [vals - np.mean(vals)]/np.std(vals)
+

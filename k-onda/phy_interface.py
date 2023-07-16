@@ -5,13 +5,10 @@ import numpy as np
 from scipy.signal import medfilt
 from collections import defaultdict
 
-animal_path = Path('/Users/katie/likhtik/data/single_cell_data/IG158')
-model = load_model(animal_path / 'params.py')
-spike_times = np.load(animal_path / 'spike_times.npy')
-spike_clusters = np.load(animal_path / 'spike_clusters.npy')
-
 
 class PhyInterface:
+    """An interface to data from Phy, the cluster visualization program.  Fetches feature views and waveform views for
+    plotting."""
 
     def __init__(self, path, animal):
         self.animal = animal
@@ -49,7 +46,6 @@ class PhyInterface:
 
         plt.show()
 
-
     def get_all_pairwise_feature_views(self, cluster_ids, electrodes):
         vals_to_return = defaultdict(lambda: [[] for _ in range(4)])
         for row in range(4):
@@ -78,25 +74,6 @@ class PhyInterface:
         averaged_waveforms = np.mean(filtered_waveforms[:, :, indices], axis=(0, 2))
         return averaged_waveforms
 
-
-#phy_interface = PhyInterface('/Users/katie/likhtik/data/single_cell_data', 'IG156')
-# phy_interface.plot_features([21, 27], [10, 8])
-#waveform = phy_interface.get_mean_waveforms(27, [10])
-# plt.plot(waveform)
-# plt.show()
-
-# colors = ['red', 'blue']
-#
-# vals = phy_interface.plot_features([21, 27], [6, 8])
-#
-# for i, cluster in enumerate(vals.values()):
-#     x, y = cluster[7]
-#     plt.scatter(x, y, alpha=0.3, color=colors[i], s=5)
-#
-# plt.show()
-
-# for 21, 27, cluster 7 is good
-#
 
 
 

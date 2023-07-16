@@ -1,19 +1,21 @@
 from bisect import bisect_left as bs_left, bisect_right as bs_right
 from collections import defaultdict
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import numpy as np
 
 from context import Base, NeuronTypeMixin
 from matlab_interface import xcorr
 from utils import cache_method
-from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
+from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac, normalize
 
 
 """
-This module defines Experiment, Group, Animal, Unit, and Trial. Experiment inherits from Base, which defines a few 
-common properties. Group, Unit, and Trial inherit from Experiment, but Animal shares a unique method with Group, and 
-inherits from it. Several of Experiment's methods are recursive, and are overwritten by the base case, most frequently 
-Trial.  
+This module defines Level, Experiment, Group, Animal, Unit, and Trial. Level inherits from Base, which defines a few 
+common properties. The rest of the classes inherit from Level and some incorporate NeuronTypeMixin for methods related 
+to updating the selected neuron type. Several of Level's methods are recursive, and are overwritten by the base case, 
+most frequently Trial.  
 """
 
 SAMPLING_RATE = 30000
@@ -112,6 +114,19 @@ class Level(Base):
                 [child_autocorrs[key] for child_autocorrs in children_autocorrs], axis=0)
         return ac_results
 
+    @cache_method
+    def upregulated_to_pip(self):
+        if self.data_type == 'psth':
+            first_pip_bin_ind = int(self.data_opts['pre_stim'] / self.data_opts['bin_size'])
+            last_pip_bin_ind = int(first_pip_bin_ind + PIP_DURATION / self.data_opts['bin_size'])
+            pip_activity = np.mean(self.data[first_pip_bin_ind:last_pip_bin_ind])
+            if pip_activity > .5 * np.std(self.data):
+                return 1
+            elif pip_activity < -.5 * np.std(self.data):
+                return -1
+            else:
+                return 0
+
 
 class Experiment(Level):
     """The experiment. Parent of groups."""
@@ -124,6 +139,24 @@ class Experiment(Level):
         for group in self.groups:
             group.parent = self
         self.all_units = None
+
+    def categorize_neurons(self):
+        firing_rates = [unit.firing_rate for unit in self.all_units]
+        fwhm = [unit.fwhm_microseconds for unit in self.all_units]
+        scaler = StandardScaler()
+        firing_rates = scaler.fit_transform(np.array(firing_rates).reshape(-1, 1))
+        fwhm = scaler.fit_transform(np.array(fwhm).reshape(-1, 1))
+        X = np.column_stack([firing_rates, fwhm])
+
+        kmeans = KMeans(n_clusters=2, random_state=0)
+        kmeans.fit(X)
+        labels = kmeans.labels_
+        centers = kmeans.cluster_centers_
+        highest_center_index = np.argmax(centers[:, 0])
+        # The label of this cluster is the same as the index
+        IN_label = highest_center_index
+        for unit, label in zip(self.all_units, labels):
+            unit.neuron_type == 'IN' if label == IN_label else 'PN'
 
 
 class Group(Level, NeuronTypeMixin):
@@ -270,19 +303,6 @@ class Unit(Level):
             p_rates = calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size)
             rates.append(p_rates)
         return np.std([rate for period in rates for rate in period])
-
-    @cache_method
-    def upregulated_to_pip(self):
-        if self.data_type == 'psth':
-            first_pip_bin_ind = int(self.data_opts['pre_stim']/self.data_opts['bin_size'])
-            last_pip_bin_ind = int(first_pip_bin_ind + .05/self.data_opts['bin_size'])
-            pip_activity = np.mean(self.data[first_pip_bin_ind:last_pip_bin_ind])
-            if pip_activity > .5 * np.std(self.data):
-                return 1
-            elif pip_activity < -.5 * np.std(self.data):
-                return -1
-            else:
-                return 0
 
 
 class Trial(Level):
