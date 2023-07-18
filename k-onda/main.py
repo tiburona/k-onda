@@ -1,35 +1,14 @@
-from logger import log_directory_contents
+from utils import log_directory_contents
 from procs import *
 
-
 """
-The top-level module for calling spike processing functions. Executing make() regenerates everything by default with all 
-the default options, but finer-grained control is available by passing subsets of the default `levels` or procedures 
-`to_run`, by calling the plot/make functions individually with non-default arguments, or changing opts in the 
-opts_library.
+The top-level module for calling spike processing functions. 
 """
-
-
-def make(levels=('group', 'animal', 'unit'), to_run=('psth', 'autocorr', 'spectrum', 'spreadsheet')):
-    if 'psth' in to_run:
-        plot_psth(levels)
-    if 'proportion' in to_run:
-        plot_proportion_score(levels=('group', 'animal', 'unit'))
-    if 'autocorr' in to_run:
-        plot_autocorr(levels)
-    if 'spectrum' in to_run:
-        plot_spectrum(levels)
-    if 'spreadsheet' in to_run:
-        make_spreadsheet()
-    if 'group_stats' in to_run:
-        plot_group_stats()
-    if 'pie_chart' in to_run:
-        plot_pie_chart()
 
 
 def main():
 
-    make(to_run='group_stats')
+    plot_psth(levels=('groups', 'animals', 'units'))  # An example.  See what else is available in the procs module.
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

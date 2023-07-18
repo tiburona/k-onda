@@ -7,7 +7,8 @@ from collections import defaultdict
 
 
 class PhyInterface:
-    """An interface to data from Phy, the cluster visualization program.  Fetches feature views and waveform views for
+    """An interface to data from Phy, the cluster visualization program.  Fetches principal component features and
+    waveforms for
     plotting."""
 
     def __init__(self, path, animal):
@@ -73,9 +74,3 @@ class PhyInterface:
         filtered_waveforms = medfilt(waveforms, kernel_size=[1, 5, 1])
         averaged_waveforms = np.mean(filtered_waveforms[:, :, indices], axis=(0, 2))
         return averaged_waveforms
-
-
-
-
-
-

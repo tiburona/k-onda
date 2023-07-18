@@ -41,14 +41,13 @@ def make_spreadsheet(spreadsheet_opts=None):
     stats.make_spreadsheet()
 
 
-def run_post_hocs(post_hoc_opts=None):
-    post_hoc_opts, = assign_vars([post_hoc_opts], [GROUP_STAT_OPTS])
-    stats = Stats(experiment, data_type_context, post_hoc_opts)
-    stats.get_post_hoc_results()
+def plot_psth_group_stats(group_stat_opts=None, graph_opts=None):
+    group_stat_opts, graph_opts = assign_vars([group_stat_opts, graph_opts], [GROUP_STAT_PSTH_OPTS, GRAPH_OPTS])
+    plot(group_stat_opts, graph_opts)
 
 
-def plot_group_stats(group_stat_opts=None, graph_opts=None):
-    group_stat_opts, graph_opts = assign_vars([group_stat_opts, graph_opts], [GROUP_STAT_OPTS, GRAPH_OPTS])
+def plot_proportion_group_stats(group_stat_opts=None, graph_opts=None):
+    group_stat_opts, graph_opts = assign_vars([group_stat_opts, graph_opts], [GROUP_STAT_PROPORTION_OPTS, GRAPH_OPTS])
     plot(group_stat_opts, graph_opts)
 
 
@@ -56,7 +55,5 @@ def plot_pie_chart(psth_opts=None, graph_opts=None):
     psth_opts, graph_opts = assign_vars([psth_opts, graph_opts], [PSTH_OPTS, GRAPH_OPTS])
     plotter = Plotter(experiment, data_type_context, neuron_type_context, graph_opts=None)
     plotter.plot_unit_pie_chart(psth_opts, graph_opts)
-
-
 
 

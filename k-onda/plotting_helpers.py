@@ -30,7 +30,7 @@ class PlottingMixin:
         else:
             object_to_label = self.invisible_ax
 
-            if self.__class__.__name__ == 'PeriStimulusPlotter':
+            if self.__class__.__name__ == 'PeriStimulusPlotter':  # kludge to deal with misplacement of y-axis label
                 x_coord_of_y_label = -0.08
             else:
                 x_coord_of_y_label = -0.15

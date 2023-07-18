@@ -40,7 +40,6 @@ class Base:
         return ['IN', 'PN']
 
 
-
 class Context:
     """
     A Context stores information about, well, the context and communicates it to its subscribers when it changes.
@@ -67,6 +66,8 @@ class Context:
 
 
 class NeuronTypeMixin:
+
+    """A mixin to confer neuron type updating functionality to Animal and Group."""
 
     def check_for_new_neuron_type(self, context):
         if context.name == 'neuron_type_context':

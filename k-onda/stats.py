@@ -129,7 +129,6 @@ class Stats(Base):
             interaction_p_val_index = 'coefficients[4, 5]'
             zero_adjustment_line = ''
 
-        self.results_path = os.path.join(self.data_opts['path'], 'r_results.csv')
         r_script = fr'''
         library(glmmTMB)
         library(lme4)
@@ -187,18 +186,14 @@ class Stats(Base):
         with open(self.script_path, 'w') as f:
             f.write(r_script)
 
-        self.script_path = os.path.join(self.data_opts['path'], self.data_type + '_r_script.r')
-        with open(self.script_path, 'w') as f:
-            f.write(r_script)
-
-    def execute_r_script(self):
-        subprocess.run(['Rscript', self.script_path], check=True)
+    def get_post_hoc_results(self, force_recalc=False):
+        self.make_spreadsheet()
+        self.results_path = os.path.join(self.data_opts['path'], 'r_results.csv')
+        if not os.path.exists(self.results_path) or force_recalc:
+            self.write_r_script()
+            subprocess.run(['Rscript', self.script_path], check=True)
         results = pd.read_csv(self.results_path)
         interaction_p_vals = results['interaction_p_val'].tolist()
         within_neuron_type_p_vals = {nt: results[f'{nt}_p_val'].tolist() for nt in ('PN', 'IN')}
         return interaction_p_vals, within_neuron_type_p_vals
 
-    def get_post_hoc_results(self):
-        self.make_spreadsheet()
-        self.write_r_script()
-        return self.execute_r_script()

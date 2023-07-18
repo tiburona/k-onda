@@ -11,6 +11,7 @@ plt.rcParams['font.family'] = 'Arial'
 
 
 class Figure(Plotter):
+    """A class to create a three row figure for the safety paper."""
     def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
         self.fig = plt.figure()
@@ -71,7 +72,7 @@ class Figure(Plotter):
 
     def pn_in_scatterplot(self):
 
-        gs0 = GridSpec(100, 100) # scatterplot needs custom position to take advantage of whitespace below
+        gs0 = GridSpec(100, 100)  # scatterplot needs custom position to take advantage of whitespace below
         overlay_ax = self.get_subplot_ax(gs0[0:30, 65:95], invisible=True)
         overlay_ax.annotate('(c)', self.graph_opts['annot_coords'], xycoords="axes fraction")
 
@@ -106,8 +107,6 @@ class Figure(Plotter):
         ax.tick_params(axis=ticks_axes[0], left=False, labelleft=False, right=False, labelright=False)
         ax.tick_params(axis=ticks_axes[1], left=True, labelleft=True, right=False, labelright=False)
         getattr(ax, f"set_{count_axis}label")('Count', fontsize=7)
-
-
         return ax
 
     def results_row(self, data_opts, group_stat_opts, grid_position):

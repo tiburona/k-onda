@@ -46,6 +46,7 @@ def get_positive_frequencies(N, T):
 
 
 def get_spectrum_fenceposts(freq_range, max_lag, bin_size):
+    """Returns the indices of a power spectrum between two frequencies."""
     first, last = freq_range
     multi = max_lag * bin_size
     first_index = round(first * multi)
@@ -54,6 +55,7 @@ def get_spectrum_fenceposts(freq_range, max_lag, bin_size):
 
 
 def spectrum(series, freq_range, max_lag, bin_size):
+    """Compute the power spectrum of a series."""
     fft = np.fft.fft(series)
     oss = compute_one_sided_spectrum(fft)
     first, last = get_spectrum_fenceposts(freq_range, max_lag, bin_size)
@@ -67,7 +69,4 @@ def sem(children_vals):
     std_dev = np.std(all_series, axis=0, ddof=1)  # ddof=1 to compute sample standard deviation
     return std_dev / np.sqrt(len(all_series))
 
-
-def normalize(vals):
-    return [vals - np.mean(vals)]/np.std(vals)
 

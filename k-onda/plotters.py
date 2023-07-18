@@ -99,8 +99,8 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.close_plot(group.identifier)
 
     def make_subplot(self, data_source, row, col, title=''):
-        subplotter = Subplotter(data_source, self.data_opts, self.graph_opts, self.axs[row, col], self.plot_type,
-                                multiplier=self.multiplier)
+        subplotter = PeriStimulusSubplotter(data_source, self.data_opts, self.graph_opts, self.axs[row, col],
+                                            self.plot_type, multiplier=self.multiplier)
         subplotter.plot_data()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
@@ -130,14 +130,14 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
     def plot_unit(self, unit, axes):
         if self.data_type == 'psth':
             self.add_raster(unit, axes)
-        subplotter = Subplotter(unit, self.data_opts, self.graph_opts, axes[-1])
+        subplotter = PeriStimulusSubplotter(unit, self.data_opts, self.graph_opts, axes[-1])
         plotting_func = getattr(subplotter, f"plot_{self.data_type}")
         plotting_func()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
 
     def add_raster(self, unit, axes):
-        subplotter = Subplotter(unit, self.data_opts, self.graph_opts, axes[0])
+        subplotter = PeriStimulusSubplotter(unit, self.data_opts, self.graph_opts, axes[0])
         subplotter.y = unit.get_spikes_by_trials()  # overwrites subplotter.y defined by data_type, which is psth
         subplotter.plot_raster()
 
@@ -228,7 +228,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.invisible_ax = invisible_ax
 
 
-class Subplotter(PlottingMixin):
+class PeriStimulusSubplotter(PlottingMixin):
     """Constructs a subplot."""
     def __init__(self, data_source, data_opts, graph_opts, ax, parent_type, multiplier=1):
         self.data_source = data_source
@@ -318,6 +318,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
 
     def plot_group_stats_data(self):
         self.stats = Stats(self.experiment, self.data_type_context, self.data_opts)
+        force_recalc = self.graph_opts['force_recalc']
         interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
 
         bin_size = self.data_opts.get('bin_size')

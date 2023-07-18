@@ -8,7 +8,7 @@ import numpy as np
 from context import Base, NeuronTypeMixin
 from matlab_interface import xcorr
 from utils import cache_method
-from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac, normalize
+from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
 
 
 """
@@ -21,7 +21,7 @@ most frequently Trial.
 SAMPLING_RATE = 30000
 TONES_PER_PERIOD = 30  # The pip sounds 30 times in a tone period
 TONE_PERIOD_DURATION = 30
-INTER_TONE_INTERVAL = 30  # number of seconds between tones
+INTER_TONE_INTERVAL = 30  # number of seconds between tone periods
 PIP_DURATION = .05
 
 
