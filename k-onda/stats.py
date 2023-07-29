@@ -13,51 +13,130 @@ class Stats(Base):
         self.experiment = experiment
         self.data_type_context = data_type_context
         self.data_opts = data_opts
-        self.df = None
+        self.dfs = {}
         self.time_type = self.data_opts['time']
-        self.time_col = 'time_point' if self.time_type == 'continuous' else 'period'
-        self.data_col = 'rate' if self.data_type == 'psth' else 'proportion'
-        pre_stim, post_stim, bin_size = (self.data_opts[k] for k in ('pre_stim', 'post_stim', 'bin_size'))
-        self.num_time_points = int((pre_stim + post_stim)/bin_size)
+        self.data_col = None
+        self.num_time_points = None
         self.spreadsheet_fname = None
-        self.bootstrap_sems = None
         self.results_path = None
         self.script_path = None
+        self.lfp_brain_region = None
+        self.frequency_band = None
 
-    def make_df(self):
+    def set_properties(self):
+        if self.data_type == 'lfp':
+            self.data_col = 'power'
+            self.frequency_band = self.data_opts['fb']
+            self.lfp_brain_region = self.data_opts['brain_region']
+        else:
+            self.data_col = 'rate' if self.data_type == 'psth' else 'proportion'
+            pre_stim, post_stim, bin_size = (self.data_opts[k] for k in ('pre_stim', 'post_stim', 'bin_size'))
+            self.num_time_points = int((pre_stim + post_stim) / bin_size)
+
+    def make_df(self, name):
+        self.set_properties()
         rows = self.get_rows()
         df = pd.DataFrame(rows)
-        for var in ['unit_num', 'animal', 'category', 'condition', 'two_way_split', 'three_way_split']:
-            df[var] = df[var].astype('category')
-        self.df = df
+        vs = ['unit_num', 'animal', 'category', 'condition', 'two_way_split', 'three_way_split', 'frequency']
+        for var in vs:
+            if var in df:
+                df[var] = df[var].astype('category')
+        self.dfs[name] = df
 
-    def make_spreadsheet(self):
+    def smart_merge(self, keys):
+        # Determine which DataFrame has the most unique key combinations
+        df_items = list(self.dfs.items())  # get a list of (name, DataFrame) pairs
+        df_items.sort(key=lambda item: item[1][list(keys)].drop_duplicates().shape[0], reverse=True)
+
+        # Extract the sorted DataFrames and their names
+        df_names, dfs = zip(*df_items)
+
+        # Start with the DataFrame that has the most unique key combinations
+        result = dfs[0]
+
+        # Merge with all the other DataFrames
+        for df in dfs[1:]:
+            result = pd.merge(result, df, how='left', on=keys)
+
+        new_df_name = '_'.join(df_names)
+        self.dfs[new_df_name] = result
+        return new_df_name
+
+    def make_dfs(self, names, opts_dicts):
+        for name, opts in zip(names, opts_dicts):
+            self.data_opts = opts
+            self.make_df(name)
+        new_name = self.smart_merge(('animal', 'condition', 'period'))
+        return new_name
+
+    def get_lfp_rows(self):
+        animals = [animal for group in self.experiment.groups for animal in group.children]
+        rows = []
+        for animal in animals:
+            lfp = animal.get_lfp()
+            for i, period_val in enumerate(lfp.normalized_power[self.data_opts['fb']]):
+                rows.append({'condition': animal.condition, 'animal': animal.identifier, 'period': i,
+                            'power': period_val})
+        return rows
+
+    def make_spreadsheet(self, df_name=None):
         row_type = self.data_opts['row_type']
         path = self.data_opts.get('path')
-        fname = os.path.join(path, '_'.join([self.data_type, self.time_type, row_type + 's']) + '.csv')
+        name = df_name if df_name else self.data_type
+        if 'lfp' in name:
+            path = os.path.join(path, 'lfp')
+            name += f"_{self.lfp_brain_region}_{self.frequency_band}"
+        fname = os.path.join(path, '_'.join([name, self.time_type, row_type + 's']) + '.csv')
         self.spreadsheet_fname = fname
 
-        header = ['unit_num', 'animal', 'condition', 'category', 'two_way_split', 'three_way_split', 'time_bin',
-                  'grouped_time_bin', self.data_col]
-        if row_type == 'trial':
-            header.insert(0, 'trial')
-
         with open(fname, 'w', newline='') as f:
+            header = self.get_header(df_name=df_name)
             writer = csv.DictWriter(f, fieldnames=header)
             writer.writeheader()
 
-            for row in self.get_rows():
-                writer.writerow(row)
+            if df_name is None:
+                for row in self.get_rows():
+                    writer.writerow(row)
+            else:
+                for index, row in self.dfs[df_name].iterrows():
+                    writer.writerow(row.to_dict())
+
+    def get_header(self, df_name=None):
+        if df_name is None:
+            df_name = self.data_type
+        row_type = self.data_opts.get('row_type')
+        header = ['animal', 'condition', 'category']
+        if 'psth' in df_name or 'proportion' in df_name:
+            header += ['unit_num']
+        if 'lfp' not in df_name:
+            header += ['two_way_split', 'three_way_split']
+        if row_type == 'trial':
+            header += ['trial']
+        if self.data_opts['time'] == 'period':
+            header += ['period']
+        else:
+            header += ['grouped_time_bin', 'time_bin']
+        if df_name:
+            data_cols = dict(proportion='proportion', psth='rate', lfp='power')
+            dfs = df_name.split('_')
+            for df in dfs:
+                header += [data_cols[df]]
+        else:
+            header += [self.data_col]
+        return header
 
     def get_rows(self):
-        if self.data_opts['row_type'] == 'unit':
-            return [row for unit in self.experiment.all_units for row in self.get_row(unit)]
-        elif self.data_opts['row_type'] == 'trial':
-            return [row for unit in self.experiment.all_units for trial in unit.trials for row in self.get_row(trial)]
+        if self.data_type == 'lfp':
+            return self.get_lfp_rows()
+        else:
+            if self.data_opts['row_type'] == 'unit':
+                return [row for unit in self.experiment.all_units for row in self.get_row(unit)]
+            elif self.data_opts['row_type'] == 'trial':
+                return [row for unit in self.experiment.all_units for trial in unit.trials for row in self.get_row(trial)]
 
     def get_row(self, data_source):
         row_dict = self.get_row_dict(data_source)
-        return getattr(self, f"{self.time_type}_rows")(data_source.data, row_dict)
+        return getattr(self, f"{self.time_type}_rows")(data_source, row_dict)
 
     @staticmethod
     def get_row_dict(data_source):
@@ -92,7 +171,8 @@ class Stats(Base):
     def calculate_rate(data, bin_slice):
         return np.mean(data[slice(*bin_slice)])
 
-    def binned_rows(self, data, row_dict):
+    def binned_rows(self, data_source, row_dict):
+        data = data_source.data
         periods = ['during_beep', 'early_post_beep', 'mid_post_beep', 'late_post_beep']
         bin_slices = [(0, 5), (5, 30), (30, 60), (60, 100)]
         rows = []
@@ -101,7 +181,8 @@ class Stats(Base):
             rows.append({**row_dict, **{'period': period, 'rate': rate}})
         return rows
 
-    def continuous_rows(self, data, row_dict):
+    def continuous_rows(self, data_source, row_dict):
+        data = data_source.data
         post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size', 1)  # Default to 1 if not present
         return [{**row_dict,
                  **{'two_way_split': self.two_way_split(time_bin),
@@ -110,6 +191,10 @@ class Stats(Base):
                     'grouped_time_bin': time_bin // post_hoc_bin_size,  # Calculate 'grouped_time_bin'
                     self.data_col: data[time_bin]}}
                 for time_bin in range(self.num_time_points)]
+
+    def period_rows(self, data_source, row_dict):
+        data = data_source.mean_over_period()
+        return [{**row_dict, **{'period': i, self.data_col: data[i]}} for i, period in enumerate(data)]
 
     def write_r_script(self):
 

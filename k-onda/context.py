@@ -5,7 +5,7 @@ from copy import deepcopy
 class Base:
 
     """
-    Base defines three properties that are useful for Experiment and its inheritors, Plotter, and Spreadsheet.
+    Base defines properties that are useful for Experiment and its inheritors, the various plotters, and Spreadsheet.
     They all access elements of the context.
     """
 
@@ -58,8 +58,12 @@ class Context:
             observer.update(self)
 
     def set_val(self, new_val):
-        if new_val == self.val:
-            return
+        if isinstance(self.val, dict) and isinstance(new_val, dict):
+            if self.val.items() == new_val.items():
+                return
+        else:
+            if new_val == self.val:
+                return
         self.val = new_val
         self.cache_id = to_hashable(new_val)
         self.notify()

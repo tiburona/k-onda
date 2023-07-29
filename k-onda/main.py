@@ -8,7 +8,7 @@ The top-level module for calling spike processing functions.
 
 def main():
 
-    plot_psth(levels=('groups', 'animals', 'units'))  # An example.  See what else is available in the procs module.
+    make_lfp_firing_rate_spreadsheet()  # An example.  See what else is available in the procs module.
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

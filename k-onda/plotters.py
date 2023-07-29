@@ -58,7 +58,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             for group in self.experiment.groups:
                 self.plot_animals(group)
         elif level == 'unit':
-            [self.plot_units(animal) for group in self.experiment.groups for animal in group.children]
+             [self.plot_units(animal) for group in self.experiment.groups for animal in group.children]
         else:
             print('unrecognized plot type')
 
@@ -88,27 +88,28 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             if i < num_animals:
                 row = i // 3  # index based on 3 columns
                 col = i % 3  # index based on 3 columns
+                ax = self.axs[row, col] if nrows > 1 else self.axs[i//3]
                 animal = group.children[i]
-                self.make_subplot(animal, row, col, f"{animal.identifier} {animal.selected_neuron_type}")
+                self.make_subplot(animal, ax, f"{animal.identifier} {animal.selected_neuron_type}")
             else:
                 # Get the axes for the extra subplot and make it invisible
-                self.axs[i // 3, i % 3].set_visible(False)
+                ax_ind = (i // 3, i % 3) if nrows > 1 else (i // 3,)
+                self.axs[ax_ind].set_visible(False)
 
         self.set_y_scales()
         self.set_pip_patches()
         self.close_plot(group.identifier)
 
-    def make_subplot(self, data_source, row, col, title=''):
-        subplotter = PeriStimulusSubplotter(data_source, self.data_opts, self.graph_opts, self.axs[row, col],
+    def make_subplot(self, data_source, ax, title=''):
+        subplotter = PeriStimulusSubplotter(data_source, self.data_opts, self.graph_opts, ax,
                                             self.plot_type, multiplier=self.multiplier)
         subplotter.plot_data()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
-        self.prettify_subplot(row, col, title=title, y_min=min(subplotter.y), y_max=max(subplotter.y))
+        self.prettify_subplot(ax, title=title, y_min=min(subplotter.y), y_max=max(subplotter.y))
 
     def plot_units(self, animal):
         multi = 2 if self.data_type == 'psth' else 1
-
         for i in range(0, len(animal.children), self.graph_opts['units_in_fig']):
             n_subplots = min(self.graph_opts['units_in_fig'], len(animal.children) - i)
             self.fig = plt.figure(figsize=(15, 3 * multi * n_subplots))
@@ -154,9 +155,9 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             self.make_footer()
         self.save_and_close_fig()
 
-    def get_ylim(self, row, col, y_min, y_max):
-        self.y_min = min(self.y_min, self.axs[row, col].get_ylim()[0], y_min)
-        self.y_max = max(self.y_max, self.axs[row, col].get_ylim()[1], y_max)
+    def get_ylim(self, ax, y_min, y_max):
+        self.y_min = min(self.y_min, ax.get_ylim()[0], y_min)
+        self.y_max = max(self.y_max, ax.get_ylim()[1], y_max)
 
     def set_y_scales(self):
         if self.graph_opts['equal_y_scales']:
@@ -165,9 +166,9 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
     def set_pip_patches(self):
         [ax.fill_betweenx([self.y_min, self.y_max], 0, 0.05, color='k', alpha=0.2) for ax in self.axs.flatten()]
 
-    def prettify_subplot(self, row, col, title, y_min, y_max):
-        self.get_ylim(row, col, y_min, y_max)
-        self.axs[row, col].set_title(title, fontsize=17*self.multiplier)
+    def prettify_subplot(self, ax, title, y_min, y_max):
+        self.get_ylim(ax, y_min, y_max)
+        ax.set_title(title, fontsize=17*self.multiplier)
 
     def make_footer(self):
         text_vals = [('bin size', self.data_opts['bin_size']), ('selected trials', self.join_trials(' ')),
@@ -240,6 +241,7 @@ class PeriStimulusSubplotter(PlottingMixin):
         self.y = data_source.data
         self.parent_type = parent_type
         self.multiplier = multiplier
+        self.plot_type = 'subplot'
 
     def set_limits_and_ticks(self, x_min, x_max, x_tick_min, x_step, y_min=None, y_max=None):
         self.ax.set_xlim(x_min, x_max)
@@ -262,15 +264,17 @@ class PeriStimulusSubplotter(PlottingMixin):
 
     def plot_bar(self, width, x_min, x_max, num, x_tick_min, x_step, y_min=None, y_max=None, x_label='', y_label='',
                  color='k', facecolor='white'):
-        if 'group_colors' in self.g_opts:
+        if self.data_source.name == 'group' and 'group_colors' in self.g_opts:
             color = self.g_opts['group_colors'][self.data_source.identifier]
+        else:
+            color = 'black'
         self.x = np.linspace(x_min, x_max, num=num)
         self.ax.bar(self.x, self.y, width=width, color=color)
         self.ax.set_facecolor(facecolor)
         self.ax.patch.set_alpha(0.2)
         self.set_limits_and_ticks(x_min, x_max, x_tick_min, x_step, y_min, y_max)
         if self.parent_type == 'standalone':
-            self.set_labels(x_label=x_label, y_label=y_label)
+            self.set_labels(x_and_y_labels=(x_label, y_label))
 
     def plot_psth(self):
         opts = self.data_opts

@@ -12,8 +12,8 @@ SPECTRUM_OPTS = {'data_type': 'spectrum', 'pre_stim': 0.0, 'post_stim': 30.0, 'b
                  'max_lag': 99, 'freq_range': (3, 60)}
 
 SPREADSHEET_OPTS = {'path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
-                    'adjustment': 'normalized', 'time': 'continuous', 'pre_stim': 0.0, 'post_stim': .70,
-                    'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'trial', 'num_bins': 70}
+                    'adjustment': 'normalized', 'time': 'period', 'pre_stim': 0.0, 'post_stim': .65,
+                    'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'unit', 'mean_over_period': True}
 
 GROUP_STAT_PROPORTION_OPTS = {'data_type': 'proportion', 'base': 'trial', 'adjustment': 'normalized',
                               'time': 'continuous', 'pre_stim': 0.0, 'post_stim': 0.70, 'bin_size': 0.01,
@@ -26,7 +26,7 @@ GROUP_STAT_PSTH_OPTS = {'data_type': 'psth', 'adjustment': 'normalized', 'time':
                         'post_hoc_bin_size': 1, 'path': '/Users/katie/likhtik/data', 'post_hoc_type': 'lmer',
                         'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}}
 
-GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'tick_step': 0.1, 'sem': True,
+GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'tick_step': 0.1, 'sem': False,
               'footer': True, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'},
               'force_recalc': False}
 
@@ -36,6 +36,9 @@ FIGURE_1_OPTS = {'data_path': '/Users/katie/likhtik/data/single_cell_data', 'ani
                  'neuron_type_colors': {'IN': '#5679C7', 'PN': '#C75B56'}, 'annot_coords': (-0.11, 1.1),
                  'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'hist_color': '#9678D3', 'force_recalc':
                  False}
+
+LFP_OPTS = {'data_type': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time': 'period', 'brain_region': 'pl',
+            'fb': 'theta_1'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',
@@ -47,3 +50,4 @@ AC_KEYS = {
 ALL_AC_METHODS = ['np', 'ml', 'pd']
 
 AC_METHODS = ['np']
+

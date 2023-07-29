@@ -4,11 +4,15 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import numpy as np
+from copy import deepcopy
+
 
 from context import Base, NeuronTypeMixin
-from matlab_interface import xcorr
+from matlab_interface import MatlabInterface
 from utils import cache_method
 from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
+from lfp import LFP
+
 
 
 """
@@ -28,17 +32,34 @@ PIP_DURATION = .05
 class Level(Base):
     @property
     def data(self):
-        return getattr(self, f"get_{self.data_type}")()
+        if self.data_opts.get('by_period'):
+            return self.data_by_period()
+        if self.data_opts.get('mean_over_period'):
+            return self.mean_over_period()
+        else:
+            return getattr(self, f"get_{self.data_type}")
 
     @property
     def autocorr_key(self):
         return self.get_autocorr_key()
 
+    def data_by_period(self):
+        data_method = getattr(self, f"get_{self.data_type}")
+        periods = []
+        for i in range(5):
+            opts = deepcopy(self.data_opts)
+            opts['trials'] = (i * 30, i * 30 + 30)
+            self.data_opts = opts
+            periods.append(data_method())
+        return periods
+
+    def mean_over_period(self):
+        return [np.mean(period) for period in self.data_by_period()]
+
     def subscribe(self, context):
         setattr(self, context.name, context)
         context.subscribe(self)
 
-    @cache_method
     def get_average(self, base_method, stop_at='trial'):  # Trial is the default base case, but not always
         if self.name == stop_at:
             return getattr(self, base_method)()
@@ -51,7 +72,6 @@ class Level(Base):
         rates = self.get_average('get_rates')
         return rates - np.mean(rates)
 
-    @cache_method
     def get_psth(self):
         return self.get_average('get_psth')
 
@@ -93,7 +113,8 @@ class Level(Base):
         if opts['ac_program'] == 'np':
             return trim_and_normalize_ac(np.correlate(x, x, mode='full'), max_lag)
         elif opts['ac_program'] == 'ml':
-            return trim_and_normalize_ac(xcorr(x, max_lag), max_lag)
+            ml = MatlabInterface()
+            return trim_and_normalize_ac(ml.xcorr(x, max_lag), max_lag)
         elif opts['ac_program'] == 'pd':
             return np.array([pd.Series(x).autocorr(lag=lag) for lag in range(max_lag + 1)])[1:]
         else:
@@ -209,6 +230,7 @@ class Animal(Level, NeuronTypeMixin):
         self.PN = []
         self.IN = []
         self.last_neuron_type = None
+        self.raw_lfp = None
 
     def update(self, context):
         if self.children is None:
@@ -220,6 +242,10 @@ class Animal(Level, NeuronTypeMixin):
             self.children = self.units['good']
         else:
             self.children = getattr(self, self.selected_neuron_type)
+
+    def get_lfp(self):
+        brain_region = self.data_opts['brain_region']
+        return LFP(self, brain_region, self.data_opts)
 
 
 class Unit(Level):
@@ -241,7 +267,7 @@ class Unit(Level):
         self.data_type_context = data_type_context
         self.trials_opts = None
         self.selected_trial_indices = None
-        spikes_for_fr = self.spike_times[self.spike_times > 15000]
+        spikes_for_fr = self.spike_times[self.spike_times > SAMPLING_RATE*30]
         self.firing_rate = SAMPLING_RATE * len(spikes_for_fr) / float(spikes_for_fr[-1] - spikes_for_fr[0])
         self.fwhm_microseconds = None
 
@@ -254,7 +280,7 @@ class Unit(Level):
             self.update_trials()
 
     def update_trials(self):
-        if self.data_opts is None:
+        if self.data_opts is None or 'trials' not in self.data_opts:
             return
         self.trials = []
         pre_stim, post_stim = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim'])
@@ -317,13 +343,11 @@ class Trial(Level):
         self.data_type_context = self.unit.data_type_context
         self.spikes = spikes
         self.index = index
-        self.identifier = self.unit.selected_trial_indices[self.index]
+        self.identifier = self.unit.selected_trial_indices[self.index]  # self.identifier is the index in the original full series of pips.
+        self.period = self.identifier // TONES_PER_PERIOD  # the index of the tone period
 
-    @cache_method
     def get_psth(self):
-        # self.identifier is a pip's index in the original full series of pips. self.identifier // TONES_PER_PERIOD can
-        # have one of five values; it's the index of the tone period
-        relative_rates = self.get_rates() - self.unit.get_pretone_means()[self.identifier // TONES_PER_PERIOD]
+        relative_rates = self.get_rates() - self.unit.get_pretone_means()[self.period]
         if self.data_opts.get('adjustment') == 'relative':
             return relative_rates
         else:
@@ -339,6 +363,9 @@ class Trial(Level):
     @cache_method
     def get_all_autocorrelations(self):
         return {'trials': self._calculate_autocorrelation(self.get_demeaned_rates())}
+
+    def data_by_period(self):
+        return getattr(self, f"get_{self.data_type}")()
 
 
 

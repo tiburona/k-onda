@@ -1,5 +1,5 @@
 from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
-    GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS, AC_KEYS, AC_METHODS, FIGURE_1_OPTS
+    GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS, AC_KEYS, AC_METHODS, FIGURE_1_OPTS, LFP_OPTS
 from initialize_experiment import experiment, data_type_context, neuron_type_context
 from proc_helpers import add_ac_keys_and_plot, assign_vars, plot
 from stats import Stats
@@ -55,5 +55,15 @@ def plot_pie_chart(psth_opts=None, graph_opts=None):
     psth_opts, graph_opts = assign_vars([psth_opts, graph_opts], [PSTH_OPTS, GRAPH_OPTS])
     plotter = Plotter(experiment, data_type_context, neuron_type_context, graph_opts=None)
     plotter.plot_unit_pie_chart(psth_opts, graph_opts)
+
+
+def make_lfp_firing_rate_spreadsheet(spreadsheet_opts=None, lfp_opts=None):
+    spreadsheet_opts, lfp_opts = assign_vars([spreadsheet_opts, lfp_opts], [SPREADSHEET_OPTS, LFP_OPTS])
+    stats = Stats(experiment, data_type_context, lfp_opts)
+    df_name = stats.make_dfs(('lfp', 'psth'), (lfp_opts, spreadsheet_opts))
+    stats.make_spreadsheet(df_name)
+
+
+
 
 

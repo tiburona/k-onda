@@ -1,5 +1,7 @@
 import numpy as np
 import math
+from scipy import signal
+
 
 
 def calc_hist(spikes, num_bins, spike_range):
@@ -70,3 +72,13 @@ def sem(children_vals):
     return std_dev / np.sqrt(len(all_series))
 
 
+def filter_60_hz(signal_with_noise, fs):
+    f0 = 60  # Frequency to be removed
+    Q = 30  # Quality factor (controls the width of the notch)
+    b, a = signal.iirnotch(f0, Q, fs)
+    return signal.lfilter(b, a, signal_with_noise)
+
+
+def divide_by_rms(arr):
+    rms = np.sqrt(np.mean(arr ** 2))
+    return arr/rms
