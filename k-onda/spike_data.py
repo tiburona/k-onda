@@ -6,14 +6,11 @@ import pandas as pd
 import numpy as np
 from copy import deepcopy
 
-
 from context import Base, NeuronTypeMixin
 from matlab_interface import MatlabInterface
 from utils import cache_method
 from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
 from lfp import LFP
-
-
 
 """
 This module defines Level, Experiment, Group, Animal, Unit, and Trial. Level inherits from Base, which defines a few 
@@ -27,6 +24,8 @@ TONES_PER_PERIOD = 30  # The pip sounds 30 times in a tone period
 TONE_PERIOD_DURATION = 30
 INTER_TONE_INTERVAL = 30  # number of seconds between tone periods
 PIP_DURATION = .05
+NUM_TRIALS = 150
+TRIAL_DURATION = 1
 
 
 class Level(Base):
@@ -261,13 +260,14 @@ class Unit(Level):
         self.animal.units[category].append(self)
         self.identifier = str(self.animal.units[category].index(self) + 1)
         self.neuron_type = neuron_type
+        self.periods = None
         self.trials = None
-        self.children = self.trials
+        self.children = self.periods
         self.spike_times = np.array(spike_times)
         self.data_type_context = data_type_context
         self.trials_opts = None
         self.selected_trial_indices = None
-        spikes_for_fr = self.spike_times[self.spike_times > SAMPLING_RATE*30]
+        spikes_for_fr = self.spike_times[self.spike_times > SAMPLING_RATE * 30]
         self.firing_rate = SAMPLING_RATE * len(spikes_for_fr) / float(spikes_for_fr[-1] - spikes_for_fr[0])
         self.fwhm_microseconds = None
 
@@ -277,39 +277,32 @@ class Unit(Level):
         trials_opts = (self.data_opts.get(opt) for opt in ['trials', 'post_stim', 'pre_stim'])
         if self.trials_opts != trials_opts:
             self.trials_opts = trials_opts
-            self.update_trials()
+            self.update_periods_and_trials()
 
-    def update_trials(self):
+    def update_periods_and_trials(self):
         if self.data_opts is None or 'trials' not in self.data_opts:
             return
-        self.trials = []
-        pre_stim, post_stim = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim'])
-        trials_slice = slice(*self.data_opts.get('trials'))
-        self.selected_trial_indices = list(range(150))[slice(*self.data_opts.get('trials'))]
-        for i, start in enumerate(self.animal.tone_onsets_expanded[trials_slice]):
-            spikes = self.find_spikes(
-                start - pre_stim * SAMPLING_RATE, start + post_stim * SAMPLING_RATE)
-            self.trials.append(Trial(self, [(spike - start) / SAMPLING_RATE for spike in spikes], i))
-        self.children = self.trials
+        self.periods = {'tone': [], 'pretone': []}
+        trials_slice = slice(*self.data_opts['trials'])
+        num_periods = set([trial // TONES_PER_PERIOD for trial in range(*self.data_opts['trials'])])
+        self.selected_trial_indices = list(range(NUM_TRIALS))[trials_slice]
+        stages = [('tone', 0)]
+        if self.data_opts.get['pretone_trials']:
+            stages += [('pretone', -TONE_PERIOD_DURATION)]
+        for period_type, offset in stages:
+            for period in range(num_periods):
+                trials = [trial for trial in self.selected_trial_indices if trial // TONES_PER_PERIOD == period]
+                self.periods[period_type].append(Period(self, self.animal, period, trials, period_type=period_type,
+                                                        offset=offset))
+        self.children = [period for period in self.periods if period.period_type == 'tone']
 
     @cache_method
     def find_spikes(self, start, stop):
-        return self.spike_times[bs_left(self.spike_times, start): bs_right(self.spike_times, stop)]
+        return np.array(self.spike_times[bs_left(self.spike_times, start): bs_right(self.spike_times, stop)])
 
     @cache_method
     def get_spikes_by_trials(self):
         return [trial.spikes for trial in self.trials]
-
-    @cache_method
-    def get_pretone_means(self):
-        bin_size = self.data_opts.get('bin_size')
-        num_bins = int(INTER_TONE_INTERVAL / bin_size)
-        rate_set = []
-        for onset in self.animal.tone_period_onsets:
-            start = onset - INTER_TONE_INTERVAL * SAMPLING_RATE
-            stop = onset - 1
-            rate_set.append(calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size))
-        return np.mean(rate_set, axis=1)
 
     @cache_method
     def get_global_std_dev(self):
@@ -321,14 +314,44 @@ class Unit(Level):
 
     @cache_method
     def get_tone_period_std_dev(self):
+        return np.std([rate for period in self.children for rate in period])
+
+
+class Period(Level):
+    name = 'period'
+
+    def __init__(self, unit, animal, index, trials, period_type='tone', offset=0):
+        self.unit = unit
+        self.identifier = index
+        self.trial_indices = trials
+        self.animal = animal
+        self.type = period_type
+        self.trials = []
+        self.full_trials = []
+        pre_stim, post_stim = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim'])
+        # TODO: check that i is the right value here (original index)
+        pip_onsets = [(i, start) for i, start in enumerate(self.animal.tone_onsets_expanded) if i in trials]
+        pre_stim, post_stim = ((value - offset) * SAMPLING_RATE for value in [pre_stim, post_stim])
+        # TODO: change the name of offset; ambiguous in context
+        for i, start in pip_onsets:
+            for spike_type, pre, post in [(self.trials, pre_stim, post_stim), (self.full_trials, 0, TRIAL_DURATION)]:
+                spikes = self.unit.find_spikes(start - pre_stim, start + post_stim - offset)
+                spike_type.append(Trial(self, unit, [(spike - start) / SAMPLING_RATE for spike in spikes], i))
+        self.children = self.trials
+
+    @cache_method
+    def get_spikes_by_trials(self):  # TODO: This method repeated for unit and period could be mixin
+        return np.array([trial.spikes for trial in self.trials])
+
+    @cache_method
+    def get_unadjusted_rates(self):
         bin_size = self.data_opts.get('bin_size')
-        num_bins = int(TONE_PERIOD_DURATION/bin_size)
-        rates = []
-        for start in self.animal.tone_period_onsets:
-            stop = start + TONE_PERIOD_DURATION * SAMPLING_RATE
-            p_rates = calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), bin_size)
-            rates.append(p_rates)
-        return np.std([rate for period in rates for rate in period])
+        return [calc_rates(trial, int(TRIAL_DURATION / bin_size), (0, TRIAL_DURATION), bin_size)
+                for trial in self.trials]
+
+    @cache_method
+    def mean_firing_rate(self):
+        return np.mean(self.get_unadjusted_rates())
 
 
 class Trial(Level):
@@ -338,20 +361,21 @@ class Trial(Level):
 
     name = 'trial'
 
-    def __init__(self, unit, spikes, index):
+    def __init__(self, period, unit, spikes, index):
         self.unit = unit
         self.data_type_context = self.unit.data_type_context
         self.spikes = spikes
-        self.index = index
-        self.identifier = self.unit.selected_trial_indices[self.index]  # self.identifier is the index in the original full series of pips.
-        self.period = self.identifier // TONES_PER_PERIOD  # the index of the tone period
+        self.identifier = index
+        self.period = period
 
     def get_psth(self):
-        relative_rates = self.get_rates() - self.unit.get_pretone_means()[self.period]
-        if self.data_opts.get('adjustment') == 'relative':
-            return relative_rates
+        rates = self.get_rates()
+        if self.period.period_type == 'pretone' or self.data_opts.get('adjustment') == 'none':
+            return rates
+        elif self.data_opts.get('adjustment') == 'relative':
+            return rates - self.unit.periods['pretone'][self.period.identifier].mean_firing_rate()
         else:
-            return relative_rates / self.unit.get_tone_period_std_dev()  # same as dividing unit psth by std dev
+            return rates / self.unit.get_tone_period_std_dev()  # same as dividing unit psth by std dev
 
     @cache_method
     def get_rates(self):
@@ -366,9 +390,3 @@ class Trial(Level):
 
     def data_by_period(self):
         return getattr(self, f"get_{self.data_type}")()
-
-
-
-
-
-
