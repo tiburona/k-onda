@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from copy import deepcopy
 
-from context import Base, NeuronTypeMixin
+from context import Base, NeuronTypeMixin, data_type_context, neuron_type_context
 from matlab_interface import MatlabInterface
 from utils import cache_method
 from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
@@ -28,36 +28,60 @@ NUM_TRIALS = 150
 TRIAL_DURATION = 1
 
 
-class Level(Base):
+class Level:
+
+    instances = []
+    neuron_type_context = neuron_type_context
+    data_type_context = neuron_type_context
+    last_trial_vals = None
+    last_neuron_type = 'uninitialized'
+
+    @property
+    def data_opts(self):
+        return self.data_type_context.val
+
+    @property
+    def data_type(self):
+        return self.data_opts['data_type']
+
     @property
     def data(self):
-        if self.data_opts.get('by_period'):
-            return self.data_by_period()
-        if self.data_opts.get('mean_over_period'):
-            return self.mean_over_period()
-        else:
-            return getattr(self, f"get_{self.data_type}")
+        return getattr(self, f"get_{self.data_type}")
+
+    @property
+    def selected_neuron_type(self):
+        return self.neuron_type_context.val
+
+    @classmethod
+    def subscribe(cls, context):
+        setattr(cls, context.name, context)
+        context.subscribe(cls)
+
+    @classmethod
+    def update(cls, context_name):
+        if context_name == 'data_type_context':
+            trial_vals = (cls.data_type_context.val[key] for key in ['pre_stim', 'post_stim', 'bin_size', 'trials'])
+            if trial_vals != cls.last_trial_vals:
+                [instance.update_children() for instance in Unit.instances]
+        if context_name == 'neuron_type_context':
+            if cls.neuron_type_context.val != cls.last_neuron_type:
+                [instance.update_children() for instance in Unit.instances + Animal.instances]
+
+    def initialize_data(self):
+        if cls.data_type == 'power':  # TODO: probably need to revisit this when I have time bins in the LFP data
+            return
+        _ = [instance.data for instance in self.instances]
+
+    def __init__(self):
+        self.instances.append(self)
+
+    def __iter__(self):
+        for child in self.children:
+            yield child
 
     @property
     def autocorr_key(self):
         return self.get_autocorr_key()
-
-    def data_by_period(self):
-        data_method = getattr(self, f"get_{self.data_type}")
-        periods = []
-        for i in range(5):
-            opts = deepcopy(self.data_opts)
-            opts['trials'] = (i * 30, i * 30 + 30)
-            self.data_opts = opts
-            periods.append(data_method())
-        return periods
-
-    def mean_over_period(self):
-        return [np.mean(period) for period in self.data_by_period()]
-
-    def subscribe(self, context):
-        setattr(self, context.name, context)
-        context.subscribe(self)
 
     def get_average(self, base_method, stop_at='trial'):  # Trial is the default base case, but not always
         if self.name == stop_at:
@@ -154,6 +178,7 @@ class Experiment(Level):
     name = 'experiment'
 
     def __init__(self, conditions):
+        super().__init__()
         self.conditions, self.groups = conditions.keys(), conditions.values()
         self.children = self.groups
         for group in self.groups:
@@ -188,17 +213,14 @@ class Group(Level, NeuronTypeMixin):
     name = 'group'
 
     def __init__(self, name, animals=None):
+        super().__init__()
         self.identifier = name
         self.animals = animals if animals else []
         self.children = self.animals
-        self.data_type_context = None
-        self.neuron_type_context = None
-        self.last_neuron_type = None
+        for animal in self.animals:
+            animal.parent = self
 
-    def update(self, context):
-        self.check_for_new_neuron_type(context)
-
-    def update_neuron_type(self):
+    def update_children(self):
         if self.selected_neuron_type is None:
             self.children = self.animals
         else:
@@ -218,26 +240,19 @@ class Animal(Level, NeuronTypeMixin):
     name = 'animal'
 
     def __init__(self, name, condition, units=None, tone_period_onsets=None, tone_onsets_expanded=None):
+        super().__init__()
         self.identifier = name
         self.condition = condition
         self.units = units if units else defaultdict(list)
         self.children = None
         self.tone_onsets_expanded = tone_onsets_expanded if tone_onsets_expanded is not None else []
         self.tone_period_onsets = tone_period_onsets if tone_period_onsets is not None else []
-        self.data_type_context = None
-        self.neuron_type_context = None
         self.PN = []
         self.IN = []
-        self.last_neuron_type = None
         self.raw_lfp = None
 
-    def update(self, context):
-        if self.children is None:
-            self.update_neuron_type()
-        self.check_for_new_neuron_type(context)
-
-    def update_neuron_type(self):
-        if self.last_neuron_type is None:
+    def update_children(self):
+        if self.selected_neuron_type is None:
             self.children = self.units['good']
         else:
             self.children = getattr(self, self.selected_neuron_type)
@@ -252,11 +267,14 @@ class Unit(Level):
     data_type_context with an opts property and updates its trials when the trial definitions in the context change."""
 
     name = 'unit'
+    instances = []
 
-    def __init__(self, animal, category, spike_times, neuron_type=None, data_type_context=None):
+    def __init__(self, animal, category, spike_times, neuron_type=None):
         self.trials = []
         self.animal = animal
         self.category = category
+        if category == 'good':  # At least for now, overwrite the Level instances variable and only append good units
+            self.instances.append(self)
         self.animal.units[category].append(self)
         self.identifier = str(self.animal.units[category].index(self) + 1)
         self.neuron_type = neuron_type
@@ -264,22 +282,14 @@ class Unit(Level):
         self.trials = None
         self.children = self.periods
         self.spike_times = np.array(spike_times)
-        self.data_type_context = data_type_context
         self.trials_opts = None
         self.selected_trial_indices = None
         spikes_for_fr = self.spike_times[self.spike_times > SAMPLING_RATE * 30]
         self.firing_rate = SAMPLING_RATE * len(spikes_for_fr) / float(spikes_for_fr[-1] - spikes_for_fr[0])
         self.fwhm_microseconds = None
+        self.parent = animal
 
-    def update(self, _):
-        if self.data_opts is None:
-            return
-        trials_opts = (self.data_opts.get(opt) for opt in ['trials', 'post_stim', 'pre_stim'])
-        if self.trials_opts != trials_opts:
-            self.trials_opts = trials_opts
-            self.update_periods_and_trials()
-
-    def update_periods_and_trials(self):
+    def update_children(self):
         if self.data_opts is None or 'trials' not in self.data_opts:
             return
         self.periods = {'tone': [], 'pretone': []}
@@ -319,9 +329,12 @@ class Unit(Level):
 
 class Period(Level):
     name = 'period'
+    instances = []
 
     def __init__(self, unit, animal, index, trials, period_type='tone', offset=0):
         self.unit = unit
+        if self.unit.category == 'good':
+            self.instances.append(self)
         self.identifier = index
         self.trial_indices = trials
         self.animal = animal
@@ -338,6 +351,7 @@ class Period(Level):
                 spikes = self.unit.find_spikes(start - pre_stim, start + post_stim - offset)
                 spike_type.append(Trial(self, unit, [(spike - start) / SAMPLING_RATE for spike in spikes], i))
         self.children = self.trials
+        self.parent = unit
 
     @cache_method
     def get_spikes_by_trials(self):  # TODO: This method repeated for unit and period could be mixin
@@ -360,22 +374,27 @@ class Trial(Level):
     case of the recursive methods on Level."""
 
     name = 'trial'
+    instances = []
 
     def __init__(self, period, unit, spikes, index):
+        if self.unit.category == 'good':
+            self.instances.append(self)
         self.unit = unit
-        self.data_type_context = self.unit.data_type_context
         self.spikes = spikes
         self.identifier = index
         self.period = period
+        self.children = None
+        self.parent = period
 
     def get_psth(self):
         rates = self.get_rates()
         if self.period.period_type == 'pretone' or self.data_opts.get('adjustment') == 'none':
-            return rates
+            pass
         elif self.data_opts.get('adjustment') == 'relative':
-            return rates - self.unit.periods['pretone'][self.period.identifier].mean_firing_rate()
+            rates -= self.unit.periods['pretone'][self.period.identifier].mean_firing_rate()
         else:
-            return rates / self.unit.get_tone_period_std_dev()  # same as dividing unit psth by std dev
+            rates /= self.unit.get_tone_period_std_dev()  # same as dividing unit psth by std dev
+        self.children = [TimeBin(i, rate) for i, rate in enumerate(rates)]
 
     @cache_method
     def get_rates(self):
@@ -388,5 +407,27 @@ class Trial(Level):
     def get_all_autocorrelations(self):
         return {'trials': self._calculate_autocorrelation(self.get_demeaned_rates())}
 
-    def data_by_period(self):
-        return getattr(self, f"get_{self.data_type}")()
+
+class TimeBin:
+
+    name = 'time_bin'
+    instances = []
+
+    def __init__(self, i, val, parent):
+        self.parent = parent
+        self.identifier = i
+        self.data = val
+
+    #  TODO: parametrize methods below
+    @staticmethod
+    def two_way_split(self):
+        return 'early' if self.identifer < 30 else 'late'
+
+    @staticmethod
+    def three_way_split(self):
+        if self.identifier < 5:
+            return 'pip'
+        elif self.identifier < 30:
+            return 'early'
+        else:
+            return 'late'

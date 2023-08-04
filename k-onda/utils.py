@@ -72,4 +72,15 @@ def log_directory_contents(log_directory):
             shutil.copy2(s, d)
 
 
+def range_args(lst):
+    if len(lst) < 2:
+        return None
 
+    start = lst[0]
+    step = lst[1] - lst[0]
+
+    for i in range(2, len(lst)):
+        if lst[i] - lst[i-1] != step:
+            return None
+
+    return (start, lst[-1] + step, step)

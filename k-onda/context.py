@@ -4,11 +4,6 @@ from copy import deepcopy
 
 class Base:
 
-    """
-    Base defines properties that are useful for Experiment and its inheritors, the various plotters, and Spreadsheet.
-    They all access elements of the context.
-    """
-
     @property
     def data_opts(self):
         return (self.data_type_context.val if self.data_type_context is not None else None) or None
@@ -55,7 +50,7 @@ class Context:
 
     def notify(self):
         for observer in self.observers:
-            observer.update(self)
+            observer.update(self, self.name)
 
     def set_val(self, new_val):
         if isinstance(self.val, dict) and isinstance(new_val, dict):
@@ -79,3 +74,6 @@ class NeuronTypeMixin:
                 self.last_neuron_type = context.val
                 self.update_neuron_type()
 
+
+neuron_type_context = Context('neuron_type_context')
+data_type_context = Context('data_type_context')

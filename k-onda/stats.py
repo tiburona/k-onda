@@ -5,6 +5,11 @@ import csv
 import os
 
 from context import Base
+from utils import range_args
+from lfp import FrequencyPeriod
+from spike_data import *
+
+LEVEL_DICT = dict(animal=Animal, group=Group, unit=Unit, period=Period, frequency_period=FrequencyPeriod)
 
 
 class Stats(Base):
@@ -23,6 +28,10 @@ class Stats(Base):
         self.lfp_brain_region = None
         self.frequency_band = None
 
+    @property
+    def rows(self):
+        return self.get_rows()
+
     def set_properties(self):
         if self.data_type == 'lfp':
             self.data_col = 'power'
@@ -35,8 +44,7 @@ class Stats(Base):
 
     def make_df(self, name):
         self.set_properties()
-        rows = self.get_rows()
-        df = pd.DataFrame(rows)
+        df = pd.DataFrame(self.rows)
         vs = ['unit_num', 'animal', 'category', 'condition', 'two_way_split', 'three_way_split', 'frequency']
         for var in vs:
             if var in df:
@@ -66,18 +74,58 @@ class Stats(Base):
         for name, opts in zip(names, opts_dicts):
             self.data_opts = opts
             self.make_df(name)
-        new_name = self.smart_merge(('animal', 'condition', 'period'))
+        common_columns = set(self.dfs[names[0]].columns)
+        for df in self.dfs.values():
+            common_columns &= set(df.columns)
+        new_name = self.smart_merge(list(common_columns))
         return new_name
 
-    def get_lfp_rows(self):
-        animals = [animal for group in self.experiment.groups for animal in group.children]
+    def get_rows(self):
         rows = []
-        for animal in animals:
-            lfp = animal.get_lfp()
-            for i, period_val in enumerate(lfp.normalized_power[self.data_opts['fb']]):
-                rows.append({'condition': animal.condition, 'animal': animal.identifier, 'period': i,
-                            'power': period_val})
+        self.experiment.initialize_data()
+        inclusion_criteria = []
+        other_attributes = []
+        if self.data_opts['time'] == 'continuous':
+            level = TimeBin
+            inclusion_criteria.append(lambda tb: tb.parent.isinstance(LEVEL_DICT[self.data_opts['row_type']]))
+        else:
+            level = LEVEL_DICT[self.data_opts['row_type']]
+
+        if self.data_opts.get('periods') and self.data_opts['row_type'] not in ['trial', 'period']:
+            data_opts = self.get_data_by_period(self.data_opts, level, inclusion_criteria, other_attributes)
+            self.data_opts = data_opts
+        else:
+            self.get_data(level, inclusion_criteria, other_attributes)
+
+        TimeBin.instances.clear()
         return rows
+
+    def get_data_by_period(self, data_opts, level, inclusion_criteria, other_attributes):
+        for i in self.data_opts('periods'):
+            orig_trials = list(range(data_opts['trials']))
+            new_trials = range_args([trial for trial in orig_trials if trial // TONES_PER_PERIOD == i])
+            self.data_opts['trials'] = new_trials
+            self.get_data(level, inclusion_criteria, other_attributes)
+        return data_opts
+
+    def get_data(self, level, inclusion_criteria, other_attributes):
+        instances = [instance for instance in level.instances
+                     if all(criterion(instance) for criterion in inclusion_criteria)]
+
+        for instance in instances:
+            row_dict = {self.data_col: instance.data}
+            current_instance = instance
+            while True:
+                row_dict[current_instance.name] = current_instance.identifier
+                if hasattr(current_instance, 'parent') and current_instance.parent is not None:
+                    current_instance = current_instance.parent  # Go one level up to the parent
+                else:
+                    break  # Stop the loop if there is no parent
+
+            for attribute in other_attributes:
+                row_dict[attribute.name] = attribute.value  # can use this for stage
+
+            self.rows.append(row_dict)
 
     def make_spreadsheet(self, df_name=None):
         row_type = self.data_opts['row_type']
@@ -90,7 +138,7 @@ class Stats(Base):
         self.spreadsheet_fname = fname
 
         with open(fname, 'w', newline='') as f:
-            header = self.get_header(df_name=df_name)
+            header = list()  # fig
             writer = csv.DictWriter(f, fieldnames=header)
             writer.writeheader()
 
@@ -100,101 +148,6 @@ class Stats(Base):
             else:
                 for index, row in self.dfs[df_name].iterrows():
                     writer.writerow(row.to_dict())
-
-    def get_header(self, df_name=None):
-        if df_name is None:
-            df_name = self.data_type
-        row_type = self.data_opts.get('row_type')
-        header = ['animal', 'condition', 'category']
-        if 'psth' in df_name or 'proportion' in df_name:
-            header += ['unit_num']
-        if 'lfp' not in df_name:
-            header += ['two_way_split', 'three_way_split']
-        if row_type == 'trial':
-            header += ['trial']
-        if self.data_opts['time'] == 'period':
-            header += ['period']
-        else:
-            header += ['grouped_time_bin', 'time_bin']
-        if df_name:
-            data_cols = dict(proportion='proportion', psth='rate', lfp='power')
-            dfs = df_name.split('_')
-            for df in dfs:
-                header += [data_cols[df]]
-        else:
-            header += [self.data_col]
-        return header
-
-    def get_rows(self):
-        if self.data_type == 'lfp':
-            return self.get_lfp_rows()
-        else:
-            if self.data_opts['row_type'] == 'unit':
-                return [row for unit in self.experiment.all_units for row in self.get_row(unit)]
-            elif self.data_opts['row_type'] == 'trial':
-                return [row for unit in self.experiment.all_units for trial in unit.trials for row in self.get_row(trial)]
-
-    def get_row(self, data_source):
-        row_dict = self.get_row_dict(data_source)
-        return getattr(self, f"{self.time_type}_rows")(data_source, row_dict)
-
-    @staticmethod
-    def get_row_dict(data_source):
-        row_dict = {}
-
-        if data_source.name == 'unit':
-            unit = data_source
-        elif data_source.name == 'trial':
-            trial = data_source
-            unit = trial.unit
-            row_dict['trial'] = trial.identifier
-
-        row_dict = {**row_dict,
-                    **{'unit_num': unit.identifier, 'animal': unit.animal.identifier,
-                       'condition': unit.animal.condition, 'category': unit.neuron_type}}
-        return row_dict
-
-    @staticmethod
-    def two_way_split(time_bin):
-        return 'early' if time_bin < 30 else 'late'
-
-    @staticmethod
-    def three_way_split(time_bin):
-        if time_bin < 5:
-            return 'pip'
-        elif time_bin < 30:
-            return 'early'
-        else:
-            return 'late'
-
-    @staticmethod
-    def calculate_rate(data, bin_slice):
-        return np.mean(data[slice(*bin_slice)])
-
-    def binned_rows(self, data_source, row_dict):
-        data = data_source.data
-        periods = ['during_beep', 'early_post_beep', 'mid_post_beep', 'late_post_beep']
-        bin_slices = [(0, 5), (5, 30), (30, 60), (60, 100)]
-        rows = []
-        for period, bin_slice in zip(periods, bin_slices):
-            rate = self.calculate_rate(data, bin_slice)
-            rows.append({**row_dict, **{'period': period, 'rate': rate}})
-        return rows
-
-    def continuous_rows(self, data_source, row_dict):
-        data = data_source.data
-        post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size', 1)  # Default to 1 if not present
-        return [{**row_dict,
-                 **{'two_way_split': self.two_way_split(time_bin),
-                    'three_way_split': self.three_way_split(time_bin),
-                    'time_bin': time_bin,
-                    'grouped_time_bin': time_bin // post_hoc_bin_size,  # Calculate 'grouped_time_bin'
-                    self.data_col: data[time_bin]}}
-                for time_bin in range(self.num_time_points)]
-
-    def period_rows(self, data_source, row_dict):
-        data = data_source.mean_over_period()
-        return [{**row_dict, **{'period': i, self.data_col: data[i]}} for i, period in enumerate(data)]
 
     def write_r_script(self):
 

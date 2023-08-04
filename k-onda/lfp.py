@@ -13,26 +13,6 @@ LFP_SAMPLING_RATE = 2000
 FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), gamma=(20, 55), hgamma=(70, 120))
 
 
-class Stage:
-    """A temporal condition in the experiment, i.e. tone or pretone.  A stage is associated with several Periods, i.e.
-    intervals of tone and pretone, and sorting them into FrequencyPeriods (the same, but with a frequency band
-    selected)."""
-    def __init__(self, name, periods):
-        self.name = name
-        self.periods = periods
-        self.frequency_periods = self.get_frequency_periods()
-
-    def get_frequency_periods(self):
-        freq_periods = {}
-        for fb in FREQUENCY_BANDS:
-            freq_periods[fb] = [FrequencyPeriod(self.name, period, FREQUENCY_BANDS[fb]) for period in self.periods]
-        return freq_periods
-
-    def get_average_power_for_frequency_band(self, fb):
-        freq_periods = [fp for fp in self.frequency_periods if fp.freq_range == fb]
-        return [fp.average_power for fp in freq_periods]
-
-
 class Period:
     """An interval in the experiment. Preprocesses data and initiates calls to Matlab to get the cross-spectrogram."""
     def __init__(self, raw_data, animal, stage, data_opts, num):
@@ -66,17 +46,22 @@ class Period:
 class FrequencyPeriod:
     """A FrequencyPeriod is a Period with selected frequency range. This class slices a cross-spectrogram into its
     appropriate frequency range and its constituent trials, and calculates averages over those trials."""
-    def __init__(self, stage, period, freq_range):
+    def __init__(self, stage, period, animal, freq_range):
         self.stage = stage
         self.period = period
+        self.parent = animal
         self.freq_range = freq_range
-        self.power = self.get_power()
+        self.power_in_freq_range = self.get_power_in_freq_range()
         self.average_power = self.get_average_over_trials()
         self.trials = []
 
-    def get_power(self):
+    @property
+    def data(self):
+        return self.get_average_over_trials()  # TODO: Make this more general when I want to get other kinds of data
+
+    def get_power_in_freq_range(self):
         indices = np.where(self.period.spectrogram[1] <= self.freq_range[0])
-        ind1 = indices[0][-1] if indices[0].size > 0 else None   # last index that's <= to start of the freq range
+        ind1 = indices[0][-1] if indices[0].size > 0 else None   # last index that's <= start of the freq range
         ind2 = np.argmax(self.period.spectrogram[1] > self.freq_range[1])  # first index >= end of freq range
         return np.mean(self.period.spectrogram[0][ind1:ind2, :], axis=0)
 
@@ -88,15 +73,14 @@ class FrequencyPeriod:
         for start in starts:
             trial_times = np.linspace(start, start + .65, 65)
             mask = (np.abs(time_bins[:, None] - trial_times) <= 1e-6).any(axis=1)
-            trials.append(np.array(self.power)[mask])
+            trials.append(np.array(self.get_power_in_freq_range)[mask])
         return trials
 
-    def get_average_of_trials(self):
+    def get_average_trials(self):
         return np.mean(self.get_trials(), axis=0)
 
     def get_average_over_trials(self):
-        return np.mean(self.get_average_of_trials())
-
+        return np.mean(self.get_average_trials())
 
 
 class LFP:
@@ -108,10 +92,12 @@ class LFP:
         self.animal = animal
         self.brain_region = brain_region
         self.data_opts = data_opts
-        self.stages = self.prepare_stages()
+        self.periods = []
+        self.prepare_periods()
+        self.frequency_periods = self.prepare_frequency_periods()
         self.normalized_power = self.normalize_average_power()
 
-    def prepare_stages(self):
+    def prepare_periods(self):
         onsets = [int(onset * LFP_SAMPLING_RATE / SAMPLING_RATE) for onset in self.animal.tone_period_onsets]
         stage_intervals = {'tone': [(tpo - LFP_SAMPLING_RATE, tpo + (TONE_PERIOD_DURATION + 1) * LFP_SAMPLING_RATE)
                            for tpo in onsets],
@@ -119,13 +105,22 @@ class LFP:
                                         tpo - LFP_SAMPLING_RATE - 1) for tpo in onsets]
                            }
         raw = self.animal.raw_lfp[self.brain_region]
-        return {stage_name: Stage(stage_name, [Period(raw[slice(*period)], self.animal, stage_name, self.data_opts, i)
-                                               for i, period in enumerate(stage_intervals[stage_name])])
-                for stage_name in stage_intervals}
+        for key in stage_intervals:
+            for i, period in enumerate(stage_intervals[key]):
+                self.periods.append(Period(raw[slice(*period)], self.animal, key, self.data_opts, i))
+
+    def prepare_frequency_periods(self):
+        freq_periods = {}
+        frequency_bands = [fb for fb in FREQUENCY_BANDS if fb in self.data_opts['fb']]
+        for fb in frequency_bands:
+            freq_periods[fb] = [FrequencyPeriod(period.period_type, period, num, FREQUENCY_BANDS[fb])
+                                for num, period in enumerate(self.periods)]
+        return freq_periods
 
     def normalize_average_power(self):
         normalized_power = {}
-        for fb in FREQUENCY_BANDS:
+        frequency_bands = [fb for fb in FREQUENCY_BANDS if fb in self.data_opts['fb']]
+        for fb in frequency_bands:
             tone_power, pretone_power = [np.array([p.average_power for p in self.stages[stage].frequency_periods[fb]])
                                          for stage in ('tone', 'pretone')]
             normalized_power[fb] = tone_power - pretone_power
