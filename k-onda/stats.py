@@ -70,6 +70,7 @@ class Stats(Base):
         common_columns = set(self.dfs[names[0]].columns)
         for df in self.dfs.values():
             common_columns &= set(df.columns)
+        common_columns = [col for col in common_columns if col != 'experiment']
         new_name = self.smart_merge(list(common_columns))
         return new_name
 
@@ -88,7 +89,8 @@ class Stats(Base):
             [animal.get_lfp() for animal in Animal.instances]
         else:
             [animal.update(self.neuron_type_context) for animal in Animal.instances]
-            LEVEL_DICT[self.data_opts['row_type']].initialize_data()  # TimeBins and Periods aren't created automatically
+            if [self.data_opts['row_type']] == 'continuous':
+                LEVEL_DICT[self.data_opts['row_type']].initialize_data()  # TimeBins  aren't created automatically
 
     def get_rows(self, inclusion_criteria=None, other_attributes=None):
         if other_attributes is None:
@@ -139,10 +141,9 @@ class Stats(Base):
             name += f"_{self.lfp_brain_region}_{self.frequency_band}"
         fname = os.path.join(path, '_'.join([name, self.time_type, row_type + 's']) + '.csv')
         self.spreadsheet_fname = fname
-        self.make_df(df_name)
 
         with open(fname, 'w', newline='') as f:
-            header = list()  # fig
+            header = list(self.dfs[df_name].columns)
             writer = csv.DictWriter(f, fieldnames=header)
             writer.writeheader()
 

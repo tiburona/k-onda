@@ -39,7 +39,7 @@ FIGURE_1_OPTS = {'data_path': '/Users/katie/likhtik/data/single_cell_data', 'ani
                  False}
 
 LFP_OPTS = {'data_type': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time': 'period', 'brain_region': 'bla',
-            'fb': 'theta_2', 'row_type': 'frequency_period'}
+            'fb': 'theta_1', 'row_type': 'frequency_period'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',

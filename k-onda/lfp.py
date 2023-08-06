@@ -51,20 +51,20 @@ class FrequencyPeriod:
 
     """A FrequencyPeriod is a Period with selected frequency range. This class slices a cross-spectrogram into its
     appropriate frequency range and its constituent trials, and calculates averages over those trials."""
-    def __init__(self, period_type, period, animal, num, freq_range):
+    def __init__(self, period_type, period, animal, freq_range):
         self.instances.append(self)
         self.period_type = period_type
         self.period = period
         self.parent = animal
         self.freq_range = freq_range
-        self.identifier = num
+        self.identifier = period.identifier
         self.power_in_freq_range = self.get_power_in_freq_range()
         self.average_power = self.get_average_over_trials()
         self.trials = []
 
     @property
     def data(self):
-        return self.get_average_trials()  # TODO: Make this more general when I want to get other kinds of data
+        return self.get_average_over_trials()  # TODO: Make this more general when I want to get other kinds of data
 
     @property
     def mean(self):
@@ -125,8 +125,8 @@ class LFP:
         freq_periods = {}
         frequency_bands = [fb for fb in FREQUENCY_BANDS if fb in self.data_opts['fb']]
         for fb in frequency_bands:
-            freq_periods[fb] = [FrequencyPeriod(period.period_type, period, self.animal, num, FREQUENCY_BANDS[fb])
-                                for num, period in enumerate(self.periods)]
+            freq_periods[fb] = [FrequencyPeriod(period.period_type, period, self.animal, FREQUENCY_BANDS[fb])
+                                for period in self.periods]
         return freq_periods
 
     def normalize_average_power(self):

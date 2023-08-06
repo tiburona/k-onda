@@ -45,7 +45,8 @@ class Level:
     @classmethod
     def update(cls, context):
         if context.name == 'data_type_context':
-            trial_vals = (cls.data_type_context.val[key] for key in ['pre_stim', 'post_stim', 'bin_size', 'trials'])
+            trial_vals = [cls.data_type_context.val[key] for key in ['pre_stim', 'post_stim', 'bin_size', 'trials']
+                          if key in cls.data_type_context.val]
             if trial_vals != cls.last_trial_vals:
                 [instance.update_children() for instance in Unit.instances]
                 cls.last_trial_vals = trial_vals
@@ -324,8 +325,7 @@ class Unit(Level):
                 trials = [trial for trial in self.selected_trial_indices if trial // TONES_PER_PERIOD == period]
                 self.periods[period_type].append(Period(self, self.animal, period, trials, period_type=period_type,
                                                         offset=offset))
-        self.children = [period for stage in self.periods for period in self.periods[stage]
-                         if period.period_type == 'tone']
+        self.children = self.periods['tone']
 
     @cache_method
     def find_spikes(self, start, stop):
@@ -353,7 +353,6 @@ class Period(Level):
     instances = []
 
     def __init__(self, unit, animal, index, trials, period_type='tone', offset=0):
-        super().__init__()
         self.unit = unit
         if self.unit.category == 'good':
             self.instances.append(self)
