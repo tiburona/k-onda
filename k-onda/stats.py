@@ -14,10 +14,12 @@ LEVEL_DICT = dict(animal=Animal, group=Group, unit=Unit, period=Period, frequenc
 
 class Stats(Base):
     """A class to construct dataframes, write out csv files, and call R for statistical tests."""
-    def __init__(self, experiment, data_type_context, data_opts):
+    def __init__(self, experiment, data_type_context, neuron_type_context, data_opts):
         self.experiment = experiment
         self.data_type_context = data_type_context
         self.data_opts = data_opts
+        self.neuron_type_context = neuron_type_context
+        self.selected_neuron_type = None
         self.dfs = {}
         self.time_type = self.data_opts['time']
         self.data_col = None
@@ -32,7 +34,7 @@ class Stats(Base):
     def rows(self):
         return self.get_rows()
 
-    def set_properties(self):
+    def set_attributes(self):
         if self.data_type == 'lfp':
             self.data_col = 'power'
             self.frequency_band = self.data_opts['fb']
@@ -41,15 +43,6 @@ class Stats(Base):
             self.data_col = 'rate' if self.data_type == 'psth' else 'proportion'
             pre_stim, post_stim, bin_size = (self.data_opts[k] for k in ('pre_stim', 'post_stim', 'bin_size'))
             self.num_time_points = int((pre_stim + post_stim) / bin_size)
-
-    def make_df(self, name):
-        self.set_properties()
-        df = pd.DataFrame(self.rows)
-        vs = ['unit_num', 'animal', 'category', 'condition', 'two_way_split', 'three_way_split', 'frequency']
-        for var in vs:
-            if var in df:
-                df[var] = df[var].astype('category')
-        self.dfs[name] = df
 
     def smart_merge(self, keys):
         # Determine which DataFrame has the most unique key combinations
@@ -80,74 +73,81 @@ class Stats(Base):
         new_name = self.smart_merge(list(common_columns))
         return new_name
 
-    def get_rows(self):
-        rows = []
-        self.experiment.initialize_data()
-        inclusion_criteria = []
-        other_attributes = []
-        if self.data_opts['time'] == 'continuous':
-            level = TimeBin
-            inclusion_criteria.append(lambda tb: tb.parent.isinstance(LEVEL_DICT[self.data_opts['row_type']]))
-        else:
-            level = LEVEL_DICT[self.data_opts['row_type']]
+    def make_df(self, name):
+        self.set_attributes()
+        self.initialize_data()
+        df = pd.DataFrame(self.rows)
+        vs = ['unit_num', 'animal', 'category', 'condition', 'two_way_split', 'three_way_split', 'frequency']
+        for var in vs:
+            if var in df:
+                df[var] = df[var].astype('category')
+        self.dfs[name] = df
 
-        if self.data_opts.get('periods') and self.data_opts['row_type'] not in ['trial', 'period']:
-            data_opts = self.get_data_by_period(self.data_opts, level, inclusion_criteria, other_attributes)
-            self.data_opts = data_opts
+    def initialize_data(self):
+        if 'lfp' in self.data_type:
+            [animal.get_lfp() for animal in Animal.instances]
         else:
-            self.get_data(level, inclusion_criteria, other_attributes)
+            [animal.update(self.neuron_type_context) for animal in Animal.instances]
+            LEVEL_DICT[self.data_opts['row_type']].initialize_data()  # TimeBins and Periods aren't created automatically
 
-        TimeBin.instances.clear()
+    def get_rows(self, inclusion_criteria=None, other_attributes=None):
+        if other_attributes is None:
+            other_attributes = []
+        if inclusion_criteria is None:
+            inclusion_criteria = []
+        if 'lfp' in self.data_type:
+            level = FrequencyPeriod
+        else:
+            level = TimeBin if self.data_opts['time'] == 'continuous' else Period
+            other_attributes.append(lambda x: ('category', x.category) if x.name == 'unit' else None)
+            parent = LEVEL_DICT[self.data_opts['row_type']]
+            inclusion_criteria.append(lambda x: isinstance(x.parent, parent))
+        other_attributes.append(lambda x: ('period_type', x.period_type) if x.name == 'period' else None)
+
+        rows = self.get_data(level, inclusion_criteria, other_attributes)
+        level.instances.clear()
+
         return rows
 
-    def get_data_by_period(self, data_opts, level, inclusion_criteria, other_attributes):
-        for i in self.data_opts('periods'):
-            orig_trials = list(range(data_opts['trials']))
-            new_trials = range_args([trial for trial in orig_trials if trial // TONES_PER_PERIOD == i])
-            self.data_opts['trials'] = new_trials
-            self.get_data(level, inclusion_criteria, other_attributes)
-        return data_opts
-
     def get_data(self, level, inclusion_criteria, other_attributes):
+        rows = []
         instances = [instance for instance in level.instances
                      if all(criterion(instance) for criterion in inclusion_criteria)]
-
         for instance in instances:
             row_dict = {self.data_col: instance.data}
             current_instance = instance
             while True:
                 row_dict[current_instance.name] = current_instance.identifier
+                for other_attribute in other_attributes:
+                    attribute = other_attribute(current_instance)
+                    if attribute is not None:
+                        attribute_name, attribute_val = attribute
+                        row_dict[attribute_name] = attribute_val  # can use this for stage
                 if hasattr(current_instance, 'parent') and current_instance.parent is not None:
                     current_instance = current_instance.parent  # Go one level up to the parent
                 else:
                     break  # Stop the loop if there is no parent
-
-            for attribute in other_attributes:
-                row_dict[attribute.name] = attribute.value  # can use this for stage
-
-            self.rows.append(row_dict)
+            rows.append(row_dict)
+        return rows
 
     def make_spreadsheet(self, df_name=None):
         row_type = self.data_opts['row_type']
-        path = self.data_opts.get('path')
+        path = self.data_opts.get('data_path')
         name = df_name if df_name else self.data_type
         if 'lfp' in name:
             path = os.path.join(path, 'lfp')
             name += f"_{self.lfp_brain_region}_{self.frequency_band}"
         fname = os.path.join(path, '_'.join([name, self.time_type, row_type + 's']) + '.csv')
         self.spreadsheet_fname = fname
+        self.make_df(df_name)
 
         with open(fname, 'w', newline='') as f:
             header = list()  # fig
             writer = csv.DictWriter(f, fieldnames=header)
             writer.writeheader()
 
-            if df_name is None:
-                for row in self.get_rows():
-                    writer.writerow(row)
-            else:
-                for index, row in self.dfs[df_name].iterrows():
-                    writer.writerow(row.to_dict())
+            for index, row in self.dfs[df_name].iterrows():
+                writer.writerow(row.to_dict())
 
     def write_r_script(self):
 
@@ -220,13 +220,13 @@ class Stats(Base):
         write_csv(results, '{self.results_path}')
         '''
 
-        self.script_path = os.path.join(self.data_opts['path'], self.data_type + '_r_script.r')
+        self.script_path = os.path.join(self.data_opts['data_path'], self.data_type + '_r_script.r')
         with open(self.script_path, 'w') as f:
             f.write(r_script)
 
     def get_post_hoc_results(self, force_recalc=False):
         self.make_spreadsheet()
-        self.results_path = os.path.join(self.data_opts['path'], 'r_results.csv')
+        self.results_path = os.path.join(self.data_opts['data_path'], 'r_results.csv')
         if not os.path.exists(self.results_path) or force_recalc:
             self.write_r_script()
             subprocess.run(['Rscript', self.script_path], check=True)

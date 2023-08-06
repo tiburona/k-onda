@@ -3,7 +3,6 @@ import math
 from scipy import signal
 
 
-
 def calc_hist(spikes, num_bins, spike_range):
     """Returns a histogram of binned spike times"""
     return np.histogram(spikes, bins=num_bins, range=spike_range)

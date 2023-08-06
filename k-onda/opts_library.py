@@ -11,9 +11,10 @@ AUTOCORR_OPTS = {'data_type': 'autocorr', 'pre_stim': 0.0, 'post_stim': 30.0, 'b
 SPECTRUM_OPTS = {'data_type': 'spectrum', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
                  'max_lag': 99, 'freq_range': (3, 60)}
 
-SPREADSHEET_OPTS = {'path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
+SPREADSHEET_OPTS = {'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
                     'adjustment': 'normalized', 'time': 'period', 'pre_stim': 0.0, 'post_stim': .65,
-                    'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'unit', 'mean_over_period': True}
+                    'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'unit', 'pretone_trials': True,
+                    'periods': list(range(5))}
 
 GROUP_STAT_PROPORTION_OPTS = {'data_type': 'proportion', 'base': 'trial', 'adjustment': 'normalized',
                               'time': 'continuous', 'pre_stim': 0.0, 'post_stim': 0.70, 'bin_size': 0.01,
@@ -38,7 +39,7 @@ FIGURE_1_OPTS = {'data_path': '/Users/katie/likhtik/data/single_cell_data', 'ani
                  False}
 
 LFP_OPTS = {'data_type': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time': 'period', 'brain_region': 'bla',
-            'fb': 'theta_2'}
+            'fb': 'theta_2', 'row_type': 'frequency_period'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',

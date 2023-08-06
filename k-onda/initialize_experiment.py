@@ -1,7 +1,7 @@
 import os
 import scipy.io as sio
 import numpy as np
-from spike_data import Experiment, Group, Animal, Unit
+from spike_data import Experiment, Group, Animal, Unit, Level
 from context import Context
 from neo.rawio import BlackrockRawIO
 
@@ -51,14 +51,11 @@ experiment = Experiment({name: Group(name=name, animals=[animal for animal in an
 experiment.all_units = [unit for group in experiment.groups for animal in group.animals
                         for unit in animal.units['good']]
 
-neuron_type_context = Context('neuron_type_context')
+
 data_type_context = Context('data_type_context')
-
-for entity in [g for g in experiment.groups] + [a for a in animals] + [u for u in experiment.all_units]:
-    entity.subscribe(data_type_context)
-
-for entity in [g for g in experiment.groups] + [a for a in animals]:
-    entity.subscribe(neuron_type_context)
+neuron_type_context = Context('neuron_type_context')
+Level.subscribe(data_type_context)
+Level.subscribe(neuron_type_context)
 
 # experiment.categorize_neurons()
 

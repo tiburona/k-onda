@@ -15,10 +15,10 @@ FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), gamma=(20,
 
 class Period:
     """An interval in the experiment. Preprocesses data and initiates calls to Matlab to get the cross-spectrogram."""
-    def __init__(self, raw_data, animal, stage, data_opts, num):
+    def __init__(self, raw_data, animal, period_type, data_opts, num):
         self.raw_data = raw_data
         self.animal = animal
-        self.stage = stage
+        self.period_type = period_type
         self.data_opts = data_opts
         self.identifier = num
         self.processed_data = self.process_lfp(raw_data)
@@ -32,7 +32,8 @@ class Period:
         frequency_args = dict(theta_1=[2048, 2000, 1000, 980, 2], theta_2=[2048, 2000, 1000, 980, 2])
         pickle_path = os.path.join(self.data_opts['data_path'], 'lfp', '_'.join(
                 [self.animal.identifier, self.data_opts['brain_region']] +
-                [str(arg) for arg in frequency_args[self.data_opts['fb']]] + [self.stage, str(self.identifier)]) + '.pkl')
+                [str(arg) for arg in frequency_args[self.data_opts['fb']]] +
+                [self.period_type, str(self.identifier)]) + '.pkl')
         if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
             with open(pickle_path, 'rb') as f:
                 return pickle.load(f)
@@ -44,20 +45,30 @@ class Period:
 
 
 class FrequencyPeriod:
+
+    instances = []
+    name = 'period'  # So named for later merging with spike data
+
     """A FrequencyPeriod is a Period with selected frequency range. This class slices a cross-spectrogram into its
     appropriate frequency range and its constituent trials, and calculates averages over those trials."""
-    def __init__(self, stage, period, animal, freq_range):
-        self.stage = stage
+    def __init__(self, period_type, period, animal, num, freq_range):
+        self.instances.append(self)
+        self.period_type = period_type
         self.period = period
         self.parent = animal
         self.freq_range = freq_range
+        self.identifier = num
         self.power_in_freq_range = self.get_power_in_freq_range()
         self.average_power = self.get_average_over_trials()
         self.trials = []
 
     @property
     def data(self):
-        return self.get_average_over_trials()  # TODO: Make this more general when I want to get other kinds of data
+        return self.get_average_trials()  # TODO: Make this more general when I want to get other kinds of data
+
+    @property
+    def mean(self):
+        return self.get_average_over_trials()
 
     def get_power_in_freq_range(self):
         indices = np.where(self.period.spectrogram[1] <= self.freq_range[0])
@@ -71,9 +82,10 @@ class FrequencyPeriod:
         time_bins = np.array(self.period.spectrogram[2])
         trials = []
         for start in starts:
-            trial_times = np.linspace(start, start + .65, 65)
+            trial_times = np.linspace(start, start + .64, 65)
+
             mask = (np.abs(time_bins[:, None] - trial_times) <= 1e-6).any(axis=1)
-            trials.append(np.array(self.get_power_in_freq_range)[mask])
+            trials.append(np.array(self.get_power_in_freq_range())[mask])
         return trials
 
     def get_average_trials(self):
@@ -113,7 +125,7 @@ class LFP:
         freq_periods = {}
         frequency_bands = [fb for fb in FREQUENCY_BANDS if fb in self.data_opts['fb']]
         for fb in frequency_bands:
-            freq_periods[fb] = [FrequencyPeriod(period.period_type, period, num, FREQUENCY_BANDS[fb])
+            freq_periods[fb] = [FrequencyPeriod(period.period_type, period, self.animal, num, FREQUENCY_BANDS[fb])
                                 for num, period in enumerate(self.periods)]
         return freq_periods
 
@@ -121,7 +133,7 @@ class LFP:
         normalized_power = {}
         frequency_bands = [fb for fb in FREQUENCY_BANDS if fb in self.data_opts['fb']]
         for fb in frequency_bands:
-            tone_power, pretone_power = [np.array([p.average_power for p in self.stages[stage].frequency_periods[fb]])
-                                         for stage in ('tone', 'pretone')]
+            tone_power, pretone_power = [np.array([p.average_power for p in self.frequency_periods[fb]
+                                                   if p.period_type == stage]) for stage in ('tone', 'pretone')]
             normalized_power[fb] = tone_power - pretone_power
         return normalized_power

@@ -50,7 +50,7 @@ class Context:
 
     def notify(self):
         for observer in self.observers:
-            observer.update(self, self.name)
+            observer.update(self)
 
     def set_val(self, new_val):
         if isinstance(self.val, dict) and isinstance(new_val, dict):
@@ -77,3 +77,4 @@ class NeuronTypeMixin:
 
 neuron_type_context = Context('neuron_type_context')
 data_type_context = Context('data_type_context')
+
