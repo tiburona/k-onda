@@ -38,8 +38,8 @@ FIGURE_1_OPTS = {'data_path': '/Users/katie/likhtik/data/single_cell_data', 'ani
                  'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'hist_color': '#9678D3', 'force_recalc':
                  False}
 
-LFP_OPTS = {'data_type': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time': 'period', 'brain_region': 'bla',
-            'fb': 'theta_1', 'row_type': 'frequency_period'}
+LFP_OPTS = {'data_type': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time': 'period', 'brain_region': 'pl',
+            'fb': ['theta_1', 'theta_2', 'delta'], 'row_type': 'frequency_period'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',

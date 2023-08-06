@@ -11,28 +11,33 @@ INTER_TONE_INTERVAL = 30  # number of seconds between tone periods
 PIP_DURATION = .05
 LFP_SAMPLING_RATE = 2000
 FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), gamma=(20, 55), hgamma=(70, 120))
+FREQUENCY_ARGS = dict(delta=(2048, 2000, 1000, 980, 2), theta_1=(2048, 2000, 1000, 980, 2),
+                      theta_2=(2048, 2000, 1000, 980, 2))
 
 
 class Period:
     """An interval in the experiment. Preprocesses data and initiates calls to Matlab to get the cross-spectrogram."""
-    def __init__(self, raw_data, animal, period_type, data_opts, num):
+    def __init__(self, raw_data, animal, period_type, data_opts, num, lfp, arg_set):
         self.raw_data = raw_data
         self.animal = animal
         self.period_type = period_type
         self.data_opts = data_opts
+        self.arg_set = arg_set
         self.identifier = num
         self.processed_data = self.process_lfp(raw_data)
         self.spectrogram = self.calc_cross_spectrogram(self.processed_data)
+        self.parent = lfp
+
 
     def process_lfp(self, raw):
         filtered = filter_60_hz(raw, 2000)
         return divide_by_rms(filtered)
 
     def calc_cross_spectrogram(self, data):
-        frequency_args = dict(theta_1=[2048, 2000, 1000, 980, 2], theta_2=[2048, 2000, 1000, 980, 2])
+
         pickle_path = os.path.join(self.data_opts['data_path'], 'lfp', '_'.join(
                 [self.animal.identifier, self.data_opts['brain_region']] +
-                [str(arg) for arg in frequency_args[self.data_opts['fb']]] +
+                [str(arg) for arg in self.arg_set] +
                 [self.period_type, str(self.identifier)]) + '.pkl')
         if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
             with open(pickle_path, 'rb') as f:
@@ -105,6 +110,7 @@ class LFP:
         self.brain_region = brain_region
         self.data_opts = data_opts
         self.periods = []
+        self.frequency_args = set(tuple(args) for fb, args in FREQUENCY_ARGS.items() if fb in self.data_opts['fb'])
         self.prepare_periods()
         self.frequency_periods = self.prepare_frequency_periods()
         self.normalized_power = self.normalize_average_power()
@@ -117,16 +123,18 @@ class LFP:
                                         tpo - LFP_SAMPLING_RATE - 1) for tpo in onsets]
                            }
         raw = self.animal.raw_lfp[self.brain_region]
-        for key in stage_intervals:
-            for i, period in enumerate(stage_intervals[key]):
-                self.periods.append(Period(raw[slice(*period)], self.animal, key, self.data_opts, i))
+        for arg_set in self.frequency_args:
+            for key in stage_intervals:
+                for i, period in enumerate(stage_intervals[key]):
+                    self.periods.append(Period(raw[slice(*period)], self.animal, key, self.data_opts, i, self, arg_set))
 
     def prepare_frequency_periods(self):
         freq_periods = {}
         frequency_bands = [fb for fb in FREQUENCY_BANDS if fb in self.data_opts['fb']]
         for fb in frequency_bands:
+            arg_set = FREQUENCY_ARGS[fb]
             freq_periods[fb] = [FrequencyPeriod(period.period_type, period, self.animal, FREQUENCY_BANDS[fb])
-                                for period in self.periods]
+                                for period in self.periods if period.arg_set == arg_set]
         return freq_periods
 
     def normalize_average_power(self):

@@ -60,7 +60,7 @@ def plot_pie_chart(psth_opts=None, graph_opts=None):
 def make_lfp_firing_rate_spreadsheet(spreadsheet_opts=None, lfp_opts=None):
     spreadsheet_opts, lfp_opts = assign_vars([spreadsheet_opts, lfp_opts], [SPREADSHEET_OPTS, LFP_OPTS])
     stats = Stats(experiment, data_type_context, neuron_type_context, lfp_opts)
-    df_name = stats.make_dfs(('lfp', 'psth'), (lfp_opts, spreadsheet_opts))
+    df_name = stats.make_dfs((lfp_opts, spreadsheet_opts))
     stats.make_spreadsheet(df_name)
 
 

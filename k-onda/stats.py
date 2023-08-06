@@ -28,7 +28,8 @@ class Stats(Base):
         self.results_path = None
         self.script_path = None
         self.lfp_brain_region = None
-        self.frequency_band = None
+        self.frequency_bands = None
+        self.current_frequency_band = None
 
     @property
     def rows(self):
@@ -36,8 +37,7 @@ class Stats(Base):
 
     def set_attributes(self):
         if self.data_type == 'lfp':
-            self.data_col = 'power'
-            self.frequency_band = self.data_opts['fb']
+            self.data_col = self.current_frequency_band + '_power'
             self.lfp_brain_region = self.data_opts['brain_region']
         else:
             self.data_col = 'rate' if self.data_type == 'psth' else 'proportion'
@@ -57,26 +57,35 @@ class Stats(Base):
 
         # Merge with all the other DataFrames
         for df in dfs[1:]:
+            if 'experiment' in df.columns:
+                df = df.drop(columns=['experiment'])
             result = pd.merge(result, df, how='left', on=keys)
 
         new_df_name = '_'.join(df_names)
         self.dfs[new_df_name] = result
         return new_df_name
 
-    def make_dfs(self, names, opts_dicts):
-        for name, opts in zip(names, opts_dicts):
+    def make_dfs(self, opts_dicts):
+        name = self.data_type
+        for opts in opts_dicts:
             self.data_opts = opts
-            self.make_df(name)
-        common_columns = set(self.dfs[names[0]].columns)
+            if 'fb' in self.data_opts:
+                self.frequency_bands = self.data_opts['fb']
+                for fb in self.data_opts['fb']:
+                    self.current_frequency_band = fb
+                    self.make_df(f"{name}_{fb}")
+            else:
+                self.make_df(name)
+        common_columns = set(self.dfs[name].columns)
         for df in self.dfs.values():
             common_columns &= set(df.columns)
         common_columns = [col for col in common_columns if col != 'experiment']
         new_name = self.smart_merge(list(common_columns))
         return new_name
 
-    def make_df(self, name):
+    def make_df(self, name, fb=None):
         self.set_attributes()
-        self.initialize_data()
+        self.initialize_data(fb=fb)
         df = pd.DataFrame(self.rows)
         vs = ['unit_num', 'animal', 'category', 'condition', 'two_way_split', 'three_way_split', 'frequency']
         for var in vs:
@@ -84,7 +93,7 @@ class Stats(Base):
                 df[var] = df[var].astype('category')
         self.dfs[name] = df
 
-    def initialize_data(self):
+    def initialize_data(self, fb=None):
         if 'lfp' in self.data_type:
             [animal.get_lfp() for animal in Animal.instances]
         else:
@@ -138,7 +147,7 @@ class Stats(Base):
         name = df_name if df_name else self.data_type
         if 'lfp' in name:
             path = os.path.join(path, 'lfp')
-            name += f"_{self.lfp_brain_region}_{self.frequency_band}"
+            name += f"_{self.lfp_brain_region}"
         fname = os.path.join(path, '_'.join([name, self.time_type, row_type + 's']) + '.csv')
         self.spreadsheet_fname = fname
 
