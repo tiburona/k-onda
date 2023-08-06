@@ -56,11 +56,12 @@ class FrequencyPeriod:
 
     """A FrequencyPeriod is a Period with selected frequency range. This class slices a cross-spectrogram into its
     appropriate frequency range and its constituent trials, and calculates averages over those trials."""
-    def __init__(self, period_type, period, animal, freq_range):
+    def __init__(self, period_type, period, animal, fb, freq_range):
         self.instances.append(self)
         self.period_type = period_type
         self.period = period
         self.parent = animal
+        self.fb = fb
         self.freq_range = freq_range
         self.identifier = period.identifier
         self.power_in_freq_range = self.get_power_in_freq_range()
@@ -133,7 +134,7 @@ class LFP:
         frequency_bands = [fb for fb in FREQUENCY_BANDS if fb in self.data_opts['fb']]
         for fb in frequency_bands:
             arg_set = FREQUENCY_ARGS[fb]
-            freq_periods[fb] = [FrequencyPeriod(period.period_type, period, self.animal, FREQUENCY_BANDS[fb])
+            freq_periods[fb] = [FrequencyPeriod(period.period_type, period, self.animal, fb, FREQUENCY_BANDS[fb])
                                 for period in self.periods if period.arg_set == arg_set]
         return freq_periods
 

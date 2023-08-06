@@ -108,6 +108,7 @@ class Stats(Base):
             inclusion_criteria = []
         if 'lfp' in self.data_type:
             level = FrequencyPeriod
+            inclusion_criteria.append(lambda x: x.fb == self.current_frequency_band)
         else:
             level = TimeBin if self.data_opts['time'] == 'continuous' else Period
             other_attributes.append(lambda x: ('category', x.category) if x.name == 'unit' else None)
