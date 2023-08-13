@@ -1,6 +1,7 @@
 import numpy as np
 import math
 from scipy import signal
+from scipy.signal import hilbert, butter, filtfilt
 
 
 def calc_hist(spikes, num_bins, spike_range):
@@ -81,3 +82,48 @@ def filter_60_hz(signal_with_noise, fs):
 def divide_by_rms(arr):
     rms = np.sqrt(np.mean(arr ** 2))
     return arr/rms
+
+
+def bandpass_filter(data, lowcut, highcut, fs, order=2):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    y = filtfilt(b, a, data)
+    return y
+
+
+def compute_phase(data):
+    analytic_signal = hilbert(data)
+    return np.angle(analytic_signal)
+
+
+def circ_r2_unbiased(alpha, w=None, dim=0):
+    if w is None:
+        w = np.ones_like(alpha)
+
+    # If w is 1D and alpha is 2D, reshape w for broadcasting
+    if w.ndim == 1 and alpha.ndim == 2:
+        w = w[np.newaxis, :]
+
+    # Handle NaN assignment based on the shape of alpha
+    if alpha.ndim == 2:
+        w[:, np.isnan(alpha).any(axis=0)] = np.nan
+    else:
+        w[np.isnan(alpha)] = np.nan
+
+    r = np.nansum(w * np.exp(1j * alpha), axis=dim)
+    n = np.nansum(w, axis=dim)
+
+    coeff2 = -1. / (n - 1)
+    coeff1 = 1. / (n ** 2 - n)
+    r = (coeff1 * (np.abs(r) ** 2) + coeff2)
+
+    if isinstance(r, float):
+        r = np.array([r])
+    r[n < 2] = np.nan
+
+    return r
+
+
+

@@ -1,13 +1,11 @@
 import subprocess
 import pandas as pd
-import numpy as np
 import csv
 import os
 
 from context import Base
-from utils import range_args
-from lfp import FrequencyPeriod
-from spike_data import *
+from lfp import LFPAnimal, FrequencyPeriod, FrequencyBin, TimeBin as FrequencyTimeBin, FrequencyUnit, initialize_lfp
+from spike import Group, Animal, Unit, Period, TimeBin
 
 LEVEL_DICT = dict(animal=Animal, group=Group, unit=Unit, period=Period, frequency_period=FrequencyPeriod)
 
@@ -21,7 +19,7 @@ class Stats(Base):
         self.neuron_type_context = neuron_type_context
         self.selected_neuron_type = None
         self.dfs = {}
-        self.time_type = self.data_opts['time']
+        self.time_type = self.data_opts.get('time')
         self.data_col = None
         self.num_time_points = None
         self.spreadsheet_fname = None
@@ -36,11 +34,12 @@ class Stats(Base):
         return self.get_rows()
 
     def set_attributes(self):
-        if self.data_type == 'lfp':
-            self.data_col = self.current_frequency_band + '_power'
+        self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
+        if self.data_class == 'lfp':
+            self.data_col = f"{self.current_frequency_band}_{self.data_type}"
             self.lfp_brain_region = self.data_opts['brain_region']
         else:
-            self.data_col = 'rate' if self.data_type == 'psth' else 'proportion'
+            self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
             pre_stim, post_stim, bin_size = (self.data_opts[k] for k in ('pre_stim', 'post_stim', 'bin_size'))
             self.num_time_points = int((pre_stim + post_stim) / bin_size)
 
@@ -76,7 +75,7 @@ class Stats(Base):
                     self.make_df(f"{name}_{fb}")
             else:
                 self.make_df(name)
-        common_columns = set(self.dfs[name].columns)
+        common_columns = set(list(self.dfs.values())[0].columns)
         for df in self.dfs.values():
             common_columns &= set(df.columns)
         common_columns = [col for col in common_columns if col != 'experiment']
@@ -85,7 +84,7 @@ class Stats(Base):
 
     def make_df(self, name, fb=None):
         self.set_attributes()
-        self.initialize_data(fb=fb)
+        self.initialize_data()
         df = pd.DataFrame(self.rows)
         vs = ['unit_num', 'animal', 'category', 'condition', 'two_way_split', 'three_way_split', 'frequency']
         for var in vs:
@@ -93,22 +92,28 @@ class Stats(Base):
                 df[var] = df[var].astype('category')
         self.dfs[name] = df
 
-    def initialize_data(self, fb=None):
-        if 'lfp' in self.data_type:
-            [animal.get_lfp() for animal in Animal.instances]
-        else:
-            [animal.update(self.neuron_type_context) for animal in Animal.instances]
-            if [self.data_opts['row_type']] == 'continuous':
-                LEVEL_DICT[self.data_opts['row_type']].initialize_data()  # TimeBins  aren't created automatically
+    def initialize_data(self):
+        if 'lfp' in self.data_class:
+            initialize_lfp()
+            if self.data_opts['frequency'] == 'continuous' or self.data_type == 'mrl':  # TODO: change the name of row_type
+                FrequencyPeriod.initialize_data()
+        if self.data_opts['time'] == 'continuous':
+            LEVEL_DICT[self.data_opts['row_type']].initialize_data()  # TimeBins  aren't created automatically
 
     def get_rows(self, inclusion_criteria=None, other_attributes=None):
         if other_attributes is None:
             other_attributes = []
         if inclusion_criteria is None:
             inclusion_criteria = []
-        if 'lfp' in self.data_type:
-            level = FrequencyPeriod
-            inclusion_criteria.append(lambda x: x.fb == self.current_frequency_band)
+        if 'lfp' in self.data_class:
+            if self.data_type == 'mrl':
+                level = FrequencyUnit
+                other_attributes += [lambda x: ('frequency', x.frequency) if hasattr(x, 'frequency') else None,
+                                     lambda x: ('fb', x.fb) if hasattr(x, 'fb') else None]
+
+            else:
+                level = FrequencyBin if self.data_opts['frequency'] == 'continuous' else FrequencyPeriod
+                inclusion_criteria.append(lambda x: x.fb == self.current_frequency_band)
         else:
             level = TimeBin if self.data_opts['time'] == 'continuous' else Period
             other_attributes.append(lambda x: ('category', x.category) if x.name == 'unit' else None)

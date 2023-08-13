@@ -64,6 +64,15 @@ def make_lfp_firing_rate_spreadsheet(spreadsheet_opts=None, lfp_opts=None):
     stats.make_spreadsheet(df_name)
 
 
+def make_lfp_spreadsheet(lfp_opts=None):
+    lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
+    stats = Stats(experiment, data_type_context, neuron_type_context, lfp_opts[0])
+    df_name = stats.make_dfs(lfp_opts,)
+    stats.make_spreadsheet(df_name)
+
+
+
+
 
 
 

@@ -44,11 +44,13 @@ def cache_method(method):
         if self.data_opts.get('debug_mode') == 2:
             return method(self, *args, **kwargs)
 
-        cache = getattr(self, cache_name, {})
+        cache = getattr(self, cache_name) if hasattr(self, cache_name) else {}
+
         context_keys = (getattr(self, c).cache_id for c in ['neuron_type_context', 'data_type_context'] if
                         hasattr(self, c))
         cache_key = (id(self), context_keys, method.__name__, tuple(to_hashable(arg) for arg in args),
                      tuple(sorted(kwargs.items())))
+
         if cache_key not in cache:
             cache[cache_key] = method(self, *args, **kwargs)
             setattr(self, cache_name, cache)

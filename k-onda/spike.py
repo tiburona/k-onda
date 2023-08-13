@@ -6,12 +6,11 @@ import pandas as pd
 import numpy as np
 from copy import deepcopy
 
-from context import data_type_context as dt_context, neuron_type_context as nt_context
+from context import Data, data_type_context as dt_context, neuron_type_context as nt_context
 from matlab_interface import MatlabInterface
-from utils import cache_method, range_args
+from utils import cache_method
 from plotting_helpers import formatted_now
 from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
-from lfp import LFP
 
 """
 This module defines Level, Experiment, Group, Animal, Unit, and Trial. Level inherits from Base, which defines a few 
@@ -29,18 +28,13 @@ NUM_TRIALS = 150
 TRIAL_DURATION = 1
 
 
-class Level:
+class Level(Data):
 
     instances = []
     last_trial_vals = None
     last_neuron_type = 'uninitialized'
     data_type_context = dt_context
     neuron_type_context = nt_context
-
-    @classmethod
-    def subscribe(cls, context):
-        setattr(cls, context.name, context)
-        context.subscribe(cls)
 
     @classmethod
     def update(cls, context):
@@ -55,26 +49,6 @@ class Level:
                 [instance.update_children() for instance in Group.instances + Animal.instances]
                 cls.last_neuron_type = cls.neuron_type_context.val
 
-    @classmethod
-    def initialize_data(cls):
-        _ = [instance.data for instance in cls.instances]
-        a = 'foo'
-
-    def __init__(self):
-        self.instances.append(self)
-
-    def __iter__(self):
-        for child in self.children:
-            yield child
-
-    @property
-    def data_opts(self):
-        return self.data_type_context.val
-
-    @property
-    def data_type(self):
-        return self.data_opts['data_type']
-
     @property
     def data(self):
         data_to_return = getattr(self, f"get_{self.data_type}")()
@@ -87,14 +61,6 @@ class Level:
     @property
     def mean(self):
         return np.mean(self.data)
-
-    @data_opts.setter
-    def data_opts(self, opts):
-        self.data_type_context.set_val(opts)
-
-    @property
-    def selected_neuron_type(self):
-        return self.neuron_type_context.val
 
     @property
     def autocorr_key(self):
@@ -271,16 +237,13 @@ class Animal(Level):
         self.PN = []
         self.IN = []
         self.raw_lfp = None
+        self.update_children()  # Needs to be called on initialization so units gets populated
 
     def update_children(self):
         if self.selected_neuron_type is None:
             self.children = self.units['good']
         else:
             self.children = getattr(self, self.selected_neuron_type)
-
-    def get_lfp(self):
-        brain_region = self.data_opts['brain_region']
-        return LFP(self, brain_region, self.data_opts)
 
 
 class Unit(Level):
@@ -301,7 +264,7 @@ class Unit(Level):
         self.neuron_type = neuron_type
         self.periods = None
         self.trials = None
-        self.children = self.periods
+        self.children = None
         self.spike_times = np.array(spike_times)
         self.trials_opts = None
         self.selected_trial_indices = None
@@ -312,20 +275,23 @@ class Unit(Level):
 
     def update_children(self):
         if self.data_opts is None or 'trials' not in self.data_opts:
-            return
+            self.data_opts = self.get_defaults()
         self.periods = {'tone': [], 'pretone': []}
         trials_slice = slice(*self.data_opts['trials'])
         num_periods = len(set([trial // TONES_PER_PERIOD for trial in range(*self.data_opts['trials'])]))
         self.selected_trial_indices = list(range(NUM_TRIALS))[trials_slice]
-        stages = [('tone', 0)]
-        if self.data_opts.get('pretone_trials'):
-            stages += [('pretone', -TONE_PERIOD_DURATION)]
-        for period_type, offset in stages:
-            for period in range(num_periods):
-                trials = [trial for trial in self.selected_trial_indices if trial // TONES_PER_PERIOD == period]
-                self.periods[period_type].append(Period(self, self.animal, period, trials, period_type=period_type,
-                                                        offset=offset))
+        for i in range(num_periods):
+            trials = [trial for trial in self.selected_trial_indices if trial // TONES_PER_PERIOD == i]
+            for period_type in ['tone', 'pretone']:
+                self.periods[period_type].append(Period(self, i, trials, period_type=period_type))
         self.children = self.periods['tone']
+        return self
+
+    def get_defaults(self):
+        data_opts = deepcopy(self.data_opts)
+        for key, val in [('trials', (0, NUM_TRIALS)), ('pre_stim', 0), ('post_stim', TRIAL_DURATION)]:
+            data_opts[key] = val
+        return data_opts
 
     @cache_method
     def find_spikes(self, start, stop):
@@ -352,24 +318,26 @@ class Period(Level):
     name = 'period'
     instances = []
 
-    def __init__(self, unit, animal, index, trials, period_type='tone', offset=0):
+    def __init__(self, unit, index, trials, period_type='tone'):
         self.unit = unit
         if self.unit.category == 'good':
             self.instances.append(self)
         self.identifier = index
         self.trial_indices = trials
-        self.animal = animal
         self.period_type = period_type
+        self.animal = self.unit.animal
         self.trials = []
         self.full_trials = []
-        pre_stim, post_stim = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim'])
+        pip_onsets = [start for i, start in enumerate(self.animal.tone_onsets_expanded) if i in trials]
+        if self.period_type == 'pre_tone':
+            pip_onsets -= TONE_PERIOD_DURATION * SAMPLING_RATE
+        self.start = pip_onsets[0]
+        pre_stim, post_stim = (self.data_opts.get(opt) * SAMPLING_RATE for opt in ['pre_stim', 'post_stim'])
         # TODO: check that i is the right value here (original index)
-        pip_onsets = [(i, start) for i, start in enumerate(self.animal.tone_onsets_expanded) if i in trials]
-        pre_stim, post_stim = ((value - offset) * SAMPLING_RATE for value in [pre_stim, post_stim])
-        # TODO: change the name of offset; ambiguous in context
-        for i, start in pip_onsets:
-            for spike_type, pre, post in [(self.trials, pre_stim, post_stim), (self.full_trials, 0, TRIAL_DURATION)]:
-                spikes = self.unit.find_spikes(start - pre_stim, start + post_stim - offset)
+        for i, start in enumerate(pip_onsets):
+            for spike_type, pre, post in [(self.trials, pre_stim, post_stim),
+                                          (self.full_trials, 0, TRIAL_DURATION*SAMPLING_RATE)]:
+                spikes = self.unit.find_spikes(start - pre_stim, start + post_stim)
                 spike_type.append(Trial(self, unit, [(spike - start) / SAMPLING_RATE for spike in spikes], i))
         self.children = self.trials
         self.parent = unit
@@ -387,6 +355,14 @@ class Period(Level):
     @cache_method
     def mean_firing_rate(self):
         return np.mean(self.get_unadjusted_rates())
+
+    def get_spikes(self, border=0):
+        if self.period_type == 'pretone':
+            start = self.start - 3 * border * SAMPLING_RATE
+        else:
+            start = self.start - border * SAMPLING_RATE
+        end = start + (TONE_PERIOD_DURATION + 2 * border) * SAMPLING_RATE
+        return self.unit.find_spikes(start, end), start, end
 
 
 class Trial(Level):

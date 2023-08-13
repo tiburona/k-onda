@@ -1,9 +1,9 @@
 import os
 import scipy.io as sio
 import numpy as np
-from spike_data import Experiment, Group, Animal, Unit, Level
+from spike import Experiment, Group, Animal, Unit, Level
+from lfp import LFP
 from context import Context
-from neo.rawio import BlackrockRawIO
 
 
 def init_units(entry, animal):
@@ -51,25 +51,17 @@ experiment = Experiment({name: Group(name=name, animals=[animal for animal in an
 experiment.all_units = [unit for group in experiment.groups for animal in group.animals
                         for unit in animal.units['good']]
 
+# experiment.categorize_neurons()
 
 data_type_context = Context('data_type_context')
 neuron_type_context = Context('neuron_type_context')
 Level.subscribe(data_type_context)
 Level.subscribe(neuron_type_context)
+LFP.subscribe(data_type_context)
 
-# experiment.categorize_neurons()
+[animal.update(neuron_type_context) for animal in animals]
 
 
-def initialize_lfp_data():
-    for animal in animals:
-        file_path = os.path.join(data_path, 'single_cell_data', animal.identifier, 'Safety')
-        reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
-        reader.parse_header()
-        animal.raw_lfp = {'hpc': reader.nsx_datas[3][0][:, 0], 'bla': reader.nsx_datas[3][0][:, 2],
-                          'pl': np.mean([reader.nsx_datas[3][0][:, 1], reader.nsx_datas[3][0][:, 3]], axis=0)}
-        a = 'foo'
-
-initialize_lfp_data()
 
 
 
