@@ -8,7 +8,7 @@ from matplotlib.gridspec import GridSpec
 
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts
 from plotting_helpers import smart_title_case, formatted_now, PlottingMixin
-from context import Base
+from data import Base
 from stats import Stats
 
 
@@ -72,7 +72,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         for row, neuron_type in enumerate(self.neuron_types):
             self.selected_neuron_type = neuron_type
             for col, group in enumerate(self.experiment.groups):
-                self.make_subplot(group, row, col, title=f"{group.identifier.capitalize()} {neuron_type}")
+                self.make_subplot(group, self.axs[row, col], title=f"{group.identifier.capitalize()} {neuron_type}")
         self.selected_neuron_type = None
         self.set_y_scales()
         self.set_pip_patches()
@@ -321,7 +321,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
         self.close_plot('stats_plot')
 
     def plot_group_stats_data(self):
-        self.stats = Stats(self.experiment, self.data_type_context, self.data_opts)
+        self.stats = Stats(self.experiment, self.data_type_context, self.neuron_type_context, self.data_opts)
         force_recalc = self.graph_opts['force_recalc']
         interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
 

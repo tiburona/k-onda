@@ -6,7 +6,8 @@ import pandas as pd
 import numpy as np
 from copy import deepcopy
 
-from context import Data, data_type_context as dt_context, neuron_type_context as nt_context
+from context import data_type_context as dt_context, neuron_type_context as nt_context
+from data import Data
 from matlab_interface import MatlabInterface
 from utils import cache_method
 from plotting_helpers import formatted_now

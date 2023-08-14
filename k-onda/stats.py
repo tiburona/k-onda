@@ -3,11 +3,11 @@ import pandas as pd
 import csv
 import os
 
-from context import Base
+from data import Base
 from lfp import LFPAnimal, FrequencyPeriod, FrequencyBin, TimeBin as FrequencyTimeBin, FrequencyUnit, initialize_lfp
-from spike import Group, Animal, Unit, Period, TimeBin
+from spike import Group, Animal, Unit, Period, Trial, TimeBin
 
-LEVEL_DICT = dict(animal=Animal, group=Group, unit=Unit, period=Period, frequency_period=FrequencyPeriod)
+LEVEL_DICT = dict(animal=Animal, group=Group, unit=Unit, period=Period, trial=Trial, frequency_period=FrequencyPeriod)
 
 
 class Stats(Base):
@@ -82,7 +82,7 @@ class Stats(Base):
         new_name = self.smart_merge(list(common_columns))
         return new_name
 
-    def make_df(self, name, fb=None):
+    def make_df(self, name):
         self.set_attributes()
         self.initialize_data()
         df = pd.DataFrame(self.rows)
@@ -108,18 +108,16 @@ class Stats(Base):
         if 'lfp' in self.data_class:
             if self.data_type == 'mrl':
                 level = FrequencyUnit
-                other_attributes += [lambda x: ('frequency', x.frequency) if hasattr(x, 'frequency') else None,
-                                     lambda x: ('fb', x.fb) if hasattr(x, 'fb') else None]
-
+                other_attributes += ['frequency', 'fb', 'category']
             else:
                 level = FrequencyBin if self.data_opts['frequency'] == 'continuous' else FrequencyPeriod
                 inclusion_criteria.append(lambda x: x.fb == self.current_frequency_band)
         else:
             level = TimeBin if self.data_opts['time'] == 'continuous' else Period
-            other_attributes.append(lambda x: ('category', x.category) if x.name == 'unit' else None)
+            other_attributes += ['category']
             parent = LEVEL_DICT[self.data_opts['row_type']]
             inclusion_criteria.append(lambda x: isinstance(x.parent, parent))
-        other_attributes.append(lambda x: ('period_type', x.period_type) if x.name == 'period' else None)
+        other_attributes += ['period_type']
 
         rows = self.get_data(level, inclusion_criteria, other_attributes)
         level.instances.clear()
@@ -135,11 +133,10 @@ class Stats(Base):
             current_instance = instance
             while True:
                 row_dict[current_instance.name] = current_instance.identifier
-                for other_attribute in other_attributes:
-                    attribute = other_attribute(current_instance)
-                    if attribute is not None:
-                        attribute_name, attribute_val = attribute
-                        row_dict[attribute_name] = attribute_val  # can use this for stage
+                for attr in other_attributes:
+                    val = getattr(current_instance, attr) if hasattr(current_instance, attr) else None
+                    if val is not None:
+                        row_dict[attr] = val  # can use this for stage
                 if hasattr(current_instance, 'parent') and current_instance.parent is not None:
                     current_instance = current_instance.parent  # Go one level up to the parent
                 else:
@@ -150,7 +147,10 @@ class Stats(Base):
     def make_spreadsheet(self, df_name=None):
         row_type = self.data_opts['row_type']
         path = self.data_opts.get('data_path')
-        name = df_name if df_name else self.data_type
+        df_name = df_name if df_name else self.data_type
+        name = df_name
+        if df_name not in self.dfs:
+            self.make_df(df_name)
         if 'lfp' in name:
             path = os.path.join(path, 'lfp')
             name += f"_{self.lfp_brain_region}"

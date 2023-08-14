@@ -5,7 +5,8 @@ from neo.rawio import BlackrockRawIO
 
 from spike import Animal, Unit
 from proxy import Proxy
-from context import Data, data_type_context
+from data import Data
+from context import data_type_context
 from matlab_interface import MatlabInterface
 from math_functions import *
 

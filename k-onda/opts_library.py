@@ -1,37 +1,38 @@
 
-PSTH_OPTS = {'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'trials': (0, 150),
-             'adjustment': 'normalized', 'average_method': 'mean', 'base': ''}
+PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'trials': (0, 150),
+             'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time': 'continuous',
+             'data_path': '/Users/katie/likhtik/data'}
 
-PROPORTION_OPTS = {'data_type': 'proportion', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01,
-                   'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial'}
+PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01,
+                   'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial', 'time': 'continuous'}
 
-AUTOCORR_OPTS = {'data_type': 'autocorr', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
+AUTOCORR_OPTS = {'data_class': 'spike', 'data_type': 'autocorr', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
                  'max_lag': 99}
 
-SPECTRUM_OPTS = {'data_type': 'spectrum', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
+SPECTRUM_OPTS = {'data_class': 'spike', 'data_type': 'spectrum', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
                  'max_lag': 99, 'freq_range': (3, 60)}
 
-SPREADSHEET_OPTS = {'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
-                    'adjustment': 'normalized', 'time': 'period', 'pre_stim': 0.0, 'post_stim': .65,
+SPREADSHEET_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
+                    'adjustment': 'normalized', 'time': 'continuous', 'pre_stim': 0.0, 'post_stim': .65,
                     'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'unit', 'pretone_trials': True,
                     'periods': list(range(5))}
 
-GROUP_STAT_PROPORTION_OPTS = {'data_type': 'proportion', 'base': 'trial', 'adjustment': 'normalized',
+GROUP_STAT_PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'base': 'trial', 'adjustment': 'normalized',
                               'time': 'continuous', 'pre_stim': 0.0, 'post_stim': 0.70, 'bin_size': 0.01,
                               'trials': (0, 150), 'row_type': 'unit', 'post_hoc_bin_size': 1,
-                              'path': '/Users/katie/likhtik/data', 'post_hoc_type': 'beta',
+                              'data_path': '/Users/katie/likhtik/data', 'post_hoc_type': 'beta',
                               'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}}
 
-GROUP_STAT_PSTH_OPTS = {'data_type': 'psth', 'adjustment': 'normalized', 'time': 'continuous', 'pre_stim': 0.0,
+GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment': 'normalized', 'time': 'continuous', 'pre_stim': 0.0,
                         'post_stim': 0.70, 'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'trial',
-                        'post_hoc_bin_size': 1, 'path': '/Users/katie/likhtik/data', 'post_hoc_type': 'lmer',
+                        'post_hoc_bin_size': 1, 'data_path': '/Users/katie/likhtik/data', 'post_hoc_type': 'lmer',
                         'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}}
 
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'tick_step': 0.1, 'sem': False,
               'footer': True, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'},
               'force_recalc': False}
 
-FIGURE_1_OPTS = {'data_path': '/Users/katie/likhtik/data/single_cell_data', 'animal_id': 'IG156',
+FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/single_cell_data', 'animal_id': 'IG156',
                  'cluster_ids': [21, 27], 'electrodes_for_waveform': [[9, 11], [8]], 'electrodes_for_feature': [1, 8],
                  'el_inds': [1, 1], 'pc_inds': [1, 0], 'sem': False, 'equal_y_scales': True, 'tick_step': 0.2,
                  'neuron_type_colors': {'IN': '#5679C7', 'PN': '#C75B56'}, 'annot_coords': (-0.11, 1.1),
