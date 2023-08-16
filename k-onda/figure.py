@@ -142,6 +142,6 @@ class Figure(Plotter):
 
 
 figure = Figure(expt, dt_context, nt_context, FIGURE_1_OPTS)
-cProfile.run('figure.spike_data_figure()', 'output.prof')
-# figure.spike_data_figure()
+# cProfile.run('figure.spike_data_figure()', 'output.prof')
+figure.spike_data_figure()
 

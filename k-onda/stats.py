@@ -83,7 +83,7 @@ class Stats(Base):
         self.set_attributes()
         self.initialize_data()
         df = pd.DataFrame(self.rows)
-        vs = ['unit_num', 'animal', 'category', 'condition', 'two_way_split', 'three_way_split', 'frequency']
+        vs = ['unit_num', 'animal', 'category', 'group', 'two_way_split', 'three_way_split', 'frequency']
         for var in vs:
             if var in df:
                 df[var] = df[var].astype('category')
@@ -108,8 +108,9 @@ class Stats(Base):
         else:
             other_attributes += ['category', 'neuron_type']
             level = self.data_opts['row_type']
-        inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'period_type') in self.data_opts.get(
-            'period_types', ['tone'])]
+            if level in ['period', 'trial']:
+                inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'period_type') in self.data_opts.get(
+                    'period_types', ['tone'])]
 
         return self.get_data(level, inclusion_criteria, other_attributes)
 
@@ -163,7 +164,7 @@ class Stats(Base):
         error_suffix = error_suffix + '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else error_suffix
 
         if self.data_opts['post_hoc_type'] == 'beta':
-            model_formula = f'glmmTMB(formula = {self.data_col} ~ condition +  (1|animal{error_suffix}), family = beta_family(link = "logit"), data = data)'
+            model_formula = f'glmmTMB(formula = {self.data_col} ~ group +  (1|animal{error_suffix}), family = beta_family(link = "logit"), data = data)'
             interaction_model_formula = f'glmmTMB(formula = {self.data_col} ~ group * neuron_type + (1|animal{error_suffix}), family = beta_family(link = "logit"), data = sub_df)'
             p_val_index = 'coefficients$cond[2, 4]'
             interaction_p_val_index = 'coefficients$cond["groupstressed:neuron_typePN", 4]'
@@ -184,7 +185,7 @@ class Stats(Base):
         df <- read_csv('{self.spreadsheet_fname}')
 
         # Convert variables to factors
-        factor_vars <- c('unit', 'animal', 'period_type', 'group')
+        factor_vars <- c('unit', 'animal', 'neuron_type', 'group')
         df[factor_vars] <- lapply(df[factor_vars], factor)
 
         # Add small constant to 0s in the data column, if necessary

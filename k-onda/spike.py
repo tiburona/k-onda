@@ -377,11 +377,11 @@ class Trial(Level):
     def get_psth(self):
         rates = self.get_rates()
         if self.period.period_type == 'pretone' or self.data_opts.get('adjustment') == 'none':
-            pass
-        elif self.data_opts.get('adjustment') == 'relative':
-            rates -= self.unit.periods['pretone'][self.period.identifier].mean_firing_rate()
-        else:
-            rates /= self.unit.get_tone_period_std_dev()  # same as dividing unit psth by std dev
+            return rates
+        rates -= self.unit.periods['pretone'][self.period.identifier].mean_firing_rate()
+        if self.data_opts.get('adjustment') == 'relative':
+            return rates
+        rates /= self.unit.get_tone_period_std_dev()  # same as dividing unit psth by std dev
         return rates
 
     @cache_method
