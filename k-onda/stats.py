@@ -5,9 +5,7 @@ import os
 
 from data import Base
 from lfp import LFPAnimal, FrequencyPeriod, FrequencyBin, TimeBin as FrequencyTimeBin, FrequencyUnit, initialize_lfp
-from spike import Group, Animal, Unit, Period, Trial, TimeBin
-
-LEVEL_DICT = dict(animal=Animal, group=Group, unit=Unit, period=Period, trial=Trial, frequency_period=FrequencyPeriod)
+from utils import find_ancestor_attribute
 
 
 class Stats(Base):
@@ -17,7 +15,6 @@ class Stats(Base):
         self.data_type_context = data_type_context
         self.data_opts = data_opts
         self.neuron_type_context = neuron_type_context
-        self.selected_neuron_type = None
         self.dfs = {}
         self.time_type = self.data_opts.get('time')
         self.data_col = None
@@ -97,56 +94,51 @@ class Stats(Base):
             initialize_lfp()
             if self.data_opts['frequency'] == 'continuous' or self.data_type == 'mrl':  # TODO: change the name of row_type
                 FrequencyPeriod.initialize_data()
-        if self.data_opts['time'] == 'continuous':
-            LEVEL_DICT[self.data_opts['row_type']].initialize_data()  # TimeBins  aren't created automatically
 
-    def get_rows(self, inclusion_criteria=None, other_attributes=None):
-        if other_attributes is None:
-            other_attributes = []
-        if inclusion_criteria is None:
-            inclusion_criteria = []
+    def get_rows(self):
+        other_attributes = ['period_type']
+        inclusion_criteria = []
         if 'lfp' in self.data_class:
             if self.data_type == 'mrl':
-                level = FrequencyUnit
-                other_attributes += ['frequency', 'fb', 'category']
+                level = 'frequency_unit'
+                other_attributes += ['frequency', 'fb', 'neuron_type']
             else:
-                level = FrequencyBin if self.data_opts['frequency'] == 'continuous' else FrequencyPeriod
+                level = 'frequency_bin' if self.data_opts['frequency'] == 'continuous' else 'frequency_period'
                 inclusion_criteria.append(lambda x: x.fb == self.current_frequency_band)
         else:
-            level = TimeBin if self.data_opts['time'] == 'continuous' else Period
-            other_attributes += ['category']
-            parent = LEVEL_DICT[self.data_opts['row_type']]
-            inclusion_criteria.append(lambda x: isinstance(x.parent, parent))
-        other_attributes += ['period_type']
+            other_attributes += ['category', 'neuron_type']
+            level = self.data_opts['row_type']
+        inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'period_type') in self.data_opts.get(
+            'period_types', ['tone'])]
 
-        rows = self.get_data(level, inclusion_criteria, other_attributes)
-        level.instances.clear()
-
-        return rows
+        return self.get_data(level, inclusion_criteria, other_attributes)
 
     def get_data(self, level, inclusion_criteria, other_attributes):
         rows = []
-        instances = [instance for instance in level.instances
-                     if all(criterion(instance) for criterion in inclusion_criteria)]
-        for instance in instances:
-            row_dict = {self.data_col: instance.data}
-            current_instance = instance
+        srcs = getattr(self.experiment, f'all_{level}s')
+        if self.data_opts['time'] == 'continuous':
+            srcs = [time_bin for entity in srcs for time_bin in entity.time_bins]
+        srcs = [src for src in srcs if all([criterion(src) for criterion in inclusion_criteria])]
+
+        for src in srcs:
+            row_dict = {self.data_col: src.data}
+            current_src = src
             while True:
-                row_dict[current_instance.name] = current_instance.identifier
+                row_dict[current_src.name] = current_src.identifier
                 for attr in other_attributes:
-                    val = getattr(current_instance, attr) if hasattr(current_instance, attr) else None
+                    val = getattr(current_src, attr) if hasattr(current_src, attr) else None
                     if val is not None:
-                        row_dict[attr] = val  # can use this for stage
-                if hasattr(current_instance, 'parent') and current_instance.parent is not None:
-                    current_instance = current_instance.parent  # Go one level up to the parent
+                        row_dict[attr] = val
+                if hasattr(current_src, 'parent') and current_src.parent is not None:
+                    current_src = current_src.parent  # Go one level up to the parent
                 else:
                     break  # Stop the loop if there is no parent
             rows.append(row_dict)
         return rows
 
-    def make_spreadsheet(self, df_name=None):
+    def make_spreadsheet(self, df_name=None, path=None):
         row_type = self.data_opts['row_type']
-        path = self.data_opts.get('data_path')
+        path = path if path else self.data_opts.get('data_path')
         df_name = df_name if df_name else self.data_type
         name = df_name
         if df_name not in self.dfs:
@@ -167,18 +159,18 @@ class Stats(Base):
 
     def write_r_script(self):
 
-        error_suffix = '/unit_num' if self.data_opts['row_type'] == 'trial' else ''
+        error_suffix = '/unit' if self.data_opts['row_type'] == 'trial' else ''
         error_suffix = error_suffix + '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else error_suffix
 
         if self.data_opts['post_hoc_type'] == 'beta':
             model_formula = f'glmmTMB(formula = {self.data_col} ~ condition +  (1|animal{error_suffix}), family = beta_family(link = "logit"), data = data)'
-            interaction_model_formula = f'glmmTMB(formula = {self.data_col} ~ condition * category + (1|animal{error_suffix}), family = beta_family(link = "logit"), data = sub_df)'
+            interaction_model_formula = f'glmmTMB(formula = {self.data_col} ~ group * neuron_type + (1|animal{error_suffix}), family = beta_family(link = "logit"), data = sub_df)'
             p_val_index = 'coefficients$cond[2, 4]'
-            interaction_p_val_index = 'coefficients$cond["conditionstressed:categoryPN", 4]'
+            interaction_p_val_index = 'coefficients$cond["groupstressed:neuron_typePN", 4]'
             zero_adjustment_line = f'df$"{self.data_col}"[df$"{self.data_col}" == 0] <- df$"{self.data_col}"[df$"{self.data_col}" == 0] + 1e-6'
         elif self.data_opts['post_hoc_type'] == 'lmer':
-            model_formula = f'lmer({self.data_col} ~ condition +  (1|animal{error_suffix}), data = data)'
-            interaction_model_formula = f'lmer({self.data_col} ~ condition * category + (1|animal{error_suffix}), data = sub_df)'
+            model_formula = f'lmer({self.data_col} ~ group +  (1|animal{error_suffix}), data = data)'
+            interaction_model_formula = f'lmer({self.data_col} ~ group * neuron_type + (1|animal{error_suffix}), data = sub_df)'
             p_val_index = 'coefficients[2, 5]'
             interaction_p_val_index = 'coefficients[4, 5]'
             zero_adjustment_line = ''
@@ -192,7 +184,7 @@ class Stats(Base):
         df <- read_csv('{self.spreadsheet_fname}')
 
         # Convert variables to factors
-        factor_vars <- c('unit_num', 'animal', 'category', 'condition')
+        factor_vars <- c('unit', 'animal', 'period_type', 'group')
         df[factor_vars] <- lapply(df[factor_vars], factor)
 
         # Add small constant to 0s in the data column, if necessary
@@ -211,17 +203,17 @@ class Stats(Base):
         }}
 
         # Iterate over the time bins
-        for (time_bin in unique(df$grouped_time_bin)) {{
+        for (time_bin in unique(df$time_bin)) {{
             # Subset the data for the current time bin
-            sub_df <- df[df$grouped_time_bin == time_bin,]
+            sub_df <- df[df$time_bin == time_bin,]
 
             # Perform the interaction analysis
             interaction_model <- {interaction_model_formula}
             p_val_interact <- summary(interaction_model)${interaction_p_val_index}
 
             # Perform the within-category analyses
-            p_val_PN <- perform_regression(sub_df[sub_df$category == 'PN', ], 'PN')
-            p_val_IN <- perform_regression(sub_df[sub_df$category == 'IN', ], 'IN')
+            p_val_PN <- perform_regression(sub_df[sub_df$neuron_type == 'PN', ], 'PN')
+            p_val_IN <- perform_regression(sub_df[sub_df$neuron_type == 'IN', ], 'IN')
 
             # Store the results
             results <- rbind(results, data.frame(
@@ -240,9 +232,10 @@ class Stats(Base):
         with open(self.script_path, 'w') as f:
             f.write(r_script)
 
-    def get_post_hoc_results(self, force_recalc=False):
-        self.make_spreadsheet()
-        self.results_path = os.path.join(self.data_opts['data_path'], 'r_results.csv')
+    def get_post_hoc_results(self, force_recalc=True):
+        spreadsheet_path = os.path.join(self.data_opts['data_path'], self.data_type)
+        self.make_spreadsheet(path=spreadsheet_path)
+        self.results_path = os.path.join(spreadsheet_path, 'r_post_hoc_results.csv')
         if not os.path.exists(self.results_path) or force_recalc:
             self.write_r_script()
             subprocess.run(['Rscript', self.script_path], check=True)

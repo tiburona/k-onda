@@ -3,7 +3,7 @@ import scipy.io as sio
 import numpy as np
 from spike import Experiment, Group, Animal, Unit, Level
 from lfp import LFP
-from context import Context
+from context import data_type_context, neuron_type_context
 
 
 def init_units(entry, animal):
@@ -48,18 +48,13 @@ animals = [init_animal(entry) for entry in entries]
 
 experiment = Experiment({name: Group(name=name, animals=[animal for animal in animals if animal.condition == name])
                          for name in ['control', 'stressed']})
-experiment.all_units = [unit for group in experiment.groups for animal in group.animals
-                        for unit in animal.units['good']]
 
 # experiment.categorize_neurons()
 
-data_type_context = Context('data_type_context')
-neuron_type_context = Context('neuron_type_context')
-Level.subscribe(data_type_context)
-Level.subscribe(neuron_type_context)
-LFP.subscribe(data_type_context)
+experiment.subscribe(data_type_context)
+experiment.subscribe(neuron_type_context)
+#LFP.subscribe(data_type_context)
 
-[animal.update(neuron_type_context) for animal in animals]
 
 
 

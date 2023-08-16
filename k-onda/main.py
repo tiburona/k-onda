@@ -1,3 +1,4 @@
+import cProfile
 from utils import log_directory_contents
 from procs import *
 

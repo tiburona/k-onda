@@ -322,7 +322,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
 
     def plot_group_stats_data(self):
         self.stats = Stats(self.experiment, self.data_type_context, self.neuron_type_context, self.data_opts)
-        force_recalc = self.graph_opts['force_recalc']
+        force_recalc = self.graph_opts['force_recalc'] # TODO: this isn't doing anything.
         interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
 
         bin_size = self.data_opts.get('bin_size')

@@ -30,34 +30,16 @@ TRIAL_DURATION = 1
 
 
 class Level(Data):
-
-    instances = []
-    last_trial_vals = None
-    last_neuron_type = 'uninitialized'
     data_type_context = dt_context
     neuron_type_context = nt_context
 
-    @classmethod
-    def update(cls, context):
-        if context.name == 'data_type_context':
-            trial_vals = [cls.data_type_context.val[key] for key in ['pre_stim', 'post_stim', 'bin_size', 'trials']
-                          if key in cls.data_type_context.val]
-            if trial_vals != cls.last_trial_vals:
-                [instance.update_children() for instance in Unit.instances]
-                cls.last_trial_vals = trial_vals
-        if context.name == 'neuron_type_context':
-            if cls.neuron_type_context.val != cls.last_neuron_type:
-                [instance.update_children() for instance in Group.instances + Animal.instances]
-                cls.last_neuron_type = cls.neuron_type_context.val
-
     @property
     def data(self):
-        data_to_return = getattr(self, f"get_{self.data_type}")()
-        if self.data_opts['time'] == 'continuous':
-            [TimeBin(i, data_point, self) for i, data_point in enumerate(data_to_return)]
-        else:
-            data_to_return = np.mean(data_to_return)
-        return data_to_return
+        return getattr(self, f"get_{self.data_type}")()
+
+    @property
+    def time_bins(self):
+        return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
 
     @property
     def mean(self):
@@ -160,16 +142,42 @@ class Experiment(Level):
     """The experiment. Parent of groups."""
 
     name = 'experiment'
-    instances = []
 
     def __init__(self, conditions):
-        super().__init__()
         self.identifier = 'Itamar_Safety_' + formatted_now()
         self.conditions, self.groups = list(conditions.keys()), list(conditions.values())
         self.children = self.groups
         for group in self.groups:
             group.parent = self
-        self.all_units = None
+        self.all_groups = self.groups
+        self.all_animals = [animal for group in self.groups for animal in group]
+        self.all_units = [unit for animal in self.all_animals for unit in animal.units['good']]
+        self.last_trial_vals = None
+        self.last_neuron_type = 'uninitialized'
+
+    @property
+    def all_periods(self):
+        return [period for unit in self.all_units for period in unit.all_periods]
+
+    @property
+    def all_trials(self):
+        return [trial for period in self.all_periods for trial in period]
+
+    def subscribe(self, context):
+        setattr(self, context.name, context)
+        context.subscribe(self)
+
+    def update(self, context):
+        if context.name == 'data_type_context':
+            trial_vals = [self.data_opts[key] for key in ['pre_stim', 'post_stim', 'bin_size', 'trials']
+                          if key in self.data_opts]
+            if trial_vals != self.last_trial_vals:
+                [unit.update_children() for unit in self.all_units]
+                self.last_trial_vals = trial_vals
+        if context.name == 'neuron_type_context':
+            if self.selected_neuron_type != self.last_neuron_type:
+                [entity.update_children() for entity in self.all_groups + self.all_animals]
+                self.last_neuron_type = self.selected_neuron_type
 
     def categorize_neurons(self):
         firing_rates = [unit.firing_rate for unit in self.all_units]
@@ -197,10 +205,8 @@ class Group(Level):
     to update its children property when it changes."""
 
     name = 'group'
-    instances = []
 
     def __init__(self, name, animals=None):
-        super().__init__()
         self.identifier = name
         self.animals = animals if animals else []
         self.children = self.animals
@@ -208,10 +214,10 @@ class Group(Level):
             animal.parent = self
 
     def update_children(self):
-        if self.selected_neuron_type is None:
+        if self.neuron_type_context.val is None:
             self.children = self.animals
         else:
-            self.children = [animal for animal in self.animals if len(getattr(animal, self.selected_neuron_type))]
+            self.children = [animal for animal in self.animals if len(getattr(animal, self.neuron_type_context.val))]
 
 
 class Animal(Level):
@@ -225,10 +231,8 @@ class Animal(Level):
     """
 
     name = 'animal'
-    instances = []
 
     def __init__(self, name, condition, units=None, tone_period_onsets=None, tone_onsets_expanded=None):
-        super().__init__()
         self.identifier = name
         self.condition = condition
         self.units = units if units else defaultdict(list)
@@ -241,10 +245,10 @@ class Animal(Level):
         self.update_children()  # Needs to be called on initialization so units gets populated
 
     def update_children(self):
-        if self.selected_neuron_type is None:
+        if self.neuron_type_context.val is None:
             self.children = self.units['good']
         else:
-            self.children = getattr(self, self.selected_neuron_type)
+            self.children = getattr(self, self.neuron_type_context.val)
 
 
 class Unit(Level):
@@ -252,47 +256,34 @@ class Unit(Level):
     data_type_context with an opts property and updates its trials when the trial definitions in the context change."""
 
     name = 'unit'
-    instances = []
 
     def __init__(self, animal, category, spike_times, neuron_type=None):
         self.trials = []
         self.animal = animal
         self.category = category
-        if category == 'good':  # At least for now, overwrite the Level instances variable and only append good units
-            self.instances.append(self)
         self.animal.units[category].append(self)
         self.identifier = str(self.animal.units[category].index(self) + 1)
         self.neuron_type = neuron_type
-        self.periods = None
-        self.trials = None
+        self.periods = {}
+        self.all_periods = []
         self.children = None
         self.spike_times = np.array(spike_times)
         self.trials_opts = None
-        self.selected_trial_indices = None
         spikes_for_fr = self.spike_times[self.spike_times > SAMPLING_RATE * 30]
         self.firing_rate = SAMPLING_RATE * len(spikes_for_fr) / float(spikes_for_fr[-1] - spikes_for_fr[0])
         self.fwhm_microseconds = None
         self.parent = animal
 
     def update_children(self):
-        if self.data_opts is None or 'trials' not in self.data_opts:
-            self.data_opts = self.get_defaults()
         self.periods = {'tone': [], 'pretone': []}
-        trials_slice = slice(*self.data_opts['trials'])
+        selected_trial_indices = list(range(NUM_TRIALS))[slice(*self.data_opts['trials'])]
         num_periods = len(set([trial // TONES_PER_PERIOD for trial in range(*self.data_opts['trials'])]))
-        self.selected_trial_indices = list(range(NUM_TRIALS))[trials_slice]
         for i in range(num_periods):
-            trials = [trial for trial in self.selected_trial_indices if trial // TONES_PER_PERIOD == i]
+            trials = [trial for trial in selected_trial_indices if trial // TONES_PER_PERIOD == i]
             for period_type in ['tone', 'pretone']:
                 self.periods[period_type].append(Period(self, i, trials, period_type=period_type))
         self.children = self.periods['tone']
-        return self
-
-    def get_defaults(self):
-        data_opts = deepcopy(self.data_opts)
-        for key, val in [('trials', (0, NUM_TRIALS)), ('pre_stim', 0), ('post_stim', TRIAL_DURATION)]:
-            data_opts[key] = val
-        return data_opts
+        self.all_periods = self.periods['tone'] + self.periods['pretone']
 
     @cache_method
     def find_spikes(self, start, stop):
@@ -317,20 +308,17 @@ class Unit(Level):
 
 class Period(Level):
     name = 'period'
-    instances = []
 
     def __init__(self, unit, index, trials, period_type='tone'):
         self.unit = unit
-        if self.unit.category == 'good':
-            self.instances.append(self)
         self.identifier = index
         self.trial_indices = trials
         self.period_type = period_type
         self.animal = self.unit.animal
         self.trials = []
         self.full_trials = []
-        pip_onsets = [start for i, start in enumerate(self.animal.tone_onsets_expanded) if i in trials]
-        if self.period_type == 'pre_tone':
+        pip_onsets = np.array([start for i, start in enumerate(self.animal.tone_onsets_expanded) if i in trials])
+        if self.period_type == 'pretone':
             pip_onsets -= TONE_PERIOD_DURATION * SAMPLING_RATE
         self.start = pip_onsets[0]
         pre_stim, post_stim = (self.data_opts.get(opt) * SAMPLING_RATE for opt in ['pre_stim', 'post_stim'])
@@ -381,6 +369,7 @@ class Trial(Level):
         self.spikes = spikes
         self.identifier = index
         self.period = period
+        self.period_type = self.period.period_type
         self.children = None
         self.parent = period
 

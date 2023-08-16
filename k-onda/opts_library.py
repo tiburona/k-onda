@@ -40,7 +40,7 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
                  False}
 
 LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time': 'period', 'brain_region': 'pl',
-            'fb': ['delta_theta'], 'row_type': 'frequency_period', 'frequency': 'continuous', 'data_type': 'mrl',
+            'fb': ['theta_1'], 'row_type': 'frequency_period', 'frequency': 'continuous', 'data_type': 'mrl',
             'pretone_trials': True}
 
 AC_KEYS = {
