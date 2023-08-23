@@ -115,7 +115,7 @@ class Stats(Base):
 
         for source in sources:
             row_dict = {self.data_col: source.data}
-            source_with_ancestors = [source + source.ancestors]
+            source_with_ancestors = [source] + source.ancestors
             for src in source_with_ancestors:
                 row_dict[src.name] = src.identifier
                 for attr in other_attributes:

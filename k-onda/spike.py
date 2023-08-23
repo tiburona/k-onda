@@ -7,7 +7,7 @@ import numpy as np
 
 from data import Data
 from matlab_interface import MatlabInterface
-from utils import cache_method
+from utils import cache_method, get_ancestors
 from plotting_helpers import formatted_now
 from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
 
@@ -427,6 +427,10 @@ class TimeBin:
         self.parent = parent
         self.identifier = i
         self.data = val
+
+    @property
+    def ancestors(self):
+        return get_ancestors(self)
 
     #  TODO: parametrize methods below
     @staticmethod
