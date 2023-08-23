@@ -95,5 +95,16 @@ def find_ancestor_attribute(obj, attr_name):
         current_obj = current_obj.parent
         if hasattr(current_obj, attr_name):
             return getattr(current_obj, attr_name)
-
     return None
+
+
+def get_ancestors(obj):
+    to_return = []
+    current = obj
+    while True:
+        if hasattr(current, 'parent'):
+            to_return.append(current.parent)
+            current = current.parent
+        else:
+            break
+    return to_return

@@ -4,9 +4,7 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import numpy as np
-from copy import deepcopy
 
-from context import data_type_context as dt_context, neuron_type_context as nt_context
 from data import Data
 from matlab_interface import MatlabInterface
 from utils import cache_method
@@ -30,12 +28,6 @@ TRIAL_DURATION = 1
 
 
 class Level(Data):
-    data_type_context = dt_context
-    neuron_type_context = nt_context
-
-    @property
-    def data(self):
-        return getattr(self, f"get_{self.data_type}")()
 
     @property
     def time_bins(self):
@@ -276,8 +268,9 @@ class Unit(Level):
 
     def update_children(self):
         self.periods = {'tone': [], 'pretone': []}
-        selected_trial_indices = list(range(NUM_TRIALS))[slice(*self.data_opts['trials'])]
-        num_periods = len(set([trial // TONES_PER_PERIOD for trial in range(*self.data_opts['trials'])]))
+        trials = self.data_opts.get('trials', (1, 150))
+        selected_trial_indices = list(range(NUM_TRIALS))[slice(*trials)]
+        num_periods = len(set([trial // TONES_PER_PERIOD for trial in range(*trials)]))
         for i in range(num_periods):
             trials = [trial for trial in selected_trial_indices if trial // TONES_PER_PERIOD == i]
             for period_type in ['tone', 'pretone']:
@@ -321,7 +314,8 @@ class Period(Level):
         if self.period_type == 'pretone':
             pip_onsets -= TONE_PERIOD_DURATION * SAMPLING_RATE
         self.start = pip_onsets[0]
-        pre_stim, post_stim = (self.data_opts.get(opt) * SAMPLING_RATE for opt in ['pre_stim', 'post_stim'])
+        pre_stim, post_stim = (self.data_opts.get(opt, default) * SAMPLING_RATE
+                               for opt, default in [('pre_stim', 0), ('post_stim', 1)])
         # TODO: check that i is the right value here (original index)
         for i, start in enumerate(pip_onsets):
             for spike_type, pre, post in [(self.trials, pre_stim, post_stim),

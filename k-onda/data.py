@@ -1,7 +1,12 @@
 from copy import deepcopy
+from utils import get_ancestors
+from context import data_type_context as dt_context, neuron_type_context as nt_context
 
 
 class Base:
+
+    data_type_context = dt_context
+    neuron_type_context = nt_context
 
     @property
     def data_opts(self):
@@ -37,6 +42,10 @@ class Base:
     def neuron_types(self):
         return ['IN', 'PN']
 
+    @property
+    def ancestors(self):
+        return get_ancestors(self)
+
 
 class Data(Base):
 
@@ -44,13 +53,8 @@ class Data(Base):
         for child in self.children:
             yield child
 
-    def find_ancestor_attribute(self, attr_name):
-        current_obj = self
+    @property
+    def data(self):
+        return getattr(self, f"get_{self.data_type}")()
 
-        while hasattr(current_obj, 'parent'):
-            current_obj = current_obj.parent
-            if hasattr(current_obj, attr_name):
-                return getattr(current_obj, attr_name)
-
-        return None
 

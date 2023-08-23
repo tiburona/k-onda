@@ -40,8 +40,9 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
                  False}
 
 LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time': 'period', 'brain_region': 'pl',
-            'fb': ['theta_1'], 'row_type': 'frequency_period', 'frequency': 'continuous', 'data_type': 'mrl',
-            'pretone_trials': True}
+            'fb': ['theta_1'], 'row_type': 'frequency_period', 'frequency_type': 'continuous', 'data_type': 'mrl',
+            'pretone_trials': True, 'frequency_band': 'theta_1', 'pre_stim': 0, 'post_stim': 0.65, 'trials': (0, 150),
+            'phase': 'wavelet'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',

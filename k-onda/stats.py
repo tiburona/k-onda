@@ -4,7 +4,6 @@ import csv
 import os
 
 from data import Base
-from lfp import LFPAnimal, FrequencyPeriod, FrequencyBin, TimeBin as FrequencyTimeBin, FrequencyUnit, initialize_lfp
 from utils import find_ancestor_attribute
 
 
@@ -81,19 +80,12 @@ class Stats(Base):
 
     def make_df(self, name):
         self.set_attributes()
-        self.initialize_data()
         df = pd.DataFrame(self.rows)
         vs = ['unit_num', 'animal', 'category', 'group', 'two_way_split', 'three_way_split', 'frequency']
         for var in vs:
             if var in df:
                 df[var] = df[var].astype('category')
         self.dfs[name] = df
-
-    def initialize_data(self):
-        if 'lfp' in self.data_class:
-            initialize_lfp()
-            if self.data_opts['frequency'] == 'continuous' or self.data_type == 'mrl':  # TODO: change the name of row_type
-                FrequencyPeriod.initialize_data()
 
     def get_rows(self):
         other_attributes = ['period_type']
@@ -116,24 +108,20 @@ class Stats(Base):
 
     def get_data(self, level, inclusion_criteria, other_attributes):
         rows = []
-        srcs = getattr(self.experiment, f'all_{level}s')
+        entities = getattr(self.experiment, f'all_{level}s')
         if self.data_opts['time'] == 'continuous':
-            srcs = [time_bin for entity in srcs for time_bin in entity.time_bins]
-        srcs = [src for src in srcs if all([criterion(src) for criterion in inclusion_criteria])]
+            sources = [time_bin for entity in entities for time_bin in entity.time_bins]
+        sources = [source for source in sources if all([criterion(source) for criterion in inclusion_criteria])]
 
-        for src in srcs:
-            row_dict = {self.data_col: src.data}
-            current_src = src
-            while True:
-                row_dict[current_src.name] = current_src.identifier
+        for source in sources:
+            row_dict = {self.data_col: source.data}
+            source_with_ancestors = [source + source.ancestors]
+            for src in source_with_ancestors:
+                row_dict[src.name] = src.identifier
                 for attr in other_attributes:
-                    val = getattr(current_src, attr) if hasattr(current_src, attr) else None
+                    val = getattr(src, attr) if hasattr(src, attr) else None
                     if val is not None:
                         row_dict[attr] = val
-                if hasattr(current_src, 'parent') and current_src.parent is not None:
-                    current_src = current_src.parent  # Go one level up to the parent
-                else:
-                    break  # Stop the loop if there is no parent
             rows.append(row_dict)
         return rows
 

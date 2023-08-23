@@ -3,12 +3,12 @@ import pickle
 from scipy.signal import cwt, morlet
 from neo.rawio import BlackrockRawIO
 
-from spike import Animal, Unit
-from proxy import Proxy
 from data import Data
-from context import data_type_context
 from matlab_interface import MatlabInterface
 from math_functions import *
+from initialize_experiment import experiment
+from utils import get_ancestors
+from opts_library import LFP_OPTS
 
 SAMPLING_RATE = 30000
 TONES_PER_PERIOD = 30  # The pip sounds 30 times in a tone period
@@ -22,163 +22,116 @@ LO_FREQ_ARGS = (2048, 2000, 1000, 980, 2)
 FREQUENCY_ARGS = {fb: LO_FREQ_ARGS for fb in ['delta', 'theta_1', 'theta_2', 'delta_theta']}
 
 
-def initialize_lfp():
-    return [LFPAnimal(animal) for animal in Animal.instances]
-
-
-class LFP(Data):
-
-    instances = []
-    data_type_context = data_type_context
-
-    @property
-    def data(self):
-        return getattr(self, f"get_{self.data_type}")()
-
+class LFPData(Data):
+    
     @property
     def brain_region(self):
         return self.data_opts.get('brain_region')
 
-    @classmethod
-    def update(cls, context):
-        pass
+    @property
+    def frequency_bins(self):
+        return [FrequencyBin(i, data_point, self) for i, data_point in enumerate(self.data)]
+
+    @property
+    def time_bins(self):
+        tbs = []
+        if len(self.data.shape) > 1:
+            for i, data_point in enumerate(range(self.data.shape[1])):
+                column = self.data[:, i]
+                TimeBin(i, column, self)
+                tbs.append(TimeBin)
+            return tbs
+        else:
+            return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
+
+    @property
+    def current_frequency_band(self):
+        return self.data_opts.get('frequency_band')
 
 
-class LFPAnimal(LFP, Proxy):
-    """A wrapper around the spike_data.Animal class.  Collects raw LFP data for an animal, and divides it into Periods,
-    as well as initializing FrequencyPeriods, subsets of the data for a Period for a given frequency range."""
+class LFPExperiment(LFPData):
 
-    instances = []
+    name = 'experiment'
+
+    def __init__(self):
+        self.experiment = experiment
+        self.all_animals = [LFPAnimal(animal) for animal in self.experiment.all_animals]
+        self.all_periods = [period for animal in self.all_animals for stage in animal.periods
+                            for period in animal.periods[stage]]
+
+    @property
+    def all_mrl_calculators(self):
+        mrl_calculators = []
+        for period in self.all_periods:
+            for unit in self.experiment.all_units:
+                mrl_calculators.append(MRLCalculator(unit, period))
+        return mrl_calculators
+
+
+class LFPAnimal(LFPData):
+    """An animal in the experiment. Processes the raw LFP data and divides it into periods."""
+
+    name = 'animal'
 
     def __init__(self, animal):
-        self.instances.append(self)
-        Proxy.__init__(self, animal, Animal)
-        self.raw_lfp = self.initialize_lfp_data()
-        self.frequency_args = set(tuple(args) for fb, args in FREQUENCY_ARGS.items() if fb in self.data_opts['fb'])
-        self.periods = self.prepare_periods()
-        self.frequency_periods = self.prepare_frequency_periods()
-        self.units = [LFPUnit(unit, self) for unit in self._target_instance]
+        self.animal = animal
+        file_path = os.path.join(self.data_opts['data_path'], 'single_cell_data', self.animal.identifier, 'Safety')
 
-    def initialize_lfp_data(self):
-        file_path = os.path.join(self.data_opts['data_path'], 'single_cell_data', self.identifier, 'Safety')
         reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
         reader.parse_header()
-        return {'hpc': reader.nsx_datas[3][0][:, 0], 'bla': reader.nsx_datas[3][0][:, 2],
-                'pl': np.mean([reader.nsx_datas[3][0][:, 1], reader.nsx_datas[3][0][:, 3]], axis=0)}
+
+        self.raw_lfp_unique_name = {
+            'hpc': reader.nsx_datas[3][0][:, 0],
+            'bla': reader.nsx_datas[3][0][:, 2],
+            'pl': np.mean([reader.nsx_datas[3][0][:, 1], reader.nsx_datas[3][0][:, 3]], axis=0)
+        }
+
+        self.frequency_args = set(tuple(args) for fb, args in FREQUENCY_ARGS.items() if fb in self.data_opts['fb'])
+        self.periods = self.prepare_periods()
 
     def prepare_periods(self):
-        periods = []
-        onsets = [int(onset * LFP_SAMPLING_RATE / SAMPLING_RATE) for onset in self.tone_period_onsets]
+        periods = {'tone': [], 'pretone': []}
+        onsets = [int(onset * LFP_SAMPLING_RATE / SAMPLING_RATE) for onset in self.animal.tone_period_onsets]
         stage_intervals = {'tone': [(tpo - LFP_SAMPLING_RATE, tpo + (TONE_PERIOD_DURATION + 1) * LFP_SAMPLING_RATE)
                            for tpo in onsets],
                            'pretone': [(tpo - LFP_SAMPLING_RATE - 1 - ((TONE_PERIOD_DURATION + 2) * LFP_SAMPLING_RATE),
                                         tpo - LFP_SAMPLING_RATE - 1) for tpo in onsets]
                            }
-        raw = self.raw_lfp[self.brain_region]
+        raw = self.raw_lfp_unique_name[self.brain_region]
         for arg_set in self.frequency_args:
             for key in stage_intervals:
                 for i, period in enumerate(stage_intervals[key]):
-                    periods.append(LFPPeriod(raw[slice(*period)], i, key, self, arg_set))
+                    periods[key].append(LFPPeriod(raw[slice(*period)], i, key, self, arg_set))
         return periods
 
-    def prepare_frequency_periods(self):
-        freq_periods = {}
-        frequency_bands = [fb for fb in FREQUENCY_BANDS if fb in self.data_opts['fb']]
-        for fb in frequency_bands:
-            arg_set = FREQUENCY_ARGS[fb]
-            freq_periods[fb] = [FrequencyPeriod(period, fb) for period in self.periods if period.arg_set == arg_set]
-        return freq_periods
 
-    def normalize_average_power(self):
-        normalized_power = {}
-        frequency_bands = [fb for fb in FREQUENCY_BANDS if fb in self.data_opts['fb']]
-        for fb in frequency_bands:
-            tone_power, pretone_power = [np.array([p.average_power for p in self.frequency_periods[fb]
-                                                   if p.period_type == stage]) for stage in ('tone', 'pretone')]
-            normalized_power[fb] = tone_power - pretone_power
-        return normalized_power
+class LFPDataSelector:
 
-
-class LFPPeriod(LFP):
-    """An interval in the experiment. Preprocesses data and initiates calls to Matlab to get the cross-spectrogram."""
-    def __init__(self, raw_data, index, period_type, animal, arg_set):
-        self.raw_data = raw_data
-        self.identifier = index
-        self.animal = animal
-        self.arg_set = arg_set
-        self.processed_data = self.process_lfp(raw_data)
-        self.mrl_data = self.processed_data[LFP_SAMPLING_RATE:-LFP_SAMPLING_RATE]
-        self.period_type = period_type
-        self.parent = animal
+    """A class with methods shared by LFPPeriod and LFPTrial that are used to return portions of their data."""
 
     @property
-    def spectrogram(self):
-        return self.calc_cross_spectrogram(self.processed_data)
+    def freq_range(self):
+        return FREQUENCY_BANDS[self.current_frequency_band]
 
-    @staticmethod
-    def process_lfp(raw):
-        filtered = filter_60_hz(raw, 2000)
-        return divide_by_rms(filtered)
+    @property
+    def frequency_bins(self):
+        return [FrequencyBin(i, data_point, self) for i, data_point in enumerate(self.data)]
 
-    def calc_cross_spectrogram(self, data):
-        pickle_path = os.path.join(self.data_opts['data_path'], 'lfp', '_'.join(
-                [self.animal.identifier, self.data_opts['brain_region']] +
-                [str(arg) for arg in self.arg_set] +
-                [self.period_type, str(self.identifier)]) + '.pkl')
-        if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
-            with open(pickle_path, 'rb') as f:
-                return pickle.load(f)
-        ml = MatlabInterface()
-        result = ml.mtcsg(data, *FREQUENCY_ARGS[self.data_opts['fb']])
-        with open(pickle_path, 'wb') as f:
-            pickle.dump(result, f)
-        return result
+    @property
+    def time_bins(self):
+        return [TimeBin(i, data_column, self) for i, data_column in enumerate(self.data.T)]
 
+    @property
+    def mean_over_time_bins(self):
+        return np.mean(self.data, axis=1)
 
-class LFPUnit(LFP, Proxy):
-    """A wrapper around the spike_data.Unit class."""
-    instances = []
+    @property
+    def mean_over_frequency(self):
+        return np.mean(self.data, axis=0)
 
-    def __init__(self, unit, lfp_animal):
-        Proxy.__init__(self, unit, Unit)
-        super().__init__()
-        self.parent = lfp_animal
-
-
-class TrialCalculatorMixin:
-    """Defines methods shared by FrequencyPeriod and FrequencyBin to subdivide themselves into trials and get
-    averages. """
-    def get_trials(self):
-        starts = np.arange(.75, 30.5, 1)
-        time_bins = np.array(self.period.spectrogram[2])
-        trials = []
-        for start in starts:
-            trial_times = np.linspace(start, start + .64, 65)
-            mask = (np.abs(time_bins[:, None] - trial_times) <= 1e-6).any(axis=1)
-            trials.append(np.array(self.time_series)[mask])
-        return trials
-
-    def get_average_over_trials(self):
-        return np.mean(self.get_trials(), axis=0)
-
-    def get_average_over_time_bins(self):
-        return np.mean(self.get_average_over_trials())
-
-
-class FrequencyPeriod(LFP, Proxy, TrialCalculatorMixin):
-    """A FrequencyPeriod is a Period with selected frequency range. This class slices a cross-spectrogram into its
-      appropriate frequency range and its constituent trials, and calculates averages over those trials. It is the parent
-      of FrequencyBin."""
-
-    instances = []
-    name = 'period'  # So named for later merging with spike data
-
-    def __init__(self, period, fb):
-        Proxy.__init__(self, period, LFPPeriod)
-        self.instances.append(self)
-        self.fb = fb
-        self.freq_range = FREQUENCY_BANDS[fb]
-        self.widths = None
+    @property
+    def mean(self):
+        return np.mean(self.data)
 
     def slice_spectrogram(self):
         indices = np.where(self.spectrogram[1] <= self.freq_range[0])
@@ -186,106 +139,178 @@ class FrequencyPeriod(LFP, Proxy, TrialCalculatorMixin):
         ind2 = np.argmax(self.spectrogram[1] > self.freq_range[1])  # first index >= end of freq range
         return self.spectrogram[0][ind1:ind2, :]
 
-    def get_power(self):
-        if self.data_opts['frequency'] == 'continuous':
-            [FrequencyBin(i, data, self) for i, data in enumerate(self.slice_spectrogram())]
-        return self.get_average_over_time_bins()  # TODO: Make this more general when I want to get other kinds of data
+
+class LFPPeriod(LFPData, LFPDataSelector):
+    """A block in the experiment. Preprocesses data, initiates calls to Matlab to get the cross-spectrogram, and
+    generates LFPTrials. Inherits from LFPSelector to be able to return portions of its data."""
+
+    name = 'period'
+
+    def __init__(self, raw_data, index, period_type, lfp_animal, arg_set):
+        self.raw_data = raw_data
+        self.identifier = index
+        self.lfp_animal = lfp_animal
+        self.arg_set = arg_set
+        self.processed_data = self.process_lfp(raw_data)
+        self.mrl_data = self.processed_data[LFP_SAMPLING_RATE:-LFP_SAMPLING_RATE]
+        self.period_type = period_type
+        self.parent = lfp_animal
 
     @property
-    def time_series(self):
-        return np.mean(self.slice_spectrogram(), axis=0)
+    def trials(self):
+        self.get_trials()
 
-    def get_wavelets(self):
-        self.widths = np.arange(1, 100)  # range of scales
-        return cwt(self.processed_data, morlet, self.widths)
+    @property
+    def spectrogram(self):
+        return self.calc_cross_spectrogram()
 
-    def get_wavelet_phases(self, frequency):
-        cwt_matrix = self.get_wavelets()
-        if frequency == 0:
-            frequency += 10 ** -6
-        scale_idx = np.argmin(np.abs(self.widths - (LFP_SAMPLING_RATE / frequency)))
-        return np.angle(cwt_matrix[scale_idx, :])
+    def get_trials(self):
+        starts = np.arange(.75, 30.5, 1)
+        time_bins = np.array(self.spectrogram[2])
+        trials = []
+        for start in starts:
+            trial_times = np.linspace(start, start + .64, 65)
+            mask = (np.abs(time_bins[:, None] - trial_times) <= 1e-6).any(axis=1)
+            trials.append(LFPTrial(trial_times, mask, self))
+        return trials
 
-    def get_weights(self, unit):
-        spike_period = unit.periods[self.period_type][self.identifier]
-        spikes, start, end = spike_period.get_spikes(border=0)
-        spikes = [int((spike - start) / (SAMPLING_RATE / LFP_SAMPLING_RATE)) for spike in spikes]
-        weights_length = int((end - start) / (SAMPLING_RATE / LFP_SAMPLING_RATE))
-        return np.array([1 if weight in spikes else float('nan') for weight in range(weights_length)])
+    @staticmethod
+    def process_lfp(raw):
+        filtered = filter_60_hz(raw, 2000)
+        return divide_by_rms(filtered)
 
-    def get_mrl(self):
-        unit_mrls = [self.mrl(unit.update_children()) for unit in self.animal]
-        return np.mean(unit_mrls)
+    def calc_cross_spectrogram(self):
+        pickle_path = os.path.join(self.data_opts['data_path'], 'lfp', '_'.join(
+                [self.lfp_animal.animal.identifier, self.data_opts['brain_region']] +
+                [str(arg) for arg in self.arg_set] +
+                [self.period_type, str(self.identifier)]) + '.pkl')
+        if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
+            with open(pickle_path, 'rb') as f:
+                return pickle.load(f)
+        ml = MatlabInterface()
+        result = ml.mtcsg(self.processed_data, *FREQUENCY_ARGS[self.data_opts['frequency']])
+        with open(pickle_path, 'wb') as f:
+            pickle.dump(result, f)
+        return result
 
-    def mrl(self, unit):
-        fb = FREQUENCY_BANDS[self.fb]
-        weights = self.get_weights(unit)
-        if self.data_opts.get('phase') == 'wavelet':
-            alpha = np.array([self.get_phases(frequency) for frequency in range(*fb)])
-        else:
-            low = fb[0] if fb[0] > 0 else .1
-            high = fb[1]
-            alpha = compute_phase(bandpass_filter(self.mrl_data, low, high, LFP_SAMPLING_RATE))
-        mrl = circ_r2_unbiased(alpha, weights)
-        if mrl.shape[0] > 1:
-            for i, frequency in enumerate(range(*fb)):
-                FrequencyUnit(unit, self, frequency, mrl[i])
-        else:
-            FrequencyUnit(unit, self, FREQUENCY_BANDS[self.fb], mrl[0])
-        return mrl
+    def get_power(self):
+        power = np.mean([trial.data for trial in self.get_trials()], axis=0)
+        if self.data_opts.get('adjustment') == 'normalize' and self.period_type == 'tone':
+            power -= self.animal.periods['pretone'][self.identifier].get_power()
+        return power
 
 
-class FrequencyBin(LFP, TrialCalculatorMixin):
-    """A FrequencyBin contains a slice of cross-spectrogram at the smallest available frequency resolution."""
+class LFPTrial(LFPData, LFPDataSelector):
+
+    name = 'trial'
+
+    def __init__(self, trial_times, mask, parent):
+        self.trial_times = trial_times
+        self.mask = mask
+        self.parent = parent
+        self.spectrogram = self.parent.spectrogram
+
+    def get_power(self):
+        return np.array(self.slice_spectrogram())[:, self.mask]
+
+
+class FrequencyBin(LFPData):
+    """A FrequencyBin contains a slice of cross-spectrogram or mrl calculation at the smallest available frequency
+    resolution."""
 
     name = 'frequency_bin'
-    instances = []
 
-    def __init__(self, index, data, frequency_period):
-        super().__init__()
-        self.parent = frequency_period
-        self.period = self.parent.period
+    def __init__(self, index, data, parent, unit=None):
+        self.parent = parent
+        self.data = data
+        if isinstance(parent, LFPPeriod):
+            self.identifier = self.period.spectrogram[1][index]
+        else:  # parent is MRLCalculator
+            self.identifier = list(range(self.current_frequency_band))[index]
         self.period_type = self.parent.period_type
-        self.identifier = self.period.spectrogram[1][index]
-        self.fb = self.parent.fb
-        self.children = None
-        self.time_series = data
-
-    @property
-    def data(self):
-        if self.data_opts['time'] == 'continuous':
-            self.children = [TimeBin(i, power, self) for i, power in enumerate(self.get_average_over_trials())]
-        return self.get_average_over_time_bins()
-
-
-class FrequencyUnit(LFPUnit):
-    """A FrequencyUnit contains a representation of the MRL calculation for a given Unit and a given frequency."""
-
-    instances = []
-
-    def __init__(self, lfp_unit, period, frequency, mrl):
-        Proxy.__init__(self, lfp_unit, LFPUnit)
-        self.instances.append(self)
-        self.frequency = frequency  # integer (single frequency) or a range (average over frequencies)
-        self.period = period
-        self.parent = period
-        self.mrl = mrl
-
-    def get_mrl(self):
-        return self.mrl
+        self.unit = unit
 
 
 class TimeBin:
 
     name = 'time_bin'
-    instances = []
 
-    def __init__(self, i, power, parent):
-        self.instances.append(self)
+    def __init__(self, i, data, parent):
         self.parent = parent
         self.period_type = self.parent.period_type
         self.identifier = i
-        self.data = power
+        self.data = data
 
 
+class MRLCalculator(LFPData):
+    """Calculates the Mean Resultant Length of the vector that represents the phase of a frequency in the LFP data on
+    the occasion the firing of a neuron. MRL """
+
+    def __init__(self, unit, period):
+        self.unit = unit
+        self.period = period
+        self.period_type = period.period_type
+        self.parent = self.unit.parent
+        self.identifier = f"{period.identifier}_{unit.identifier}"
+
+    @property
+    def ancestors(self):
+        return get_ancestors(self.period).append(self.unit)
+    
+    @property
+    def mean_over_frequency(self):
+        return np.mean(self.data, axis=0)
+
+    @property
+    def frequency_bins(self):
+        return [FrequencyBin(i, data, self, unit=self.unit) for i, data in enumerate(self.data)]
+
+    def get_weights(self):
+        spike_period = self.unit.periods[self.period_type][self.period.identifier]
+        spikes = [int((spike + i) * LFP_SAMPLING_RATE) for i, trial in enumerate(spike_period.trials) for spike in
+                  trial.spikes]
+
+        return np.array(
+            [1 if weight in spikes else float('nan') for weight in range(TONES_PER_PERIOD * LFP_SAMPLING_RATE)])
+
+    def get_wavelet_phases(self, frequency):
+        """Get wavelet phases for a specific frequency."""
+        scale = get_wavelet_scale(frequency, LFP_SAMPLING_RATE)
+
+        # Compute the continuous wavelet transform
+        cwt_matrix = cwt(self.period.mrl_data, morlet, [scale])
+
+        if frequency == 0:
+            frequency += 10 ** -6
+
+        # Since we're computing the CWT for only one scale, the result is at index 0.
+        return np.angle(cwt_matrix[0, :])
+
+    def get_mrl(self):
+        """Compute mean resultant length for the desired frequency band."""
+        fb = FREQUENCY_BANDS[self.current_frequency_band]
+        weights = self.get_weights()
+        low = fb[0] + .1
+        high = fb[1]
+        if self.data_opts.get('phase') == 'wavelet':
+            alpha = np.array([self.get_wavelet_phases(frequency)
+                              for frequency in np.linspace(low, high, int(high - low) + 1)])
+        else:
+            alpha = compute_phase(bandpass_filter(self.period.mrl_data, low, high, LFP_SAMPLING_RATE))
+
+        return circ_r2_unbiased(alpha, weights, dim=1)
+
+
+experiment.data_opts = LFP_OPTS
+
+lfp_experiment = LFPExperiment()
+
+lfp_experiment.all_periods
+
+#lfp_experiment.all_periods[0].data
+
+lfp_experiment.all_mrl_calculators[0].data
+
+
+a = 'foo'
 

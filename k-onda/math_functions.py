@@ -98,6 +98,12 @@ def compute_phase(data):
     return np.angle(analytic_signal)
 
 
+def get_wavelet_scale(frequency, sampling_rate, fc=1.0):
+    """Compute the wavelet scale for a given frequency using Morlet wavelet relationship."""
+    delta = 1 / sampling_rate  # Sampling period
+    return int(fc / (frequency * delta))
+
+
 def circ_r2_unbiased(alpha, w=None, dim=0):
     if w is None:
         w = np.ones_like(alpha)
@@ -121,6 +127,9 @@ def circ_r2_unbiased(alpha, w=None, dim=0):
 
     if isinstance(r, float):
         r = np.array([r])
+
+    # Reshape n to ensure it's broadcastable to r
+    n = np.broadcast_to(n, r.shape)
     r[n < 2] = np.nan
 
     return r
