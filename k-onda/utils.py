@@ -99,12 +99,12 @@ def find_ancestor_attribute(obj, attr_name):
 
 
 def get_ancestors(obj):
-    to_return = []
-    current = obj
-    while True:
-        if hasattr(current, 'parent'):
-            to_return.append(current.parent)
-            current = current.parent
-        else:
-            break
-    return to_return
+    """Fetch all ancestors."""
+
+    if not hasattr(obj, 'parent'):
+        return []
+
+    # Include the current object and then get the ancestors of its parent
+    return [obj] + obj.parent.ancestors
+
+

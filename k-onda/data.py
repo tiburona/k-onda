@@ -1,6 +1,6 @@
 from copy import deepcopy
-from utils import get_ancestors
 from context import data_type_context as dt_context, neuron_type_context as nt_context
+from utils import get_ancestors
 
 
 class Base:
@@ -42,9 +42,6 @@ class Base:
     def neuron_types(self):
         return ['IN', 'PN']
 
-    @property
-    def ancestors(self):
-        return get_ancestors(self)
 
 
 class Data(Base):
@@ -56,5 +53,9 @@ class Data(Base):
     @property
     def data(self):
         return getattr(self, f"get_{self.data_type}")()
+
+    @property
+    def ancestors(self):
+        return get_ancestors(self)
 
 

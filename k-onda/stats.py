@@ -5,6 +5,7 @@ import os
 
 from data import Base
 from utils import find_ancestor_attribute
+from lfp import LFPExperiment
 
 
 class Stats(Base):
@@ -15,7 +16,8 @@ class Stats(Base):
         self.data_opts = data_opts
         self.neuron_type_context = neuron_type_context
         self.dfs = {}
-        self.time_type = self.data_opts.get('time')
+        self.time_type = self.data_opts.get('time_type')
+        self.lfp = None
         self.data_col = None
         self.num_time_points = None
         self.spreadsheet_fname = None
@@ -32,6 +34,7 @@ class Stats(Base):
     def set_attributes(self):
         self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
         if self.data_class == 'lfp':
+            self.lfp = LFPExperiment(self.experiment)
             self.data_col = f"{self.current_frequency_band}_{self.data_type}"
             self.lfp_brain_region = self.data_opts['brain_region']
         else:
@@ -68,7 +71,7 @@ class Stats(Base):
                 self.frequency_bands = self.data_opts['fb']
                 for fb in self.data_opts['fb']:
                     self.current_frequency_band = fb
-                    self.make_df(f"{name}_{fb}")
+                    self.make_df(f"lfp_{fb}")
             else:
                 self.make_df(name)
         common_columns = set(list(self.dfs.values())[0].columns)
@@ -92,7 +95,7 @@ class Stats(Base):
         inclusion_criteria = []
         if 'lfp' in self.data_class:
             if self.data_type == 'mrl':
-                level = 'frequency_unit'
+                level = 'mrl_calculator'
                 other_attributes += ['frequency', 'fb', 'neuron_type']
             else:
                 level = 'frequency_bin' if self.data_opts['frequency'] == 'continuous' else 'frequency_period'
@@ -108,15 +111,17 @@ class Stats(Base):
 
     def get_data(self, level, inclusion_criteria, other_attributes):
         rows = []
-        entities = getattr(self.experiment, f'all_{level}s')
-        if self.data_opts['time'] == 'continuous':
-            sources = [time_bin for entity in entities for time_bin in entity.time_bins]
+        experiment = self.lfp if self.data_class == 'lfp' else self.experiment
+        sources = getattr(experiment, f'all_{level}s')
+        if self.data_opts.get('frequency_type') == 'continuous':
+            sources = [frequency_bin for source in sources for frequency_bin in source.frequency_bins]
+        if self.data_opts.get('time_type') == 'continuous':
+            sources = [time_bin for source in sources for time_bin in source.time_bins]
         sources = [source for source in sources if all([criterion(source) for criterion in inclusion_criteria])]
 
         for source in sources:
             row_dict = {self.data_col: source.data}
-            source_with_ancestors = [source] + source.ancestors
-            for src in source_with_ancestors:
+            for src in source.ancestors:
                 row_dict[src.name] = src.identifier
                 for attr in other_attributes:
                     val = getattr(src, attr) if hasattr(src, attr) else None
@@ -132,10 +137,16 @@ class Stats(Base):
         name = df_name
         if df_name not in self.dfs:
             self.make_df(df_name)
+        frequency, time = (self.data_opts.get(attr) if self.data_opts.get(attr) else ''
+                           for attr in ['frequency_type', 'time_type'])
+        name += '_'.join([frequency, time, row_type + 's'])
         if 'lfp' in name:
             path = os.path.join(path, 'lfp')
             name += f"_{self.lfp_brain_region}"
-        fname = os.path.join(path, '_'.join([name, self.time_type, row_type + 's']) + '.csv')
+            if 'phase' in self.data_opts:
+                name += f"_{self.data_opts['phase']}"
+        name.replace('lfp_', '')
+        fname = os.path.join(path, name + '.csv')
         self.spreadsheet_fname = fname
 
         with open(fname, 'w', newline='') as f:

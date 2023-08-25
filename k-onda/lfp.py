@@ -6,9 +6,7 @@ from neo.rawio import BlackrockRawIO
 from data import Data
 from matlab_interface import MatlabInterface
 from math_functions import *
-from initialize_experiment import experiment
 from utils import get_ancestors
-from opts_library import LFP_OPTS
 
 SAMPLING_RATE = 30000
 TONES_PER_PERIOD = 30  # The pip sounds 30 times in a tone period
@@ -53,7 +51,7 @@ class LFPExperiment(LFPData):
 
     name = 'experiment'
 
-    def __init__(self):
+    def __init__(self, experiment):
         self.experiment = experiment
         self.all_animals = [LFPAnimal(animal) for animal in self.experiment.all_animals]
         self.all_periods = [period for animal in self.all_animals for stage in animal.periods
@@ -88,6 +86,7 @@ class LFPAnimal(LFPData):
 
         self.frequency_args = set(tuple(args) for fb, args in FREQUENCY_ARGS.items() if fb in self.data_opts['fb'])
         self.periods = self.prepare_periods()
+        self.identifier = self.animal.identifier
 
     def prepare_periods(self):
         periods = {'tone': [], 'pretone': []}
@@ -220,15 +219,19 @@ class FrequencyBin(LFPData):
 
     name = 'frequency_bin'
 
-    def __init__(self, index, data, parent, unit=None):
+    def __init__(self, index, val, parent, unit=None):
         self.parent = parent
-        self.data = data
+        self.val = val
         if isinstance(parent, LFPPeriod):
             self.identifier = self.period.spectrogram[1][index]
-        else:  # parent is MRLCalculator
-            self.identifier = list(range(self.current_frequency_band))[index]
+        else:  # parent is MRLCalculator  # TODO: this is really an approximation of what frequencies these actually were; make more exact
+            self.identifier = list(range(*FREQUENCY_BANDS[self.current_frequency_band]))[index]
         self.period_type = self.parent.period_type
         self.unit = unit
+
+    @property
+    def data(self):
+        return self.val
 
 
 class TimeBin:
@@ -246,6 +249,8 @@ class MRLCalculator(LFPData):
     """Calculates the Mean Resultant Length of the vector that represents the phase of a frequency in the LFP data on
     the occasion the firing of a neuron. MRL """
 
+    name = 'mrl_calculator'
+
     def __init__(self, unit, period):
         self.unit = unit
         self.period = period
@@ -255,8 +260,9 @@ class MRLCalculator(LFPData):
 
     @property
     def ancestors(self):
-        return get_ancestors(self.period).append(self.unit)
-    
+        custom_ancestors = [self.unit] + [self.period]
+        return [self] + custom_ancestors + self.parent.ancestors
+
     @property
     def mean_over_frequency(self):
         return np.mean(self.data, axis=0)
@@ -301,16 +307,4 @@ class MRLCalculator(LFPData):
         return circ_r2_unbiased(alpha, weights, dim=1)
 
 
-experiment.data_opts = LFP_OPTS
-
-lfp_experiment = LFPExperiment()
-
-lfp_experiment.all_periods
-
-#lfp_experiment.all_periods[0].data
-
-lfp_experiment.all_mrl_calculators[0].data
-
-
-a = 'foo'
 
