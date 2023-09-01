@@ -42,6 +42,13 @@ class Base:
     def neuron_types(self):
         return ['IN', 'PN']
 
+    @property
+    def current_frequency_band(self):
+        return self.data_opts.get('frequency_band')
+
+    @current_frequency_band.setter
+    def current_frequency_band(self, frequency_band):
+        self.data_opts['frequency_band'] = frequency_band
 
 
 class Data(Base):

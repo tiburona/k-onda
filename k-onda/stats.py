@@ -14,75 +14,39 @@ class Stats(Base):
         self.experiment = experiment
         self.data_type_context = data_type_context
         self.data_opts = data_opts
+        self.lfp = LFPExperiment(experiment)
         self.neuron_type_context = neuron_type_context
         self.dfs = {}
-        self.time_type = self.data_opts.get('time_type')
-        self.lfp = None
         self.data_col = None
-        self.num_time_points = None
         self.spreadsheet_fname = None
         self.results_path = None
         self.script_path = None
-        self.lfp_brain_region = None
-        self.frequency_bands = None
         self.current_frequency_band = None
 
     @property
     def rows(self):
         return self.get_rows()
 
-    def set_attributes(self):
-        self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
+    def set_attributes(self, fb=None):
         if self.data_class == 'lfp':
-            self.lfp = LFPExperiment(self.experiment)
+            self.current_frequency_band = fb
             self.data_col = f"{self.current_frequency_band}_{self.data_type}"
-            self.lfp_brain_region = self.data_opts['brain_region']
         else:
             self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
-            pre_stim, post_stim, bin_size = (self.data_opts[k] for k in ('pre_stim', 'post_stim', 'bin_size'))
-            self.num_time_points = int((pre_stim + post_stim) / bin_size)
-
-    def smart_merge(self, keys):
-        # Determine which DataFrame has the most unique key combinations
-        df_items = list(self.dfs.items())  # get a list of (name, DataFrame) pairs
-        df_items.sort(key=lambda item: item[1][list(keys)].drop_duplicates().shape[0], reverse=True)
-
-        # Extract the sorted DataFrames and their names
-        df_names, dfs = zip(*df_items)
-
-        # Start with the DataFrame that has the most unique key combinations
-        result = dfs[0]
-
-        # Merge with all the other DataFrames
-        for df in dfs[1:]:
-            if 'experiment' in df.columns:
-                df = df.drop(columns=['experiment'])
-            result = pd.merge(result, df, how='left', on=keys)
-
-        new_df_name = '_'.join(df_names)
-        self.dfs[new_df_name] = result
-        return new_df_name
 
     def make_dfs(self, opts_dicts):
         name = self.data_type
         for opts in opts_dicts:
             self.data_opts = opts
-            if 'fb' in self.data_opts:
-                self.frequency_bands = self.data_opts['fb']
+            if 'lfp' in self.data_class:
                 for fb in self.data_opts['fb']:
-                    self.current_frequency_band = fb
-                    self.make_df(f"lfp_{fb}")
+                    self.make_df(f"lfp_{fb}", fb=fb)
             else:
                 self.make_df(name)
-        common_columns = set(list(self.dfs.values())[0].columns)
-        for df in self.dfs.values():
-            common_columns &= set(df.columns)
-        common_columns = [col for col in common_columns if col != 'experiment']
-        new_name = self.smart_merge(list(common_columns))
-        return new_name
+        return self.merge_dfs()
 
-    def make_df(self, name):
-        self.set_attributes()
+    def make_df(self, name, fb=None):
+        self.set_attributes(fb=fb)
         df = pd.DataFrame(self.rows)
         vs = ['unit_num', 'animal', 'category', 'group', 'two_way_split', 'three_way_split', 'frequency']
         for var in vs:
@@ -90,7 +54,29 @@ class Stats(Base):
                 df[var] = df[var].astype('category')
         self.dfs[name] = df
 
+    def merge_dfs(self):
+        common_columns = list(set.intersection(*(set(df.columns) for df in self.dfs.values())) - {'experiment'})
+        # Determine which DataFrame has the most unique key combinations
+        df_items = list(self.dfs.items())  # get a list of (name, DataFrame) pairs
+        df_items.sort(key=lambda item: item[1][common_columns].drop_duplicates().shape[0], reverse=True)
+        # Extract the sorted DataFrames and their names
+        df_names, dfs = zip(*df_items)
+        # Start with the DataFrame that has the most unique key combinations
+        result = dfs[0]
+        # Merge with all the other DataFrames
+        for df in dfs[1:]:
+            if 'experiment' in df.columns:
+                df = df.drop(columns=['experiment'])
+            result = pd.merge(result, df, how='left', on=common_columns)
+        new_df_name = '_'.join(df_names)
+        self.dfs[new_df_name] = result
+        return new_df_name
+
     def get_rows(self):
+        """Sets up the level, i.e., the data class from which data will be collected, the other attributes to add to the
+        row, and the inclusion criteria for a member of the data class to be included in the data, then calls
+        self.get_data."""
+
         other_attributes = ['period_type']
         inclusion_criteria = []
         if 'lfp' in self.data_class:
@@ -110,6 +96,9 @@ class Stats(Base):
         return self.get_data(level, inclusion_criteria, other_attributes)
 
     def get_data(self, level, inclusion_criteria, other_attributes):
+        """Collects data from data sources and returns a list of row dictionaries, along with the identifiers of the
+        source and all its ancestors and any other specified attributes of the source or its ancestors."""
+
         rows = []
         experiment = self.lfp if self.data_class == 'lfp' else self.experiment
         sources = getattr(experiment, f'all_{level}s')
@@ -134,26 +123,19 @@ class Stats(Base):
         row_type = self.data_opts['row_type']
         path = path if path else self.data_opts.get('data_path')
         df_name = df_name if df_name else self.data_type
-        name = df_name
         if df_name not in self.dfs:
             self.make_df(df_name)
-        frequency, time = (self.data_opts.get(attr) if self.data_opts.get(attr) else ''
-                           for attr in ['frequency_type', 'time_type'])
-        name += '_'.join([frequency, time, row_type + 's'])
+        frequency, time, phase = (self.data_opts.get(attr) for attr in ['frequency_type', 'time_type', 'phase'])
+        name = '_'.join([attr for attr in [self.data_type, df_name, frequency, time, row_type + 's', phase] if attr])
         if 'lfp' in name:
-            path = os.path.join(path, 'lfp')
-            name += f"_{self.lfp_brain_region}"
-            if 'phase' in self.data_opts:
-                name += f"_{self.data_opts['phase']}"
-        name.replace('lfp_', '')
-        fname = os.path.join(path, name + '.csv')
-        self.spreadsheet_fname = fname
+            path = os.path.join(path, 'lfp', self.data_type)
+            name += f"_{self.data_opts.get('brain_region')}"
+        self.spreadsheet_fname = os.path.join(path, name + '.csv').replace('lfp_', '')
 
-        with open(fname, 'w', newline='') as f:
+        with open(self.spreadsheet_fname, 'w', newline='') as f:
             header = list(self.dfs[df_name].columns)
             writer = csv.DictWriter(f, fieldnames=header)
             writer.writeheader()
-
             for index, row in self.dfs[df_name].iterrows():
                 writer.writerow(row.to_dict())
 

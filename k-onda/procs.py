@@ -67,12 +67,19 @@ def make_lfp_firing_rate_spreadsheet(spreadsheet_opts=None, lfp_opts=None):
 def make_lfp_spreadsheet(lfp_opts=None):
     lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
     stats = Stats(experiment, data_type_context, neuron_type_context, lfp_opts[0])
-    df_name = stats.make_dfs(lfp_opts,)
+    df_name = stats.make_dfs(lfp_opts, )
     stats.make_spreadsheet(df_name)
 
 
-
-
-
-
-
+def make_all_mrl_spreadsheets(lfp_opts=None):
+    lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
+    for brain_region in ['pl', 'bla', 'hpc']:
+        lfp_opts[0]['brain_region'] = brain_region
+        for phase_opt in ['wavelet', None]:
+            lfp_opts[0]['phase'] = phase_opt
+            #for fb in ['delta', 'theta_1', 'theta_2', 'delta', 'gamma', 'hgamma']:
+            for fb in ['gamma', 'hgamma']:
+                lfp_opts[0]['fb'] = [fb]
+                stats = Stats(experiment, data_type_context, neuron_type_context, lfp_opts[0])
+                df_name = stats.make_dfs(lfp_opts,)
+                stats.make_spreadsheet(df_name)

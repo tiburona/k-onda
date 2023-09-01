@@ -6,7 +6,6 @@ from neo.rawio import BlackrockRawIO
 from data import Data
 from matlab_interface import MatlabInterface
 from math_functions import *
-from utils import get_ancestors
 
 SAMPLING_RATE = 30000
 TONES_PER_PERIOD = 30  # The pip sounds 30 times in a tone period
@@ -17,11 +16,11 @@ LFP_SAMPLING_RATE = 2000
 FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
                        hgamma=(70, 120))
 LO_FREQ_ARGS = (2048, 2000, 1000, 980, 2)
-FREQUENCY_ARGS = {fb: LO_FREQ_ARGS for fb in ['delta', 'theta_1', 'theta_2', 'delta_theta']}
-
+FREQUENCY_ARGS = {fb: LO_FREQ_ARGS for fb in ['delta', 'theta_1', 'theta_2', 'delta_theta', 'gamma', 'hgamma']}
+# TODO: gamma and hgamma don't really belong there, find out what their args should be.
 
 class LFPData(Data):
-    
+
     @property
     def brain_region(self):
         return self.data_opts.get('brain_region')
@@ -48,11 +47,12 @@ class LFPData(Data):
 
 
 class LFPExperiment(LFPData):
-
     name = 'experiment'
 
     def __init__(self, experiment):
         self.experiment = experiment
+        self.groups = [LFPGroup(group, self) for group in self.experiment.groups]
+        self.all_groups = self.groups
         self.all_animals = [LFPAnimal(animal) for animal in self.experiment.all_animals]
         self.all_periods = [period for animal in self.all_animals for stage in animal.periods
                             for period in animal.periods[stage]]
@@ -64,6 +64,22 @@ class LFPExperiment(LFPData):
             for unit in self.experiment.all_units:
                 mrl_calculators.append(MRLCalculator(unit, period))
         return mrl_calculators
+
+
+class LFPGroup(LFPData):
+    name = 'group'
+
+    def __init__(self, group, lfp_experiment):
+        self.target = group
+        self.experiment = lfp_experiment
+
+    @property
+    def mrl_calculators(self):
+        return [mrl_calc for mrl_calc in self.experiment.all_mrl_calculators
+                if mrl_calc.period.animal.condition == self.identifier]
+
+    def get_phases(self):
+        return [phase for mrl_calc in self.mrl_calculators for phase in mrl_calc.get_phases()]
 
 
 class LFPAnimal(LFPData):
@@ -92,7 +108,7 @@ class LFPAnimal(LFPData):
         periods = {'tone': [], 'pretone': []}
         onsets = [int(onset * LFP_SAMPLING_RATE / SAMPLING_RATE) for onset in self.animal.tone_period_onsets]
         stage_intervals = {'tone': [(tpo - LFP_SAMPLING_RATE, tpo + (TONE_PERIOD_DURATION + 1) * LFP_SAMPLING_RATE)
-                           for tpo in onsets],
+                                    for tpo in onsets],
                            'pretone': [(tpo - LFP_SAMPLING_RATE - 1 - ((TONE_PERIOD_DURATION + 2) * LFP_SAMPLING_RATE),
                                         tpo - LFP_SAMPLING_RATE - 1) for tpo in onsets]
                            }
@@ -105,7 +121,6 @@ class LFPAnimal(LFPData):
 
 
 class LFPDataSelector:
-
     """A class with methods shared by LFPPeriod and LFPTrial that are used to return portions of their data."""
 
     @property
@@ -180,9 +195,9 @@ class LFPPeriod(LFPData, LFPDataSelector):
 
     def calc_cross_spectrogram(self):
         pickle_path = os.path.join(self.data_opts['data_path'], 'lfp', '_'.join(
-                [self.lfp_animal.animal.identifier, self.data_opts['brain_region']] +
-                [str(arg) for arg in self.arg_set] +
-                [self.period_type, str(self.identifier)]) + '.pkl')
+            [self.lfp_animal.animal.identifier, self.data_opts['brain_region']] +
+            [str(arg) for arg in self.arg_set] +
+            [self.period_type, str(self.identifier)]) + '.pkl')
         if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
             with open(pickle_path, 'rb') as f:
                 return pickle.load(f)
@@ -200,7 +215,6 @@ class LFPPeriod(LFPData, LFPDataSelector):
 
 
 class LFPTrial(LFPData, LFPDataSelector):
-
     name = 'trial'
 
     def __init__(self, trial_times, mask, parent):
@@ -235,7 +249,6 @@ class FrequencyBin(LFPData):
 
 
 class TimeBin:
-
     name = 'time_bin'
 
     def __init__(self, i, data, parent):
@@ -279,32 +292,32 @@ class MRLCalculator(LFPData):
         return np.array(
             [1 if weight in spikes else float('nan') for weight in range(TONES_PER_PERIOD * LFP_SAMPLING_RATE)])
 
-    def get_wavelet_phases(self, frequency):
-        """Get wavelet phases for a specific frequency."""
-        scale = get_wavelet_scale(frequency, LFP_SAMPLING_RATE)
+    def get_wavelet_phases(self, frequency, scale):
 
-        # Compute the continuous wavelet transform
         cwt_matrix = cwt(self.period.mrl_data, morlet, [scale])
-
         if frequency == 0:
             frequency += 10 ** -6
-
         # Since we're computing the CWT for only one scale, the result is at index 0.
         return np.angle(cwt_matrix[0, :])
 
-    def get_mrl(self):
-        """Compute mean resultant length for the desired frequency band."""
+    def get_phases(self):
         fb = FREQUENCY_BANDS[self.current_frequency_band]
-        weights = self.get_weights()
         low = fb[0] + .1
         high = fb[1]
         if self.data_opts.get('phase') == 'wavelet':
-            alpha = np.array([self.get_wavelet_phases(frequency)
-                              for frequency in np.linspace(low, high, int(high - low) + 1)])
+            if 'gamma' in self.current_frequency_band:
+                frequencies = np.logspace(np.log10(low), np.log10(high), int((high - low) / 5))
+            else:
+                frequencies = np.linspace(low, high, int(high - low))
+            scales = [get_wavelet_scale(f, LFP_SAMPLING_RATE) for f in frequencies]
+            return np.array([self.get_wavelet_phases(f, s) for f, s in zip(frequencies, scales)])
         else:
-            alpha = compute_phase(bandpass_filter(self.period.mrl_data, low, high, LFP_SAMPLING_RATE))
+            return compute_phase(bandpass_filter(self.period.mrl_data, low, high, LFP_SAMPLING_RATE))
 
-        return circ_r2_unbiased(alpha, weights, dim=1)
+    def get_mrl(self):
+        weights = self.get_weights()
+        alpha = self.get_phases()
+        return circ_r2_unbiased(alpha, weights, dim=int(self.data_opts.get('phase') == 'wavelet'))
 
 
 

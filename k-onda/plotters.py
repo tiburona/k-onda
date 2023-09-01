@@ -422,3 +422,30 @@ class PiePlotter(Plotter):
                 plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%')
                 plt.axis('equal')
                 self.close_plot(f'{group.identifier}_during_pip')
+
+
+class RosePlot(Plotter):
+    def __init__(self, lfp_experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
+        super().__init__(lfp_experiment, data_type_context, neuron_type_context, graph_opts=graph_opts,
+                         plot_type=plot_type)
+
+    def rose_plot(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts, neuron_type=None)
+
+        for row, neuron_type in enumerate(self.neuron_types):
+            self.selected_neuron_type = neuron_type
+            for col, group in enumerate(self.experiment.groups):
+                self.make_rose_plot(group, self.axs[row, col], title=f"{group.identifier.capitalize()} {neuron_type}")
+        self.selected_neuron_type = None
+
+    def make_rose_plot(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='polar')
+
+        # Plot histogram
+        n_bins = 36
+        #n, _, _ = ax.hist(angles, bins=np.linspace(0, 2 * np.pi, n_bins), alpha=0.6)
+
+        ax.set_theta_zero_location('N')
+        ax.set_theta_direction(-1)
+        ax.set_rlabel_position(90)
