@@ -324,11 +324,15 @@ class MRLCalculator(LFPData):
         phases = self.get_phases().T
         weights = self.get_weights()
 
-        weights_expanded = weights[:, np.newaxis]
-
         # Apply the function to every element
         vfunc = np.vectorize(adjust_angle)
-        adjusted_phases = vfunc(phases, weights_expanded)
+
+        if phases.ndim == 1:
+            adjusted_phases = vfunc(phases, weights)
+        else:
+            # Expand the dimensions of weights to make it (60000, 1)
+            weights_expanded = weights[:, np.newaxis]
+            adjusted_phases = vfunc(phases, weights_expanded)
 
         # Filter out NaNs
         return adjusted_phases[~np.isnan(adjusted_phases)]

@@ -76,6 +76,7 @@ def make_all_mrl_spreadsheets(lfp_opts=None):
     for brain_region in ['pl', 'bla', 'hpc']:
         lfp_opts[0]['brain_region'] = brain_region
         for phase_opt in ['wavelet', None]:
+
             lfp_opts[0]['phase'] = phase_opt
             for fb in ['delta', 'theta_1', 'theta_2', 'delta', 'gamma', 'hgamma']:
             # for fb in ['gamma', 'hgamma']:

@@ -455,7 +455,7 @@ class RosePlotter(Plotter):
         tags = [self.data_type, self.lfp.current_frequency_band, self.lfp.brain_region]
         self.dir_tags = [self.data_type]
         tags.insert(0, basename)
-        if self.data_opts.get('phase') == 'wavelets':
+        if self.data_opts.get('phase') == 'wavelet':
             tags += ['wavelet']
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
