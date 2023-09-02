@@ -10,6 +10,7 @@ from math_functions import get_positive_frequencies, get_spectrum_fenceposts
 from plotting_helpers import smart_title_case, formatted_now, PlottingMixin
 from data import Base
 from stats import Stats
+from lfp import LFPExperiment
 
 
 class Plotter(Base):
@@ -22,6 +23,7 @@ class Plotter(Base):
         self.data_opts = None
         self.neuron_type_context = neuron_type_context
         self.selected_neuron_type = None
+        self.lfp = None
         self.graph_opts = graph_opts
         self.plot_type = plot_type
         self.fig = None
@@ -40,7 +42,23 @@ class Plotter(Base):
         """Both initializes values on self and sets values for the contexts and all the contexts' subscribers."""
         self.graph_opts = graph_opts
         self.data_opts = data_opts  # Sets data_opts for all subscribers to data_type_context
+        self.lfp = LFPExperiment(self.experiment)
         self.selected_neuron_type = neuron_type  # Sets neuron type for all subscribers to neuron_type_context
+
+    def close_plot(self, basename):
+        self.set_dir_and_filename(basename)
+        if self.graph_opts.get('footer'):
+            self.make_footer()
+        self.save_and_close_fig()
+
+    def save_and_close_fig(self):
+        dirs = [self.graph_opts['graph_dir']]
+        if self.dir_tags is not None:
+            dirs += self.dir_tags
+        path = os.path.join(*dirs)
+        os.makedirs(path, exist_ok=True)
+        self.fig.savefig(os.path.join(path, self.fname))
+        plt.close(self.fig)
 
 
 class PeriStimulusPlotter(Plotter, PlottingMixin):
@@ -149,12 +167,6 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         big_subplot.set_xlabel(self.get_labels()[self.data_type][0], labelpad=30, fontsize=14)
         plt.subplots_adjust(hspace=0.5)  # Add space between subplots
 
-    def close_plot(self, basename):
-        self.set_dir_and_filename(basename)
-        if self.graph_opts.get('footer'):
-            self.make_footer()
-        self.save_and_close_fig()
-
     def get_ylim(self, ax, y_min, y_max):
         self.y_min = min(self.y_min, ax.get_ylim()[0], y_min)
         self.y_max = max(self.y_max, ax.get_ylim()[1], y_max)
@@ -197,14 +209,6 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             tags += [self.data_opts.get('base')]
         self.fname = f"{'_'.join(tags)}.png"
 
-    def save_and_close_fig(self):
-        dirs = [self.graph_opts['graph_dir']]
-        if self.dir_tags is not None:
-            dirs += self.dir_tags
-        path = os.path.join(*dirs)
-        os.makedirs(path, exist_ok=True)
-        self.fig.savefig(os.path.join(path, self.fname))
-        plt.close(self.fig)
 
     def join_trials(self, s):
         return s.join([str(t) for t in self.data_opts['trials']])
@@ -230,7 +234,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
 
 
 class PeriStimulusSubplotter(PlottingMixin):
-    """Constructs a subplot."""
+    """Constructs a subplot of a PeriStimulusPlot."""
     def __init__(self, data_source, data_opts, graph_opts, ax, parent_type, multiplier=1):
         self.data_source = data_source
         self.data_opts = data_opts
@@ -399,6 +403,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
 
 
 class PiePlotter(Plotter):
+    """Constructs a pie chart of up- or down-regulation of individual neurons"""
 
     def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
@@ -424,28 +429,46 @@ class PiePlotter(Plotter):
                 self.close_plot(f'{group.identifier}_during_pip')
 
 
-class RosePlot(Plotter):
-    def __init__(self, lfp_experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
-        super().__init__(lfp_experiment, data_type_context, neuron_type_context, graph_opts=graph_opts,
+class RosePlotter(Plotter):
+    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts,
                          plot_type=plot_type)
 
     def rose_plot(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type=None)
+        self.fig = plt.figure(figsize=(15, 15))
+
+        self.axs = [
+            [self.fig.add_subplot(2, 2, 1 + 2 * row + col, projection='polar') for col in range(2)]
+            for row in range(2)
+        ]
 
         for row, neuron_type in enumerate(self.neuron_types):
             self.selected_neuron_type = neuron_type
-            for col, group in enumerate(self.experiment.groups):
-                self.make_rose_plot(group, self.axs[row, col], title=f"{group.identifier.capitalize()} {neuron_type}")
+            for col, group in enumerate(self.lfp.groups):
+                self.make_rose_plot(group, self.axs[row][col], title=f"{group.identifier.capitalize()} {neuron_type}")
+
         self.selected_neuron_type = None
+        self.close_plot("rose_plot")
 
-    def make_rose_plot(self):
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='polar')
+    def set_dir_and_filename(self, basename):
+        tags = [self.data_type, self.lfp.current_frequency_band, self.lfp.brain_region]
+        self.dir_tags = [self.data_type]
+        tags.insert(0, basename)
+        if self.data_opts.get('phase') == 'wavelets':
+            tags += ['wavelet']
+        self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
+        self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
+        self.fname = f"{'_'.join(tags)}.png"
 
-        # Plot histogram
+    def make_rose_plot(self, group, ax, title=""):
         n_bins = 36
-        #n, _, _ = ax.hist(angles, bins=np.linspace(0, 2 * np.pi, n_bins), alpha=0.6)
+        angles = group.get_angles_at_spikes('tone')
+        if angles.ndim == 2:
+            angles = angles.flatten()
+        n, _, _ = ax.hist(angles, bins=np.linspace(0, 2 * np.pi, n_bins), alpha=0.6)
 
         ax.set_theta_zero_location('N')
         ax.set_theta_direction(-1)
         ax.set_rlabel_position(90)
+        ax.set_title(title)

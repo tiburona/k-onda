@@ -50,7 +50,7 @@ def formatted_now():
 def smart_title_case(s):
     lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 'as', 'but', 'or',
                        'nor', 'is'}
-    acronyms = {'psth'}
+    acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl'}
     words = re.split(r'(\W+)', s)  # Split string on non-alphanumeric characters, preserving delimiters
     title_words = []
     for i, word in enumerate(words):
