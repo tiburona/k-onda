@@ -4,9 +4,12 @@ from scipy.signal import cwt, morlet
 from neo.rawio import BlackrockRawIO
 
 from data import Data
+from context import Subscriber, period_type_context as pt_context
 from matlab_interface import MatlabInterface
 from math_functions import *
+from utils import cache_method
 
+DATA_PATH = '/Users/katie/likhtik/data/single_cell_data'
 SAMPLING_RATE = 30000
 TONES_PER_PERIOD = 30  # The pip sounds 30 times in a tone period
 TONE_PERIOD_DURATION = 30
@@ -18,6 +21,14 @@ FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_thet
 LO_FREQ_ARGS = (2048, 2000, 1000, 980, 2)
 FREQUENCY_ARGS = {fb: LO_FREQ_ARGS for fb in ['delta', 'theta_1', 'theta_2', 'delta_theta', 'gamma', 'hgamma']}
 # TODO: gamma and hgamma don't really belong there, find out what their args should be.
+# TODO: It would be nice to bring the cacheing into this module but I have to carefully check that context is considerd
+
+PL_ELECTRODES = {
+    'IG154': (4, 6), 'IG155': (12, 14), 'IG156': (12, 14), 'IG158': (7, 14), 'IG160': (1, 8), 'IG161': (9, 11),
+    'IG162': (13, 3), 'IG163': (14, 8), 'IG175': (15, 4), 'IG176': (11, 12), 'IG177': (15, 4), 'IG178': (6, 14),
+    'IG179': (13, 15), 'IG180': (15, 4)
+}
+
 
 class LFPData(Data):
 
@@ -45,22 +56,43 @@ class LFPData(Data):
     def current_frequency_band(self):
         return self.data_opts.get('frequency_band')
 
+    @property
+    def selected_period_type(self):
+        return self.period_type_context.val
 
-class LFPExperiment(LFPData):
+    def get_mrl(self):
+        return self.get_average('get_mrl', stop_at='mrl_calculator', axis=None)
+
+
+class LFPExperiment(LFPData, Subscriber):
     name = 'experiment'
 
     def __init__(self, experiment):
+        self.data_path = DATA_PATH
         self.experiment = experiment
         self.groups = [LFPGroup(group, self) for group in self.experiment.groups]
         self.all_groups = self.groups
-        self.all_animals = [LFPAnimal(animal) for animal in self.experiment.all_animals]
-        self.all_periods = [period for animal in self.all_animals for stage in animal.periods
-                            for period in animal.periods[stage]]
+        self.all_animals = [LFPAnimal(animal, self.data_path) for animal in self.experiment.all_animals]
+        self.last_brain_region = None
+
+    @property
+    def all_periods(self):
+        periods = []
+        for animal in self.all_animals:
+            [periods.extend(animal_periods) for animal_periods in animal.all_periods.values()]
+        return periods
 
     @property
     def all_mrl_calculators(self):
-        return [MRLCalculator(unit, period) for animal in self.all_animals for period in animal.all_periods
+        return [MRLCalculator(unit, period) for animal in self.all_animals
+                for period in animal.all_periods['tone'] + animal.all_periods['pretone']
                 for unit in animal.children]
+
+    def update(self, context):
+        if context.name == 'data_type_context':
+            if self.last_brain_region != self.data_opts.get('brain_region'):
+                [animal.update_children() for animal in self.all_animals]
+                self.last_brain_region = self.data_opts.get('brain_region')
 
 
 class LFPGroup(LFPData):
@@ -71,13 +103,23 @@ class LFPGroup(LFPData):
         self.experiment = lfp_experiment
         self.identifier = self.target.identifier
 
-    def get_mrl_calculators(self, period_type):
-        return [mrl_calc for mrl_calc in self.experiment.all_mrl_calculators
-                if mrl_calc.period.animal.condition == self.identifier and mrl_calc.period.period_type == period_type]
+    @property
+    def children(self):
+        return [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
 
-    def get_angles_at_spikes(self, period_type):
-        return np.array([phase for mrl_calc in self.get_mrl_calculators(period_type)
-                         for phase in mrl_calc.get_angles_at_spikes()]).flatten()
+    @property
+    def mrl_calculators(self):
+        return [mrl_calc for animal in self.children for mrl_calc in animal.mrl_calculators if mrl_calc.is_valid]
+
+    def get_angle_counts(self):
+        for calc in self.mrl_calculators:
+            if any(np.isnan(calc.get_angle_counts())):
+                print(f"{calc.parent.identifier} {calc.identifier}")
+        counts = np.sum(np.array([calc.get_angle_counts() for calc in self.mrl_calculators]), axis=0)
+        return counts
+
+    def get_mrl(self):
+        return self.get_average('get_mrl', stop_at='mrl_calculator', axis=None)
 
 
 class LFPAnimal(LFPData):
@@ -85,41 +127,75 @@ class LFPAnimal(LFPData):
 
     name = 'animal'
 
-    def __init__(self, animal):
+    def __init__(self, animal, data_path):
         self.target = animal
-        #[setattr(self, attr, getattr(self.target, attr)) for attr in ['identifier', 'condition', 'tone_period_onsets']]
-        file_path = os.path.join(self.data_opts['data_path'], 'single_cell_data', self.identifier, 'Safety')
-
-        reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
-        reader.parse_header()
-
-        self.raw_lfp_unique_name = {
-            'hpc': reader.nsx_datas[3][0][:, 0],
-            'bla': reader.nsx_datas[3][0][:, 2],
-            'pl': np.mean([reader.nsx_datas[3][0][:, 1], reader.nsx_datas[3][0][:, 3]], axis=0)
-        }
-
-        self.frequency_args = set(tuple(args) for fb, args in FREQUENCY_ARGS.items() if fb in self.data_opts['fb'])
-        self.periods = self.prepare_periods()
-        self.all_periods = self.periods['tone'] + self.periods['pretone']
+        self.data_path = data_path
+        self.raw_lfp = self.get_raw_lfp()
+        self.period_intervals = self.get_period_intervals()
+        self.all_periods = None
+        self.all_mrl_calculators = None
 
     def __getattr__(self, name):
         return getattr(self.target, name)
 
-    def prepare_periods(self):
-        periods = {'tone': [], 'pretone': []}
+    @property
+    def frequency_args(self):
+        return set(tuple(args) for fb, args in FREQUENCY_ARGS.items() if fb in self.data_opts['fb'])
+
+    @property
+    def mrl_calculators(self):
+        if self.selected_period_type is None:
+            calcs = [calc for calc in self.all_mrl_calculators['tone'] + self.all_mrl_calculators['pretone']]
+        else:
+            calcs = [calc for calc in self.all_mrl_calculators[self.selected_period_type]]
+        return [calc for calc in calcs if calc.unit in self.target.children and calc.is_valid]
+
+    @property
+    def periods(self):
+        if self.all_periods is None:
+            self.all_periods = self.prepare_periods()
+        if self.selected_period_type:
+            return self.all_periods[self.selected_period_type]
+        else:
+            return self.all_periods['tone'] + self.all_periods['pretone']
+
+    @property
+    def children(self):
+        return self.mrl_calculators if self.data_type == 'mrl' else self.periods
+
+    def update_children(self):
+        self.all_periods = self.prepare_periods()
+        if 'mrl' in self.data_type:
+            self.all_mrl_calculators = self.prepare_mrl_calculators()
+
+    def get_raw_lfp(self):
+        file_path = os.path.join(self.data_path, self.identifier, 'Safety')
+        reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
+        reader.parse_header()
+        pl1, pl2 = PL_ELECTRODES[self.identifier]
+        return {
+            'hpc': reader.nsx_datas[3][0][:, 0],
+            'bla': reader.nsx_datas[3][0][:, 2],
+            'pl': np.mean([reader.nsx_datas[3][0][:, pl1], reader.nsx_datas[3][0][:, pl2]], axis=0)
+        }
+
+    def get_period_intervals(self):
         onsets = [int(onset * LFP_SAMPLING_RATE / SAMPLING_RATE) for onset in self.tone_period_onsets]
-        stage_intervals = {'tone': [(tpo - LFP_SAMPLING_RATE, tpo + (TONE_PERIOD_DURATION + 1) * LFP_SAMPLING_RATE)
-                                    for tpo in onsets],
-                           'pretone': [(tpo - LFP_SAMPLING_RATE - 1 - ((TONE_PERIOD_DURATION + 2) * LFP_SAMPLING_RATE),
+        period_intervals = {'tone': [(tpo - LFP_SAMPLING_RATE, tpo + (TONE_PERIOD_DURATION + 1) * LFP_SAMPLING_RATE)
+                                     for tpo in onsets],
+                            'pretone': [(tpo - LFP_SAMPLING_RATE - 1 - ((TONE_PERIOD_DURATION + 2) * LFP_SAMPLING_RATE),
                                         tpo - LFP_SAMPLING_RATE - 1) for tpo in onsets]
                            }
-        raw = self.raw_lfp_unique_name[self.brain_region]
-        for arg_set in self.frequency_args:
-            for key in stage_intervals:
-                for i, period in enumerate(stage_intervals[key]):
-                    periods[key].append(LFPPeriod(raw[slice(*period)], i, key, self, arg_set))
-        return periods
+        return period_intervals
+
+    def prepare_periods(self):
+        raw = self.raw_lfp[self.brain_region]
+        return {stage: [LFPPeriod(raw[slice(*period)], i, stage, self) for i, period in enumerate(periods)]
+                for stage, periods in self.period_intervals.items()}
+
+    def prepare_mrl_calculators(self):
+        return {stage: [MRLCalculator(unit, period) for period in periods for unit in self.target.units['good']]
+                for stage, periods in self.all_periods.items()}
 
 
 class LFPDataSelector:
@@ -162,11 +238,10 @@ class LFPPeriod(LFPData, LFPDataSelector):
 
     name = 'period'
 
-    def __init__(self, raw_data, index, period_type, lfp_animal, arg_set):
+    def __init__(self, raw_data, index, period_type, lfp_animal):
         self.raw_data = raw_data
         self.identifier = index
         self.animal = lfp_animal
-        self.arg_set = arg_set
         self.processed_data = self.process_lfp(raw_data)
         self.mrl_data = self.processed_data[LFP_SAMPLING_RATE:-LFP_SAMPLING_RATE]
         self.period_type = period_type
@@ -196,8 +271,9 @@ class LFPPeriod(LFPData, LFPDataSelector):
         return divide_by_rms(filtered)
 
     def calc_cross_spectrogram(self):
+        arg_set = FREQUENCY_ARGS(self.current_frequency_band)
         pickle_path = os.path.join(self.data_opts['data_path'], 'lfp', '_'.join(
-            [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in self.arg_set] +
+            [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] +
             [self.period_type, str(self.identifier)]) + '.pkl')
         if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
             with open(pickle_path, 'rb') as f:
@@ -243,6 +319,7 @@ class FrequencyBin(LFPData):
             self.identifier = list(range(*FREQUENCY_BANDS[self.current_frequency_band]))[index]
         self.period_type = self.parent.period_type
         self.unit = unit
+        self.is_valid = self.parent.is_valid if hasattr(self.parent, 'is_valid') else True
 
     @property
     def data(self):
@@ -269,8 +346,12 @@ class MRLCalculator(LFPData):
         self.unit = unit
         self.period = period
         self.period_type = period.period_type
-        self.parent = self.unit.parent
+        self.parent = self.period.parent
         self.identifier = f"{period.identifier}_{unit.identifier}"
+        self.spike_period = self.unit.periods[self.period_type][self.period.identifier]
+        self.spikes = [int((spike + i) * LFP_SAMPLING_RATE) for i, trial in enumerate(self.spike_period.trials)
+                       for spike in trial.spikes]
+        self.num_events = len(self.spikes)
 
     @property
     def ancestors(self):
@@ -285,13 +366,21 @@ class MRLCalculator(LFPData):
     def frequency_bins(self):
         return [FrequencyBin(i, data, self, unit=self.unit) for i, data in enumerate(self.data)]
 
-    def get_weights(self):
-        spike_period = self.unit.periods[self.period_type][self.period.identifier]
-        spikes = [int((spike + i) * LFP_SAMPLING_RATE) for i, trial in enumerate(spike_period.trials) for spike in
-                  trial.spikes]
+    @property
+    def equivalent_calculator(self):
+        other_stage = 'tone' if self.period_type == 'pretone' else 'pretone'
+        return [calc for calc in self.parent.all_mrl_calculators[other_stage] if calc.identifier == self.identifier][0]
 
+    @property
+    def is_valid(self):
+        if self.data_opts.get('adjustment') == 'relative':
+            return self.num_events > 4 and self.equivalent_calculator.num_events > 4
+        else:
+            return self.num_events > 4
+
+    def get_weights(self):
         return np.array(
-            [1 if weight in spikes else float('nan') for weight in range(TONES_PER_PERIOD * LFP_SAMPLING_RATE)])
+            [1 if weight in self.spikes else float('nan') for weight in range(TONES_PER_PERIOD * LFP_SAMPLING_RATE)])
 
     def get_wavelet_phases(self, frequency, scale):
 
@@ -315,7 +404,8 @@ class MRLCalculator(LFPData):
         else:
             return compute_phase(bandpass_filter(self.period.mrl_data, low, high, LFP_SAMPLING_RATE))
 
-    def get_angles_at_spikes(self):
+    def get_angles(self):
+
         def adjust_angle(angle, weight):
             if np.isnan(weight):
                 return np.nan
@@ -335,7 +425,20 @@ class MRLCalculator(LFPData):
             adjusted_phases = vfunc(phases, weights_expanded)
 
         # Filter out NaNs
-        return adjusted_phases[~np.isnan(adjusted_phases)]
+        adjusted_phases = adjusted_phases[~np.isnan(adjusted_phases)]
+
+        return adjusted_phases
+
+    def get_angle_counts(self):
+        n_bins = 36
+        bin_edges = np.linspace(0, 2 * np.pi, n_bins + 1)
+        angles = self.get_angles()
+        counts, _ = np.histogram(angles, bins=bin_edges)
+        if self.data_opts.get('adjustment') == 'relative':
+            counts = counts/len(angles)
+            if self.period_type == 'tone':
+                counts -= self.equivalent_calculator.get_angle_counts()
+        return counts
 
     def get_mrl(self):
         weights = self.get_weights()

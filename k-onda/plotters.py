@@ -1,29 +1,36 @@
 import os
 import math
 import numpy as np
+import seaborn as sns
+import pandas as pd
+from itertools import product
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from matplotlib.gridspec import GridSpec
+# Create a custom legend
+from matplotlib.patches import Patch
 
-from math_functions import get_positive_frequencies, get_spectrum_fenceposts
+from math_functions import get_positive_frequencies, get_spectrum_fenceposts, std_err
 from plotting_helpers import smart_title_case, formatted_now, PlottingMixin
 from data import Base
 from stats import Stats
-from lfp import LFPExperiment
 
 
 class Plotter(Base):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple plots of multiple
     kinds of data, see the figure module."""
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
+    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
+                 lfp=None, plot_type='standalone'):
         self.experiment = experiment
         self.data_type_context = data_type_context
         self.data_opts = None
         self.neuron_type_context = neuron_type_context
         self.selected_neuron_type = None
-        self.lfp = None
+        self.period_type_context = period_type_context
+        self.selected_period_type = None
+        self.lfp = lfp
         self.graph_opts = graph_opts
         self.plot_type = plot_type
         self.fig = None
@@ -42,7 +49,6 @@ class Plotter(Base):
         """Both initializes values on self and sets values for the contexts and all the contexts' subscribers."""
         self.graph_opts = graph_opts
         self.data_opts = data_opts  # Sets data_opts for all subscribers to data_type_context
-        self.lfp = LFPExperiment(self.experiment)
         self.selected_neuron_type = neuron_type  # Sets neuron type for all subscribers to neuron_type_context
 
     def close_plot(self, basename):
@@ -429,46 +435,129 @@ class PiePlotter(Plotter):
                 self.close_plot(f'{group.identifier}_during_pip')
 
 
-class RosePlotter(Plotter):
-    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts,
+class MRLPlotter(Plotter):
+    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, lfp=None, graph_opts=None,
+                 plot_type='standalone'):
+        print('hello?')
+        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, lfp=lfp, graph_opts=graph_opts,
                          plot_type=plot_type)
 
     def rose_plot(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type=None)
         self.fig = plt.figure(figsize=(15, 15))
 
+        ncols = 2 if self.data_opts.get('adjustment') == 'relative' else 4
+
         self.axs = [
-            [self.fig.add_subplot(2, 2, 1 + 2 * row + col, projection='polar') for col in range(2)]
+            [self.fig.add_subplot(2, ncols, 1 + ncols * row + col, projection='polar') for col in range(ncols)]
             for row in range(2)
         ]
 
-        for row, neuron_type in enumerate(self.neuron_types):
+        for i, neuron_type in enumerate(self.neuron_types):
             self.selected_neuron_type = neuron_type
-            for col, group in enumerate(self.lfp.groups):
-                self.make_rose_plot(group, self.axs[row][col], title=f"{group.identifier.capitalize()} {neuron_type}")
-
+            for j, group in enumerate(self.lfp.groups):
+                if self.data_opts.get('adjustment') == 'relative':
+                    self.selected_period_type = 'tone'
+                    self.make_rose_plot(group, self.axs[i][j], title=f"{group.identifier.capitalize()} {neuron_type}")
+                else:
+                    for k, period_type in enumerate(['pretone', 'tone']):
+                        self.selected_period_type = period_type
+                        self.make_rose_plot(group, self.axs[i][j*2 + k],
+                                            title=f"{group.identifier.capitalize()} {neuron_type} {period_type}")
         self.selected_neuron_type = None
-        self.close_plot("rose_plot")
+        self.close_plot('rose_plot')
 
     def set_dir_and_filename(self, basename):
-        tags = [self.data_type, self.lfp.current_frequency_band, self.lfp.brain_region]
+        tags = [self.lfp.current_frequency_band, self.lfp.brain_region]
         self.dir_tags = [self.data_type]
-        tags.insert(0, basename)
-        if self.data_opts.get('phase') == 'wavelet':
-            tags += ['wavelet']
+        for opt in ['phase', 'adjustment']:
+            if self.data_opts.get(opt):
+                tags += [self.data_opts.get(opt)]
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
-        self.fname = f"{'_'.join(tags)}.png"
+        self.fname = f"{basename}_{'_'.join(tags)}.png"
 
     def make_rose_plot(self, group, ax, title=""):
         n_bins = 36
-        angles = group.get_angles_at_spikes('tone')
-        if angles.ndim == 2:
-            angles = angles.flatten()
-        n, _, _ = ax.hist(angles, bins=np.linspace(0, 2 * np.pi, n_bins), alpha=0.6)
-
-        ax.set_theta_zero_location('N')
-        ax.set_theta_direction(-1)
-        ax.set_rlabel_position(90)
+        bin_edges = np.linspace(0, 2 * np.pi, n_bins + 1)
+        color = self.graph_opts['group_colors'][group.identifier]
+        width = 2 * np.pi / n_bins
+        ax.bar(bin_edges[:-1], group.get_angle_counts(), width=width, align='edge', color=color, alpha=1)
+        current_ticks = ax.get_yticks()
+        ax.set_yticks(current_ticks[::2])  # every second tick
         ax.set_title(title)
+
+    def mrl_vals_plot(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts, neuron_type=None)
+
+        data = []
+        for neuron_type in self.neuron_types:
+            self.selected_neuron_type = neuron_type
+            for group in self.lfp.groups:
+                for period_type in ['pretone', 'tone']:
+                    self.selected_period_type = period_type
+                    data.append([neuron_type, group.identifier, period_type, group.data, std_err(group.scatter),
+                                 group.scatter])
+
+        df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Period', 'Average MRL', 'sem', 'scatter'])
+
+        group_order = df['Group'].unique()
+        period_order = ['pretone', 'tone']
+
+        # Define custom color and hatch palettes
+        group_colors = self.graph_opts['group_colors']
+        period_hatches = {'pretone': '/', 'tone': None}
+
+        g = sns.catplot(data=df, x='Group', y='Average MRL', hue='Period', row='Neuron Type', kind='bar',
+                        height=4, aspect=1.5, dodge=True, legend=False, hue_order=period_order, order=group_order)
+        g.set_axis_labels("", "Average MRL")
+        g.fig.subplots_adjust(top=0.85, hspace=0.4, right=0.85)
+        g.despine(left=True)
+
+        # Adjust the appearance
+        legend_elements = [Patch(facecolor='white', hatch=period_hatches[stage], edgecolor='black', label=stage.upper())
+                           for stage in period_order]
+
+        for ax, neuron_type in zip(g.axes.flat, self.neuron_types):
+            bars = ax.patches
+            for grp in group_order:
+                for prd in period_order:
+                    row = df[(df['Neuron Type'] == neuron_type) & (df['Group'] == grp) & (df['Period'] == prd)].iloc[0]
+
+                    # Find corresponding bar
+                    idx = group_order.tolist().index(grp) + period_order.index(prd) * len(group_order)
+                    bar = bars[idx]
+
+                    # Set color and hatch
+                    bar.set_facecolor(group_colors[grp])
+                    bar.set_hatch(period_hatches[prd])
+
+                    # Plotting the error bars and scatter points
+                    bar_x = bar.get_x() + bar.get_width() / 2
+                    ax.errorbar(bar_x, row['Average MRL'], yerr=row['sem'], color='black', capsize=5)
+
+                    jitter = np.random.rand(len(row['scatter'])) * 0.1 - 0.05
+                    ax.scatter([bar_x + j for j in jitter], row['scatter'], color='black', s=20)
+
+                ax.axhline(0, color='gray', linestyle='--')
+                ax.set_title(ax.get_title(), fontsize=14)
+
+        g.fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, .9))
+        self.fig = g.fig
+        self.close_plot('average_mrl')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

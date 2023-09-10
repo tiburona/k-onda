@@ -30,6 +30,14 @@ class Context:
         self.notify()
 
 
+class Subscriber:
+
+    def subscribe(self, context):
+        setattr(self, context.name, context)
+        context.subscribe(self)
+
+
 neuron_type_context = Context('neuron_type_context')
 data_type_context = Context('data_type_context')
+period_type_context = Context('period_type_context')
 

@@ -6,10 +6,11 @@ import pandas as pd
 import numpy as np
 
 from data import Data
+from context import Subscriber
 from matlab_interface import MatlabInterface
 from utils import cache_method, get_ancestors
 from plotting_helpers import formatted_now
-from math_functions import calc_rates, spectrum, sem, trim_and_normalize_ac
+from math_functions import calc_rates, spectrum, trim_and_normalize_ac, sem
 
 """
 This module defines Level, Experiment, Group, Animal, Unit, and Trial. Level inherits from Base, which defines a few 
@@ -41,13 +42,6 @@ class Level(Data):
     def autocorr_key(self):
         return self.get_autocorr_key()
 
-    def get_average(self, base_method, stop_at='trial'):  # Trial is the default base case, but not always
-        if self.name == stop_at:
-            return getattr(self, base_method)()
-        else:
-            child_vals = [child.get_average(base_method, stop_at=stop_at) for child in self.children]
-        return np.mean(child_vals, axis=0)
-
     @cache_method
     def get_demeaned_rates(self):
         rates = self.get_average('get_rates')
@@ -72,10 +66,6 @@ class Level(Data):
     def get_spectrum(self):
         freq_range, max_lag, bin_size = (self.data_opts[opt] for opt in ['freq_range', 'max_lag', 'bin_size'])
         return spectrum(self.get_autocorr(), freq_range, max_lag, bin_size)
-
-    @cache_method
-    def get_sem(self):
-        return sem([child.data for child in self.children])
 
     def get_autocorr_key(self):
         key = self.data_opts.get('ac_key')
@@ -129,8 +119,11 @@ class Level(Data):
             else:
                 return 0
 
+    def get_sem(self):
+        return sem([child.data for child in self.children])
 
-class Experiment(Level):
+
+class Experiment(Level, Subscriber):
     """The experiment. Parent of groups."""
 
     name = 'experiment'
@@ -154,10 +147,6 @@ class Experiment(Level):
     @property
     def all_trials(self):
         return [trial for period in self.all_periods for trial in period]
-
-    def subscribe(self, context):
-        setattr(self, context.name, context)
-        context.subscribe(self)
 
     def update(self, context):
         if context.name == 'data_type_context':

@@ -2,7 +2,8 @@ import os
 import scipy.io as sio
 import numpy as np
 from spike import Experiment, Group, Animal, Unit
-from context import data_type_context, neuron_type_context
+from lfp import LFPExperiment
+from context import data_type_context, neuron_type_context, period_type_context
 
 
 def init_units(entry, animal):
@@ -52,6 +53,10 @@ experiment = Experiment({name: Group(name=name, animals=[animal for animal in an
 
 experiment.subscribe(data_type_context)
 experiment.subscribe(neuron_type_context)
+
+lfp_experiment = LFPExperiment(experiment)
+lfp_experiment.subscribe(data_type_context)
+lfp_experiment.subscribe(period_type_context)
 
 
 

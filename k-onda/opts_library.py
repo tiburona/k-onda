@@ -32,9 +32,9 @@ GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4
               'footer': True, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'},
               'force_recalc': False}
 
-ROSE_PLOT_OPTS =  {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'sem': False,
+ROSE_PLOT_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'sem': False,
               'footer': False, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'},
-              'force_recalc': False}
+              'force_recalc': False, 'superimpose': False}
 
 FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/single_cell_data', 'animal_id': 'IG156',
                  'cluster_ids': [21, 27], 'electrodes_for_waveform': [[9, 11], [8]], 'electrodes_for_feature': [1, 8],
@@ -45,7 +45,7 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
 
 LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period', 'brain_region': 'hpc',
             'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl', 'row_type': 'frequency_bin',
-            'pretone_trials': True, 'pre_stim': 0, 'post_stim': 0.65, 'trials': (0, 150)}
+            'pretone_trials': True, 'pre_stim': 0, 'post_stim': 0.65, 'trials': (0, 150), 'adjustment': 'relative'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',

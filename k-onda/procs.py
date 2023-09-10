@@ -1,9 +1,13 @@
+from copy import deepcopy
+
 from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
     GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS, AC_KEYS, AC_METHODS, FIGURE_1_OPTS, LFP_OPTS, ROSE_PLOT_OPTS
-from initialize_experiment import experiment, data_type_context, neuron_type_context
+from initialize_experiment import experiment, data_type_context, neuron_type_context, period_type_context, \
+    lfp_experiment
 from proc_helpers import add_ac_keys_and_plot, assign_vars, plot
 from stats import Stats
-from plotters import Plotter, RosePlotter
+from plotters import Plotter, MRLPlotter
+
 
 """
 Functions in this module, with the assistance of functions imported from proc_helpers, read in values of opts or other 
@@ -72,27 +76,48 @@ def make_lfp_spreadsheet(lfp_opts=None):
 
 
 def make_all_mrl_spreadsheets(lfp_opts=None):
-    lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
     for brain_region in ['pl', 'bla', 'hpc']:
-        lfp_opts[0]['brain_region'] = brain_region
-        for phase_opt in ['wavelet', None]:
-
-            lfp_opts[0]['phase'] = phase_opt
-            for fb in ['delta', 'theta_1', 'theta_2', 'delta', 'gamma', 'hgamma']:
-            # for fb in ['gamma', 'hgamma']:
-                lfp_opts[0]['fb'] = [fb]
-                stats = Stats(experiment, data_type_context, neuron_type_context, lfp_opts[0])
-                df_name = stats.make_dfs(lfp_opts,)
+        my_lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
+        my_lfp_opts[0]['brain_region'] = brain_region  # I found it! it's a pass by reference error
+        for fb in ['delta', 'theta_1', 'theta_2', 'delta', 'gamma', 'hgamma']:
+            my_lfp_opts[0]['fb'] = [fb]
+            for phase_opt in ['wavelet', None]:
+                my_lfp_opts[0]['phase'] = phase_opt
+                copy_lfp_opts = deepcopy(my_lfp_opts[0])
+                stats = Stats(experiment, data_type_context, neuron_type_context, copy_lfp_opts, lfp=lfp_experiment)
+                df_name = stats.make_dfs([copy_lfp_opts],)
                 stats.make_spreadsheet(df_name)
 
 
 def make_all_rose_plots(lfp_opts=None, graph_opts=None):
-    lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [LFP_OPTS, ROSE_PLOT_OPTS])
-    plotter = RosePlotter(experiment, data_type_context, neuron_type_context)
     for brain_region in ['pl', 'bla', 'hpc']:
-        lfp_opts['brain_region'] = brain_region
+        my_lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [LFP_OPTS, ROSE_PLOT_OPTS])
+        plotter = MRLPlotter(experiment, data_type_context, neuron_type_context, period_type_context,
+                              lfp=lfp_experiment)
+        my_lfp_opts['brain_region'] = brain_region
         for phase_opt in ['wavelet', None]:
-            lfp_opts['phase'] = phase_opt
+            my_lfp_opts['phase'] = phase_opt
             for fb in ['delta', 'theta_1', 'theta_2', 'delta', 'gamma', 'hgamma']:
-                lfp_opts['frequency_band'] = fb
-                plotter.rose_plot(lfp_opts, graph_opts)
+                my_lfp_opts['frequency_band'] = fb
+                for adjustment in [None, 'relative']:
+                    my_lfp_opts['adjustment'] = adjustment
+                    copy_lfp_opts = deepcopy(my_lfp_opts)
+                    plotter.rose_plot(copy_lfp_opts, graph_opts)
+
+
+def make_all_mrl_plots(lfp_opts=None, graph_opts=None):
+    print('what is happening?')
+    for brain_region in ['pl', 'bla', 'hpc']:
+        my_lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [LFP_OPTS, ROSE_PLOT_OPTS])
+        plotter = MRLPlotter(experiment, data_type_context, neuron_type_context, period_type_context,
+                             lfp=lfp_experiment)
+        my_lfp_opts['brain_region'] = brain_region
+        for phase_opt in ['wavelet', None]:
+            my_lfp_opts['phase'] = phase_opt
+            for fb in ['delta', 'theta_1', 'theta_2', 'delta', 'gamma', 'hgamma']:
+                my_lfp_opts['frequency_band'] = fb
+                for adjustment in [None]:
+                    print("hmm")
+                    my_lfp_opts['adjustment'] = adjustment
+                    copy_lfp_opts = deepcopy(my_lfp_opts)
+                    plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)

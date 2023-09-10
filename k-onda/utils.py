@@ -46,8 +46,8 @@ def cache_method(method):
 
         cache = getattr(self, cache_name) if hasattr(self, cache_name) else {}
 
-        context_keys = (getattr(self, c).cache_id for c in ['neuron_type_context', 'data_type_context'] if
-                        hasattr(self, c))
+        context_keys = (getattr(self, c).cache_id for c in ['neuron_type_context', 'data_type_context',
+                                                            'period_type_context'] if hasattr(self, c))
         cache_key = (id(self), context_keys, method.__name__, tuple(to_hashable(arg) for arg in args),
                      tuple(sorted(kwargs.items())))
 

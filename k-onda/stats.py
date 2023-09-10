@@ -5,16 +5,15 @@ import os
 
 from data import Base
 from utils import find_ancestor_attribute
-from lfp import LFPExperiment
 
 
 class Stats(Base):
     """A class to construct dataframes, write out csv files, and call R for statistical tests."""
-    def __init__(self, experiment, data_type_context, neuron_type_context, data_opts):
+    def __init__(self, experiment, data_type_context, neuron_type_context, data_opts, lfp=None): #TODO: stats needs to set period type context and if setting period type needs to happen in spreadsheet initialization
         self.experiment = experiment
+        self.lfp = lfp
         self.data_type_context = data_type_context
         self.data_opts = data_opts
-        self.lfp = LFPExperiment(experiment)
         self.neuron_type_context = neuron_type_context
         self.dfs = {}
         self.data_col = None
@@ -83,6 +82,7 @@ class Stats(Base):
             if self.data_type == 'mrl':
                 level = 'mrl_calculator'
                 other_attributes += ['frequency', 'fb', 'neuron_type']
+                inclusion_criteria.append(lambda x: x.is_valid)
             else:
                 level = 'frequency_bin' if self.data_opts['frequency'] == 'continuous' else 'frequency_period'
                 inclusion_criteria.append(lambda x: x.fb == self.current_frequency_band)
