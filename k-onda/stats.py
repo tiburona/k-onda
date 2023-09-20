@@ -20,7 +20,6 @@ class Stats(Base):
         self.spreadsheet_fname = None
         self.results_path = None
         self.script_path = None
-        self.current_frequency_band = None
 
     @property
     def rows(self):
@@ -119,7 +118,7 @@ class Stats(Base):
             rows.append(row_dict)
         return rows
 
-    def make_spreadsheet(self, df_name=None, path=None):
+    def make_spreadsheet(self, df_name=None, path=None, force_recalc=True):
         row_type = self.data_opts['row_type']
         path = path if path else self.data_opts.get('data_path')
         df_name = df_name if df_name else self.data_type
@@ -131,6 +130,8 @@ class Stats(Base):
             path = os.path.join(path, 'lfp', self.data_type)
             name += f"_{self.data_opts.get('brain_region')}"
         self.spreadsheet_fname = os.path.join(path, name + '.csv').replace('lfp_', '')
+        if os.path.exists(self.spreadsheet_fname) and not force_recalc:
+            return
 
         with open(self.spreadsheet_fname, 'w', newline='') as f:
             header = list(self.dfs[df_name].columns)
@@ -139,8 +140,15 @@ class Stats(Base):
             for index, row in self.dfs[df_name].iterrows():
                 writer.writerow(row.to_dict())
 
-    def write_r_script(self):
+    def write_post_hoc_r_script(self):
 
+        r_script = self.write_spike_r_script()
+
+        self.script_path = os.path.join(self.data_opts['data_path'], self.data_type + '_r_script.r')
+        with open(self.script_path, 'w') as f:
+            f.write(r_script)
+
+    def write_spike_r_script(self):
         error_suffix = '/unit' if self.data_opts['row_type'] == 'trial' else ''
         error_suffix = error_suffix + '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else error_suffix
 
@@ -157,72 +165,209 @@ class Stats(Base):
             interaction_p_val_index = 'coefficients[4, 5]'
             zero_adjustment_line = ''
 
-        r_script = fr'''
-        library(glmmTMB)
-        library(lme4)
-        library(lmerTest)  # for lmer p-values
-        library(readr)
+        return fr'''
+                library(glmmTMB)
+                library(lme4)
+                library(lmerTest)  # for lmer p-values
+                library(readr)
 
-        df <- read_csv('{self.spreadsheet_fname}')
+                df <- read_csv('{self.spreadsheet_fname}')
 
-        # Convert variables to factors
-        factor_vars <- c('unit', 'animal', 'neuron_type', 'group')
-        df[factor_vars] <- lapply(df[factor_vars], factor)
+                # Convert variables to factors
+                factor_vars <- c('unit', 'animal', 'neuron_type', 'group')
+                df[factor_vars] <- lapply(df[factor_vars], factor)
 
-        # Add small constant to 0s in the data column, if necessary
-        {zero_adjustment_line}
+                # Add small constant to 0s in the data column, if necessary
+                {zero_adjustment_line}
 
-        # Create an empty data frame to store results
-        results <- data.frame()
+                # Create an empty data frame to store results
+                results <- data.frame()
 
-        perform_regression <- function(data, category){{
-            # Perform regression with mixed effects
-            mixed_model <- {model_formula}
+                perform_regression <- function(data, category){{
+                    # Perform regression with mixed effects
+                    mixed_model <- {model_formula}
 
-            # Extract p-value
-            p_val <- summary(mixed_model)${p_val_index}
-            return(p_val)
-        }}
+                    # Extract p-value
+                    p_val <- summary(mixed_model)${p_val_index}
+                    return(p_val)
+                }}
 
-        # Iterate over the time bins
-        for (time_bin in unique(df$time_bin)) {{
-            # Subset the data for the current time bin
-            sub_df <- df[df$time_bin == time_bin,]
+                # Iterate over the time bins
+                for (time_bin in unique(df$time_bin)) {{
+                    # Subset the data for the current time bin
+                    sub_df <- df[df$time_bin == time_bin,]
 
-            # Perform the interaction analysis
-            interaction_model <- {interaction_model_formula}
-            p_val_interact <- summary(interaction_model)${interaction_p_val_index}
+                    # Perform the interaction analysis
+                    interaction_model <- {interaction_model_formula}
+                    p_val_interact <- summary(interaction_model)${interaction_p_val_index}
 
-            # Perform the within-category analyses
-            p_val_PN <- perform_regression(sub_df[sub_df$neuron_type == 'PN', ], 'PN')
-            p_val_IN <- perform_regression(sub_df[sub_df$neuron_type == 'IN', ], 'IN')
+                    # Perform the within-category analyses
+                    p_val_PN <- perform_regression(sub_df[sub_df$neuron_type == 'PN', ], 'PN')
+                    p_val_IN <- perform_regression(sub_df[sub_df$neuron_type == 'IN', ], 'IN')
 
-            # Store the results
-            results <- rbind(results, data.frame(
-                time_bin = time_bin,
-                interaction_p_val = p_val_interact,
-                PN_p_val = p_val_PN,
-                IN_p_val = p_val_IN
-            ))
-        }}
+                    # Store the results
+                    results <- rbind(results, data.frame(
+                        time_bin = time_bin,
+                        interaction_p_val = p_val_interact,
+                        PN_p_val = p_val_PN,
+                        IN_p_val = p_val_IN
+                    ))
+                }}
 
-        # Write the results to a CSV file
-        write_csv(results, '{self.results_path}')
-        '''
-
-        self.script_path = os.path.join(self.data_opts['data_path'], self.data_type + '_r_script.r')
-        with open(self.script_path, 'w') as f:
-            f.write(r_script)
+                # Write the results to a CSV file
+                write_csv(results, '{self.results_path}')
+                '''
 
     def get_post_hoc_results(self, force_recalc=True):
         spreadsheet_path = os.path.join(self.data_opts['data_path'], self.data_type)
         self.make_spreadsheet(path=spreadsheet_path)
         self.results_path = os.path.join(spreadsheet_path, 'r_post_hoc_results.csv')
         if not os.path.exists(self.results_path) or force_recalc:
-            self.write_r_script()
+            getattr(self, f"write_{self.data_class}_post_hoc_r_script")()
             subprocess.run(['Rscript', self.script_path], check=True)
         results = pd.read_csv(self.results_path)
+        return getattr(self, f"construct_{self.data_class}_post_hoc_results")(results)
+
+    def construct_spike_post_hoc_results(self, results):
         interaction_p_vals = results['interaction_p_val'].tolist()
         within_neuron_type_p_vals = {nt: results[f'{nt}_p_val'].tolist() for nt in ('PN', 'IN')}
         return interaction_p_vals, within_neuron_type_p_vals
+
+    def construct_lfp_post_hoc_results(self, results):
+        return results
+
+    def write_lfp_post_hoc_r_script(self):
+        prepare_df_script = f"""
+        prepare_df <- function(frequency_band, brain_region, evoked=FALSE) {{
+            csv_name = sprintf('mrl_%s_continuous_period_frequency_bins_wavelet_%s.csv', frequency_band, brain_region)
+            csv_file = paste('{os.path.join(self.data_path, 'lfp', 'mrl')}', csv_name, sep='/')
+            df <- read_csv(csv_file)
+
+            factor_vars <- c('animal', 'group', 'period_type', 'neuron_type', 'unit')
+            df[factor_vars] <- lapply(df[factor_vars], factor)
+
+            mrl_column <- sym(paste0(frequency_band, "_mrl"))
+
+            averaged_over_unit_result <- df %>%
+                group_by(animal, period_type, period, neuron_type, group, frequency_bin) %>%
+                summarize(
+                    mean_mrl = mean(!!mrl_column, na.rm = TRUE)
+                ) %>%
+                ungroup()
+
+            data_to_return <- averaged_over_unit_result
+
+            if (evoked) {{
+                pretone_data <- subset(averaged_over_unit_result, period_type == "pretone")
+                tone_data <- subset(averaged_over_unit_result, period_type == "tone")
+
+                merged_data <- merge(pretone_data, tone_data, by = setdiff(names(averaged_over_unit_result), c("mean_mrl", "period_type")))
+                merged_data$mrl_diff <- merged_data$mean_mrl.x - merged_data$mean_mrl.y
+                data_to_return <- merged_data
+            }}
+
+            return(data_to_return)
+        }}
+        """
+
+        regression_script = f"""
+        perform_tests <- function(df, evoked=FALSE) {{
+            results <- data.frame()
+
+            # ... Rest of the regression script ...
+
+            return(results)
+        }}
+
+        data <- prepare_df('{self.current_frequency_band}', '{self.lfp.brain_region}')
+        evoked_data <- prepare_df('{self.frequency_band}', '{self.brain_region}', evoked=TRUE)
+
+        results <- rbind(perform_tests(data), perform_tests(evoked_data, evoked=TRUE))
+
+        write_csv(results, '{self.results_path}')
+        """
+
+        complete_script = f"""
+        library(glmmTMB)
+        library(lme4)
+        library(lmerTest)
+        library(readr)
+        library(dplyr)
+        library(tidyr)
+
+        {prepare_df_script}
+        {self.mrl_post_hoc_regression_script()}
+        """
+
+        return complete_script
+
+    def mrl_post_hoc_regression_script(self):
+        return f"""
+        perform_tests <- function(df, evoked=FALSE) {{
+            results <- data.frame()
+
+            groups <- c('control', 'stressed')
+            neuron_types <- c('IN', 'PN')
+
+            if (!evoked) {{
+
+                # mrl ~ period_type + period + (1|animal) within each combination of control/stressed and IN/PN
+                for (group in groups) {{
+                    for (neuron in neuron_types) {{
+                        sub_df <- df[df$group == group & df$neuron_type == neuron,]
+                        model <- lmer(mean_mrl ~ period_type + period + (1|animal), data=sub_df)
+                        p_vals <- summary(model)$coefficients[,5]  # Assuming 5th column has p-values
+                        non_intercept_pvals <- p_vals[names(p_vals) != '(Intercept)']
+                        results <- rbind(results, data.frame(test='within-group-and-neuron', group=group, neuron_type=neuron, p_values=paste(non_intercept_pvals, collapse=',')))
+                    }}
+                }}
+
+                # mrl ~ group*period_type + period + (1/animal) in each subset of neuron_type
+                for (neuron in neuron_types) {{
+                    sub_df <- df[df$neuron_type == neuron,]
+                    model <- lmer(mean_mrl ~ group*period_type + period + (1|animal), data=sub_df)
+                    p_vals <- summary(model)$coefficients[,5]
+                    non_intercept_pvals <- p_vals[names(p_vals) != '(Intercept)']
+                    results <- rbind(results, data.frame(test='interaction-with-group', neuron_type=neuron, p_values=paste(non_intercept_pvals, collapse=',')))
+                }}
+
+                # mrl ~ neuron_type*period_type + period + (1/animal) in each subset of group
+                for (group in groups) {{
+                    sub_df <- df[df$group == group,]
+                    model <- lmer(mean_mrl ~ neuron_type*period_type + period + (1|animal), data=sub_df)
+                    p_vals <- summary(model)$coefficients[,5]
+                    non_intercept_pvals <- p_vals[names(p_vals) != '(Intercept)']
+                    results <- rbind(results, data.frame(test='interaction-with-neuron', group=group, p_values=paste(non_intercept_pvals, collapse=',')))
+                }}
+
+            }} else {{
+
+                # For evoked data
+
+                # evoked_mrl ~ group + period + (1|animal) within subsets of IN and PN
+                for (neuron in neuron_types) {{
+                    sub_df <- df[df$neuron_type == neuron,]
+                    model <- lmer(mrl_diff ~ group + period + (1|animal), data=sub_df)
+                    p_vals <- summary(model)$coefficients[,5]
+                    non_intercept_pvals <- p_vals[names(p_vals) != '(Intercept)']
+                    results <- rbind(results, data.frame(test='evoked-within-neuron', neuron_type=neuron, p_values=paste(non_intercept_pvals, collapse=',')))
+                }}
+
+                # evoked_mrl ~ neuron_type + period + (1/animal) within control/stressed
+                for (group in groups) {{
+                    sub_df <- df[df$group == group,]
+                    model <- lmer(mrl_diff ~ neuron_type + period + (1|animal), data=sub_df)
+                    p_vals <- summary(model)$coefficients[,5]
+                    non_intercept_pvals <- p_vals[names(p_vals) != '(Intercept)']
+                    results <- rbind(results, data.frame(test='evoked-within-group', group=group, p_values=paste(non_intercept_pvals, collapse=',')))
+                }}
+
+            }}
+
+            return(results)
+        }}
+        """
+
+
+
 

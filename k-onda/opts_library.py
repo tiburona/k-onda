@@ -45,7 +45,8 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
 
 LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period', 'brain_region': 'hpc',
             'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl', 'row_type': 'frequency_bin',
-            'pretone_trials': True, 'pre_stim': 0, 'post_stim': 0.65, 'trials': (0, 150), 'adjustment': 'relative'}
+            'pretone_trials': True, 'pre_stim': 0, 'post_stim': 0.3, 'trials': (0, 150), 'adjustment': 'relative',
+            'frequency_band': 'gamma'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',

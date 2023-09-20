@@ -438,7 +438,6 @@ class PiePlotter(Plotter):
 class MRLPlotter(Plotter):
     def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, lfp=None, graph_opts=None,
                  plot_type='standalone'):
-        print('hello?')
         super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, lfp=lfp, graph_opts=graph_opts,
                          plot_type=plot_type)
 
@@ -512,7 +511,7 @@ class MRLPlotter(Plotter):
                         height=4, aspect=1.5, dodge=True, legend=False, hue_order=period_order, order=group_order)
         g.set_axis_labels("", "Average MRL")
         g.fig.subplots_adjust(top=0.85, hspace=0.4, right=0.85)
-        g.despine(left=True)
+        g.despine()
 
         # Adjust the appearance
         legend_elements = [Patch(facecolor='white', hatch=period_hatches[stage], edgecolor='black', label=stage.upper())
@@ -539,13 +538,24 @@ class MRLPlotter(Plotter):
                     jitter = np.random.rand(len(row['scatter'])) * 0.1 - 0.05
                     ax.scatter([bar_x + j for j in jitter], row['scatter'], color='black', s=20)
 
-                ax.axhline(0, color='gray', linestyle='--')
                 ax.set_title(ax.get_title(), fontsize=14)
 
         g.fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, .9))
         self.fig = g.fig
         self.close_plot('average_mrl')
 
+
+    def add_significance_markers(self):
+        self.stats = Stats(self.experiment, self.data_type_context, self.neuron_type_context, self.data_opts,
+                           lfp=self.lfp)
+        # interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
+        # I need to start by getting pairwise t-test of tone versus pretone.  This is four tests.  The model will be:
+        # mrl ~ period_type + period + (1|animal) within each combination of control/stressed IN/PN
+        # I could also look at evoked_mrl ~ group + period + (1/animal) within IN/PN.  That would be the bars over the top
+        # I could also look at evoked_mrl ~ neuron_type + period + (1/animal) within a condition.
+        # I could analogously look at two way interactions:
+        # mrl ~ group*period_type + period + (1/animal)
+        # mrl ~ neuron_type*period_type + period + (1/animal)
 
 
 

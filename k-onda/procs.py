@@ -83,17 +83,19 @@ def make_all_mrl_spreadsheets(lfp_opts=None):
             my_lfp_opts[0]['fb'] = [fb]
             for phase_opt in ['wavelet', None]:
                 my_lfp_opts[0]['phase'] = phase_opt
-                copy_lfp_opts = deepcopy(my_lfp_opts[0])
-                stats = Stats(experiment, data_type_context, neuron_type_context, copy_lfp_opts, lfp=lfp_experiment)
-                df_name = stats.make_dfs([copy_lfp_opts],)
-                stats.make_spreadsheet(df_name)
+                for adjustment in [None]:
+                    my_lfp_opts[0]['adjustment'] = adjustment
+                    copy_lfp_opts = deepcopy(my_lfp_opts[0])
+                    stats = Stats(experiment, data_type_context, neuron_type_context, copy_lfp_opts, lfp=lfp_experiment)
+                    df_name = stats.make_dfs([copy_lfp_opts],)
+                    stats.make_spreadsheet(df_name)
 
 
 def make_all_rose_plots(lfp_opts=None, graph_opts=None):
     for brain_region in ['pl', 'bla', 'hpc']:
         my_lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [LFP_OPTS, ROSE_PLOT_OPTS])
         plotter = MRLPlotter(experiment, data_type_context, neuron_type_context, period_type_context,
-                              lfp=lfp_experiment)
+                             lfp=lfp_experiment)
         my_lfp_opts['brain_region'] = brain_region
         for phase_opt in ['wavelet', None]:
             my_lfp_opts['phase'] = phase_opt
@@ -106,7 +108,6 @@ def make_all_rose_plots(lfp_opts=None, graph_opts=None):
 
 
 def make_all_mrl_plots(lfp_opts=None, graph_opts=None):
-    print('what is happening?')
     for brain_region in ['pl', 'bla', 'hpc']:
         my_lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [LFP_OPTS, ROSE_PLOT_OPTS])
         plotter = MRLPlotter(experiment, data_type_context, neuron_type_context, period_type_context,
@@ -117,7 +118,14 @@ def make_all_mrl_plots(lfp_opts=None, graph_opts=None):
             for fb in ['delta', 'theta_1', 'theta_2', 'delta', 'gamma', 'hgamma']:
                 my_lfp_opts['frequency_band'] = fb
                 for adjustment in [None]:
-                    print("hmm")
                     my_lfp_opts['adjustment'] = adjustment
                     copy_lfp_opts = deepcopy(my_lfp_opts)
                     plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)
+
+
+def test_mrl_post_hoc_results(lfp_opts=None):
+    my_lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
+    stats = Stats(experiment, data_type_context, neuron_type_context, my_lfp_opts[0], lfp=lfp_experiment)
+    results = stats.get_post_hoc_results()
+    print(results)
+

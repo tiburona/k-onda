@@ -86,7 +86,7 @@ class LFPExperiment(LFPData, Subscriber):
     def all_mrl_calculators(self):
         return [MRLCalculator(unit, period) for animal in self.all_animals
                 for period in animal.all_periods['tone'] + animal.all_periods['pretone']
-                for unit in animal.children]
+                for unit in animal.spike_target.children]
 
     def update(self, context):
         if context.name == 'data_type_context':
@@ -99,9 +99,9 @@ class LFPGroup(LFPData):
     name = 'group'
 
     def __init__(self, group, lfp_experiment):
-        self.target = group
+        self.spike_target = group
         self.experiment = lfp_experiment
-        self.identifier = self.target.identifier
+        self.identifier = self.spike_target.identifier
 
     @property
     def children(self):
@@ -128,7 +128,7 @@ class LFPAnimal(LFPData):
     name = 'animal'
 
     def __init__(self, animal, data_path):
-        self.target = animal
+        self.spike_target = animal
         self.data_path = data_path
         self.raw_lfp = self.get_raw_lfp()
         self.period_intervals = self.get_period_intervals()
@@ -136,7 +136,7 @@ class LFPAnimal(LFPData):
         self.all_mrl_calculators = None
 
     def __getattr__(self, name):
-        return getattr(self.target, name)
+        return getattr(self.spike_target, name)
 
     @property
     def frequency_args(self):
@@ -148,7 +148,7 @@ class LFPAnimal(LFPData):
             calcs = [calc for calc in self.all_mrl_calculators['tone'] + self.all_mrl_calculators['pretone']]
         else:
             calcs = [calc for calc in self.all_mrl_calculators[self.selected_period_type]]
-        return [calc for calc in calcs if calc.unit in self.target.children and calc.is_valid]
+        return [calc for calc in calcs if calc.unit in self.spike_target.children and calc.is_valid]
 
     @property
     def periods(self):
@@ -194,7 +194,7 @@ class LFPAnimal(LFPData):
                 for stage, periods in self.period_intervals.items()}
 
     def prepare_mrl_calculators(self):
-        return {stage: [MRLCalculator(unit, period) for period in periods for unit in self.target.units['good']]
+        return {stage: [MRLCalculator(unit, period) for period in periods for unit in self.spike_target.units['good']]
                 for stage, periods in self.all_periods.items()}
 
 
@@ -352,6 +352,12 @@ class MRLCalculator(LFPData):
         self.spikes = [int((spike + i) * LFP_SAMPLING_RATE) for i, trial in enumerate(self.spike_period.trials)
                        for spike in trial.spikes]
         self.num_events = len(self.spikes)
+        if self.num_events < 5:
+            print(self.parent.identifier)
+            print(self.period_type)
+            print(self.identifier)
+            print(self.num_events)
+            print(" ")
 
     @property
     def ancestors(self):
@@ -382,15 +388,14 @@ class MRLCalculator(LFPData):
         return np.array(
             [1 if weight in self.spikes else float('nan') for weight in range(TONES_PER_PERIOD * LFP_SAMPLING_RATE)])
 
-    def get_wavelet_phases(self, frequency, scale):
+    def get_wavelet_phases(self, scale):
 
         cwt_matrix = cwt(self.period.mrl_data, morlet, [scale])
-        if frequency == 0:
-            frequency += 10 ** -6
         # Since we're computing the CWT for only one scale, the result is at index 0.
         return np.angle(cwt_matrix[0, :])
 
     def get_phases(self):
+
         fb = FREQUENCY_BANDS[self.current_frequency_band]
         low = fb[0] + .1
         high = fb[1]
@@ -400,7 +405,7 @@ class MRLCalculator(LFPData):
             else:
                 frequencies = np.linspace(low, high, int(high - low) + 1)
             scales = [get_wavelet_scale(f, LFP_SAMPLING_RATE) for f in frequencies]
-            return np.array([self.get_wavelet_phases(f, s) for f, s in zip(frequencies, scales)])
+            return np.array([self.get_wavelet_phases(s) for s in scales])
         else:
             return compute_phase(bandpass_filter(self.period.mrl_data, low, high, LFP_SAMPLING_RATE))
 
@@ -441,9 +446,23 @@ class MRLCalculator(LFPData):
         return counts
 
     def get_mrl(self):
-        weights = self.get_weights()
+        w = self.get_weights()
         alpha = self.get_phases()
-        return circ_r2_unbiased(alpha, weights, dim=int(self.data_opts.get('phase') == 'wavelet'))
+        dim = int(self.data_opts.get('phase') == 'wavelet')
+
+        if w.ndim == 1 and alpha.ndim == 2:
+            w = w[np.newaxis, :]
+
+        # Handle NaN assignment based on the shape of alpha
+        if alpha.ndim == 2:
+            w[:, np.isnan(alpha).any(axis=0)] = np.nan
+        else:
+            w[np.isnan(alpha)] = np.nan
+
+        if self.data_type == 'ppc':
+            return circ_r2_unbiased(alpha, w, dim=dim)
+        else:
+            return compute_mrl(alpha, w, dim=dim)
 
 
 

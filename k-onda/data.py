@@ -97,10 +97,6 @@ class Data(Base):
                                    not (isinstance(x, np.ndarray) and np.isnan(x).all()) and not (
                                                isinstance(x, float) and np.isnan(x))]
             if axis is None:
-                if self.name == 'group':
-                    print(self.name)
-                    print(self.identifier)
-                    print(child_vals_filtered)
                 return np.nanmean(np.array(child_vals_filtered))
             else:
                 return np.nanmean(np.array(child_vals_filtered), axis=axis)

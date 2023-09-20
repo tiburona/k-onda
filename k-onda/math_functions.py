@@ -111,18 +111,6 @@ def get_wavelet_scale(frequency, sampling_rate, fc=1.0):
 
 
 def circ_r2_unbiased(alpha, w=None, dim=0):
-    if w is None:
-        w = np.ones_like(alpha)
-
-    # If w is 1D and alpha is 2D, reshape w for broadcasting
-    if w.ndim == 1 and alpha.ndim == 2:
-        w = w[np.newaxis, :]
-
-    # Handle NaN assignment based on the shape of alpha
-    if alpha.ndim == 2:
-        w[:, np.isnan(alpha).any(axis=0)] = np.nan
-    else:
-        w[np.isnan(alpha)] = np.nan
 
     r = np.nansum(w * np.exp(1j * alpha), axis=dim)
     n = np.nansum(w, axis=dim)
@@ -137,6 +125,26 @@ def circ_r2_unbiased(alpha, w=None, dim=0):
     # Reshape n to ensure it's broadcastable to r
     n = np.broadcast_to(n, r.shape)
     r[n < 2] = np.nan
+
+    return r
+
+
+def compute_mrl(alpha, w, dim):
+    # Convert phase data to Cartesian coordinates
+    x = w * np.cos(alpha)
+    y = w * np.sin(alpha)
+
+    # Compute the average Cartesian coordinates
+    x_bar = np.nansum(x, axis=dim) / np.nansum(w, axis=dim)
+    y_bar = np.nansum(y, axis=dim) / np.nansum(w, axis=dim)
+
+    # Compute and return the MRL
+    r = np.sqrt(x_bar ** 2 + y_bar ** 2)
+    if isinstance(r, float):
+        r = np.array([r])
+    n = np.nansum(w, axis=dim)
+    mask = np.broadcast_to(n < 2, r.shape)
+    r[mask] = np.nan
 
     return r
 
