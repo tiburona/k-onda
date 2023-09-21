@@ -379,33 +379,6 @@ class Trial(Level):
         return {'trials': self._calculate_autocorrelation(self.get_demeaned_rates())}
 
 
-# class Block(Level):
-#
-#     instances = []
-#     name = 'period'
-#
-#     def __init__(self, i, parent):
-#         self.instances.append(self)
-#         self.parent = parent
-#         self.identifier = i
-#         self.trials = range_args([trial for trial in range(*self.data_opts['trials'])
-#                                   if trial // TONES_PER_PERIOD == i])
-#         self.children = None
-#
-#     @property
-#     def data(self):
-#         data_opts = deepcopy(self.data_opts)
-#         self.data_opts['trials'] = self.trials
-#         self.data_opts['time'] = 'continuous'
-#         data_to_return = self.parent.data
-#         self.children = [TimeBin(i, val, self) for i, val in enumerate(data_to_return)]
-#         return data_to_return, data_opts
-#
-#     @property
-#     def mean(self):
-#         return np.mean(self.data)
-
-
 class TimeBin:
 
     name = 'time_bin'

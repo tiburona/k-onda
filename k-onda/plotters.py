@@ -3,13 +3,14 @@ import math
 import numpy as np
 import seaborn as sns
 import pandas as pd
+from copy import deepcopy
 from itertools import product
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from matplotlib.gridspec import GridSpec
-# Create a custom legend
 from matplotlib.patches import Patch
+from matplotlib.colors import LinearSegmentedColormap
 
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts, std_err
 from plotting_helpers import smart_title_case, formatted_now, PlottingMixin
@@ -125,8 +126,8 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.close_plot(group.identifier)
 
     def make_subplot(self, data_source, ax, title=''):
-        subplotter = PeriStimulusSubplotter(data_source, self.data_opts, self.graph_opts, ax,
-                                            self.plot_type, multiplier=self.multiplier)
+        subplotter = PeriStimulusSubplotter(data_source, self.data_opts, self.graph_opts, ax, self.plot_type,
+                                            multiplier=self.multiplier)
         subplotter.plot_data()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
@@ -214,7 +215,6 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         if self.data_opts.get('base'):
             tags += [self.data_opts.get('base')]
         self.fname = f"{'_'.join(tags)}.png"
-
 
     def join_trials(self, s):
         return s.join([str(t) for t in self.data_opts['trials']])
@@ -436,19 +436,28 @@ class PiePlotter(Plotter):
 
 
 class MRLPlotter(Plotter):
-    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, lfp=None, graph_opts=None,
-                 plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, lfp=lfp, graph_opts=graph_opts,
-                         plot_type=plot_type)
+    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, lfp=None,
+                 graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, lfp=lfp,
+                         graph_opts=graph_opts, plot_type=plot_type)
 
-    def rose_plot(self, data_opts, graph_opts):
+    def make_plot(self, data_opts, graph_opts, plot_type='rose'):
+        if plot_type == 'rose':
+            basename = 'rose_plot'
+            plot_func = self.make_rose_plot
+            projection = 'polar'
+        else:
+            basename = 'heat_map'
+            plot_func = self.make_heat_map
+            projection = None
+
         self.initialize(data_opts, graph_opts, neuron_type=None)
         self.fig = plt.figure(figsize=(15, 15))
 
         ncols = 2 if self.data_opts.get('adjustment') == 'relative' else 4
 
         self.axs = [
-            [self.fig.add_subplot(2, ncols, 1 + ncols * row + col, projection='polar') for col in range(ncols)]
+            [self.fig.add_subplot(2, ncols, 1 + ncols * row + col, projection=projection) for col in range(ncols)]
             for row in range(2)
         ]
 
@@ -457,17 +466,18 @@ class MRLPlotter(Plotter):
             for j, group in enumerate(self.lfp.groups):
                 if self.data_opts.get('adjustment') == 'relative':
                     self.selected_period_type = 'tone'
-                    self.make_rose_plot(group, self.axs[i][j], title=f"{group.identifier.capitalize()} {neuron_type}")
+                    plot_func(group, self.axs[i][j], title=f"{group.identifier.capitalize()} {neuron_type}")
                 else:
                     for k, period_type in enumerate(['pretone', 'tone']):
                         self.selected_period_type = period_type
-                        self.make_rose_plot(group, self.axs[i][j*2 + k],
-                                            title=f"{group.identifier.capitalize()} {neuron_type} {period_type}")
+                        plot_func(group, self.axs[i][j * 2 + k],
+                                  title=f"{group.identifier.capitalize()} {neuron_type} {period_type}")
         self.selected_neuron_type = None
-        self.close_plot('rose_plot')
+        self.close_plot(basename)
 
     def set_dir_and_filename(self, basename):
-        tags = [self.lfp.current_frequency_band, self.lfp.brain_region]
+        frequency_band = str(self.lfp.current_frequency_band)
+        tags = [frequency_band, self.lfp.brain_region]
         self.dir_tags = [self.data_type]
         for opt in ['phase', 'adjustment']:
             if self.data_opts.get(opt):
@@ -486,8 +496,17 @@ class MRLPlotter(Plotter):
         ax.set_yticks(current_ticks[::2])  # every second tick
         ax.set_title(title)
 
+    def make_heat_map(self, group, ax, title=""):
+        data = group.data_by_period
+        im = ax.imshow(data.T, cmap='jet', interpolation='nearest', aspect='auto',
+                       extent=[0.5, 5.5, self.current_frequency_band[0], self.current_frequency_band[1]], origin='lower')
+        cbar = ax.figure.colorbar(im, ax=ax, label='MRL')
+        ax.set_title(title)
+
     def mrl_vals_plot(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts, neuron_type=None)
+        mrl_vals_data_opts = deepcopy(data_opts)
+        mrl_vals_data_opts['collapse_matrix'] = True
+        self.initialize(mrl_vals_data_opts, graph_opts, neuron_type=None)
 
         data = []
         for neuron_type in self.neuron_types:
@@ -496,9 +515,10 @@ class MRLPlotter(Plotter):
                 for period_type in ['pretone', 'tone']:
                     self.selected_period_type = period_type
                     data.append([neuron_type, group.identifier, period_type, group.data, std_err(group.scatter),
-                                 group.scatter])
+                                 group.scatter, group.grandchildren_scatter])
 
-        df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Period', 'Average MRL', 'sem', 'scatter'])
+        df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Period', 'Average MRL', 'sem', 'scatter',
+                                         'unit_scatter'])
 
         group_order = df['Group'].unique()
         period_order = ['pretone', 'tone']
@@ -538,12 +558,17 @@ class MRLPlotter(Plotter):
                     jitter = np.random.rand(len(row['scatter'])) * 0.1 - 0.05
                     ax.scatter([bar_x + j for j in jitter], row['scatter'], color='black', s=20)
 
+                    jitter = np.random.rand(len(row['unit_scatter'])) * 0.1 - 0.05
+                    ax.scatter([bar_x + j for j in jitter], row['unit_scatter'], color='gray', s=20)
+
                 ax.set_title(ax.get_title(), fontsize=14)
 
         g.fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, .9))
         self.fig = g.fig
         self.close_plot('average_mrl')
 
+    def make_footer(self):
+        pass # todo: make this do something
 
     def add_significance_markers(self):
         self.stats = Stats(self.experiment, self.data_type_context, self.neuron_type_context, self.data_opts,

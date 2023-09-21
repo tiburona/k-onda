@@ -1,7 +1,8 @@
 from copy import deepcopy
 
 from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
-    GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS, AC_KEYS, AC_METHODS, FIGURE_1_OPTS, LFP_OPTS, ROSE_PLOT_OPTS
+    GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS, AC_KEYS, AC_METHODS, FIGURE_1_OPTS, LFP_OPTS, ROSE_PLOT_OPTS, \
+    HEAT_MAP_DATA_OPTS
 from initialize_experiment import experiment, data_type_context, neuron_type_context, period_type_context, \
     lfp_experiment
 from proc_helpers import add_ac_keys_and_plot, assign_vars, plot
@@ -121,6 +122,16 @@ def make_all_mrl_plots(lfp_opts=None, graph_opts=None):
                     my_lfp_opts['adjustment'] = adjustment
                     copy_lfp_opts = deepcopy(my_lfp_opts)
                     plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)
+
+
+def make_mrl_heat_maps(lfp_opts=None, graph_opts=None):
+    for brain_region in ['pl', 'bla', 'hpc']:
+        my_lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [HEAT_MAP_DATA_OPTS, GRAPH_OPTS])
+        plotter = MRLPlotter(experiment, data_type_context, neuron_type_context, period_type_context,
+                             lfp=lfp_experiment)
+        my_lfp_opts['brain_region'] = brain_region
+        copy_lfp_opts = deepcopy(my_lfp_opts)
+        plotter.make_plot(copy_lfp_opts, graph_opts, plot_type='heat_map')
 
 
 def test_mrl_post_hoc_results(lfp_opts=None):

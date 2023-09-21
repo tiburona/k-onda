@@ -57,11 +57,19 @@ class LFPData(Data):
         return self.data_opts.get('frequency_band')
 
     @property
+    def freq_range(self):
+        if isinstance(self.current_frequency_band, type('str')):
+            return FREQUENCY_BANDS[self.current_frequency_band]
+        else:
+            return self.current_frequency_band
+
+    @property
     def selected_period_type(self):
         return self.period_type_context.val
 
     def get_mrl(self):
-        return self.get_average('get_mrl', stop_at='mrl_calculator', axis=None)
+        axis = 0 if not self.data_opts.get('collapse_matrix') else None
+        return self.get_average('get_mrl', stop_at='mrl_calculator', axis=axis)
 
 
 class LFPExperiment(LFPData, Subscriber):
@@ -110,6 +118,32 @@ class LFPGroup(LFPData):
     @property
     def mrl_calculators(self):
         return [mrl_calc for animal in self.children for mrl_calc in animal.mrl_calculators if mrl_calc.is_valid]
+
+    @property
+    def grandchildren_scatter(self):
+        if self.data_type != 'mrl':
+            raise NotImplementedError("Grandchildren Scatter is currently only implemented for MRL")
+        else:
+            unit_points = []
+            for animal in self.children:
+                for unit in animal.spike_target.children:
+                    unit_points.append(np.mean([mrl_calc.data for mrl_calc in animal.children
+                                                if mrl_calc.unit.identifier == unit.identifier]))
+            return unit_points
+
+    @property
+    def data_by_period(self):
+        if self.data_type != 'mrl':
+            raise NotImplementedError("Grandchildren Scatter is currently only implemented for MRL")
+        data_by_period = []
+        for i in range(5):
+            data_by_period.append(
+                np.mean(
+                    [mrl_calc.data for animal in self.children for mrl_calc in animal.children
+                     if mrl_calc.period.identifier == i], axis=0)
+            )
+        return np.array(data_by_period)
+
 
     def get_angle_counts(self):
         for calc in self.mrl_calculators:
@@ -200,10 +234,6 @@ class LFPAnimal(LFPData):
 
 class LFPDataSelector:
     """A class with methods shared by LFPPeriod and LFPTrial that are used to return portions of their data."""
-
-    @property
-    def freq_range(self):
-        return FREQUENCY_BANDS[self.current_frequency_band]
 
     @property
     def frequency_bins(self):
@@ -316,7 +346,7 @@ class FrequencyBin(LFPData):
         if isinstance(parent, LFPPeriod):
             self.identifier = self.period.spectrogram[1][index]
         else:  # parent is MRLCalculator  # TODO: this is really an approximation of what frequencies these actually were; make more exact
-            self.identifier = list(range(*FREQUENCY_BANDS[self.current_frequency_band]))[index]
+            self.identifier = list(range(*self.freq_range))[index]
         self.period_type = self.parent.period_type
         self.unit = unit
         self.is_valid = self.parent.is_valid if hasattr(self.parent, 'is_valid') else True
@@ -395,10 +425,8 @@ class MRLCalculator(LFPData):
         return np.angle(cwt_matrix[0, :])
 
     def get_phases(self):
-
-        fb = FREQUENCY_BANDS[self.current_frequency_band]
-        low = fb[0] + .1
-        high = fb[1]
+        low = self.freq_range[0] + .05
+        high = self.freq_range[1]
         if self.data_opts.get('phase') == 'wavelet':
             if 'gamma' in self.current_frequency_band:
                 frequencies = np.logspace(np.log10(low), np.log10(high), int((high - low) / 5))
@@ -407,8 +435,14 @@ class MRLCalculator(LFPData):
             scales = [get_wavelet_scale(f, LFP_SAMPLING_RATE) for f in frequencies]
             return np.array([self.get_wavelet_phases(s) for s in scales])
         else:
-            return compute_phase(bandpass_filter(self.period.mrl_data, low, high, LFP_SAMPLING_RATE))
+            if isinstance(self.current_frequency_band, type('str')):
+                return compute_phase(bandpass_filter(self.period.mrl_data, low, high, LFP_SAMPLING_RATE))
+            else:
+                frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
+                return np.array([compute_phase(bandpass_filter(self.period.mrl_data, low, high, LFP_SAMPLING_RATE))
+                                 for low, high in frequency_bands])
 
+    @cache_method
     def get_angles(self):
 
         def adjust_angle(angle, weight):
@@ -445,10 +479,11 @@ class MRLCalculator(LFPData):
                 counts -= self.equivalent_calculator.get_angle_counts()
         return counts
 
+    @cache_method
     def get_mrl(self):
         w = self.get_weights()
         alpha = self.get_phases()
-        dim = int(self.data_opts.get('phase') == 'wavelet')
+        dim = int(self.data_opts.get('phase') == 'wavelet' or not isinstance(self.current_frequency_band, type('str')))
 
         if w.ndim == 1 and alpha.ndim == 2:
             w = w[np.newaxis, :]

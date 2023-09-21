@@ -71,9 +71,28 @@ class Stats(Base):
         return new_df_name
 
     def get_rows(self):
-        """Sets up the level, i.e., the data class from which data will be collected, the other attributes to add to the
-        row, and the inclusion criteria for a member of the data class to be included in the data, then calls
-        self.get_data."""
+        """
+        Prepares the necessary parameters and then calls `self.get_data` to collect rows of data based on the specified
+        level, attributes, and inclusion criteria.
+
+        The function determines the level (i.e., the object type) from which data will be collected, the additional
+        attributes to be included in each row, and the criteria that an object must meet to be included in the data.
+
+        Parameters:
+        None
+
+        Returns:
+        list of dict: A list of dictionaries, where each dictionary represents a row of data. The keys in the dictionary
+        include the data column, source identifiers, ancestor identifiers, and any other specified attributes.
+
+        Notes:
+        - The function sets default attributes to include like 'period_type' and then adds to them based on the
+          object's `data_class` and `data_type` attributes.
+        - Inclusion criteria are set based on the data class, data type, and other options set in the object's
+          `data_opts` attribute.
+        - The `self.get_data` method is then called with the determined level, inclusion criteria, and attributes to
+          collect the rows of data.
+        """
 
         other_attributes = ['period_type']
         inclusion_criteria = []
@@ -95,8 +114,36 @@ class Stats(Base):
         return self.get_data(level, inclusion_criteria, other_attributes)
 
     def get_data(self, level, inclusion_criteria, other_attributes):
-        """Collects data from data sources and returns a list of row dictionaries, along with the identifiers of the
-        source and all its ancestors and any other specified attributes of the source or its ancestors."""
+        """
+        Collects data from specified data sources based on the provided level and criteria. The function returns a list
+        of dictionaries, where each dictionary represents a row of data. Each row dictionary contains data values,
+        identifiers of the source, identifiers of all its ancestors, and any other specified attributes of the source
+        or its ancestors.
+
+        Parameters:
+        - level (str): Specifies the hierarchical level from which data should be collected. This determines which
+          sources are considered for data collection.
+        - inclusion_criteria (list of callables): A list of functions that each take a source as an argument and return
+          a boolean value. Only sources for which all criteria functions return True are included in the data
+          collection.
+        - other_attributes (list of str): A list of additional attribute names to be collected from the source or its
+          ancestors. If an attribute does not exist for a particular source, it will be omitted from the row dictionary.
+
+        Returns:
+        list of dict: A list of dictionaries, where each dictionary represents a row of data. The keys in the dictionary
+        include the data column, source identifiers, ancestor identifiers, and any other specified attributes.
+
+        Notes:
+        - The function first determines the relevant data sources based on the specified `level` and the object's
+          `data_class` attribute.
+        - If the `frequency_type` in `data_opts` is set to 'continuous', the function further breaks down the sources
+          based on frequency bins.
+        - Similarly, if the `time_type` in `data_opts` is set to 'continuous', the sources are further broken down based
+          on time bins.
+        - The final list of sources is filtered based on the provided `inclusion_criteria`.
+        - For each source, a row dictionary is constructed containing the data, source identifiers, ancestor
+          identifiers, and any other specified attributes.
+        """
 
         rows = []
         experiment = self.lfp if self.data_class == 'lfp' else self.experiment
@@ -119,13 +166,33 @@ class Stats(Base):
         return rows
 
     def make_spreadsheet(self, df_name=None, path=None, force_recalc=True):
+        """
+        Creates a spreadsheet (CSV file) from a specified DataFrame stored within the object.
+
+        This function constructs the filename based on various attributes and options set in the objects `data_opts`. If
+        the file already exists and `force_recalc` is set to False, the function will not overwrite the existing file.
+
+        Parameters:
+        - df_name (str, optional): Name of the DataFrame to be written to the spreadsheet. Defaults to the object's
+            `data_type` attribute if not provided.
+        - path (str, optional): Directory path where the spreadsheet should be saved. If not provided, it defaults to
+            the `data_path` attribute from the object's `data_opts`.
+        - force_recalc (bool, optional): If set to True, the function will overwrite an existing file with the same
+            name. Defaults to True.
+
+        Returns:
+        None: The function saves the spreadsheet to the specified path and updates the `spreadsheet_fname` attribute
+           of the object.
+        """
         row_type = self.data_opts['row_type']
         path = path if path else self.data_opts.get('data_path')
         df_name = df_name if df_name else self.data_type
         if df_name not in self.dfs:
             self.make_df(df_name)
-        frequency, time, phase = (self.data_opts.get(attr) for attr in ['frequency_type', 'time_type', 'phase'])
-        name = '_'.join([attr for attr in [self.data_type, df_name, frequency, time, row_type + 's', phase] if attr])
+        frequency, time, phase, pre_stim, post_stim = (
+            self.data_opts.get(attr) for attr in ['frequency_type', 'time_type', 'phase', 'pre_stim', 'post_stim'])
+        name = '_'.join([str(attr) for attr in [self.data_type, df_name, frequency, time, row_type + 's', phase,
+                                                pre_stim, post_stim] if attr])
         if 'lfp' in name:
             path = os.path.join(path, 'lfp', self.data_type)
             name += f"_{self.data_opts.get('brain_region')}"

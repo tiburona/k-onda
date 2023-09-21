@@ -88,17 +88,32 @@ class Data(Base):
 
     @cache_method
     def get_average(self, base_method, stop_at='trial', axis=0):  # Trial is the default base case, but not always
-        if self.name == stop_at:
+        """
+        Recursively calculates the average of the values of the computation in the base method on the object's
+        descendants.
+
+        Parameters:
+        - base_method (str): Name of the method to be called when the recursion reaches the base case.
+        - stop_at (str): The 'name' attribute of the base case object upon which `base_method` should be called.
+        - axis (int or None): When the 'data' property of an object returns a vector or matrix instead of a single
+        number, this specifies the axis across which to compute the mean. Default is 0, which preserves the original
+        shape of the data and averages over dimensions like units and animals. If set to None, the mean is computed
+        over all dimensions.
+
+        Returns:
+        float or np.array: The mean of the data values from the object's descendants.
+        """
+        if self.name == stop_at:  # we are at the base case and will call the base method
             return getattr(self, base_method)()
-        else:
+        else:  # recursively call
             child_vals = [child.get_average(base_method, stop_at=stop_at) for child in self.children]
             # Filter out nan values and arrays that are all NaN
-            child_vals_filtered = [x for x in child_vals if
-                                   not (isinstance(x, np.ndarray) and np.isnan(x).all()) and not (
-                                               isinstance(x, float) and np.isnan(x))]
-            if axis is None:
+            child_vals_filtered = [x for x in child_vals
+                                   if not (isinstance(x, np.ndarray) and np.isnan(x).all())
+                                   and not (isinstance(x, float) and np.isnan(x))]
+            if axis is None:  # compute mean over all dimensions
                 return np.nanmean(np.array(child_vals_filtered))
-            else:
+            else:  # compute mean over provided dimension
                 return np.nanmean(np.array(child_vals_filtered), axis=axis)
 
     @cache_method
@@ -107,7 +122,8 @@ class Data(Base):
 
     @cache_method
     def get_scatter_points(self):
-        return [child.data for child in self.children]
+        """Returns an array of points of the data values for an object's children for use on, e.g. a bar graph"""
+        return [np.mean(child.data) for child in self.children]
 
 
 
