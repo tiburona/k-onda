@@ -9,7 +9,7 @@ The top-level module for calling spike processing functions.
 
 def main():
 
-    make_all_mrl_spreadsheets()  # An example.  See what else is available in the procs module.
+    make_spike_mrl_spreadsheet() # An example.  See what else is available in the procs module.
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

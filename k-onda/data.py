@@ -72,7 +72,15 @@ class Data(Base):
 
     @property
     def data(self):
-        return getattr(self, f"get_{self.data_type}")()
+        data = getattr(self, f"get_{self.data_type}")()
+        if hasattr(self, 'evoked_value_calculator'):
+            return self.evoked_value_calculator.get_evoked_data(data, self.data_opts.get('evoked'))
+        else:
+            return data
+
+    @property
+    def mean_data(self):
+        return np.mean(self.data)
 
     @property
     def ancestors(self):
@@ -124,6 +132,23 @@ class Data(Base):
     def get_scatter_points(self):
         """Returns an array of points of the data values for an object's children for use on, e.g. a bar graph"""
         return [np.mean(child.data) for child in self.children]
+
+
+class EvokedValueCalculator:
+
+    def __init__(self, ref):
+        self.ref = ref
+
+    @property
+    def equivalent(self):
+        other_stage = 'tone' if self.ref.period_type == 'pretone' else 'pretone'
+        other_stage_children = getattr(self.ref.parent, f"all_{self.ref.name}s")[other_stage]
+        return [p for p in other_stage_children if p.identifier == self.ref.identifier][0]
+
+    def get_evoked_data(self, data, evoked):
+        if evoked and self.ref.period_type == 'tone':
+            data -= self.equivalent.data
+        return data
 
 
 

@@ -3,7 +3,7 @@ import pickle
 from scipy.signal import cwt, morlet
 from neo.rawio import BlackrockRawIO
 
-from data import Data
+from data import Data, EvokedValueCalculator
 from context import Subscriber, period_type_context as pt_context
 from matlab_interface import MatlabInterface
 from math_functions import *
@@ -21,7 +21,6 @@ FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_thet
 LO_FREQ_ARGS = (2048, 2000, 1000, 980, 2)
 FREQUENCY_ARGS = {fb: LO_FREQ_ARGS for fb in ['delta', 'theta_1', 'theta_2', 'delta_theta', 'gamma', 'hgamma']}
 # TODO: gamma and hgamma don't really belong there, find out what their args should be.
-# TODO: It would be nice to bring the cacheing into this module but I have to carefully check that context is considerd
 
 PL_ELECTRODES = {
     'IG154': (4, 6), 'IG155': (12, 14), 'IG156': (12, 14), 'IG158': (7, 14), 'IG160': (1, 8), 'IG161': (9, 11),
@@ -98,7 +97,7 @@ class LFPExperiment(LFPData, Subscriber):
 
     def update(self, context):
         if context.name == 'data_type_context':
-            if self.last_brain_region != self.data_opts.get('brain_region'):
+            if self.data_class == 'lfp' and self.last_brain_region != self.data_opts.get('brain_region'):
                 [animal.update_children() for animal in self.all_animals]
                 self.last_brain_region = self.data_opts.get('brain_region')
 
@@ -143,7 +142,6 @@ class LFPGroup(LFPData):
                      if mrl_calc.period.identifier == i], axis=0)
             )
         return np.array(data_by_period)
-
 
     def get_angle_counts(self):
         for calc in self.mrl_calculators:
@@ -276,6 +274,7 @@ class LFPPeriod(LFPData, LFPDataSelector):
         self.mrl_data = self.processed_data[LFP_SAMPLING_RATE:-LFP_SAMPLING_RATE]
         self.period_type = period_type
         self.parent = lfp_animal
+        self.evoked_value_calculator = EvokedValueCalculator(self)
 
     @property
     def trials(self):
@@ -316,7 +315,7 @@ class LFPPeriod(LFPData, LFPDataSelector):
 
     def get_power(self):
         power = np.mean([trial.data for trial in self.get_trials()], axis=0)
-        if self.data_opts.get('adjustment') == 'normalize' and self.period_type == 'tone':
+        if self.data_opts.get('evoked') and self.period_type == 'tone':
             power -= self.animal.periods['pretone'][self.identifier].get_power()
         return power
 
@@ -355,6 +354,10 @@ class FrequencyBin(LFPData):
     def data(self):
         return self.val
 
+    @property
+    def mean_data(self):
+        return np.mean(self.val)
+
 
 class TimeBin:
     name = 'time_bin'
@@ -382,12 +385,7 @@ class MRLCalculator(LFPData):
         self.spikes = [int((spike + i) * LFP_SAMPLING_RATE) for i, trial in enumerate(self.spike_period.trials)
                        for spike in trial.spikes]
         self.num_events = len(self.spikes)
-        if self.num_events < 5:
-            print(self.parent.identifier)
-            print(self.period_type)
-            print(self.identifier)
-            print(self.num_events)
-            print(" ")
+        self.evoked_value_calculator = EvokedValueCalculator(self)
 
     @property
     def ancestors(self):
@@ -409,7 +407,7 @@ class MRLCalculator(LFPData):
 
     @property
     def is_valid(self):
-        if self.data_opts.get('adjustment') == 'relative':
+        if self.data_opts.get('evoked') == 'relative':
             return self.num_events > 4 and self.equivalent_calculator.num_events > 4
         else:
             return self.num_events > 4
@@ -473,8 +471,8 @@ class MRLCalculator(LFPData):
         bin_edges = np.linspace(0, 2 * np.pi, n_bins + 1)
         angles = self.get_angles()
         counts, _ = np.histogram(angles, bins=bin_edges)
-        if self.data_opts.get('adjustment') == 'relative':
-            counts = counts/len(angles)
+        if self.data_opts.get('evoked'):
+            counts = counts/len(angles)  # counts must be transformed to proportions for the subtraction to make sense
             if self.period_type == 'tone':
                 counts -= self.equivalent_calculator.get_angle_counts()
         return counts
@@ -494,7 +492,7 @@ class MRLCalculator(LFPData):
         else:
             w[np.isnan(alpha)] = np.nan
 
-        if self.data_type == 'ppc':
+        if self.data_opts.get('mrl_func') == 'ppc':
             return circ_r2_unbiased(alpha, w, dim=dim)
         else:
             return compute_mrl(alpha, w, dim=dim)

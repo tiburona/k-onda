@@ -31,7 +31,8 @@ TRIAL_DURATION = 1
 class Level(Data):
 
     @property
-    def time_bins(self):
+    def time_bins(
+            self):  # TODO: Right now i is the integer value of the time point.  Would be nice to make it the actual time bin.
         return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
 
     @property
@@ -308,11 +309,24 @@ class Period(Level):
         # TODO: check that i is the right value here (original index)
         for i, start in enumerate(pip_onsets):
             for spike_type, pre, post in [(self.trials, pre_stim, post_stim),
-                                          (self.full_trials, 0, TRIAL_DURATION*SAMPLING_RATE)]:
+                                          (self.full_trials, 0, TRIAL_DURATION * SAMPLING_RATE)]:
                 spikes = self.unit.find_spikes(start - pre_stim, start + post_stim)
                 spike_type.append(Trial(self, unit, [(spike - start) / SAMPLING_RATE for spike in spikes], i))
         self.children = self.trials
         self.parent = unit
+
+    @property
+    def equivalent_period(self):
+        other_stage = 'tone' if self.period_type == 'pretone' else 'pretone'
+        return [p for p in self.parent.periods[other_stage] if p.identifier == self.identifier][0]
+
+    @property
+    def data(self):
+        data = getattr(self, f"get_{self.data_type}")()
+        if self.data_opts.get('evoked'):
+            if self.period_type == 'tone':
+                data -= self.equivalent_period.data
+        return data
 
     @cache_method
     def get_spikes_by_trials(self):  # TODO: This method repeated for unit and period could be mixin
@@ -380,7 +394,6 @@ class Trial(Level):
 
 
 class TimeBin:
-
     name = 'time_bin'
     instances = []
 
@@ -389,6 +402,7 @@ class TimeBin:
         self.parent = parent
         self.identifier = i
         self.data = val
+        self.mean_data = val
 
     @property
     def ancestors(self):
@@ -407,5 +421,3 @@ class TimeBin:
             return 'early'
         else:
             return 'late'
-
-

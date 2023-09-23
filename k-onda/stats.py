@@ -2,7 +2,9 @@ import subprocess
 import pandas as pd
 import csv
 import os
-
+from copy import deepcopy
+import random
+import string
 from data import Base
 from utils import find_ancestor_attribute
 
@@ -20,6 +22,8 @@ class Stats(Base):
         self.spreadsheet_fname = None
         self.results_path = None
         self.script_path = None
+        self.opts_dicts = []
+        self.name_suffix = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(6))
 
     @property
     def rows(self):
@@ -28,23 +32,39 @@ class Stats(Base):
     def set_attributes(self, fb=None):
         if self.data_class == 'lfp':
             self.current_frequency_band = fb
-            self.data_col = f"{self.current_frequency_band}_{self.data_type}"
+            self.data_col = f"{self.data_opts['brain_region']}_{self.current_frequency_band}_{self.data_type}"
         else:
             self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
 
     def make_dfs(self, opts_dicts):
-        name = self.data_type
+        """
+         Constructs one or more DataFrames based on the provided options dictionaries.
+
+         The function iterates over each options dictionary in `opts_dicts`, sets the object's `data_opts` attribute,
+         and then calls the `self.make_df` method to create a DataFrame. If the data class includes 'lfp', the function
+         creates a DataFrame for each frequency band specified in the options. Otherwise, it creates a single DataFrame
+         based on the object's data type. After constructing all DataFrames, it calls `self.merge_dfs` to merge them.
+
+         Parameters:
+         - opts_dicts (list of dict): A list of dictionaries, where each dictionary contains options that influence how
+           the DataFrame is constructed.
+
+         Returns:
+         DataFrame: A merged DataFrame constructed based on the provided options dictionaries and the object's attributes.
+         """
         for opts in opts_dicts:
             self.data_opts = opts
             if 'lfp' in self.data_class:
                 for fb in self.data_opts['fb']:
-                    self.make_df(f"lfp_{fb}", fb=fb)
+                    self.make_df(fb=fb)
             else:
-                self.make_df(name)
+                self.make_df()
         return self.merge_dfs()
 
-    def make_df(self, name, fb=None):
+    def make_df(self, fb=None):
         self.set_attributes(fb=fb)
+        self.opts_dicts.append(deepcopy(self.data_opts))
+        name = self.set_df_name()
         df = pd.DataFrame(self.rows)
         vs = ['unit_num', 'animal', 'category', 'group', 'two_way_split', 'three_way_split', 'frequency']
         for var in vs:
@@ -52,19 +72,46 @@ class Stats(Base):
                 df[var] = df[var].astype('category')
         self.dfs[name] = df
 
+    def set_df_name(self):
+        name = self.data_type
+        if 'lfp' in self.data_class:
+            name += f"_{self.data_opts['brain_region']}_{self.current_frequency_band}"
+        return name
+
     def merge_dfs(self):
-        common_columns = list(set.intersection(*(set(df.columns) for df in self.dfs.values())) - {'experiment'})
+        """
+        Merge multiple DataFrames stored in self.dfs based on their common columns.
+
+        The function starts with the DataFrame that has the most columns and sequentially merges all other DataFrames
+        based on columns they have in common. If a DataFrame doesn't share any columns with the current merged result,
+        it will be appended as new columns without any matching rows.
+
+        The 'experiment' column, if present, is excluded from the merge process.
+
+        After merging, the resulting DataFrame is added to self.dfs with a name that is a concatenation of all original
+        DataFrame names, separated by underscores.
+
+        Parameters:
+        None
+
+        Returns:
+        str: The name of the newly added DataFrame in self.dfs.
+        """
         # Determine which DataFrame has the most unique key combinations
         df_items = list(self.dfs.items())  # get a list of (name, DataFrame) pairs
-        df_items.sort(key=lambda item: item[1][common_columns].drop_duplicates().shape[0], reverse=True)
+        df_items.sort(key=lambda item: len(item[1].columns), reverse=True)
         # Extract the sorted DataFrames and their names
         df_names, dfs = zip(*df_items)
-        # Start with the DataFrame that has the most unique key combinations
+        # Start with the DataFrame that has the most columns
         result = dfs[0]
         # Merge with all the other DataFrames
         for df in dfs[1:]:
+            # Determine common columns between result and df
+            common_columns = list(set(result.columns).intersection(set(df.columns)))
+            # If 'experiment' column exists, remove it
             if 'experiment' in df.columns:
                 df = df.drop(columns=['experiment'])
+            # Merge on the common columns
             result = pd.merge(result, df, how='left', on=common_columns)
         new_df_name = '_'.join(df_names)
         self.dfs[new_df_name] = result
@@ -97,7 +144,7 @@ class Stats(Base):
         other_attributes = ['period_type']
         inclusion_criteria = []
         if 'lfp' in self.data_class:
-            if self.data_type == 'mrl':
+            if self.data_type in 'mrl':
                 level = 'mrl_calculator'
                 other_attributes += ['frequency', 'fb', 'neuron_type']
                 inclusion_criteria.append(lambda x: x.is_valid)
@@ -107,9 +154,10 @@ class Stats(Base):
         else:
             other_attributes += ['category', 'neuron_type']
             level = self.data_opts['row_type']
-            if level in ['period', 'trial']:
-                inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'period_type') in self.data_opts.get(
-                    'period_types', ['tone'])]
+
+        if level in ['period', 'trial', 'mrl_calculator']:
+            inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'period_type') in self.data_opts.get(
+                'period_types', ['tone'])]
 
         return self.get_data(level, inclusion_criteria, other_attributes)
 
@@ -155,7 +203,7 @@ class Stats(Base):
         sources = [source for source in sources if all([criterion(source) for criterion in inclusion_criteria])]
 
         for source in sources:
-            row_dict = {self.data_col: source.data}
+            row_dict = {self.data_col: source.mean_data}
             for src in source.ancestors:
                 row_dict[src.name] = src.identifier
                 for attr in other_attributes:
@@ -165,7 +213,7 @@ class Stats(Base):
             rows.append(row_dict)
         return rows
 
-    def make_spreadsheet(self, df_name=None, path=None, force_recalc=True):
+    def make_spreadsheet(self, df_name=None, path=None, force_recalc=True, name_suffix=None):
         """
         Creates a spreadsheet (CSV file) from a specified DataFrame stored within the object.
 
@@ -174,33 +222,37 @@ class Stats(Base):
 
         Parameters:
         - df_name (str, optional): Name of the DataFrame to be written to the spreadsheet. Defaults to the object's
-            `data_type` attribute if not provided.
+          `data_type` attribute if not provided.
         - path (str, optional): Directory path where the spreadsheet should be saved. If not provided, it defaults to
-            the `data_path` attribute from the object's `data_opts`.
+          the `data_path` attribute from the object's `data_opts`.
         - force_recalc (bool, optional): If set to True, the function will overwrite an existing file with the same
-            name. Defaults to True.
+          name. Defaults to True.
+        - name_suffix (str, optional): String to append to a spreadsheet name to allow writing multiple similar files to
+          the same directory.  Defaults to None, which means a random six character string will be written to the file.
 
         Returns:
         None: The function saves the spreadsheet to the specified path and updates the `spreadsheet_fname` attribute
            of the object.
         """
-        row_type = self.data_opts['row_type']
-        path = path if path else self.data_opts.get('data_path')
         df_name = df_name if df_name else self.data_type
-        if df_name not in self.dfs:
-            self.make_df(df_name)
-        frequency, time, phase, pre_stim, post_stim = (
-            self.data_opts.get(attr) for attr in ['frequency_type', 'time_type', 'phase', 'pre_stim', 'post_stim'])
-        name = '_'.join([str(attr) for attr in [self.data_type, df_name, frequency, time, row_type + 's', phase,
-                                                pre_stim, post_stim] if attr])
-        if 'lfp' in name:
+        path = path if path else self.data_opts.get('data_path')
+        if 'mrl' in df_name or 'power' in df_name:
             path = os.path.join(path, 'lfp', self.data_type)
-            name += f"_{self.data_opts.get('brain_region')}"
-        self.spreadsheet_fname = os.path.join(path, name + '.csv').replace('lfp_', '')
+        else:
+            path = os.path.join(path, self.data_type)
+        name_suffix = name_suffix if name_suffix is not None else self.name_suffix
+        self.spreadsheet_fname = os.path.join(path, df_name + '_' + name_suffix + '.csv')
         if os.path.exists(self.spreadsheet_fname) and not force_recalc:
             return
 
         with open(self.spreadsheet_fname, 'w', newline='') as f:
+            # write information from `opts_dicts` into csv metadata
+            for opts_dict in self.opts_dicts:
+                line = ', '.join([f"{str(key).replace(',', '_')}: {str(value).replace(',', '_')}" for key, value in
+                                  opts_dict.items()])
+                f.write(f"# {line}\n")
+                f.write("\n")
+
             header = list(self.dfs[df_name].columns)
             writer = csv.DictWriter(f, fieldnames=header)
             writer.writeheader()

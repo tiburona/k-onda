@@ -134,6 +134,18 @@ def make_mrl_heat_maps(lfp_opts=None, graph_opts=None):
         plotter.make_plot(copy_lfp_opts, graph_opts, plot_type='heat_map')
 
 
+def make_spike_mrl_spreadsheet(lfp_opts=None, spike_opts=None):
+    my_lfp_opts, psth_opts = assign_vars([lfp_opts, spike_opts], [LFP_OPTS, SPREADSHEET_OPTS])
+    opts_dicts = []
+    for brain_region in ['pl', 'bla', 'hpc']:
+        opts_dict = deepcopy(my_lfp_opts)
+        opts_dict['brain_region'] = brain_region
+        opts_dicts.append(opts_dict)
+    stats = Stats(experiment, data_type_context, neuron_type_context, opts_dicts[0], lfp=lfp_experiment)
+    df_name = stats.make_dfs(opts_dicts + [psth_opts])
+    stats.make_spreadsheet(df_name)
+
+
 def test_mrl_post_hoc_results(lfp_opts=None):
     my_lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
     stats = Stats(experiment, data_type_context, neuron_type_context, my_lfp_opts[0], lfp=lfp_experiment)

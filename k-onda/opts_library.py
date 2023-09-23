@@ -1,10 +1,11 @@
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'trials': (0, 150),
-             'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time': 'continuous',
-             'data_path': '/Users/katie/likhtik/data'}
+             'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time_type': 'continuous',
+             'data_path': '/Users/katie/likhtik/data', 'row_type': 'trial'}
 
 PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01,
-                   'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial', 'time': 'continuous'}
+                   'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial', 'time': 'continuous',
+                       'row_type': 'trial'}
 
 AUTOCORR_OPTS = {'data_class': 'spike', 'data_type': 'autocorr', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
                  'max_lag': 99}
@@ -13,9 +14,9 @@ SPECTRUM_OPTS = {'data_class': 'spike', 'data_type': 'spectrum', 'pre_stim': 0.0
                  'max_lag': 99, 'freq_range': (3, 60)}
 
 SPREADSHEET_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
-                    'adjustment': 'normalized', 'time_type': 'continuous', 'pre_stim': 0.0, 'post_stim': .65,
-                    'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'unit', 'pretone_trials': True,
-                    'periods': list(range(5))}
+                    'pre_stim': 0.0, 'post_stim': .05, 'adjustment': 'none',
+                    'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'period', 'pretone_trials': True,
+                    'periods': list(range(5)), 'period_types': ['pretone', 'tone']}
 
 GROUP_STAT_PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'base': 'trial', 'adjustment': 'normalized',
                               'time_type': 'continuous', 'pre_stim': 0.0, 'post_stim': 0.70, 'bin_size': 0.01,
@@ -45,9 +46,9 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
                  False}
 
 LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period', 'brain_region': 'hpc',
-            'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl', 'row_type': 'frequency_bin',
-            'pretone_trials': True, 'pre_stim': 0, 'post_stim': 0.3, 'trials': (0, 150), 'adjustment': 'relative',
-            'frequency_band': 'gamma'}
+            'frequency_type': 'block', 'data_type': 'mrl',
+            'row_type': 'period', 'pretone_trials': True, 'pre_stim': 0, 'post_stim': 0.3, 'trials': (0, 150),
+            'frequency_band': 'theta_1', 'period_types': ['pretone', 'tone']}
 
 HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period',
                       'brain_region': 'hpc', 'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl',
