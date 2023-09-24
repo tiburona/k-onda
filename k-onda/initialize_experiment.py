@@ -1,8 +1,10 @@
 import os
 import scipy.io as sio
 import numpy as np
+import csv
 from spike import Experiment, Group, Animal, Unit
 from lfp import LFPExperiment
+from behavior import Behavior
 from context import data_type_context, neuron_type_context, period_type_context
 
 
@@ -39,6 +41,23 @@ def init_animal(entry):
     return Animal(name, condition, tone_period_onsets=tone_period_onsets, tone_onsets_expanded=tone_onsets_expanded)
 
 
+def read_itamar_spreadsheet():
+    data_dict = {}
+
+    with open(os.path.join(data_path, 'percent_freezing.csv'), 'r', encoding='utf-8-sig') as csvfile:
+        reader = csv.DictReader(csvfile)
+
+        for row in reader:
+            data_dict[row['ID']] = {
+                'group': row['Group'],
+                'pretone': [float(row['Pretone 1']), float(row['Pretone 2']), float(row['Pretone 3']),
+                            float(row['Pretone 4']), float(row['Pretone 5'])],
+                'tone': [float(row['Tone 1']), float(row['Tone 2']), float(row['Tone 3']), float(row['Tone 4']),
+                         float(row['Tone 5'])]
+            }
+    return data_dict
+
+
 data_path = '/Users/katie/likhtik/data/'
 
 mat_contents = sio.loadmat(os.path.join(data_path, 'single_cell_data.mat'))['single_cell_data']
@@ -58,6 +77,7 @@ lfp_experiment = LFPExperiment(experiment)
 lfp_experiment.subscribe(data_type_context)
 lfp_experiment.subscribe(period_type_context)
 
+behavior_experiment = Behavior(experiment, read_itamar_spreadsheet())
 
 
 

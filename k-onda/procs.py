@@ -2,9 +2,9 @@ from copy import deepcopy
 
 from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
     GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS, AC_KEYS, AC_METHODS, FIGURE_1_OPTS, LFP_OPTS, ROSE_PLOT_OPTS, \
-    HEAT_MAP_DATA_OPTS
+    HEAT_MAP_DATA_OPTS, BEHAVIOR_OPTS
 from initialize_experiment import experiment, data_type_context, neuron_type_context, period_type_context, \
-    lfp_experiment
+    lfp_experiment, behavior_experiment
 from proc_helpers import add_ac_keys_and_plot, assign_vars, plot
 from stats import Stats
 from plotters import Plotter, MRLPlotter
@@ -134,15 +134,17 @@ def make_mrl_heat_maps(lfp_opts=None, graph_opts=None):
         plotter.make_plot(copy_lfp_opts, graph_opts, plot_type='heat_map')
 
 
-def make_spike_mrl_spreadsheet(lfp_opts=None, spike_opts=None):
-    my_lfp_opts, psth_opts = assign_vars([lfp_opts, spike_opts], [LFP_OPTS, SPREADSHEET_OPTS])
+def make_spike_mrl_percent_freezing_spreadsheet(behavior_opts=None, lfp_opts=None, spike_opts=None):
+    behavior_opts, my_lfp_opts, psth_opts = assign_vars([behavior_opts, lfp_opts, spike_opts],
+                                                        [BEHAVIOR_OPTS, LFP_OPTS, SPREADSHEET_OPTS])
     opts_dicts = []
     for brain_region in ['pl', 'bla', 'hpc']:
         opts_dict = deepcopy(my_lfp_opts)
         opts_dict['brain_region'] = brain_region
         opts_dicts.append(opts_dict)
-    stats = Stats(experiment, data_type_context, neuron_type_context, opts_dicts[0], lfp=lfp_experiment)
-    df_name = stats.make_dfs(opts_dicts + [psth_opts])
+    stats = Stats(experiment, data_type_context, neuron_type_context, opts_dicts[0], lfp=lfp_experiment,
+                  behavior=behavior_experiment)
+    df_name = stats.make_dfs([behavior_opts] + opts_dicts + [psth_opts])
     stats.make_spreadsheet(df_name)
 
 

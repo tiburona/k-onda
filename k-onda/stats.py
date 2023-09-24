@@ -11,9 +11,10 @@ from utils import find_ancestor_attribute
 
 class Stats(Base):
     """A class to construct dataframes, write out csv files, and call R for statistical tests."""
-    def __init__(self, experiment, data_type_context, neuron_type_context, data_opts, lfp=None): #TODO: stats needs to set period type context and if setting period type needs to happen in spreadsheet initialization
+    def __init__(self, experiment, data_type_context, neuron_type_context, data_opts, lfp=None, behavior=None): #TODO: stats needs to set period type context and if setting period type needs to happen in spreadsheet initialization
         self.experiment = experiment
         self.lfp = lfp
+        self.behavior = behavior
         self.data_type_context = data_type_context
         self.data_opts = data_opts
         self.neuron_type_context = neuron_type_context
@@ -149,11 +150,14 @@ class Stats(Base):
                 other_attributes += ['frequency', 'fb', 'neuron_type']
                 inclusion_criteria.append(lambda x: x.is_valid)
             else:
-                level = 'frequency_bin' if self.data_opts['frequency'] == 'continuous' else 'frequency_period'
+                level = 'frequency_bin' if self.data_opts['frequency'] == 'continuous' else 'period'
                 inclusion_criteria.append(lambda x: x.fb == self.current_frequency_band)
+        elif self.data_class == 'behavior':
+            level = self.data_opts['row_type']
         else:
             other_attributes += ['category', 'neuron_type']
             level = self.data_opts['row_type']
+
 
         if level in ['period', 'trial', 'mrl_calculator']:
             inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'period_type') in self.data_opts.get(
@@ -194,7 +198,13 @@ class Stats(Base):
         """
 
         rows = []
-        experiment = self.lfp if self.data_class == 'lfp' else self.experiment
+        if self.data_class == 'lfp':
+            experiment = self.lfp
+        elif self.data_class == 'behavior':
+            experiment = self.behavior
+        else:
+            experiment = self.experiment
+
         sources = getattr(experiment, f'all_{level}s')
         if self.data_opts.get('frequency_type') == 'continuous':
             sources = [frequency_bin for source in sources for frequency_bin in source.frequency_bins]
