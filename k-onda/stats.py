@@ -244,12 +244,15 @@ class Stats(Base):
         None: The function saves the spreadsheet to the specified path and updates the `spreadsheet_fname` attribute
            of the object.
         """
+        if not len(self.dfs):
+            self.make_df()
         df_name = df_name if df_name else self.data_type
-        path = path if path else self.data_opts.get('data_path')
-        if 'mrl' in df_name or 'power' in df_name:
-            path = os.path.join(path, 'lfp', self.data_type)
-        else:
-            path = os.path.join(path, self.data_type)
+        if not path:
+            path = self.data_opts.get('data_path')
+            if 'mrl' in df_name or 'power' in df_name:
+                path = os.path.join(path, 'lfp', self.data_type)
+            else:
+                path = os.path.join(path, self.data_type)
         name_suffix = name_suffix if name_suffix is not None else self.name_suffix
         self.spreadsheet_fname = os.path.join(path, df_name + '_' + name_suffix + '.csv')
         if os.path.exists(self.spreadsheet_fname) and not force_recalc:
@@ -271,13 +274,13 @@ class Stats(Base):
 
     def write_post_hoc_r_script(self):
 
-        r_script = self.write_spike_r_script()
+        r_script = self.write_spike_post_hoc_r_script()
 
-        self.script_path = os.path.join(self.data_opts['data_path'], self.data_type + '_r_script.r')
+        self.script_path = os.path.join(self.data_opts['data_path'], self.data_type, 'post_hoc', self.data_type + '_r_script.r')
         with open(self.script_path, 'w') as f:
             f.write(r_script)
 
-    def write_spike_r_script(self):
+    def write_spike_post_hoc_r_script(self):
         error_suffix = '/unit' if self.data_opts['row_type'] == 'trial' else ''
         error_suffix = error_suffix + '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else error_suffix
 
@@ -300,7 +303,7 @@ class Stats(Base):
                 library(lmerTest)  # for lmer p-values
                 library(readr)
 
-                df <- read_csv('{self.spreadsheet_fname}')
+                df <- read.csv('{self.spreadsheet_fname}', comment.char="#")
 
                 # Convert variables to factors
                 factor_vars <- c('unit', 'animal', 'neuron_type', 'group')
@@ -348,11 +351,11 @@ class Stats(Base):
                 '''
 
     def get_post_hoc_results(self, force_recalc=True):
-        spreadsheet_path = os.path.join(self.data_opts['data_path'], self.data_type)
-        self.make_spreadsheet(path=spreadsheet_path)
-        self.results_path = os.path.join(spreadsheet_path, 'r_post_hoc_results.csv')
+        post_hoc_path = os.path.join(self.data_opts['data_path'], self.data_type, 'post_hoc')
+        self.make_spreadsheet(path=post_hoc_path)
+        self.results_path = os.path.join(post_hoc_path, 'r_post_hoc_results.csv')
         if not os.path.exists(self.results_path) or force_recalc:
-            getattr(self, f"write_{self.data_class}_post_hoc_r_script")()
+            getattr(self, f"write_post_hoc_r_script")()
             subprocess.run(['Rscript', self.script_path], check=True)
         results = pd.read_csv(self.results_path)
         return getattr(self, f"construct_{self.data_class}_post_hoc_results")(results)
@@ -370,7 +373,7 @@ class Stats(Base):
         prepare_df <- function(frequency_band, brain_region, evoked=FALSE) {{
             csv_name = sprintf('mrl_%s_continuous_period_frequency_bins_wavelet_%s.csv', frequency_band, brain_region)
             csv_file = paste('{os.path.join(self.data_path, 'lfp', 'mrl')}', csv_name, sep='/')
-            df <- read_csv(csv_file)
+            df <- read.csv(csv_file, comment.char="#")
 
             factor_vars <- c('animal', 'group', 'period_type', 'neuron_type', 'unit')
             df[factor_vars] <- lapply(df[factor_vars], factor)

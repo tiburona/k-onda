@@ -5,7 +5,8 @@ import numpy as np
 
 from plotters import Plotter, PeriStimulusPlotter, GroupStatsPlotter
 from phy_interface import PhyInterface
-from initialize_experiment import experiment as expt, data_type_context as dt_context, neuron_type_context as nt_context
+from initialize_experiment import experiment as expt, data_type_context as dt_context, neuron_type_context as nt_context, \
+    period_type_context as pt_context
 from opts_library import FIGURE_1_OPTS, PSTH_OPTS, PROPORTION_OPTS, GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS
 
 plt.rcParams['font.family'] = 'Arial'
@@ -13,8 +14,10 @@ plt.rcParams['font.family'] = 'Arial'
 
 class Figure(Plotter):
     """A class to create a three row figure for the safety paper."""
-    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
+                 plot_type='standalone'):
+        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=graph_opts,
+                         plot_type=plot_type)
         self.fig = plt.figure()
         self.grid = GridSpec(3, 1, height_ratios=[3, 4, 4])
         self.rows = []
@@ -123,7 +126,7 @@ class Figure(Plotter):
 
     def initialize_plotter(self, plotter_class, data_opts, graph_opts, rows, cols, position_in_row, letter):
         plotter = plotter_class(self.experiment, self.data_type_context, self.neuron_type_context,
-                                graph_opts=graph_opts, plot_type='gridspec_subplot')
+                                self.period_type_context, graph_opts=graph_opts, plot_type='gridspec_subplot')
         plotter.data_opts = data_opts
         gridspec = GridSpecFromSubplotSpec(rows, cols, subplot_spec=self.rows[-1][position_in_row], hspace=0.9)
         invisible_ax = self.get_subplot_ax(self.rows[-1][position_in_row], invisible=True)
@@ -141,7 +144,7 @@ class Figure(Plotter):
         return ax1
 
 
-figure = Figure(expt, dt_context, nt_context, FIGURE_1_OPTS)
+figure = Figure(expt, dt_context, nt_context, pt_context, FIGURE_1_OPTS)
 # cProfile.run('figure.spike_data_figure()', 'output.prof')
 figure.spike_data_figure()
 

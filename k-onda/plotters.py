@@ -71,8 +71,8 @@ class Plotter(Base):
 class PeriStimulusPlotter(Plotter, PlottingMixin):
     """Makes plots where the x-axis is time around the stimulus, and y can be a variety of types of data."""
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=graph_opts, plot_type=plot_type)
         self.multiplier = 1 if self.plot_type == 'standalone' else 0.5
 
     def plot(self, data_opts, graph_opts, level=None, neuron_type=None):
@@ -321,8 +321,10 @@ class PeriStimulusSubplotter(PlottingMixin):
 
 class GroupStatsPlotter(PeriStimulusPlotter):
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
+                 plot_type='standalone'):
+        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=graph_opts,
+                         plot_type=plot_type)
 
     def plot_group_stats(self):
         self.fig, self.axs = plt.subplots(2, 1, figsize=(15, 15))
@@ -411,8 +413,10 @@ class GroupStatsPlotter(PeriStimulusPlotter):
 class PiePlotter(Plotter):
     """Constructs a pie chart of up- or down-regulation of individual neurons"""
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
+                 plot_type='standalone'):
+        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context,
+                         graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_unit_pie_chart(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type=None)
@@ -573,14 +577,7 @@ class MRLPlotter(Plotter):
     def add_significance_markers(self):
         self.stats = Stats(self.experiment, self.data_type_context, self.neuron_type_context, self.data_opts,
                            lfp=self.lfp)
-        # interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
-        # I need to start by getting pairwise t-test of tone versus pretone.  This is four tests.  The model will be:
-        # mrl ~ period_type + period + (1|animal) within each combination of control/stressed IN/PN
-        # I could also look at evoked_mrl ~ group + period + (1/animal) within IN/PN.  That would be the bars over the top
-        # I could also look at evoked_mrl ~ neuron_type + period + (1/animal) within a condition.
-        # I could analogously look at two way interactions:
-        # mrl ~ group*period_type + period + (1/animal)
-        # mrl ~ neuron_type*period_type + period + (1/animal)
+        # TODO: implement this
 
 
 
