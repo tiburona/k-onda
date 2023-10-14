@@ -72,12 +72,6 @@ def sem(children_vals):
     return std_dev / np.sqrt(len(all_series))
 
 
-def std_err(vals):
-    non_nans = np.array([val for val in vals if not np.isnan(val)])
-    return np.std(non_nans, ddof=1)/np.sqrt(len(non_nans))
-
-
-
 def filter_60_hz(signal_with_noise, fs):
     f0 = 60  # Frequency to be removed
     Q = 30  # Quality factor (controls the width of the notch)

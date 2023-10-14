@@ -1,3 +1,4 @@
+STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156', 'IG158', 'IG177', 'IG179']
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'trials': (0, 150),
              'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time_type': 'continuous',
@@ -14,9 +15,9 @@ SPECTRUM_OPTS = {'data_class': 'spike', 'data_type': 'spectrum', 'pre_stim': 0.0
                  'max_lag': 99, 'freq_range': (3, 60)}
 
 SPREADSHEET_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
-                    'pre_stim': 0.0, 'post_stim': .65, 'adjustment': 'none',
-                    'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'period', 'pretone_trials': True,
-                    'periods': list(range(5)), 'period_types': ['pretone', 'tone']}
+                    'pre_stim': 0.0, 'post_stim': .65, 'adjustment': 'none', 'bin_size': 0.01, 'trials': (0, 150),
+                    'row_type': 'trial', 'periods': list(range(5)), 'period_types': ['pretone', 'tone'],
+                    'selected_animals': STANDARD_ANIMALS, 'time_type': 'continuous'}
 
 GROUP_STAT_PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'base': 'trial', 'adjustment': 'normalized',
                               'time_type': 'continuous', 'pre_stim': 0.0, 'post_stim': 0.70, 'bin_size': 0.01,
@@ -45,10 +46,11 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
                  'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'hist_color': '#9678D3', 'force_recalc':
                  False}
 
-LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period', 'brain_region': 'hpc',
-            'frequency_type': 'block', 'data_type': 'mrl', 'fb': ['theta_1', 'theta_2'],
-            'row_type': 'period', 'pretone_trials': True, 'pre_stim': 0, 'post_stim': 0.3, 'trials': (0, 150),
-            'frequency_band': 'theta_1', 'period_types': ['pretone', 'tone']}
+LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'continuous',
+            'brain_region': 'hpc',  'frequency_type': 'block', 'data_type': 'power', 'fb': ['theta_1', 'theta_2'],
+            'row_type': 'trial', 'pretone_trials': True, 'pre_stim': 0, 'post_stim': 1,
+            'frequency_band': 'theta_1', 'period_types': ['pretone', 'tone'], 'selected_animals': STANDARD_ANIMALS,
+            'power_deviation': True}
 
 HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period',
                       'brain_region': 'hpc', 'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl',
@@ -57,7 +59,8 @@ HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/da
 
 
 BEHAVIOR_OPTS = {'data_class': 'behavior', 'data_type': 'percent_freezing', 'row_type': 'period',
-                 'period_types': ['pretone', 'tone']}
+                 'period_types': ['pretone', 'tone'], 'selected_animals': STANDARD_ANIMALS,
+                 'data_path': '/Users/katie/likhtik/data'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',

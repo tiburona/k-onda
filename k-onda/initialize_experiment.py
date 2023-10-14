@@ -41,6 +41,17 @@ def init_animal(entry):
     return Animal(name, condition, tone_period_onsets=tone_period_onsets, tone_onsets_expanded=tone_onsets_expanded)
 
 
+def init_hpc_animal(entry, ):
+    conditions = {'IG155': 'stressed', 'IG162': 'control', 'IG171': 'control', 'IG173': 'control',
+                  'IG174': 'stressed', 'IG175': 'stressed'}
+
+    name = entry[1][0]
+    condition = conditions[name]
+    tone_period_onsets = entry[2][0]
+    tone_onsets_expanded = entry[3][0]
+    return Animal(name, condition, tone_period_onsets=tone_period_onsets, tone_onsets_expanded=tone_onsets_expanded)
+
+
 def read_itamar_spreadsheet():
     data_dict = {}
 
@@ -64,6 +75,11 @@ mat_contents = sio.loadmat(os.path.join(data_path, 'single_cell_data.mat'))['sin
 entries = mat_contents[0]
 animals = [init_animal(entry) for entry in entries]
 [init_units(entry, animal) for entry, animal in zip(entries, animals)]
+
+# hpc_mat_contents = sio.loadmat(os.path.join(data_path, 'hpc_power_test_data.mat'))['data']
+# entries = hpc_mat_contents[0]
+# hpc_power_animals = [init_hpc_animal(entry) for entry in entries]
+# animals += hpc_power_animals
 
 experiment = Experiment({name: Group(name=name, animals=[animal for animal in animals if animal.condition == name])
                          for name in ['control', 'stressed']})

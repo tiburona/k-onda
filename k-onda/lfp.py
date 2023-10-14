@@ -1,5 +1,6 @@
 import os
 import pickle
+
 from scipy.signal import cwt, morlet
 from neo.rawio import BlackrockRawIO
 
@@ -7,7 +8,9 @@ from data import Data, EvokedValueCalculator
 from context import Subscriber, period_type_context as pt_context
 from matlab_interface import MatlabInterface
 from math_functions import *
-from utils import cache_method
+from utils import cache_method, get_ancestors
+
+
 
 DATA_PATH = '/Users/katie/likhtik/data/single_cell_data'
 SAMPLING_RATE = 30000
@@ -41,15 +44,14 @@ class LFPData(Data):
 
     @property
     def time_bins(self):
-        tbs = []
-        if len(self.data.shape) > 1:
-            for i, data_point in enumerate(range(self.data.shape[1])):
-                column = self.data[:, i]
-                TimeBin(i, column, self)
-                tbs.append(TimeBin)
-            return tbs
-        else:
-            return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
+        return self.get_time_bins()
+
+    @property
+    def num_bins(self):
+        # TODO: this calculation or a close variant exists in spike, too.  Figure out how to abstract
+        pre_stim, post_stim = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim'])
+        bin_size = .01  # TODO: don't hard code this.  It's inferrable from mtcsg args
+        return int((pre_stim + post_stim)/bin_size)
 
     @property
     def current_frequency_band(self):
@@ -70,6 +72,17 @@ class LFPData(Data):
         axis = 0 if not self.data_opts.get('collapse_matrix') else None
         return self.get_average('get_mrl', stop_at='mrl_calculator', axis=axis)
 
+    def get_time_bins(self):
+        tbs = []
+        if len(self.data.shape) > 1:
+            for i, data_point in enumerate(range(self.data.shape[1])):
+                column = self.data[:, i]
+                tb = TimeBin(i, column, self)
+                tbs.append(tb)
+            return tbs
+        else:
+            return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
+
 
 class LFPExperiment(LFPData, Subscriber):
     name = 'experiment'
@@ -77,10 +90,11 @@ class LFPExperiment(LFPData, Subscriber):
     def __init__(self, experiment):
         self.data_path = DATA_PATH
         self.experiment = experiment
+        self.all_animals = [LFPAnimal(animal, self.data_path) for animal in self.experiment.all_animals]
         self.groups = [LFPGroup(group, self) for group in self.experiment.groups]
         self.all_groups = self.groups
-        self.all_animals = [LFPAnimal(animal, self.data_path) for animal in self.experiment.all_animals]
         self.last_brain_region = None
+        self.selected_animals = None
 
     @property
     def all_periods(self):
@@ -95,11 +109,21 @@ class LFPExperiment(LFPData, Subscriber):
                 for period in animal.all_periods['tone'] + animal.all_periods['pretone']
                 for unit in animal.spike_target.children]
 
+    @property
+    def all_trials(self):
+        if self.data_class == 'mrl':
+            raise ValueError("You can't extract trials from MRL data")
+        trials = [trial for period in self.all_periods for trial in period.trials]
+        return trials
+
     def update(self, context):
         if context.name == 'data_type_context':
             if self.data_class == 'lfp' and self.last_brain_region != self.data_opts.get('brain_region'):
                 [animal.update_children() for animal in self.all_animals]
                 self.last_brain_region = self.data_opts.get('brain_region')
+            if self.data_opts.get('selected_animals') != self.selected_animals:
+                [group.update_children() for group in self.groups]
+                self.selected_animals = self.data_opts.get('selected_animals')
 
 
 class LFPGroup(LFPData):
@@ -109,10 +133,7 @@ class LFPGroup(LFPData):
         self.spike_target = group
         self.experiment = lfp_experiment
         self.identifier = self.spike_target.identifier
-
-    @property
-    def children(self):
-        return [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
+        self.children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
 
     @property
     def mrl_calculators(self):
@@ -142,6 +163,12 @@ class LFPGroup(LFPData):
                      if mrl_calc.period.identifier == i], axis=0)
             )
         return np.array(data_by_period)
+
+    def update_children(self):
+        self.children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
+        if self.data_opts.get('selected_animals') is not None:
+            self.children = [child for child in self.children if child.identifier in
+                             self.data_opts.get('selected_animals')]
 
     def get_angle_counts(self):
         for calc in self.mrl_calculators:
@@ -204,7 +231,11 @@ class LFPAnimal(LFPData):
         file_path = os.path.join(self.data_path, self.identifier, 'Safety')
         reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
         reader.parse_header()
-        pl1, pl2 = PL_ELECTRODES[self.identifier]
+        if self.identifier in PL_ELECTRODES:
+            pl1, pl2 = PL_ELECTRODES[self.identifier]
+        else:
+            print(f"no selected electrodes found for PL for animal {self.identifier}, using 1 and 3")
+            pl1, pl2 = (1, 3)
         return {
             'hpc': reader.nsx_datas[3][0][:, 0],
             'bla': reader.nsx_datas[3][0][:, 2],
@@ -228,6 +259,10 @@ class LFPAnimal(LFPData):
     def prepare_mrl_calculators(self):
         return {stage: [MRLCalculator(unit, period) for period in periods for unit in self.spike_target.units['good']]
                 for stage, periods in self.all_periods.items()}
+
+    @cache_method
+    def get_power(self):
+        return [period.get_power() for period in self.periods]
 
 
 class LFPDataSelector:
@@ -253,11 +288,22 @@ class LFPDataSelector:
     def mean(self):
         return np.mean(self.data)
 
+    @cache_method
     def slice_spectrogram(self):
         indices = np.where(self.spectrogram[1] <= self.freq_range[0])
         ind1 = indices[0][-1] if indices[0].size > 0 else None  # last index that's <= start of the freq range
         ind2 = np.argmax(self.spectrogram[1] > self.freq_range[1])  # first index >= end of freq range
         return self.spectrogram[0][ind1:ind2, :]
+
+    @cache_method
+    def trimmed_spectrogram(self):
+        return self.sliced_spectrogram[:, 75:-75]  # TODO: 75 should be a function of period length and mtscg args
+
+    @property
+    def sliced_spectrogram(self):
+        return self.slice_spectrogram()
+
+
 
 
 class LFPPeriod(LFPData, LFPDataSelector):
@@ -267,6 +313,7 @@ class LFPPeriod(LFPData, LFPDataSelector):
     name = 'period'
 
     def __init__(self, raw_data, index, period_type, lfp_animal):
+        LFPDataSelector.__init__(self)
         self.raw_data = raw_data
         self.identifier = index
         self.animal = lfp_animal
@@ -275,23 +322,29 @@ class LFPPeriod(LFPData, LFPDataSelector):
         self.period_type = period_type
         self.parent = lfp_animal
         self.evoked_value_calculator = EvokedValueCalculator(self)
+        self._spectrogram = None
+        self.last_brain_region = None
 
     @property
     def trials(self):
-        self.get_trials()
+        return self.get_trials()
 
     @property
     def spectrogram(self):
-        return self.calc_cross_spectrogram()
+        if self._spectrogram is None or self.brain_region != self.last_brain_region:
+            self._spectrogram = self.calc_cross_spectrogram()
+            self.last_brain_region = self.brain_region
+        return self._spectrogram
 
     def get_trials(self):
         starts = np.arange(.75, 30.5, 1)
         time_bins = np.array(self.spectrogram[2])
         trials = []
-        for start in starts:
-            trial_times = np.linspace(start, start + .64, 65)
+        for i, start in enumerate(starts):
+            end = start + self.data_opts['post_stim'] - .01 # TODO: this should be a function of mtcsg args
+            trial_times = np.arange(start, end+0.01, 0.01) #  TODO: this will stop working with different mtcsg args
             mask = (np.abs(time_bins[:, None] - trial_times) <= 1e-6).any(axis=1)
-            trials.append(LFPTrial(trial_times, mask, self))
+            trials.append(LFPTrial(i, trial_times, mask, self))
         return trials
 
     @staticmethod
@@ -300,7 +353,7 @@ class LFPPeriod(LFPData, LFPDataSelector):
         return divide_by_rms(filtered)
 
     def calc_cross_spectrogram(self):
-        arg_set = FREQUENCY_ARGS(self.current_frequency_band)
+        arg_set = FREQUENCY_ARGS[self.current_frequency_band]
         pickle_path = os.path.join(self.data_opts['data_path'], 'lfp', '_'.join(
             [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] +
             [self.period_type, str(self.identifier)]) + '.pkl')
@@ -308,29 +361,55 @@ class LFPPeriod(LFPData, LFPDataSelector):
             with open(pickle_path, 'rb') as f:
                 return pickle.load(f)
         ml = MatlabInterface()
-        result = ml.mtcsg(self.processed_data, *FREQUENCY_ARGS[self.data_opts['frequency']])
+        result = ml.mtcsg(self.processed_data, *FREQUENCY_ARGS[self.current_frequency_band])
         with open(pickle_path, 'wb') as f:
             pickle.dump(result, f)
         return result
 
+    @cache_method
     def get_power(self):
+        if self.brain_region == 'pl':
+            a = 'foo'
         power = np.mean([trial.data for trial in self.get_trials()], axis=0)
         if self.data_opts.get('evoked') and self.period_type == 'tone':
             power -= self.animal.periods['pretone'][self.identifier].get_power()
         return power
 
+    @property
+    def power_deviations(self):
+        return self.get_power_deviations()
+
+    @cache_method
+    def get_power_deviations(self, moving_window=.15):
+        print(self.identifier, self.animal.identifier)
+        parent_mean = self.parent.mean_data
+        parent_sd = self.parent.sd_data
+        moving_avgs = np.zeros(int(TONE_PERIOD_DURATION/.01))
+        window_interval = int(moving_window/.01)  # TODO: bin size actually depends on args to mtcsg
+        for i in range(self.trimmed_spectrogram().shape[1] - window_interval + 1):
+            data = np.mean(self.trimmed_spectrogram()[:, i:i+window_interval])
+            normalized_data = (data - parent_mean)/parent_sd
+            for j in range(window_interval):
+                if abs(normalized_data) > np.abs(moving_avgs[i + j]):
+                    moving_avgs[i + j] = normalized_data
+        return moving_avgs
+
 
 class LFPTrial(LFPData, LFPDataSelector):
     name = 'trial'
 
-    def __init__(self, trial_times, mask, parent):
+    def __init__(self, id, trial_times, mask, parent):
+        LFPDataSelector.__init__(self)
+        self.identifier = id
         self.trial_times = trial_times
         self.mask = mask
         self.parent = parent
+        self.period_type = self.parent.period_type
         self.spectrogram = self.parent.spectrogram
 
+    @cache_method
     def get_power(self):
-        return np.array(self.slice_spectrogram())[:, self.mask]
+        return np.array(self.sliced_spectrogram)[:, self.mask]
 
 
 class FrequencyBin(LFPData):
@@ -367,6 +446,17 @@ class TimeBin:
         self.period_type = self.parent.period_type
         self.identifier = i
         self.data = data
+        self.mean_data = np.mean(self.data)
+        self.ancestors = get_ancestors(self)
+        self.position = self.get_position_in_period_time_series()
+        self.period = [ancestor for ancestor in self.ancestors if ancestor.name == 'period'][0]
+
+    @property
+    def power_deviation(self):
+        return self.period.power_deviations[self.position]
+
+    def get_position_in_period_time_series(self):
+        return self.parent.num_bins * self.parent.identifier + self.identifier
 
 
 class MRLCalculator(LFPData):
@@ -496,6 +586,5 @@ class MRLCalculator(LFPData):
             return circ_r2_unbiased(alpha, w, dim=dim)
         else:
             return compute_mrl(alpha, w, dim=dim)
-
 
 

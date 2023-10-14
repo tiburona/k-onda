@@ -6,7 +6,7 @@ from copy import deepcopy
 import random
 import string
 from data import Base
-from utils import find_ancestor_attribute
+from utils import find_ancestor_attribute, find_ancestor_id
 
 
 class Stats(Base):
@@ -150,18 +150,20 @@ class Stats(Base):
                 other_attributes += ['frequency', 'fb', 'neuron_type']
                 inclusion_criteria.append(lambda x: x.is_valid)
             else:
-                level = 'frequency_bin' if self.data_opts['frequency'] == 'continuous' else 'period'
-                inclusion_criteria.append(lambda x: x.fb == self.current_frequency_band)
+                level = self.data_opts['row_type']
+                if self.data_opts['time_type'] == 'continuous' and self.data_opts.get('power_deviation'):
+                    other_attributes.append('power_deviation')
         elif self.data_class == 'behavior':
             level = self.data_opts['row_type']
         else:
             other_attributes += ['category', 'neuron_type']
             level = self.data_opts['row_type']
 
-
         if level in ['period', 'trial', 'mrl_calculator']:
             inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'period_type') in self.data_opts.get(
                 'period_types', ['tone'])]
+        if self.data_opts.get('selected_animals') is not None:
+            inclusion_criteria += [lambda x: find_ancestor_id(x, 'animal') in self.data_opts['selected_animals']]
 
         return self.get_data(level, inclusion_criteria, other_attributes)
 
@@ -219,8 +221,11 @@ class Stats(Base):
                 for attr in other_attributes:
                     val = getattr(src, attr) if hasattr(src, attr) else None
                     if val is not None:
+                        if attr == 'power_deviation':
+                            attr = f"{self.lfp.brain_region}_{self.current_frequency_band}_{attr}"
                         row_dict[attr] = val
             rows.append(row_dict)
+
         return rows
 
     def make_spreadsheet(self, df_name=None, path=None, force_recalc=True, name_suffix=None):

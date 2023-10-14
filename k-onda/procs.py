@@ -71,7 +71,7 @@ def make_lfp_firing_rate_spreadsheet(spreadsheet_opts=None, lfp_opts=None):
 
 def make_lfp_spreadsheet(lfp_opts=None):
     lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
-    stats = Stats(experiment, data_type_context, neuron_type_context, lfp_opts[0])
+    stats = Stats(experiment, data_type_context, neuron_type_context, lfp_opts[0], lfp=lfp_experiment)
     df_name = stats.make_dfs(lfp_opts, )
     stats.make_spreadsheet(df_name)
 
@@ -134,18 +134,18 @@ def make_mrl_heat_maps(lfp_opts=None, graph_opts=None):
         plotter.make_plot(copy_lfp_opts, graph_opts, plot_type='heat_map')
 
 
-def make_spike_mrl_percent_freezing_spreadsheet(behavior_opts=None, lfp_opts=None, spike_opts=None):
+def make_spike_lfp_behavior_spreadsheet(behavior_opts=None, lfp_opts=None, spike_opts=None):
     behavior_opts, my_lfp_opts, psth_opts = assign_vars([behavior_opts, lfp_opts, spike_opts],
                                                         [BEHAVIOR_OPTS, LFP_OPTS, SPREADSHEET_OPTS])
     opts_dicts = []
-    for brain_region in ['pl', 'bla', 'hpc']:
+    for brain_region in ['bla', 'pl', 'hpc']:
         opts_dict = deepcopy(my_lfp_opts)
         opts_dict['brain_region'] = brain_region
         opts_dicts.append(opts_dict)
     stats = Stats(experiment, data_type_context, neuron_type_context, opts_dicts[0], lfp=lfp_experiment,
                   behavior=behavior_experiment)
-    df_name = stats.make_dfs([behavior_opts] + opts_dicts + [psth_opts])
-    stats.make_spreadsheet(df_name)
+    df_name = stats.make_dfs([psth_opts] + opts_dicts + [behavior_opts])
+    stats.make_spreadsheet(df_name, name_suffix='spike_power_by_period')
 
 
 def test_mrl_post_hoc_results(lfp_opts=None):

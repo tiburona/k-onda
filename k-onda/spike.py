@@ -10,7 +10,7 @@ from context import Subscriber
 from matlab_interface import MatlabInterface
 from utils import cache_method, get_ancestors
 from plotting_helpers import formatted_now
-from math_functions import calc_rates, spectrum, trim_and_normalize_ac, sem
+from math_functions import calc_rates, spectrum, trim_and_normalize_ac
 
 """
 This module defines Level, Experiment, Group, Animal, Unit, and Trial. Level inherits from Base, which defines a few 
@@ -30,9 +30,8 @@ TRIAL_DURATION = 1
 
 class Level(Data):
 
-    @property
-    def time_bins(
-            self):  # TODO: Right now i is the integer value of the time point.  Would be nice to make it the actual time bin.
+    @property  # TODO: need the ability to add a filter to this
+    def time_bins(self):  # TODO: Right now i is the integer value of the time point.  Would be nice to make it the actual time bin.
         return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
 
     @property
@@ -94,6 +93,16 @@ class Level(Data):
 
     @cache_method
     def get_all_autocorrelations(self):
+        """
+        Recursively generates a dictionary of firing rate autocorrelation series, calculated in every permutation of
+        taking the autocorrelation of the rates associated with the object, or averaging autocorrelations taken of the
+        rates of an object at a lower level. For example, the 'group_by_rates' key in the dictionary will have, as a
+        value, autocorrelation of the groups average firing rate, and the 'group_by_animal_by_rates will calculate the
+        average of the autocorrelations of the individual animals' rates, and so on.
+
+        Returns:
+            dict: Dictionary containing all autocorrelations.
+        """
 
         # Calculate the autocorrelation of the rates for this node
         ac_results = {f"{self.name}_by_rates": self._calculate_autocorrelation(self.get_demeaned_rates())}
@@ -109,6 +118,14 @@ class Level(Data):
 
     @cache_method
     def upregulated_to_pip(self):
+        """
+        Determines if the data is upregulated to pip, where 'regulation' is a change of .5 standard deviations.
+
+        Returns:
+            int: 1 if upregulated, -1 if downregulated, 0 otherwise.
+        """
+        if self.data_opts['pre_stim'] < 0:
+            raise ValueError("opts must include entire stim duration for `upregulated_to_pip`")
         if self.data_type == 'psth':
             first_pip_bin_ind = int(self.data_opts['pre_stim'] / self.data_opts['bin_size'])
             last_pip_bin_ind = int(first_pip_bin_ind + PIP_DURATION / self.data_opts['bin_size'])
@@ -120,8 +137,7 @@ class Level(Data):
             else:
                 return 0
 
-    def get_sem(self):
-        return sem([child.data for child in self.children])
+
 
 
 class Experiment(Level, Subscriber):
@@ -140,6 +156,7 @@ class Experiment(Level, Subscriber):
         self.all_units = [unit for animal in self.all_animals for unit in animal.units['good']]
         self.last_trial_vals = None
         self.last_neuron_type = 'uninitialized'
+        self.selected_animals = None  # None means all animals will be included; it's the default state
 
     @property
     def all_periods(self):
@@ -156,6 +173,10 @@ class Experiment(Level, Subscriber):
             if trial_vals != self.last_trial_vals:
                 [unit.update_children() for unit in self.all_units]
                 self.last_trial_vals = trial_vals
+            if self.data_opts.get('selected_animals') != self.selected_animals:
+                [group.update_children() for group in self.groups]
+                self.selected_animals = self.data_opts.get('selected_animals')
+
         if context.name == 'neuron_type_context':
             if self.selected_neuron_type != self.last_neuron_type:
                 [entity.update_children() for entity in self.all_groups + self.all_animals]
@@ -200,6 +221,9 @@ class Group(Level):
             self.children = self.animals
         else:
             self.children = [animal for animal in self.animals if len(getattr(animal, self.neuron_type_context.val))]
+        if self.data_opts.get('selected_animals') is not None:
+            self.children = [child for child in self.children
+                             if child.identifier in self.data_opts.get('selected_animals')]
 
 
 class Animal(Level):
@@ -369,9 +393,10 @@ class Trial(Level):
         self.period_type = self.period.period_type
         self.children = None
         self.parent = period
+        self.pre_stim, self.post_stim = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim'])
 
     @cache_method
-    def get_psth(self):
+    def get_psth(self):  # default is to subtract pretone average from tone
         rates = self.get_rates()
         if self.period.period_type == 'pretone' or self.data_opts.get('adjustment') == 'none':
             return rates
@@ -383,9 +408,9 @@ class Trial(Level):
 
     @cache_method
     def get_rates(self):
-        pre_stim, post_stim, bin_size = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim', 'bin_size'])
-        num_bins = int((post_stim + pre_stim) / bin_size)
-        spike_range = (-pre_stim, post_stim)
+        bin_size = self.data_opts['bin_size']
+        num_bins = int((self.post_stim + self.pre_stim) / bin_size)
+        spike_range = (-self.pre_stim, self.post_stim)
         return calc_rates(self.spikes, num_bins, spike_range, bin_size)
 
     @cache_method
@@ -393,20 +418,16 @@ class Trial(Level):
         return {'trials': self._calculate_autocorrelation(self.get_demeaned_rates())}
 
 
+
 class TimeBin:
     name = 'time_bin'
-    instances = []
 
     def __init__(self, i, val, parent):
-        self.instances.append(self)
         self.parent = parent
         self.identifier = i
         self.data = val
         self.mean_data = val
-
-    @property
-    def ancestors(self):
-        return get_ancestors(self)
+        self.ancestors = get_ancestors(self)
 
     #  TODO: parametrize methods below
     @staticmethod
@@ -421,3 +442,8 @@ class TimeBin:
             return 'early'
         else:
             return 'late'
+
+    def position_in_period_time_series(self):
+        return self.parent.num_bins * self.parent.identifier + self.identifier
+
+

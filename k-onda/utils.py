@@ -46,8 +46,9 @@ def cache_method(method):
 
         cache = getattr(self, cache_name) if hasattr(self, cache_name) else {}
 
-        context_keys = (getattr(self, c).cache_id for c in ['neuron_type_context', 'data_type_context',
-                                                            'period_type_context'] if hasattr(self, c))
+        context_keys = tuple(getattr(self, c).cache_id for c in ['neuron_type_context', 'data_type_context',
+                                                                 'period_type_context'] if hasattr(self, c))
+
         cache_key = (id(self), context_keys, method.__name__, tuple(to_hashable(arg) for arg in args),
                      tuple(sorted(kwargs.items())))
 
@@ -66,6 +67,8 @@ def log_directory_contents(log_directory):
     os.makedirs(new_subdirectory, exist_ok=True)
 
     for item in os.listdir(current_directory):
+        if 'venv' in item:
+            continue
         s = os.path.join(current_directory, item)
         d = os.path.join(new_subdirectory, item)
         if os.path.isdir(s):
@@ -85,7 +88,7 @@ def range_args(lst):
         if lst[i] - lst[i-1] != step:
             return None
 
-    return (start, lst[-1] + step, step)
+    return start, lst[-1] + step, step
 
 
 def find_ancestor_attribute(obj, attr_name):
@@ -94,6 +97,15 @@ def find_ancestor_attribute(obj, attr_name):
     while hasattr(current_obj, 'parent'):
         if hasattr(current_obj, attr_name):
             return getattr(current_obj, attr_name)
+        current_obj = current_obj.parent
+    return None
+
+
+def find_ancestor_id(obj, ancestor_type):
+    current_obj = obj
+    while hasattr(current_obj, 'parent'):
+        if current_obj.name == ancestor_type:
+            return current_obj.identifier
         current_obj = current_obj.parent
     return None
 

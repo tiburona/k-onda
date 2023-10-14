@@ -4,15 +4,13 @@ import numpy as np
 import seaborn as sns
 import pandas as pd
 from copy import deepcopy
-from itertools import product
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
-from matplotlib.colors import LinearSegmentedColormap
 
-from math_functions import get_positive_frequencies, get_spectrum_fenceposts, std_err
+from math_functions import get_positive_frequencies, get_spectrum_fenceposts
 from plotting_helpers import smart_title_case, formatted_now, PlottingMixin
 from data import Base
 from stats import Stats
@@ -518,8 +516,8 @@ class MRLPlotter(Plotter):
             for group in self.lfp.groups:
                 for period_type in ['pretone', 'tone']:
                     self.selected_period_type = period_type
-                    data.append([neuron_type, group.identifier, period_type, group.data, std_err(group.scatter),
-                                 group.scatter, group.grandchildren_scatter])
+                    data.append([neuron_type, group.identifier, period_type, group.data, group.sem, group.scatter,
+                                 group.grandchildren_scatter])
 
         df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Period', 'Average MRL', 'sem', 'scatter',
                                          'unit_scatter'])

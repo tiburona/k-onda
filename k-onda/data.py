@@ -31,7 +31,7 @@ class Base:
 
     @data_type.setter
     def data_type(self, data_type):
-        data_opts = deepcopy(self.data_opts)
+        data_opts = deepcopy(self.data_opts)  # necessary to trigger the data type context notification
         data_opts['data_type'] = data_type
         self.data_opts = data_opts
 
@@ -72,6 +72,11 @@ class Data(Base):
 
     @property
     def data(self):
+        """
+
+        Returns:
+        float or np.array: The mean of the data values from the object's descendants.
+        """
         data = getattr(self, f"get_{self.data_type}")()
         if hasattr(self, 'evoked_value_calculator'):
             return self.evoked_value_calculator.get_evoked_data(data, self.data_opts.get('evoked'))
@@ -81,6 +86,10 @@ class Data(Base):
     @property
     def mean_data(self):
         return np.mean(self.data)
+
+    @property
+    def sd_data(self):
+        return np.std(self.data)
 
     @property
     def ancestors(self):
@@ -126,11 +135,23 @@ class Data(Base):
 
     @cache_method
     def get_sem(self):
-        return sem(self.scatter)
+        """
+        Calculates the standard error of an object's data. If object's data is a vector, it will always return a float.
+        If object's data is a matrix, the `collapse_sem_data` opt will determine whether it returns the standard error
+        of its children's average data points or whether it computes the standard error over children maintaining the
+        original shape of children's data, as you would want, for instance, if graphing a standard error envelope around
+        firing rate over time.
+
+        Returns:
+        float or np.array: The ."""
+        if self.data_opts.get('collapse_sem_data'):
+            return sem(self.scatter)
+        else:
+            return sem([child.data for child in self.children])
 
     @cache_method
     def get_scatter_points(self):
-        """Returns an array of points of the data values for an object's children for use on, e.g. a bar graph"""
+        """Returns a list of points of the data values for an object's children for use on, e.g. a bar graph"""
         return [np.mean(child.data) for child in self.children]
 
 
@@ -149,6 +170,8 @@ class EvokedValueCalculator:
         if evoked and self.ref.period_type == 'tone':
             data -= self.equivalent.data
         return data
+
+
 
 
 

@@ -12,6 +12,7 @@ class MatlabInterface:
         self.data_file_path = ''
         self.script_file_path = ''
         self.result_file_path = ''
+        self.session_directory = ''
 
     def init_session(self):
         # Create a unique subdirectory for this session
