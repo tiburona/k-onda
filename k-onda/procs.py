@@ -73,13 +73,13 @@ def make_lfp_spreadsheet(lfp_opts=None):
     lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
     stats = Stats(experiment, data_type_context, neuron_type_context, lfp_opts[0], lfp=lfp_experiment)
     df_name = stats.make_dfs(lfp_opts, )
-    stats.make_spreadsheet(df_name)
+    stats.make_spreadsheet(df_name, name_suffix='lfp_power_bla_by_period')
 
 
 def make_all_mrl_spreadsheets(lfp_opts=None):
     for brain_region in ['pl', 'bla', 'hpc']:
         my_lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
-        my_lfp_opts[0]['brain_region'] = brain_region  # I found it! it's a pass by reference error
+        my_lfp_opts[0]['brain_region'] = brain_region
         for fb in ['delta', 'theta_1', 'theta_2', 'delta', 'gamma', 'hgamma']:
             my_lfp_opts[0]['fb'] = [fb]
             for phase_opt in ['wavelet', None]:
@@ -145,7 +145,7 @@ def make_spike_lfp_behavior_spreadsheet(behavior_opts=None, lfp_opts=None, spike
     stats = Stats(experiment, data_type_context, neuron_type_context, opts_dicts[0], lfp=lfp_experiment,
                   behavior=behavior_experiment)
     df_name = stats.make_dfs([psth_opts] + opts_dicts + [behavior_opts])
-    stats.make_spreadsheet(df_name, name_suffix='spike_power_by_period')
+    stats.make_spreadsheet(df_name, name_suffix='power_deviations')
 
 
 def test_mrl_post_hoc_results(lfp_opts=None):

@@ -1,12 +1,12 @@
 STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156', 'IG158', 'IG177', 'IG179']
+HPC_REPLICATION_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174', 'IG175', 'IG179']
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'trials': (0, 150),
              'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time_type': 'continuous',
              'data_path': '/Users/katie/likhtik/data', 'row_type': 'trial'}
 
 PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01,
-                   'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial', 'time': 'continuous',
-                       'row_type': 'trial'}
+                   'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial', 'time': 'continuous', 'row_type': 'trial'}
 
 AUTOCORR_OPTS = {'data_class': 'spike', 'data_type': 'autocorr', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
                  'max_lag': 99}
@@ -15,7 +15,7 @@ SPECTRUM_OPTS = {'data_class': 'spike', 'data_type': 'spectrum', 'pre_stim': 0.0
                  'max_lag': 99, 'freq_range': (3, 60)}
 
 SPREADSHEET_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
-                    'pre_stim': 0.0, 'post_stim': .65, 'adjustment': 'none', 'bin_size': 0.01, 'trials': (0, 150),
+                    'pre_stim': 0.0, 'post_stim': 1, 'adjustment': 'none', 'bin_size': 0.01, 'trials': (0, 150),
                     'row_type': 'trial', 'periods': list(range(5)), 'period_types': ['pretone', 'tone'],
                     'selected_animals': STANDARD_ANIMALS, 'time_type': 'continuous'}
 
@@ -47,7 +47,7 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
                  False}
 
 LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'continuous',
-            'brain_region': 'hpc',  'frequency_type': 'block', 'data_type': 'power', 'fb': ['theta_1', 'theta_2'],
+            'brain_region': 'hpc',  'frequency_type': 'block', 'data_type': 'power', 'fb': ['delta', 'theta_1', 'theta_2'],
             'row_type': 'trial', 'pretone_trials': True, 'pre_stim': 0, 'post_stim': 1,
             'frequency_band': 'theta_1', 'period_types': ['pretone', 'tone'], 'selected_animals': STANDARD_ANIMALS,
             'power_deviation': True}

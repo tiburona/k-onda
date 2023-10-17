@@ -340,9 +340,12 @@ class LFPPeriod(LFPData, LFPDataSelector):
         starts = np.arange(.75, 30.5, 1)
         time_bins = np.array(self.spectrogram[2])
         trials = []
+        epsilon = 1e-6  # a small offset to avoid floating-point rounding issues
         for i, start in enumerate(starts):
-            end = start + self.data_opts['post_stim'] - .01 # TODO: this should be a function of mtcsg args
-            trial_times = np.arange(start, end+0.01, 0.01) #  TODO: this will stop working with different mtcsg args
+            end = start + self.data_opts['post_stim']
+            num_points = int(np.ceil((end - start) / .01 - epsilon))
+            trial_times = np.linspace(start, start + (num_points * .01), num_points, endpoint=False)
+            trial_times = trial_times[trial_times < end]
             mask = (np.abs(time_bins[:, None] - trial_times) <= 1e-6).any(axis=1)
             trials.append(LFPTrial(i, trial_times, mask, self))
         return trials
@@ -368,8 +371,6 @@ class LFPPeriod(LFPData, LFPDataSelector):
 
     @cache_method
     def get_power(self):
-        if self.brain_region == 'pl':
-            a = 'foo'
         power = np.mean([trial.data for trial in self.get_trials()], axis=0)
         if self.data_opts.get('evoked') and self.period_type == 'tone':
             power -= self.animal.periods['pretone'][self.identifier].get_power()
