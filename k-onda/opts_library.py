@@ -15,7 +15,7 @@ SPECTRUM_OPTS = {'data_class': 'spike', 'data_type': 'spectrum', 'pre_stim': 0.0
                  'max_lag': 99, 'freq_range': (3, 60)}
 
 SPREADSHEET_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
-                    'pre_stim': 0.0, 'post_stim': 1, 'adjustment': 'none', 'bin_size': 0.01, 'trials': (0, 150),
+                    'pre_stim': 0.0, 'post_stim': .05, 'adjustment': 'none', 'bin_size': 0.01, 'trials': (0, 150),
                     'row_type': 'trial', 'periods': list(range(5)), 'period_types': ['pretone', 'tone'],
                     'selected_animals': STANDARD_ANIMALS, 'time_type': 'continuous'}
 
@@ -48,9 +48,9 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
 
 LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'continuous',
             'brain_region': 'hpc',  'frequency_type': 'block', 'data_type': 'power', 'fb': ['delta', 'theta_1', 'theta_2'],
-            'row_type': 'trial', 'pretone_trials': True, 'pre_stim': 0, 'post_stim': 1,
+            'row_type': 'trial', 'pretone_trials': True, 'pre_stim': .3, 'post_stim': .05,
             'frequency_band': 'theta_1', 'period_types': ['pretone', 'tone'], 'selected_animals': STANDARD_ANIMALS,
-            'power_deviation': True}
+            'power_deviation': False, 'wavelet': False}
 
 HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period',
                       'brain_region': 'hpc', 'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl',

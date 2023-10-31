@@ -457,7 +457,10 @@ class TimeBin:
         return self.period.power_deviations[self.position]
 
     def get_position_in_period_time_series(self):
-        return self.parent.num_bins * self.parent.identifier + self.identifier
+        if self.parent.name == 'trial':
+            self.parent.num_bins * self.parent.identifier + self.identifier
+        else:
+            return self.identifier
 
 
 class MRLCalculator(LFPData):

@@ -139,13 +139,18 @@ def make_spike_lfp_behavior_spreadsheet(behavior_opts=None, lfp_opts=None, spike
                                                         [BEHAVIOR_OPTS, LFP_OPTS, SPREADSHEET_OPTS])
     opts_dicts = []
     for brain_region in ['bla', 'pl', 'hpc']:
-        opts_dict = deepcopy(my_lfp_opts)
-        opts_dict['brain_region'] = brain_region
-        opts_dicts.append(opts_dict)
+        for dtype in ['mrl', 'power']:
+            opts_dict = deepcopy(my_lfp_opts)
+            opts_dict['brain_region'] = brain_region
+            opts_dict['data_type'] = dtype
+            if dtype == 'mrl':
+                opts_dict['row_type'] = 'period'
+                opts_dict['time_type'] = 'block'
+            opts_dicts.append(opts_dict)
     stats = Stats(experiment, data_type_context, neuron_type_context, opts_dicts[0], lfp=lfp_experiment,
                   behavior=behavior_experiment)
     df_name = stats.make_dfs([psth_opts] + opts_dicts + [behavior_opts])
-    stats.make_spreadsheet(df_name, name_suffix='power_deviations')
+    stats.make_spreadsheet(df_name, name_suffix='previous_pip_lfp_05_firing_rate')
 
 
 def test_mrl_post_hoc_results(lfp_opts=None):

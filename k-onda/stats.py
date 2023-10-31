@@ -145,7 +145,7 @@ class Stats(Base):
         other_attributes = ['period_type']
         inclusion_criteria = []
         if 'lfp' in self.data_class:
-            if self.data_type in 'mrl':
+            if self.data_type in ['mrl']:
                 level = 'mrl_calculator'
                 other_attributes += ['frequency', 'fb', 'neuron_type']
                 inclusion_criteria.append(lambda x: x.is_valid)
@@ -262,20 +262,30 @@ class Stats(Base):
         self.spreadsheet_fname = os.path.join(path, df_name + '_' + name_suffix + '.csv')
         if os.path.exists(self.spreadsheet_fname) and not force_recalc:
             return
+        try:
+            with open(self.spreadsheet_fname, 'w', newline='') as f:
+                self.write_csv(f, df_name)
+        except OSError:
+            self.spreadsheet_fname = self.spreadsheet_fname[0:75] + self.name_suffix
+            if name_suffix != self.name_suffix:
+                self.spreadsheet_fname += name_suffix
+            self.spreadsheet_fname += '.csv'
+            with open(self.spreadsheet_fname, 'w', newline='') as f:
+                self.write_csv(f, df_name)
 
-        with open(self.spreadsheet_fname, 'w', newline='') as f:
-            # write information from `opts_dicts` into csv metadata
-            for opts_dict in self.opts_dicts:
-                line = ', '.join([f"{str(key).replace(',', '_')}: {str(value).replace(',', '_')}" for key, value in
-                                  opts_dict.items()])
-                f.write(f"# {line}\n")
-                f.write("\n")
 
-            header = list(self.dfs[df_name].columns)
-            writer = csv.DictWriter(f, fieldnames=header)
-            writer.writeheader()
-            for index, row in self.dfs[df_name].iterrows():
-                writer.writerow(row.to_dict())
+    def write_csv(self, f, df_name):
+        for opts_dict in self.opts_dicts:
+            line = ', '.join([f"{str(key).replace(',', '_')}: {str(value).replace(',', '_')}" for key, value in
+                              opts_dict.items()])
+            f.write(f"# {line}\n")
+            f.write("\n")
+
+        header = list(self.dfs[df_name].columns)
+        writer = csv.DictWriter(f, fieldnames=header)
+        writer.writeheader()
+        for index, row in self.dfs[df_name].iterrows():
+            writer.writerow(row.to_dict())
 
     def write_post_hoc_r_script(self):
 
