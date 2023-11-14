@@ -2,12 +2,13 @@ from copy import deepcopy
 
 from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
     GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS, AC_KEYS, AC_METHODS, FIGURE_1_OPTS, LFP_OPTS, ROSE_PLOT_OPTS, \
-    HEAT_MAP_DATA_OPTS, BEHAVIOR_OPTS
+    HEAT_MAP_DATA_OPTS, BEHAVIOR_OPTS, CAROLINA_OPTS, CAROLINA_GRAPH_OPTS, CAROLINA_GROUP_STAT_OPTS, SPONTANEOUS_OPTS, \
+    SPONTANEOUS_GRAPH_OPTS, CROSS_CORR_OPTS, SPONTANEOUS_MRL_OPTS
 from initialize_experiment import experiment, data_type_context, neuron_type_context, period_type_context, \
     lfp_experiment, behavior_experiment
 from proc_helpers import add_ac_keys_and_plot, assign_vars, plot
 from stats import Stats
-from plotters import Plotter, MRLPlotter
+from plotters import Plotter, MRLPlotter, NeuronTypePlotter, PeriStimulusPlotter
 
 
 """
@@ -158,4 +159,71 @@ def test_mrl_post_hoc_results(lfp_opts=None):
     stats = Stats(experiment, data_type_context, neuron_type_context, my_lfp_opts[0], lfp=lfp_experiment)
     results = stats.get_post_hoc_results()
     print(results)
+
+
+def duplicate_itamar_spreadsheet(lfp_opts=None):
+    my_lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
+    opts_dicts = []
+    for trial_duration in [(0, 1), (0, .3)]:
+        opts_dict = deepcopy(my_lfp_opts[0])
+        opts_dict['pre_stim'] = trial_duration[0]
+        opts_dict['post_stim'] = trial_duration[1]
+        opts_dicts.append(opts_dict)
+    stats = Stats(experiment, data_type_context, neuron_type_context, opts_dicts[0], lfp=lfp_experiment,
+                  behavior=behavior_experiment)
+    df_name = stats.make_dfs(opts_dicts)
+    stats.make_spreadsheet(df_name, name_suffix='duplicate_itamar')
+
+
+def plot_carolina_psth(levels, psth_opts=None, graph_opts=None):
+    psth_opts, graph_opts = assign_vars([psth_opts, graph_opts], [CAROLINA_OPTS, CAROLINA_GRAPH_OPTS])
+    plot(psth_opts, graph_opts, levels=levels, n_types=['PV_IN', 'ACH'])
+
+
+def plot_carolina_group_stats(group_stat_opts=None, graph_opts=None):
+    group_stat_opts, graph_opts = assign_vars([group_stat_opts, graph_opts], [CAROLINA_GROUP_STAT_OPTS,
+                                                                              CAROLINA_GRAPH_OPTS])
+    plot(group_stat_opts, graph_opts, sig_markers=False)
+
+
+def plot_carolina_scatter(graph_opts=None):
+    graph_opts = assign_vars([graph_opts], [CAROLINA_GRAPH_OPTS])[0]
+    plotter = NeuronTypePlotter(experiment, data_type_context, neuron_type_context, period_type_context,
+                                graph_opts=graph_opts)
+    plotter.scatterplot()
+
+
+def plot_carolina_waveforms(graph_opts=None):
+    graph_opts = assign_vars([graph_opts], [CAROLINA_GRAPH_OPTS])[0]
+    plotter = NeuronTypePlotter(experiment, data_type_context, neuron_type_context, period_type_context,
+                                graph_opts=graph_opts)
+    plotter.phy_graphs()
+
+
+def plot_spontaneous_firing(spontaneous_opts=None, graph_opts=None):
+    spontaneous_opts, graph_opts = assign_vars([spontaneous_opts, graph_opts],
+                                               [SPONTANEOUS_OPTS, SPONTANEOUS_GRAPH_OPTS])
+    plotter = PeriStimulusPlotter(experiment, data_type_context, neuron_type_context, period_type_context,
+                                  graph_opts=graph_opts)
+    plotter.plot(spontaneous_opts, graph_opts, level='group')
+
+
+def plot_cross_correlations(cross_corr_opts=None, graph_opts=None):
+    cross_corr_opts, graph_opts = assign_vars([cross_corr_opts, graph_opts], [CROSS_CORR_OPTS, CAROLINA_GRAPH_OPTS])
+    plot(cross_corr_opts, graph_opts, levels=['group'], n_types=['PV_IN', 'ACH'])
+
+
+def plot_spontaneous_mrl(spontaneous_opts=None, graph_opts=None):
+    spontaneous_opts, graph_opts = assign_vars([spontaneous_opts, graph_opts], [SPONTANEOUS_MRL_OPTS, CAROLINA_GRAPH_OPTS])
+    for brain_region in ['bla', 'il']:
+        my_data_opts = deepcopy(spontaneous_opts)
+        my_data_opts['brain_region'] = brain_region
+        plotter = MRLPlotter(experiment, data_type_context, neuron_type_context, period_type_context, lfp=lfp_experiment)
+        plotter.mrl_vals_plot(spontaneous_opts, graph_opts)
+
+
+
+
+
+
 

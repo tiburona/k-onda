@@ -120,3 +120,19 @@ def get_ancestors(obj):
     return [obj] + obj.parent.ancestors
 
 
+def get_descendants(obj, level=None):
+    descendants = []
+    # If the object does not have children, return the empty list
+    if not hasattr(obj, 'children') or not obj.children:
+        return descendants
+    # Recursively get the descendants of each child
+    for child in obj.children:
+        # If level is None or the child's name matches level, add the child to the list
+        if level is None or child.name == level:
+            descendants.append(child)
+        # Regardless, continue to check the child's descendants
+        descendants.extend(get_descendants(child, level))
+    return descendants
+
+
+

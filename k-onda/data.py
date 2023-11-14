@@ -1,10 +1,14 @@
 from copy import deepcopy
 from context import data_type_context as dt_context, neuron_type_context as nt_context, \
     period_type_context as pt_context
-from utils import get_ancestors
+from utils import get_ancestors, get_descendants
 import numpy as np
 from math_functions import sem
 from utils import cache_method
+
+# NEURON_TYPES = ['IN', 'PN']
+NEURON_TYPES = ['PV_IN', 'ACH']
+PERIOD_TYPES = ['pretone', 'tone']
 
 
 class Base:
@@ -45,7 +49,11 @@ class Base:
 
     @property
     def neuron_types(self):
-        return ['IN', 'PN']
+        return NEURON_TYPES
+
+    @property
+    def period_types(self):
+        return PERIOD_TYPES
 
     @property
     def selected_period_type(self):
@@ -96,6 +104,10 @@ class Data(Base):
         return get_ancestors(self)
 
     @property
+    def descendants(self):
+        return get_descendants(self)
+
+    @property
     def sem(self):
         return self.get_sem()
 
@@ -141,18 +153,24 @@ class Data(Base):
         of its children's average data points or whether it computes the standard error over children maintaining the
         original shape of children's data, as you would want, for instance, if graphing a standard error envelope around
         firing rate over time.
+        """
 
-        Returns:
-        float or np.array: The ."""
-        if self.data_opts.get('collapse_sem_data'):
-            return sem(self.scatter)
+        if self.data_opts.get('sem_level'):
+            sem_children = get_descendants(self, level=self.data_opts.get('sem_level'))
         else:
-            return sem([child.data for child in self.children])
+            sem_children = self.children
+
+        if self.data_opts.get('collapse_sem_data'):
+            return sem([np.mean(child.data) for child in sem_children])
+        else:
+            return sem([child.data for child in sem_children])
 
     @cache_method
     def get_scatter_points(self):
         """Returns a list of points of the data values for an object's children for use on, e.g. a bar graph"""
-        return [np.mean(child.data) for child in self.children]
+        if not self.children:
+            return []
+        return [np.nanmean(child.data) for child in self.children]
 
 
 class EvokedValueCalculator:

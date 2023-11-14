@@ -71,6 +71,8 @@ class Stats(Base):
         for var in vs:
             if var in df:
                 df[var] = df[var].astype('category')
+        if name in self.dfs:
+            name += '_2'
         self.dfs[name] = df
 
     def set_df_name(self):
@@ -80,40 +82,40 @@ class Stats(Base):
         return name
 
     def merge_dfs(self):
-        """
-        Merge multiple DataFrames stored in self.dfs based on their common columns.
-
-        The function starts with the DataFrame that has the most columns and sequentially merges all other DataFrames
-        based on columns they have in common. If a DataFrame doesn't share any columns with the current merged result,
-        it will be appended as new columns without any matching rows.
-
-        The 'experiment' column, if present, is excluded from the merge process.
-
-        After merging, the resulting DataFrame is added to self.dfs with a name that is a concatenation of all original
-        DataFrame names, separated by underscores.
-
-        Parameters:
-        None
-
-        Returns:
-        str: The name of the newly added DataFrame in self.dfs.
-        """
-        # Determine which DataFrame has the most unique key combinations
-        df_items = list(self.dfs.items())  # get a list of (name, DataFrame) pairs
+        df_items = list(self.dfs.items())
         df_items.sort(key=lambda item: len(item[1].columns), reverse=True)
-        # Extract the sorted DataFrames and their names
         df_names, dfs = zip(*df_items)
-        # Start with the DataFrame that has the most columns
-        result = dfs[0]
-        # Merge with all the other DataFrames
+        result = dfs[0].copy()
+        original_dtypes = result.dtypes
+
         for df in dfs[1:]:
-            # Determine common columns between result and df
             common_columns = list(set(result.columns).intersection(set(df.columns)))
-            # If 'experiment' column exists, remove it
+            print("Common columns before handling non-identical values:", common_columns)
+
             if 'experiment' in df.columns:
                 df = df.drop(columns=['experiment'])
-            # Merge on the common columns
-            result = pd.merge(result, df, how='left', on=common_columns)
+            for col in common_columns:
+                if col in df.columns and col in result.columns:
+                    # Ensure data types are the same before merging
+                    if result[col].dtype != df[col].dtype:
+                        df[col] = df[col].astype(result[col].dtype)
+                    if not result[col].equals(df[col]):
+                        df = df.rename(columns={col: f'{col}_non_identical'})
+                        print(f"Renamed {col} to {col}_non_identical due to non-identical values")
+
+            common_columns = list(set(result.columns).intersection(set(df.columns)))
+            print("Common columns after handling non-identical values:", common_columns)
+
+            if common_columns:
+                result = pd.merge(result, df, how='left', suffixes=('', '_right'))
+            else:
+                print("No common columns found for merging. Skipping this DataFrame.")
+
+        # Convert columns back to original data types
+        for col, dtype in original_dtypes.items():
+            if col in result.columns:
+                result[col] = result[col].astype(dtype)
+
         new_df_name = '_'.join(df_names)
         self.dfs[new_df_name] = result
         return new_df_name

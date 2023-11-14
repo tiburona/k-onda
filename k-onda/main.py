@@ -8,8 +8,7 @@ The top-level module for calling spike processing functions.
 
 
 def main():
-
-    make_spike_lfp_behavior_spreadsheet()  # An example.  See what else is available in the procs module.
+    plot_spontaneous_mrl() # An example.  See what else is available in the procs module.
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

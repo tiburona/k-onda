@@ -66,9 +66,11 @@ def spectrum(series, freq_range, max_lag, bin_size):
 
 def sem(children_vals):
     """Take the standard error by columns, over rows of a matrix"""
+    if len(children_vals) == 0:
+        return np.nan
     all_series = np.vstack(children_vals)
     # Compute standard deviation along the vertical axis (each point in time)
-    std_dev = np.std(all_series, axis=0, ddof=1)  # ddof=1 to compute sample standard deviation
+    std_dev = np.nanstd(all_series, axis=0, ddof=1)  # ddof=1 to compute sample standard deviation
     return std_dev / np.sqrt(len(all_series))
 
 

@@ -46,8 +46,8 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
                  'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'hist_color': '#9678D3', 'force_recalc':
                  False}
 
-LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'continuous',
-            'brain_region': 'hpc',  'frequency_type': 'block', 'data_type': 'power', 'fb': ['delta', 'theta_1', 'theta_2'],
+LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'block',
+            'brain_region': 'hpc',  'frequency_type': 'block', 'data_type': 'power', 'fb': ['theta_1'],
             'row_type': 'trial', 'pretone_trials': True, 'pre_stim': .3, 'post_stim': .05,
             'frequency_band': 'theta_1', 'period_types': ['pretone', 'tone'], 'selected_animals': STANDARD_ANIMALS,
             'power_deviation': False, 'wavelet': False}
@@ -61,6 +61,42 @@ HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/da
 BEHAVIOR_OPTS = {'data_class': 'behavior', 'data_type': 'percent_freezing', 'row_type': 'period',
                  'period_types': ['pretone', 'tone'], 'selected_animals': STANDARD_ANIMALS,
                  'data_path': '/Users/katie/likhtik/data'}
+
+CAROLINA_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH_forKatie', 'data_type': 'psth', 'base': 'trial',
+                    'pre_stim': .05, 'post_stim': .65, 'adjustment': 'normalized', 'bin_size': 0.01, 'trials': (0, 150),
+                    'row_type': 'trial', 'periods': list(range(5)), 'period_types': ['pretone', 'tone']}
+
+
+CAROLINA_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_forKatie/graphs', 'units_in_fig': 4, 'tick_step': 20, 'sem': False,
+              'footer': False, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'arch': '#F2A354'},
+              'force_recalc': False, 'neuron_type_colors': {'PV_IN': '#5679C7', 'ACH': '#C75B56'}, 'animal_id': 'CH272',
+                 'cluster_ids': [10, 101], 'electrodes_for_waveform': [[7], [3, 5]], 'electrodes_for_feature': [13, 15],
+                 'el_inds': [1, 1], 'pc_inds': [0, 1], 'annot_coords': (-0.11, 1.1), 'data_path': '/Users/katie/likhtik/CH_forKatie',
+                       'normalize_waveform': True}
+
+CAROLINA_GROUP_STAT_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment': 'normalized', 'time_type': 'continuous', 'pre_stim': 0.0,
+                        'post_stim': 0.70, 'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'trial',
+                        'post_hoc_bin_size': 1, 'data_path': '/Users/katie/likhtik/data', 'post_hoc_type': 'lmer',
+                        'group_colors': {'control': '#76BD4E', 'arch': '#F2A354'}, 'sem_level': 'unit'}
+
+SPONTANEOUS_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH_forKatie',
+                    'data_type': 'spontaneous_firing', 'bin_size': 0.1, 'selected_animals': ['CH272', 'CH274', 'CH275']}
+
+
+SPONTANEOUS_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_forKatie/graphs', 'units_in_fig': 4, 'tick_step': 100,
+                          'sem': False, 'footer': False, 'equal_y_scales': False,
+                          'group_colors': {'control': '#76BD4E', 'arch': '#F2A354'}, 'force_recalc': False,
+                          'neuron_type_colors': {'PV_IN': '#5679C7', 'ACH': '#C75B56'}}
+
+
+CROSS_CORR_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH_forKatie', 'data_type': 'cross_correlations',
+                   'pre_stim': 0, 'post_stim': 1, 'adjustment': 'none', 'bin_size': 0.01, 'trials': (0, 150),
+                   'periods': list(range(5)), 'period_types': ['pretone', 'tone'], 'neuron_type_pair': ('PV_IN', 'ACH')
+}
+
+SPONTANEOUS_MRL_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/CH_forKatie', 'data_type': 'mrl',
+                        'bin_size': 0.01, 'spontaneous': True, 'trials': (0, 150),  'fb': ['theta_1'],
+                        'brain_region': 'bf', 'frequency_band': 'theta_1', 'sem_level': 'mrl_calculator'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',

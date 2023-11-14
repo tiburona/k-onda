@@ -50,6 +50,12 @@ class Level(Data):
     def get_psth(self):
         return self.get_average('get_psth')
 
+    def get_spontaneous_firing(self):
+        return self.get_average('get_spontaneous_firing', stop_at='unit')
+
+    def get_cross_correlations(self):
+        return self.get_average('get_cross_correlations')
+
     @cache_method
     def proportion_score(self):
         return [1 if rate > 0 else 0 for rate in self.get_psth()]
@@ -138,8 +144,6 @@ class Level(Data):
                 return 0
 
 
-
-
 class Experiment(Level, Subscriber):
     """The experiment. Parent of groups."""
 
@@ -156,6 +160,7 @@ class Experiment(Level, Subscriber):
         self.all_units = [unit for animal in self.all_animals for unit in animal.units['good']]
         self.last_trial_vals = None
         self.last_neuron_type = 'uninitialized'
+        self.last_period_type = 'uninitialized'
         self.selected_animals = None  # None means all animals will be included; it's the default state
 
     @property
@@ -181,6 +186,10 @@ class Experiment(Level, Subscriber):
             if self.selected_neuron_type != self.last_neuron_type:
                 [entity.update_children() for entity in self.all_groups + self.all_animals]
                 self.last_neuron_type = self.selected_neuron_type
+
+        if context.name == 'period_type_context':
+            if self.selected_animals != self.last_period_type:
+                [unit.update_children() for unit in self.all_units]
 
     def categorize_neurons(self):
         firing_rates = [unit.firing_rate for unit in self.all_units]
@@ -238,15 +247,16 @@ class Animal(Level):
 
     name = 'animal'
 
-    def __init__(self, name, condition, units=None, tone_period_onsets=None, tone_onsets_expanded=None):
+    def __init__(self, name, condition, units=None, tone_period_onsets=None, tone_onsets_expanded=None,
+                 neuron_types=('IN', 'PN')):
         self.identifier = name
         self.condition = condition
         self.units = units if units else defaultdict(list)
         self.children = None
         self.tone_onsets_expanded = tone_onsets_expanded if tone_onsets_expanded is not None else []
         self.tone_period_onsets = tone_period_onsets if tone_period_onsets is not None else []
-        self.PN = []
-        self.IN = []
+        for nt in neuron_types:
+            setattr(self, nt, [])
         self.raw_lfp = None
         self.update_children()  # Needs to be called on initialization so units gets populated
 
@@ -275,8 +285,9 @@ class Unit(Level):
         self.children = None
         self.spike_times = np.array(spike_times)
         self.trials_opts = None
-        spikes_for_fr = self.spike_times[self.spike_times > SAMPLING_RATE * 30]
-        self.firing_rate = SAMPLING_RATE * len(spikes_for_fr) / float(spikes_for_fr[-1] - spikes_for_fr[0])
+        # spikes_for_fr = self.spike_times[self.spike_times > SAMPLING_RATE * 30]
+        # self.firing_rate = SAMPLING_RATE * len(spikes_for_fr) / float(spikes_for_fr[-1] - spikes_for_fr[0])
+        self.firing_rate = SAMPLING_RATE * len(self.spike_times) / float(self.spike_times[-1] - self.spike_times[0])
         self.fwhm_microseconds = None
         self.parent = animal
 
@@ -289,7 +300,7 @@ class Unit(Level):
             trials = [trial for trial in selected_trial_indices if trial // TONES_PER_PERIOD == i]
             for period_type in ['tone', 'pretone']:
                 self.periods[period_type].append(Period(self, i, trials, period_type=period_type))
-        self.children = self.periods['tone']
+        self.children = self.periods[self.selected_period_type] if self.selected_period_type else self.periods['tone']
         self.all_periods = self.periods['tone'] + self.periods['pretone']
 
     @cache_method
@@ -299,6 +310,13 @@ class Unit(Level):
     @cache_method
     def get_spikes_by_trials(self):
         return [trial.spikes for trial in self.trials]
+
+    @cache_method
+    def get_spontaneous_firing(self):  # TODO: don't hardcode the number in here
+        num_bins = int(120/self.data_opts['bin_size'])
+        start = self.animal.tone_period_onsets[0] - 120 * SAMPLING_RATE - 1
+        stop = self.animal.tone_period_onsets[0] - 1
+        return calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), self.data_opts['bin_size'])
 
     @cache_method
     def get_global_std_dev(self):
@@ -311,6 +329,8 @@ class Unit(Level):
     @cache_method
     def get_tone_period_std_dev(self):
         return np.std([rate for period in self.children for rate in period.get_unadjusted_rates()])
+
+
 
 
 class Period(Level):
@@ -417,6 +437,28 @@ class Trial(Level):
     def get_all_autocorrelations(self):
         return {'trials': self._calculate_autocorrelation(self.get_demeaned_rates())}
 
+    def get_cross_correlations(self):
+        cross_correlations = []
+        neuron_type_pair = self.data_opts['neuron_type_pair']
+        if self.unit.neuron_type == neuron_type_pair[0]:
+            if all([getattr(self.unit.animal, neuron_type) for neuron_type in neuron_type_pair]):
+                pairs = [self.find_equivalent(unit) for unit in getattr(self.unit.animal, neuron_type_pair[1])]
+                for pair in pairs:
+                    if len(pair.spikes) == 0:
+                        continue
+                    x = self.get_demeaned_rates()
+                    y = pair.get_demeaned_rates()
+                    cross_corr = np.correlate(x, y, mode='full')
+                    norm_factor = np.std(x) * np.std(y) * len(x)
+                    normalized_cross_corr = cross_corr / norm_factor
+                    cross_correlations.append(normalized_cross_corr)
+        return np.nanmean(np.array(cross_correlations), axis=0)
+
+    def find_equivalent(self, unit):
+        return [trial for period in unit for trial in period
+                if period.period_type == self.period_type
+                and period.identifier == self.period.identifier
+                and trial.identifier == self.identifier][0]
 
 
 class TimeBin:

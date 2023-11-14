@@ -5,13 +5,17 @@ from datetime import datetime
 class PlottingMixin:
     def get_labels(self):
         adjustment = self.data_opts.get('adjustment')
+        if not adjustment:
+            adjustment = ''
         Hz = '' if adjustment == 'normalized' else ' Hz'
         base = self.data_opts.get('base') if self.data_opts.get('base') else ''
 
         return {'psth': ('Time (s)', f'{adjustment.capitalize()} Firing Rate{Hz}'),
                 'proportion': ('Time (s)', ''f'Proportion Positive {base.capitalize() + "s"}'),
                 'autocorr': ('Lags (s)', 'Autocorrelation'),
-                'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum')}
+                'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum'),
+                'spontaneous_firing': ('Time(s)', 'Firing Rate (Samples per Second)'),
+                'cross_correlations': ('Lags (s)', 'Cross-Correlation')}
 
     def set_labels(self, x_and_y_labels=(None, None)):
         canonical_labels = self.get_labels().get(self.data_type)
@@ -50,7 +54,7 @@ def formatted_now():
 def smart_title_case(s):
     lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 'as', 'but', 'or',
                        'nor', 'is'}
-    acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl'}
+    acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl', 'il', 'bf'}
     words = re.split(r'(\W+)', s)  # Split string on non-alphanumeric characters, preserving delimiters
     title_words = []
     for i, word in enumerate(words):
