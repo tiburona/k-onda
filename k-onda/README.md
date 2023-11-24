@@ -51,7 +51,7 @@ and for doing standard calculations (like calculating data means and standard de
 
 The modules containing the classes which coordinate the work to be done on the model are [plotters.py](plotters.py) and 
 [stats.py](stats.py).  There are currently several types of platters in the `plotters` module (all of which inherit from
-the top-level plotter class); so far Stats is just one class that handles both making csv files and interfacing with R for 
+the top-level plotter class); so far `Stats` is just one class that handles both making csv files and interfacing with R for 
 the purpose of running post-hoc tests.
 
 

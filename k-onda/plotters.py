@@ -138,7 +138,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.close_plot(group.identifier)
 
     def make_subplot(self, data_source, ax, title=''):
-        subplotter = PeriStimulusSubplotter(data_source, self.data_opts, self.graph_opts, ax, self.plot_type,
+        subplotter = PeriStimulusSubplotter(self, data_source, self.data_opts, self.graph_opts, ax, self.plot_type,
                                             multiplier=self.multiplier)
         subplotter.plot_data()
         if self.graph_opts.get('sem'):
@@ -168,14 +168,14 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
     def plot_unit(self, unit, axes):
         if self.data_type == 'psth':
             self.add_raster(unit, axes)
-        subplotter = PeriStimulusSubplotter(unit, self.data_opts, self.graph_opts, axes[-1])
+        subplotter = PeriStimulusSubplotter(self, unit, self.data_opts, self.graph_opts, axes[-1])
         plotting_func = getattr(subplotter, f"plot_{self.data_type}")
         plotting_func()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
 
     def add_raster(self, unit, axes):
-        subplotter = PeriStimulusSubplotter(unit, self.data_opts, self.graph_opts, axes[0])
+        subplotter = PeriStimulusSubplotter(self, unit, self.data_opts, self.graph_opts, axes[0])
         subplotter.y = unit.get_spikes_by_trials()  # overwrites subplotter.y defined by data_type, which is psth
         subplotter.plot_raster()
 
@@ -255,7 +255,8 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
 
 class PeriStimulusSubplotter(PlottingMixin):
     """Constructs a subplot of a PeriStimulusPlot."""
-    def __init__(self, data_source, data_opts, graph_opts, ax, parent_type='standalone', multiplier=1):
+    def __init__(self, plotter, data_source, data_opts, graph_opts, ax, parent_type='standalone', multiplier=1):
+        self.plotter = plotter
         self.data_source = data_source
         self.data_opts = data_opts
         self.data_type = data_opts['data_type']
@@ -296,13 +297,7 @@ class PeriStimulusSubplotter(PlottingMixin):
         else:
             color = 'black'
         self.x = np.linspace(x_min, x_max, num=num)
-        self.bars = self.ax.bar(self.x, self.y, width=width, color=color)
-        for bar in self.bars:
-            height = bar.get_height()
-            width = bar.get_width()
-            x = bar.get_x()
-            y = bar.get_y()
-            print(f"Bar at {x} with height {height}, width {width}")
+        self.ax.bar(self.x, self.y, width=width, color=color)
         self.ax.set_facecolor(facecolor)
         self.ax.patch.set_alpha(0.2)
         self.set_limits_and_ticks(x_min, x_max, x_tick_min, x_step, y_min, y_max)
@@ -343,9 +338,12 @@ class PeriStimulusSubplotter(PlottingMixin):
     def plot_cross_correlations(self):
         opts = self.data_opts
         boundary = int(opts['post_stim']/opts['bin_size'])
-        #self.plot_bar(width=opts['bin_size'], x_min=-boundary, x_tick_min=-boundary, num=len(self.y), x_max=boundary,
-                      #x_step=self.g_opts['tick_step'], y_min=min(self.y) - .01, y_max=max(self.y) + .01, zero_line=True)
-        self.ax.bar(np.linspace(-100, 99, 199), self.y)
+        tick_step = self.plotter.graph_opts['tick_step']
+        self.ax.bar(np.linspace(-boundary, boundary, 2*boundary-1), self.y)
+        tick_positions = np.arange(-boundary, boundary + 1, tick_step)
+        tick_labels = np.arange(-opts['post_stim'], opts['post_stim'] + opts['bin_size'], tick_step/boundary)
+        self.ax.set_xticks(tick_positions)
+        self.ax.set_xticklabels([f'{label:.1f}' for label in tick_labels])
 
     def plot_data(self):
         getattr(self, f"plot_{self.data_type}")()

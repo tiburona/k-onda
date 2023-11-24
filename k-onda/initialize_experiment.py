@@ -10,7 +10,7 @@ from lfp import LFPExperiment
 from behavior import Behavior
 from context import data_type_context, neuron_type_context, period_type_context
 
-CAROLINA_DATA_PATH = '/Users/katie/likhtik/CH_forKatie/'
+CAROLINA_DATA_PATH = '/Users/katie/likhtik/CH_for_katie_less_conservative/'
 
 PL_ELECTRODES = {
     'IG154': (4, 6), 'IG155': (12, 14), 'IG156': (12, 14), 'IG158': (7, 14), 'IG160': (1, 8), 'IG161': (9, 11),
