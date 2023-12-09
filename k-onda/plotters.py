@@ -3,7 +3,6 @@ import math
 import numpy as np
 import seaborn as sns
 import pandas as pd
-from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
@@ -21,14 +20,10 @@ class Plotter(Base):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple plots of multiple
     kinds of data, see the figure module."""
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
-                 lfp=None, plot_type='standalone'):
+    def __init__(self, experiment, graph_opts=None, lfp=None, plot_type='standalone'):
         self.experiment = experiment
-        self.data_type_context = data_type_context
         self.data_opts = None
-        self.neuron_type_context = neuron_type_context
         self.selected_neuron_type = None
-        self.period_type_context = period_type_context
         self.selected_period_type = None
         self.lfp = lfp
         self.graph_opts = graph_opts
@@ -45,12 +40,12 @@ class Plotter(Base):
         self.invisible_ax = None
         self.grid = None
 
-    def initialize(self, data_opts, graph_opts, neuron_type=None, period_type=None):
+    def initialize(self, data_opts, graph_opts, neuron_type=None, block_type=None):
         """Both initializes values on self and sets values for the contexts and all the contexts' subscribers."""
         self.graph_opts = graph_opts
         self.data_opts = data_opts  # Sets data_opts for all subscribers to data_type_context
         self.selected_neuron_type = neuron_type  # Sets neuron type for all subscribers to neuron_type_context
-        self.selected_period_type = period_type
+        self.selected_block_type = block_type
 
     def close_plot(self, basename):
         self.set_dir_and_filename(basename)
@@ -71,8 +66,8 @@ class Plotter(Base):
 class PeriStimulusPlotter(Plotter, PlottingMixin):
     """Makes plots where the x-axis is time around the stimulus, and y can be a variety of types of data."""
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
         self.multiplier = 1 if self.plot_type == 'standalone' else 0.5
 
     def plot(self, data_opts, graph_opts, level=None, neuron_type=None):
@@ -231,7 +226,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.fname = f"{'_'.join(tags)}.png"
 
     def join_trials(self, s):
-        return s.join([str(t) for t in self.data_opts['trials']])
+        return s.join([str(t) for t in self.data_opts['events']])
 
     def set_gridspec_axes(self, fig, gridspec, numrows, numcols, invisible_ax=None):
         self.fig = fig
@@ -285,13 +280,13 @@ class PeriStimulusSubplotter(PlottingMixin):
         for i, spiketrain in enumerate(self.y):
             for spike in spiketrain:
                 self.ax.vlines(spike, i + .5, i + 1.5)
-        self.set_labels(x_and_y_labels=['', 'Trial'])
+        self.set_labels(x_and_y_labels=['', 'Event'])
         self.set_limits_and_ticks(-opts['pre_stim'], opts['post_stim'], self.g_opts['tick_step'], .5, len(self.y) + .5)
         self.ax.add_patch(plt.Rectangle((0, self.ax.get_ylim()[0]), 0.05, self.ax.get_ylim()[1] - self.ax.get_ylim()[0],
                                         facecolor='gray', alpha=0.3))
 
     def plot_bar(self, width, x_min, x_max, num, x_tick_min, x_step, y_min=None, y_max=None, x_label='', y_label='',
-                 color='k', facecolor='white', zero_line=False):
+                 facecolor='white', zero_line=False):
         if self.data_source.name == 'group' and 'group_colors' in self.g_opts:
             color = self.g_opts['group_colors'][self.data_source.identifier]
         else:
@@ -359,10 +354,8 @@ class PeriStimulusSubplotter(PlottingMixin):
 
 class GroupStatsPlotter(PeriStimulusPlotter):
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
-                 plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=graph_opts,
-                         plot_type=plot_type)
+    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_group_stats(self, sig_markers=True):
         self.fig, self.axs = plt.subplots(2, 1, figsize=(15, 15))
@@ -371,7 +364,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
         self.close_plot('stats_plot')
 
     def plot_group_stats_data(self, sig_markers=True):
-        self.stats = Stats(self.experiment, self.data_type_context, self.neuron_type_context, self.data_opts)
+        self.stats = Stats(self.experiment, self.data_opts)
         force_recalc = self.graph_opts['force_recalc'] # TODO: this isn't doing anything.
         if sig_markers:
             interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
@@ -454,10 +447,8 @@ class GroupStatsPlotter(PeriStimulusPlotter):
 class PiePlotter(Plotter):
     """Constructs a pie chart of up- or down-regulation of individual neurons"""
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
-                 plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context,
-                         graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_unit_pie_chart(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type=None)
@@ -483,10 +474,9 @@ class PiePlotter(Plotter):
 class SpontaneousFiringPlotter(Plotter):
     """Constructs a pie chart of up- or down-regulation of individual neurons"""
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
+    def __init__(self, experiment, context, graph_opts=None,
                  plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context,
-                         graph_opts=graph_opts, plot_type=plot_type)
+        super().__init__(experiment, context, graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_unit_pie_chart(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type=None)
@@ -511,10 +501,8 @@ class SpontaneousFiringPlotter(Plotter):
 
 class NeuronTypePlotter(Plotter):
 
-    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
-                 plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context,
-                         graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, context, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, context, graph_opts=graph_opts, plot_type=plot_type)
 
     def scatterplot(self):
 
@@ -581,10 +569,8 @@ class NeuronTypePlotter(Plotter):
 
 
 class MRLPlotter(Plotter):
-    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, lfp=None,
-                 graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, lfp=lfp,
-                         graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, context, lfp=None, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, context, lfp=lfp, graph_opts=graph_opts, plot_type=plot_type)
 
     def make_plot(self, data_opts, graph_opts, plot_type='rose'):
         if plot_type == 'rose':
@@ -733,8 +719,7 @@ class MRLPlotter(Plotter):
         pass # todo: make this do something
 
     def add_significance_markers(self):
-        self.stats = Stats(self.experiment, self.data_type_context, self.neuron_type_context, self.data_opts,
-                           lfp=self.lfp)
+        self.stats = Stats(self.experiment, self.context, self.data_opts, lfp=self.lfp)
         # TODO: implement this
 
 

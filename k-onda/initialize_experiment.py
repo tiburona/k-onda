@@ -1,181 +1,202 @@
 import os
-import scipy.io as sio
+import json
 import numpy as np
-import csv
 from neo.rawio import BlackrockRawIO
 from scipy.signal import resample
 
 from spike import Experiment, Group, Animal, Unit
 from lfp import LFPExperiment
-from behavior import Behavior
-from context import data_type_context, neuron_type_context, period_type_context
-
-CAROLINA_DATA_PATH = '/Users/katie/likhtik/CH_for_katie_less_conservative/'
-
-PL_ELECTRODES = {
-    'IG154': (4, 6), 'IG155': (12, 14), 'IG156': (12, 14), 'IG158': (7, 14), 'IG160': (1, 8), 'IG161': (9, 11),
-    'IG162': (13, 3), 'IG163': (14, 8), 'IG175': (15, 4), 'IG176': (11, 12), 'IG177': (15, 4), 'IG178': (6, 14),
-    'IG179': (13, 15), 'IG180': (15, 4)
-}
 
 
-carolina_neuron_classification_rule = {
-    'PV_IN': lambda i, categorized_unit_data: categorized_unit_data['good'][i][8][0][0] > 2,
-    'ACH': lambda i, categorized_unit_data: categorized_unit_data['good'][i][8][0][0] <= 2
-}
+class Initializer:
 
-itamar_neuron_classification_rule = {
-    'IN': lambda i, categorized_unit_data: categorized_unit_data['good'][i][8][0][0] > 1,
-    'PN': lambda i, categorized_unit_data: categorized_unit_data['good'][i][8][0][0] <= 1
-}
+    def __init__(self, config):
+        if type(config) == dict:
+            self.exp_info = config
+        elif type(config) == str:
+            with open(config, 'r',  encoding='utf-8') as file:
+                data = file.read()
+                self.exp_info = json.loads(data)
+        else:
+            raise ValueError('Unknown input type')
+        self.conditions = self.exp_info['conditions']
+        self.animals_info = self.exp_info['animals']
+        self.neuron_types = self.exp_info['neuron_types']
+        self.neuron_classification_rule = self.exp_info['neuron_classification_rule']
+        self.sampling_rate = self.exp_info['sampling_rate']
+        self.experiment = None
+        self.groups = None
+        self.animals = None
+        self.raw_lfp = None
+        self.lfp_experiment = None
+
+    def init_experiment(self):
+        self.animals = [self.init_animal(animal_info) for animal_info in self.animals_info]
+        for animal, animal_info in zip(self.animals, self.animals_info):
+            self.init_units(animal_info['units'], animal)
+        self.groups = [
+            Group(name=condition, animals=[animal for animal in self.animals if animal.condition == condition])
+            for condition in self.conditions]
+        self.experiment = Experiment(self.exp_info, self.groups)
+        return self.experiment
+
+    def init_animal(self, animal_info):
+        animal = Animal(animal_info['identifier'], animal_info['condition'],
+                        block_info=animal_info['block_info'],
+                        neuron_types=self.neuron_types)
+        return animal
+
+    def init_units(self, units_info, animal):
+        for category in ['good', 'MUA']:
+            for unit_info in units_info[category]:
+                unit = Unit(animal, category, unit_info['spike_times'])
+                animal.units[category].append(unit)
+                if category == 'good':
+                    classification_val = unit_info[self.neuron_classification_rule['column_name']]
+                    classifications = self.neuron_classification_rule['classifications']
+                    for neuron_type, values in classifications.items():
+                        if classification_val in values:
+                            unit.neuron_type = neuron_type
+                    unit.fwhm_microseconds = unit_info['FWHM_microseconds']
+                    getattr(animal, unit.neuron_type).append(unit)
+
+    def init_lfp_experiment(self):
+        self.raw_lfp = {}
+        for animal in self.animals:
+            self.raw_lfp[animal.identifier] = self.get_raw_lfp(animal)
+        self.lfp_experiment = LFPExperiment(self.experiment, self.exp_info, self.raw_lfp)
+        return self.lfp_experiment
+
+    def get_raw_lfp(self, animal):
+        file_path = os.path.join(self.exp_data['lfp_root'], animal.identifier, *self.exp_data['lfp_path_constructor'])
+        reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
+        reader.parse_header()
+        data_to_return = {region: reader.nsx_datas[3][0][:, val] for region, val in self.exp_data['lfp_electrodes']}
+        if self.exp_info.get('lfp_from_stereotrode_electrodes') is not None:
+            data_to_return = self.get_lfp_from_stereotrodes(animal, data_to_return, file_path)
+        return data_to_return
+
+    def get_lfp_from_stereotrodes(self, animal, data_to_return, file_path):
+        lfp_from_stereotrodes_info = self.exp_info['lfp_from_stereotrodes_info']
+        nsx_num = lfp_from_stereotrodes_info['nsx_num']
+        reader = BlackrockRawIO(filename=file_path, nsx_to_load=nsx_num)
+        reader.parse_header()
+        for region, region_data in lfp_from_stereotrodes_info.items():
+            animal_specific = region_data.get('animal_specific')
+            if animal_specific is not None:
+                electrodes = animal_specific[animal.identifier]
+            else:
+                electrodes = region_data['electrodes']
+            data = np.mean([reader.nsx_datas[nsx_num][0][:, electrode] for electrode in electrodes], axis=0)
+            num_samples = len(data)
+            new_num_samples = int(num_samples * self.exp_info['lfp_sampling_rate'] / self.exp_info['sampling_rate'])
+            downsampled_data = resample(data, new_num_samples)
+            data_to_return[region] = downsampled_data
+        return data_to_return
 
 
-def init_units(entry, animal, neuron_classification_rule):
-    categories = entry[3][0][0]
-    category_names = [k for k in categories.dtype.fields.keys()]
-    categorized_unit_data = dict(zip(category_names, [category[0] for category in categories]))
+def init_experiment(json_path):
+    exp_data = json.loads(json_path)
+    conditions = exp_data['conditions']
+    animals_info = exp_data['animals']
+    neuron_types = exp_data['neuron_types']
+    neuron_classification_rule = exp_data['neuron_classification_rule']
+    animals = []
+    for animal in animals:
+        animals.append(init_animal(animal, neuron_types, neuron_classification_rule))
+    groups = [Group(name=condition, animals=[animal for animal in animals_info if animal.condition == condition])
+              for condition in conditions]
+    experiment = Experiment(exp_data, groups)
+    return experiment
 
-    units_w_spikes = {
-        category: [
-            {'spikes': [spike_time[0].astype(np.int64) for spike_time in unit[0]]}
-            for unit in categorized_unit_data[category]
-        ] for category in category_names
+
+def init_animal(animal_data, neuron_types, neuron_classification_rule):
+    """
+    Note:
+
+    Every animal needs a `block_info` dict.  This should be a dictionary with `block_type` keys.
+    Values in this dict should also be dicts.  They should contain the following keys if the block
+    is not a reference block:
+
+    `onsets`: a list of onset times, one for each block of that block_type
+    `events`: a list of lists of event times within the block.
+
+    If it is a reference block, i.e., a block that provides a baseline value, it should contain
+
+    `target`: a block_type that provides the point in time from which the reference is shifted
+    `shift`: a value, in seconds for how far back in time to locate the reference block
+    `duration`: the duration of the reference block. Optional, if not included duration will be that of
+    the target block.
+    `is_reference`: True
+    """
+
+    name = animal_data['name']
+    block_info = animal_data['block_info']
+    condition = animal_data['condition']
+    units = animal_data['units']
+    animal = Animal(name, condition, block_info=block_info, neuron_types=neuron_types)
+    init_units(units, animal, neuron_classification_rule)
+    return animal
+
+
+def init_units(units, animal, neuron_classification_rule):
+    """
+
+    Notes: the format of `neuron_classification_rule` is as follows:
+    {column_name: <column_name>,
+    classifications:
+        {<neuron_type1>: [<value1>, <value2>, ...], <neuron_type2>: [<value3>, ...], ...}
     }
+    """
 
-    initialized_units = [
-        Unit(animal, category, unit['spikes'])
-        for category in ['good', 'MUA'] for unit in units_w_spikes[category]
-    ]
-
-    for i, unit in enumerate(animal.units['good']):
-        for key in neuron_classification_rule:
-            if neuron_classification_rule[key](i, categorized_unit_data):
-                unit.neuron_type = key
-        unit.fwhm_microseconds = categorized_unit_data['good'][i][6][0][0]
-        getattr(animal, unit.neuron_type).append(unit)
-
-    return initialized_units
-
-
-def init_animal(entry, neuron_types=('IN', 'PN')):
-    name = entry[1][0]
-    condition = entry[2][0]
-    tone_period_onsets = entry[4][0]
-    tone_onsets_expanded = entry[6][0]
-    return Animal(name, condition, tone_period_onsets=tone_period_onsets, tone_onsets_expanded=tone_onsets_expanded,
-                  neuron_types=neuron_types)
+    for category in ['good', 'MUA']:
+        for unit_data in units[category]:
+            unit = Unit(animal, category, unit_data['spike_times'])
+            classification_val = unit_data[neuron_classification_rule['column_name']]
+            classifications = neuron_classification_rule['classifications']
+            for neuron_type, values in classifications.items():
+                if classification_val in values:
+                    unit.neuron_type = neuron_type
+            unit.fwhm_microseconds = unit_data['fwhm_microseconds']
+            animal.units[category].append(unit)
+            getattr(animal, unit.neuron_type).append(unit)
 
 
-def init_hpc_animal(entry, ):
-    conditions = {'IG155': 'stressed', 'IG162': 'control', 'IG171': 'control', 'IG173': 'control',
-                  'IG174': 'stressed', 'IG175': 'stressed'}
 
-    name = entry[1][0]
-    condition = conditions[name]
-    tone_period_onsets = entry[2][0]
-    tone_onsets_expanded = entry[3][0]
-    return Animal(name, condition, tone_period_onsets=tone_period_onsets, tone_onsets_expanded=tone_onsets_expanded)
-
-
-def init_carolina_animal(entry):
-    neuron_types = ('PV_IN', 'ACH')
-    conditions = {'CH272': 'control', 'CH274': 'arch', 'CH275': 'arch'}
-
-    name = entry[1][0]
-    condition = conditions[name]
-    tone_period_onsets = entry[4][0]
-    tone_onsets_expanded = entry[6][0]
-    return Animal(name, condition, tone_period_onsets=tone_period_onsets, tone_onsets_expanded=tone_onsets_expanded,
-                  neuron_types=neuron_types)
-
-
-def read_itamar_spreadsheet():
-    data_dict = {}
-
-    with open(os.path.join('/Users/katie/likhtik/data', 'percent_freezing.csv'), 'r', encoding='utf-8-sig') as csvfile:
-        reader = csv.DictReader(csvfile)
-
-        for row in reader:
-            data_dict[row['ID']] = {
-                'group': row['Group'],
-                'pretone': [float(row['Pretone 1']), float(row['Pretone 2']), float(row['Pretone 3']),
-                            float(row['Pretone 4']), float(row['Pretone 5'])],
-                'tone': [float(row['Tone 1']), float(row['Tone 2']), float(row['Tone 3']), float(row['Tone 4']),
-                         float(row['Tone 5'])]
-            }
-    return data_dict
-
-
-def get_itamar_raw_lfp(animal):
-    file_path = os.path.join(animal.data_path, animal.identifier, 'Safety')
-    reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
+def get_lfp_from_stereotrodes(animal, data_to_return, file_path, lfp_from_stereotrodes_info, exp_info):
+    nsx_num = lfp_from_stereotrodes_info['nsx_num']
+    reader = BlackrockRawIO(filename=file_path, nsx_to_load=nsx_num)
     reader.parse_header()
-    if animal.identifier in PL_ELECTRODES:
-        pl1, pl2 = PL_ELECTRODES[animal.identifier]
-    else:
-        print(f"no selected electrodes found for PL for animal {animal.identifier}, using 1 and 3")
-        pl1, pl2 = (1, 3)
-    return {
-        'hpc': reader.nsx_datas[3][0][:, 0],
-        'bla': reader.nsx_datas[3][0][:, 2],
-        'pl': np.mean([reader.nsx_datas[3][0][:, pl1], reader.nsx_datas[3][0][:, pl2]], axis=0)
-    }
-
-
-def get_carolina_raw_lfp(animal):
-    file_path = os.path.join(CAROLINA_DATA_PATH, animal.identifier, 'EXTREC')
-    reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
-    reader.parse_header()
-    data_to_return = {
-        'bla': reader.nsx_datas[3][0][:, 0],
-        'il': reader.nsx_datas[3][0][:, 2]
-    }
-    reader = BlackrockRawIO(filename=file_path, nsx_to_load=5)
-    reader.parse_header()
-    bf_data = np.mean([reader.nsx_datas[5][0][:, 0], reader.nsx_datas[5][0][:, 1]], axis=0)
-    original_rate = 30000
-    new_rate = 2000
-    num_samples = len(bf_data)
-
-    # Calculate the number of samples in the downsampled data
-    new_num_samples = int(num_samples * new_rate / original_rate)
-
-    # Resample
-    downsampled_bf = resample(bf_data, new_num_samples)
-    data_to_return['bf'] = downsampled_bf
+    for region, region_data in lfp_from_stereotrodes_info.items():
+        animal_specific = region_data.get('animal_specific')
+        if animal_specific is not None:
+            electrodes = animal_specific[animal.identifier]
+        else:
+            electrodes = region_data['electrodes']
+        data = np.mean([reader.nsx_datas[nsx_num][0][:, electrode] for electrode in electrodes], axis=0)
+        original_rate = exp_info['sampling_rate']
+        new_rate = exp_info['lfp_sampling_rate']
+        num_samples = len(data)
+        new_num_samples = int(num_samples * new_rate / original_rate)
+        downsampled_data = resample(data, new_num_samples)
+        data_to_return[region] = downsampled_data
     return data_to_return
 
 
-mat_contents = sio.loadmat(os.path.join(CAROLINA_DATA_PATH, 'single_cell_data.mat'))['single_cell_data']
-entries = mat_contents[0]
-animals = [init_carolina_animal(entry) for entry in entries]
-[init_units(entry, animal, carolina_neuron_classification_rule) for entry, animal in zip(entries, animals)]
-
-# hpc_mat_contents = sio.loadmat(os.path.join(data_path, 'hpc_power_test_data.mat'))['data']
-# entries = hpc_mat_contents[0]
-# hpc_power_animals = [init_hpc_animal(entry) for entry in entries]
-# animals += hpc_power_animals
-
-# experiment = Experiment({name: Group(name=name, animals=[animal for animal in animals if animal.condition == name])
-#                          for name in ['control', 'stressed']})
-
-experiment = Experiment({name: Group(name=name, animals=[animal for animal in animals if animal.condition == name])
-                         for name in ['control', 'arch']})
-
-# experiment.categorize_neurons()
-
-experiment.subscribe(data_type_context)
-experiment.subscribe(neuron_type_context)
-experiment.subscribe(period_type_context)
-
-lfp_experiment = LFPExperiment(experiment, get_carolina_raw_lfp)
-lfp_experiment.subscribe(data_type_context)
-lfp_experiment.subscribe(period_type_context)
-#
-# behavior_experiment = Behavior(experiment, read_itamar_spreadsheet())
-
-
-behavior_experiment = 'bar'
+def get_raw_lfp(animal, json_path):
+    exp_info = json.loads(json_path)
+    lfp_root = exp_info['lfp_root']
+    sub_dirs = exp_info['lfp_path_constructor']
+    lfp_electrodes = exp_info['lfp_electrodes']
+    file_path = os.path.join(lfp_root, animal.identifier, *sub_dirs)
+    reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
+    reader.parse_header()
+    data_to_return = {region: reader.nsx_datas[3][0][:, val] for region, val in lfp_electrodes}
+    lfp_from_stereotrodes_info = exp_info.get('lfp_from_stereotrode_electrodes')
+    if lfp_from_stereotrodes_info is not None:
+        data_to_return = get_lfp_from_stereotrodes(animal, data_to_return, file_path, lfp_from_stereotrodes_info,
+                                                   exp_info)
+    return data_to_return
 
 
 

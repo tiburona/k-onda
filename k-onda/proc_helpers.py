@@ -1,5 +1,6 @@
 from plotters import Plotter, PeriStimulusPlotter, GroupStatsPlotter
-from initialize_experiment import experiment, data_type_context, neuron_type_context, period_type_context
+from initialize_experiment import experiment
+from context import experiment_context
 
 '''
 Helpers for procs.py
@@ -9,7 +10,7 @@ Helpers for procs.py
 def plot(data_opts, graph_opts, levels=None, n_types=None, sig_markers=True):
 
     if levels is None:
-        plotter = GroupStatsPlotter(experiment, data_type_context, neuron_type_context, period_type_context)
+        plotter = GroupStatsPlotter(experiment, context)
         plotter.initialize(data_opts, graph_opts)
         plotter.plot_group_stats(sig_markers=sig_markers)
         return

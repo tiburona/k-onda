@@ -1,6 +1,5 @@
 from copy import deepcopy
-from context import data_type_context as dt_context, neuron_type_context as nt_context, \
-    period_type_context as pt_context
+from context import experiment_context
 from utils import get_ancestors, get_descendants
 import numpy as np
 from math_functions import sem
@@ -13,17 +12,15 @@ PERIOD_TYPES = ['pretone', 'tone']
 
 class Base:
 
-    data_type_context = dt_context
-    neuron_type_context = nt_context
-    period_type_context = pt_context
+    context = experiment_context
 
     @property
     def data_opts(self):
-        return (self.data_type_context.val if self.data_type_context is not None else None) or None
+        return self.context.vals.get('data')
 
     @data_opts.setter
     def data_opts(self, opts):
-        self.data_type_context.set_val(opts)
+        self.context.set_val('data', opts)
 
     @property
     def data_type(self):
@@ -35,19 +32,19 @@ class Base:
 
     @data_type.setter
     def data_type(self, data_type):
-        data_opts = deepcopy(self.data_opts)  # necessary to trigger the data type context notification
+        data_opts = deepcopy(self.data_opts)  # necessary to trigger the data context notification TODO: check that this is still necessay
         data_opts['data_type'] = data_type
         self.data_opts = data_opts
 
     @property
     def selected_neuron_type(self):
-        return self.neuron_type_context.val
+        return self.context.vals.get('neuron_type')
 
     @selected_neuron_type.setter
     def selected_neuron_type(self, neuron_type):
-        self.neuron_type_context.set_val(neuron_type)
+        self.context.set_val('neuron_type', neuron_type)
 
-    @property
+    @property  # TODO: reading from global vars here is terrible; undo t
     def neuron_types(self):
         return NEURON_TYPES
 
@@ -56,12 +53,12 @@ class Base:
         return PERIOD_TYPES
 
     @property
-    def selected_period_type(self):
-        return self.period_type_context.val
+    def selected_block_type(self):
+        return self.context.vals.get('neuron_type')
 
-    @selected_period_type.setter
-    def selected_period_type(self, period_type):
-        self.period_type_context.set_val(period_type)
+    @selected_block_type.setter
+    def selected_block_type(self, block_type):
+        self.context.set_val('block_type', block_type)
 
     @property
     def current_frequency_band(self):
@@ -115,8 +112,31 @@ class Data(Base):
     def scatter(self):
         return self.get_scatter_points()
 
+    @property
+    def num_bins_per_event(self):
+        pre_stim, post_stim, bin_size = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim', 'bin_size'])
+        return int((pre_stim + post_stim) / bin_size)
+
+    @property
+    def sampling_rate(self):
+        if hasattr(self, '_sampling_rate'):
+            return self._sampling_rate
+        elif self.parent is not None:
+            return self.parent.sampling_rate
+        else:
+            return None
+
+    @property
+    def event_duration(self):
+        if self._event_duration is not None:
+            return self._event_duration
+        elif self.parent is not None:
+            return self.parent.event_duration
+        else:
+            return None
+
     @cache_method
-    def get_average(self, base_method, stop_at='trial', axis=0):  # Trial is the default base case, but not always
+    def get_average(self, base_method, stop_at='event', axis=0):  # Trial is the default base case, but not always
         """
         Recursively calculates the average of the values of the computation in the base method on the object's
         descendants.
@@ -173,21 +193,19 @@ class Data(Base):
         return [np.nanmean(child.data) for child in self.children]
 
 
-class EvokedValueCalculator:
 
-    def __init__(self, ref):
-        self.ref = ref
+class TimeBin:
+    name = 'time_bin'
 
-    @property
-    def equivalent(self):
-        other_stage = 'tone' if self.ref.period_type == 'pretone' else 'pretone'
-        other_stage_children = getattr(self.ref.parent, f"all_{self.ref.name}s")[other_stage]
-        return [p for p in other_stage_children if p.identifier == self.ref.identifier][0]
+    def __init__(self, i, val, parent):
+        self.parent = parent
+        self.identifier = i
+        self.data = val
+        self.mean_data = val
+        self.ancestors = get_ancestors(self)
 
-    def get_evoked_data(self, data, evoked):
-        if evoked and self.ref.period_type == 'tone':
-            data -= self.equivalent.data
-        return data
+    def position_in_block_time_series(self):
+        return self.parent.num_bins * self.parent.identifier + self.identifier
 
 
 

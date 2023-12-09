@@ -11,13 +11,11 @@ from utils import find_ancestor_attribute, find_ancestor_id
 
 class Stats(Base):
     """A class to construct dataframes, write out csv files, and call R for statistical tests."""
-    def __init__(self, experiment, data_type_context, neuron_type_context, data_opts, lfp=None, behavior=None): #TODO: stats needs to set period type context and if setting period type needs to happen in spreadsheet initialization
+    def __init__(self, experiment, data_opts, lfp=None, behavior=None):
         self.experiment = experiment
         self.lfp = lfp
         self.behavior = behavior
-        self.data_type_context = data_type_context
         self.data_opts = data_opts
-        self.neuron_type_context = neuron_type_context
         self.dfs = {}
         self.data_col = None
         self.spreadsheet_fname = None

@@ -1,7 +1,7 @@
 STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156', 'IG158', 'IG177', 'IG179']
 HPC_REPLICATION_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174', 'IG175', 'IG179']
 
-PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'trials': (0, 150),
+PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'events': (0, 300),
              'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time_type': 'continuous',
              'data_path': '/Users/katie/likhtik/data', 'row_type': 'trial'}
 
