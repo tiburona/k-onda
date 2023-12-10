@@ -4,7 +4,7 @@ import os
 import shutil
 from datetime import datetime
 
-DEBUG_MODE = 0
+DEBUG_MODE = 2
 
 
 """Cache Utils"""
@@ -46,10 +46,9 @@ def cache_method(method):
 
         cache = getattr(self, cache_name) if hasattr(self, cache_name) else {}
 
-        context_keys = tuple(getattr(self, c).cache_id for c in ['neuron_type_context', 'data_type_context',
-                                                                 'period_type_context'] if hasattr(self, c))
+        context_key = getattr(self, 'context').cache_id if hasattr(self, 'context') else ''
 
-        cache_key = (id(self), context_keys, method.__name__, tuple(to_hashable(arg) for arg in args),
+        cache_key = (id(self), context_key, method.__name__, tuple(to_hashable(arg) for arg in args),
                      tuple(sorted(kwargs.items())))
 
         if cache_key not in cache:

@@ -21,12 +21,12 @@ class Context:
         if isinstance(self.vals.get(name), dict) and isinstance(new_val, dict):
             if self.val.items() == new_val.items():
                 return
+        elif new_val in [self.vals.get(name), None] and name != 'neuron_type':
+            return
         else:
-            if new_val in [self.vals.get(name), None]:
-                return
-        self.vals[name] = new_val
-        self.cache_id = to_hashable(new_val)
-        self.notify(name)
+            self.vals[name] = new_val
+            self.cache_id = to_hashable(self.vals)
+            self.notify(name)
 
 
 class Subscriber:

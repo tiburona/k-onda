@@ -22,9 +22,6 @@ class Plotter(Base):
 
     def __init__(self, experiment, graph_opts=None, lfp=None, plot_type='standalone'):
         self.experiment = experiment
-        self.data_opts = None
-        self.selected_neuron_type = None
-        self.selected_period_type = None
         self.lfp = lfp
         self.graph_opts = graph_opts
         self.plot_type = plot_type
@@ -44,7 +41,7 @@ class Plotter(Base):
         """Both initializes values on self and sets values for the contexts and all the contexts' subscribers."""
         self.graph_opts = graph_opts
         self.data_opts = data_opts  # Sets data_opts for all subscribers to data_type_context
-        self.selected_neuron_type = neuron_type  # Sets neuron type for all subscribers to neuron_type_context
+        self.selected_neuron_type = neuron_type
         self.selected_block_type = block_type
 
     def close_plot(self, basename):
@@ -89,7 +86,9 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.close_plot('groups')
 
     def plot_groups_data(self):
-        subdivision = 'period' if self.data_type == 'cross_correlations' else 'neuron'
+        subdivision = 'block' if self.data_type == 'cross_correlations' else 'neuron'
+        if self.data_type in ['psth']:
+            self.selected_block_type = self.data_opts.get('data_block_type', 'tone')
         self.iterate_through_group_subdivisions(subdivision)
         self.set_y_scales()
         if self.data_type not in ['spontaneous_firing', 'cross_correlations']:
@@ -101,7 +100,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             self.set_labels()
 
     def iterate_through_group_subdivisions(self, subdivision):
-        types_attribute = getattr(self, f"{subdivision}_types")
+        types_attribute = getattr(self.experiment, f"{subdivision}_types")
         for row, typ in enumerate(types_attribute):
             # Set the selected type based on the subdivision
             setattr(self, f"selected_{subdivision}_type", typ)
@@ -171,7 +170,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
 
     def add_raster(self, unit, axes):
         subplotter = PeriStimulusSubplotter(self, unit, self.data_opts, self.graph_opts, axes[0])
-        subplotter.y = unit.get_spikes_by_trials()  # overwrites subplotter.y defined by data_type, which is psth
+        subplotter.y = unit.get_spikes_by_events()  # overwrites subplotter.y defined by data_type, which is psth
         subplotter.plot_raster()
 
     def set_units_plot_frame_and_spacing(self):
@@ -197,7 +196,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         ax.set_title(title, fontsize=17*self.multiplier)
 
     def make_footer(self):
-        text_vals = [('bin size', self.data_opts['bin_size']), ('selected trials', self.join_trials(' ')),
+        text_vals = [('bin size', self.data_opts['bin_size']), ('selected events', self.join_events(' ')),
                      ('time generated', formatted_now())]
         [text_vals.append((k, self.data_opts[k])) for k in ['adjustment, average_method'] if k in self.data_opts]
         text = '  '.join([f"{k}: {v}" for k, v in text_vals])
@@ -211,7 +210,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
     def set_dir_and_filename(self, basename):
         tags = [self.data_type]
         if self.data_type != 'spontaneous_firing':
-            self.dir_tags = tags + [f"trials_{self.join_trials('_')}"]
+            self.dir_tags = tags + [f"events_{self.join_events('_')}"]
 
         tags.insert(0, basename)
         if self.selected_neuron_type:
@@ -225,7 +224,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             tags += [self.data_opts.get('base')]
         self.fname = f"{'_'.join(tags)}.png"
 
-    def join_trials(self, s):
+    def join_events(self, s):
         return s.join([str(t) for t in self.data_opts['events']])
 
     def set_gridspec_axes(self, fig, gridspec, numrows, numcols, invisible_ax=None):

@@ -3,7 +3,7 @@ HPC_REPLICATION_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174',
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'events': (0, 300),
              'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time_type': 'continuous',
-             'data_path': '/Users/katie/likhtik/data', 'row_type': 'trial'}
+             'data_path': '/Users/katie/likhtik/data', 'row_type': 'event'}
 
 PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01,
                    'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial', 'time': 'continuous', 'row_type': 'trial'}
@@ -95,7 +95,7 @@ SPONTANEOUS_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_c
 
 CROSS_CORR_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative',
                    'data_type': 'cross_correlations', 'pre_stim': 0, 'post_stim': 1, 'adjustment': 'none',
-                   'bin_size': 0.01, 'trials': (0, 150), 'periods': list(range(5)), 'period_types': ['pretone', 'tone'],
+                   'bin_size': 0.01, 'events': (0, 300), 'periods': list(range(10)), 'period_types': ['pretone', 'tone'],
                    'neuron_type_pair': ('PV_IN', 'ACH')
 }
 

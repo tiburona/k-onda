@@ -5,10 +5,6 @@ import numpy as np
 from math_functions import sem
 from utils import cache_method
 
-# NEURON_TYPES = ['IN', 'PN']
-NEURON_TYPES = ['PV_IN', 'ACH']
-PERIOD_TYPES = ['pretone', 'tone']
-
 
 class Base:
 
@@ -44,20 +40,15 @@ class Base:
     def selected_neuron_type(self, neuron_type):
         self.context.set_val('neuron_type', neuron_type)
 
-    @property  # TODO: reading from global vars here is terrible; undo t
-    def neuron_types(self):
-        return NEURON_TYPES
-
-    @property
-    def period_types(self):
-        return PERIOD_TYPES
-
     @property
     def selected_block_type(self):
-        return self.context.vals.get('neuron_type')
+        return self.context.vals.get('block_type')
 
     @selected_block_type.setter
     def selected_block_type(self, block_type):
+        print("in block type setter", block_type)
+        if block_type == 'tone':
+            a = 'foo'
         self.context.set_val('block_type', block_type)
 
     @property
@@ -83,10 +74,7 @@ class Data(Base):
         float or np.array: The mean of the data values from the object's descendants.
         """
         data = getattr(self, f"get_{self.data_type}")()
-        if hasattr(self, 'evoked_value_calculator'):
-            return self.evoked_value_calculator.get_evoked_data(data, self.data_opts.get('evoked'))
-        else:
-            return data
+        return data
 
     @property
     def mean_data(self):

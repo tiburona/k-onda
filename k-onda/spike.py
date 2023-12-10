@@ -151,6 +151,8 @@ class Experiment(Level, Subscriber):
         self.children = self.groups
         for group in self.groups:
             group.parent = self
+        self.block_types = set(block_type for animal in self.all_animals for block_type in animal.block_info)
+        self.neuron_types = set([unit.neuron_type for unit in self.all_units])
 
     @property
     def all_units(self):
@@ -187,9 +189,7 @@ class Experiment(Level, Subscriber):
 
 class Group(Level):
     """A group in the experiment, i.e., a collection of animals assigned to a condition, the child of an Experiment,
-    parent of Animals. Subscribes to neuron_type_context that defines which neuron type, PN or IN, is currently active.
-    Limits its children to animals who have neurons of that type.  Also subscribes to data_type_context but doesn't need
-    to update its children property when it changes."""
+    parent of animals. Limits its children to the active neuron type."""
 
     name = 'group'
 
@@ -202,7 +202,7 @@ class Group(Level):
         self.parent = None
 
     def update_children(self):
-        if self.context.vals['neuron_type'] is None:
+        if self.context.vals.get('neuron_type') is None:
             self.children = self.animals
         else:
             self.children = [animal for animal in self.animals
@@ -213,10 +213,8 @@ class Group(Level):
 
 
 class Animal(Level):
-    """An animal in the experiment, the child of a Group, parent of Units. Subscribes to neuron_type_context that
-    defines which neuron type is currently active. Updates its children, i.e., the active units for analysis,
-    when the context changes. Also subscribes to the data_type_context but doesn't need to update its children property
-    when it changes.
+    """An animal in the experiment, the child of a Group, parent of units. Updates its children, i.e., the active units
+    for analysis, when the selected neuron type is altered in the context.
 
     Note that the `units` property is not a list, but rather a dictionary with keys for different categories in list.
     It would also be possible to implement context changes where self.children updates to self.units['MUA'].
@@ -225,33 +223,15 @@ class Animal(Level):
     name = 'animal'
 
     def __init__(self, identifier, condition, block_info=None, neuron_types=('IN', 'PN')):
-        """
-        The constructor for the Animal class.
-
-        Parameters:
-        - name (str): The identifier of the animal.
-        - condition (str): The condition the animal belonged to in the experiment.  This will determine the animal's
-          group.
-        - block_info (dict): A dictionary where keys are `block_types` and values are dictionaries with further
-          information for initializing blocks.
-        - neuron_types (tuple): The types of neurons that an animal can have.  All `good` units will be one of those
-          types.
-
-        Returns:
-        Animal: an instance of the Animal class
-
-        Notes:
-
-        """
         self.identifier = identifier
         self.condition = condition
         self.block_info = block_info if block_info is not None else {}
         for nt in neuron_types:
             setattr(self, nt, [])
         self.units = defaultdict(list)
+        self.raw_lfp = None
         self.children = None
         self.parent = None
-        self.raw_lfp = None
 
     def update_children(self):
         if self.context.vals['neuron_type'] is None:
@@ -261,8 +241,8 @@ class Animal(Level):
 
 
 class Unit(Level, BlockConstructor):
-    """A unit that was recorded from in the experiment, the child of an Animal, parent of events. Subscribes to
-    data_type_context with an opts property and updates its events when the event definitions in the context change."""
+    """A unit that was recorded from in the experiment, the child of an Animal, parent of events. Updates its events
+    when the event definitions in the context change."""
 
     name = 'unit'
 
@@ -310,7 +290,7 @@ class Unit(Level, BlockConstructor):
         else:
             start = spontaneous_period[0] * self.sampling_rate
             stop = spontaneous_period[1] * self.sampling_rate
-        num_bins = int(len(start-stop) * self.data_opts['bin_size'])
+        num_bins = int((stop-start) / (self.sampling_rate * self.data_opts['bin_size']))
         return calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), self.data_opts['bin_size'])
 
     @cache_method
@@ -368,11 +348,15 @@ class Block(Level):
     def update_children(self):
         pre_stim, post_stim = (self.data_opts.get(opt, default) * self.sampling_rate
                                for opt, default in [('pre_stim', 0), ('post_stim', 1)])
-        event_starts = self.event_starts if not self.is_reference else self.paired_block.event_starts
-        shift = 0 if not self.is_reference else self.shift
+        if self.is_reference:
+            event_starts = self.paired_block.event_starts - self.shift * self.sampling_rate
+        else:
+            event_starts = self.event_starts
         for i, start in enumerate(event_starts):
-            spikes = self.unit.find_spikes(start - pre_stim - shift, start + post_stim - shift)
+            spikes = self.unit.find_spikes(start - pre_stim, start + post_stim)
             self._events.append(Event(self, self.unit, [((spike - start) / self.sampling_rate) for spike in spikes], i))
+        if self.selected_block_type == 'pretone':
+            a = 'foo'
 
     @cache_method
     def get_spikes_by_events(self):  # TODO: This method repeated for unit and block could be mixin
@@ -389,8 +373,8 @@ class Block(Level):
 
 class Event(Level):
     """A single event in the experiment, the child of a unit. Aspects of an event, for instance, the start and end of
-    relevant data, can change when the parent unit's data_type_context is updated. All methods on event are the base
-    case of the recursive methods on Level."""
+    relevant data, can change when the context is updated. Most methods on event are the base case of the recursive
+    methods on Level."""
 
     name = 'event'
     instances = []
@@ -434,7 +418,7 @@ class Event(Level):
         neuron_type_pair = self.data_opts['neuron_type_pair']
         if self.unit.neuron_type == neuron_type_pair[0]:
             if all([getattr(self.unit.animal, neuron_type) for neuron_type in neuron_type_pair]):
-                pairs = [self.find_equivalent(unit) for unit in getattr(self.unit.animal, neuron_type_pair[1])]
+                pairs = [self.find_equivalent(unit=unit) for unit in getattr(self.unit.animal, neuron_type_pair[1])]
                 for pair in pairs:
                     if len(pair.spikes) == 0:
                         continue
@@ -446,8 +430,11 @@ class Event(Level):
                     cross_correlations.append(normalized_cross_corr)
         return np.nanmean(np.array(cross_correlations), axis=0)
 
-    def find_equivalent(self):  # TODO: Can I improve this?  Can I just index into the paired block events?
-        return [event for event in self.block.reference_block if event.identifier == self.identifier][0]
+    def find_equivalent(self, unit=None):  # TODO: Can I improve this?  Can I just index into the paired block events?
+        if unit:
+            return [block for block in unit.children][self.block.identifier].events[self.identifier]
+        else:
+            return self.block.reference_block.events[self.identifier]
 
 
 
