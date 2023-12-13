@@ -145,4 +145,11 @@ def compute_mrl(alpha, w, dim):
     return r
 
 
+def cross_correlation(x, y, mode='valid'):
+    cross_corr = np.correlate(x, y, mode=mode)
+    norm_factor = np.std(x) * np.std(y) * len(x)
+    normalized_cross_corr = cross_corr / norm_factor
+    return normalized_cross_corr
+
+
 

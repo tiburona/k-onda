@@ -68,10 +68,10 @@ class Initializer:
         return self.lfp_experiment
 
     def get_raw_lfp(self, animal):
-        file_path = os.path.join(self.exp_data['lfp_root'], animal.identifier, *self.exp_data['lfp_path_constructor'])
+        file_path = os.path.join(self.exp_info['lfp_root'], animal.identifier, *self.exp_info['lfp_path_constructor'])
         reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
         reader.parse_header()
-        data_to_return = {region: reader.nsx_datas[3][0][:, val] for region, val in self.exp_data['lfp_electrodes']}
+        data_to_return = {region: reader.nsx_datas[3][0][:, val] for region, val in self.exp_info['lfp_electrodes'].items()}
         if self.exp_info.get('lfp_from_stereotrode_electrodes') is not None:
             data_to_return = self.get_lfp_from_stereotrodes(animal, data_to_return, file_path)
         return data_to_return
@@ -81,7 +81,7 @@ class Initializer:
         nsx_num = lfp_from_stereotrodes_info['nsx_num']
         reader = BlackrockRawIO(filename=file_path, nsx_to_load=nsx_num)
         reader.parse_header()
-        for region, region_data in lfp_from_stereotrodes_info.items():
+        for region, region_data in lfp_from_stereotrodes_info['regions'].items():
             animal_specific = region_data.get('animal_specific')
             if animal_specific is not None:
                 electrodes = animal_specific[animal.identifier]
@@ -163,11 +163,11 @@ def init_units(units, animal, neuron_classification_rule):
 
 
 
-def get_lfp_from_stereotrodes(animal, data_to_return, file_path, lfp_from_stereotrodes_info, exp_info):
-    nsx_num = lfp_from_stereotrodes_info['nsx_num']
+def get_lfp_from_stereotrodes(animal, data_to_return, file_path, lfp_from_stereotrodes, exp_info):
+    nsx_num = lfp_from_stereotrodes['nsx_num']
     reader = BlackrockRawIO(filename=file_path, nsx_to_load=nsx_num)
     reader.parse_header()
-    for region, region_data in lfp_from_stereotrodes_info.items():
+    for region, region_data in lfp_from_stereotrodes.items():
         animal_specific = region_data.get('animal_specific')
         if animal_specific is not None:
             electrodes = animal_specific[animal.identifier]
@@ -192,9 +192,9 @@ def get_raw_lfp(animal, json_path):
     reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
     reader.parse_header()
     data_to_return = {region: reader.nsx_datas[3][0][:, val] for region, val in lfp_electrodes}
-    lfp_from_stereotrodes_info = exp_info.get('lfp_from_stereotrode_electrodes')
-    if lfp_from_stereotrodes_info is not None:
-        data_to_return = get_lfp_from_stereotrodes(animal, data_to_return, file_path, lfp_from_stereotrodes_info,
+    lfp_from_stereotrodes = exp_info.get('lfp_from_stereotrodes')
+    if lfp_from_stereotrodes is not None:
+        data_to_return = get_lfp_from_stereotrodes(animal, data_to_return, file_path, lfp_from_stereotrodes,
                                                    exp_info)
     return data_to_return
 

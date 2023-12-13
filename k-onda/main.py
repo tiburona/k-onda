@@ -8,7 +8,7 @@ The top-level module for calling spike processing functions.
 
 
 def main():
-    plot_spontaneous_firing() # An example.  See what else is available in the procs module.
+    plot_cross_correlations() # An example.  See what else is available in the procs module.
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

@@ -5,8 +5,9 @@ from scipy.signal import cwt, morlet
 
 
 from data import Data
+from context import experiment_context
 from block_constructor import BlockConstructor
-from context import Subscriber, experiment_context
+from context import Subscriber
 from matlab_interface import MatlabInterface
 from math_functions import *
 from utils import cache_method, get_ancestors
@@ -66,15 +67,15 @@ class LFPExperiment(LFPData, Subscriber):
 
     def __init__(self, experiment, info, raw_lfp):
         self.experiment = experiment
+        self.subscribe(experiment_context)
         self._sampling_rate = info['lfp_sampling_rate']
-        self._event_duration = info['event_duration']
-        self.block_info = info['block_info']
-        self.event_info = info['event_info']
         self.all_animals = [LFPAnimal(animal, raw_lfp[animal.identifier])
                             for animal in self.experiment.all_animals]
         self.groups = [LFPGroup(group, self) for group in self.experiment.groups]
         self.all_groups = self.groups
         self.last_brain_region = None
+        self.last_neuron_type = 'uninitialized'
+        self.last_block_type = 'uninitialized'
         self.selected_animals = None
 
     @property
@@ -95,14 +96,22 @@ class LFPExperiment(LFPData, Subscriber):
         events = [event for block in self.all_blocks for event in block.events]
         return events
 
-    def update(self, context):
-        if context.name == 'data_type_context':
+    def update(self, name):
+        if name == 'data':
             if self.data_class == 'lfp' and self.last_brain_region != self.data_opts.get('brain_region'):
                 [animal.update_children() for animal in self.all_animals]
                 self.last_brain_region = self.data_opts.get('brain_region')
             if self.data_opts.get('selected_animals') != self.selected_animals:
                 [group.update_children() for group in self.groups]
                 self.selected_animals = self.data_opts.get('selected_animals')
+        if name == 'block_type':
+            if self.selected_block_type != self.last_block_type:
+                [animal.update_children() for animal in self.all_animals]
+                self.last_block_type = self.selected_block_type
+        if name == 'neuron_type':
+            if self.selected_neuron_type != self.last_neuron_type:
+                [animal.update_children() for animal in self.all_animals]
+                self.last_neuron_type = self.selected_neuron_type
 
 
 class LFPGroup(LFPData):
@@ -160,7 +169,7 @@ class LFPGroup(LFPData):
         return self.get_average('get_mrl', stop_at='mrl_calculator', axis=None)
 
 
-class LFPAnimal(LFPData):
+class LFPAnimal(LFPData, BlockConstructor):
     """An animal in the experiment. Processes the raw LFP data and divides it into blocks."""
 
     name = 'animal'
@@ -168,8 +177,7 @@ class LFPAnimal(LFPData):
     def __init__(self, animal, raw_lfp):
         self.spike_target = animal
         self.raw_lfp = raw_lfp
-        self.block_intervals = self.get_block_intervals()
-        self.all_blocks = None
+        self.block_class = LFPBlock
         self.all_mrl_calculators = None
 
     @property
@@ -220,7 +228,7 @@ class LFPAnimal(LFPData):
                                                for unit in self.spike_target.units['good']]}
         else:
             mrl_calculators = {block_type: [BlockMRLCalculator(unit, block=block) for block in blocks
-                                       for unit in self.spike_target.units['good']]
+                                            for unit in self.spike_target.units['good']]
                                for block_type, blocks in self.all_blocks.items()}
         return mrl_calculators
 
@@ -230,7 +238,7 @@ class LFPAnimal(LFPData):
 
 
 class LFPDataSelector:
-    """A class with methods shared by LFPblock and LFPevent that are used to return portions of their data."""
+    """A class with methods shared by LFPBlock and LFPEvent that are used to return portions of their data."""
 
     @property
     def frequency_bins(self):
@@ -270,19 +278,21 @@ class LFPDataSelector:
 
 class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
     """A block in the experiment. Preprocesses data, initiates calls to Matlab to get the cross-spectrogram, and
-    generates LFPevents. Inherits from LFPSelector to be able to return portions of its data."""
+    generates LFPEvents. Inherits from LFPSelector to be able to return portions of its data."""
 
     name = 'block'
 
-    def __init__(self, lfp_animal, i, block_type, block_info, onset, block_events):
+    def __init__(self, lfp_animal, i, block_type, block_info, onset, events=None, paired_block=None, is_reference=False):
         LFPDataSelector.__init__(self)
         self.animal = lfp_animal
+        self.parent = lfp_animal
         self.identifier = i
         self.block_type = block_type
-        self.block_events = block_events
-        self.onset = onset * self.sampling_rate / self.animal.target.sampling_rate
-        self.convolution_padding = block_info['convolution_padding']
+        self.event_starts = events if events is not None else []
+        self.onset = onset * self.sampling_rate / self.animal.spike_target.sampling_rate
+        self.convolution_padding = block_info['lfp_padding']
         self.duration = block_info.get('duration')
+        self.event_duration = block_info.get('event_duration')
         start = (self.onset - self.convolution_padding[0]) * self.sampling_rate
         stop = (self.onset + self.duration + self.convolution_padding[1]) * self.sampling_rate
         self.raw_data = self.animal.raw_lfp[self.brain_region][slice(*(start, stop))]
@@ -303,8 +313,8 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
             self.last_brain_region = self.brain_region
         return self._spectrogram
 
-    def get_lost_signal(self):  # TODO: implement this
-        pass
+    def get_lost_signal(self):
+        return self.block_info['lost_signal']
 
     def get_events(self):
         true_beginning = -self.convolution_padding + self.get_lost_signal()

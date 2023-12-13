@@ -3,7 +3,7 @@ from context import experiment_context
 from utils import get_ancestors, get_descendants
 import numpy as np
 from math_functions import sem
-from utils import cache_method
+from utils import cache_method, is_empty
 
 
 class Base:
@@ -46,9 +46,6 @@ class Base:
 
     @selected_block_type.setter
     def selected_block_type(self, block_type):
-        print("in block type setter", block_type)
-        if block_type == 'tone':
-            a = 'foo'
         self.context.set_val('block_type', block_type)
 
     @property
@@ -114,15 +111,6 @@ class Data(Base):
         else:
             return None
 
-    @property
-    def event_duration(self):
-        if self._event_duration is not None:
-            return self._event_duration
-        elif self.parent is not None:
-            return self.parent.event_duration
-        else:
-            return None
-
     @cache_method
     def get_average(self, base_method, stop_at='event', axis=0):  # Trial is the default base case, but not always
         """
@@ -147,7 +135,8 @@ class Data(Base):
             # Filter out nan values and arrays that are all NaN
             child_vals_filtered = [x for x in child_vals
                                    if not (isinstance(x, np.ndarray) and np.isnan(x).all())
-                                   and not (isinstance(x, float) and np.isnan(x))]
+                                   and not (isinstance(x, float) and np.isnan(x))
+                                   and not is_empty(x)]
             if axis is None:  # compute mean over all dimensions
                 return np.nanmean(np.array(child_vals_filtered))
             else:  # compute mean over provided dimension
@@ -179,7 +168,6 @@ class Data(Base):
         if not self.children:
             return []
         return [np.nanmean(child.data) for child in self.children]
-
 
 
 class TimeBin:

@@ -13,9 +13,13 @@ class BlockConstructor:
 
     def prepare_blocks(self):
         for boo, function in zip((False, True), (self.construct_blocks, self.construct_reference_blocks)):
-            block_info = {k: v for k, v in self.parent.block_info.items() if bool(v.get('reference')) == bool(boo)}
-            for block_type in block_info:
-                self.blocks[block_type] = function(block_type, block_info[block_type])
+            try:
+                block_info = self.block_info
+            except AttributeError:
+                block_info = self.parent.block_info
+            filtered_block_info = {k: v for k, v in block_info.items() if bool(v.get('reference')) == bool(boo)}
+            for block_type in filtered_block_info:
+                self.blocks[block_type] = function(block_type, filtered_block_info[block_type])
 
     def construct_blocks(self, block_type, block_info):
         blocks = []
@@ -47,5 +51,4 @@ class BlockConstructor:
             paired_block.paired_block = reference_block
             blocks.append(reference_block)
         return blocks
-
 

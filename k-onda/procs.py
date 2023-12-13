@@ -153,19 +153,16 @@ def make_all_rose_plots(lfp_opts=None, graph_opts=None):
                     plotter.rose_plot(copy_lfp_opts, graph_opts)
 
 
-def make_all_mrl_plots(lfp_opts=None, graph_opts=None):
-    for brain_region in ['pl', 'bla', 'hpc']:
-        my_lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [LFP_OPTS, ROSE_PLOT_OPTS])
-        plotter = MRLPlotter(experiment, lfp=initializer.init_lfp_experiment())
-        my_lfp_opts['brain_region'] = brain_region
-        for phase_opt in ['wavelet', None]:
-            my_lfp_opts['phase'] = phase_opt
-            for fb in ['delta', 'theta_1', 'theta_2', 'delta', 'gamma', 'hgamma']:
-                my_lfp_opts['frequency_band'] = fb
-                for adjustment in [None]:
-                    my_lfp_opts['adjustment'] = adjustment
-                    copy_lfp_opts = deepcopy(my_lfp_opts)
-                    plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)
+def make_mrl_plots(lfp_opts=None, graph_opts=None):
+    my_lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [LFP_OPTS, ROSE_PLOT_OPTS])
+    plotter = MRLPlotter(experiment, lfp=initializer.init_lfp_experiment())
+    for brain_region in lfp_opts['brain_regions']:
+        my_lfp_opts['current_brain_region'] = brain_region
+        for fb in my_lfp_opts['fb']:
+            my_lfp_opts['current_frequency_band'] = fb
+            copy_lfp_opts = deepcopy(my_lfp_opts)
+            plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)
+
 
 
 def make_mrl_heat_maps(lfp_opts=None, graph_opts=None):
@@ -255,8 +252,11 @@ def plot_cross_correlations(cross_corr_opts=None, graph_opts=None):
 def plot_spontaneous_mrl(spontaneous_opts=None, graph_opts=None):
     spontaneous_opts, graph_opts = assign_vars([spontaneous_opts, graph_opts],
                                                [SPONTANEOUS_MRL_OPTS, CAROLINA_GRAPH_OPTS])
-    for brain_region in ['bla', 'il']:
-        my_data_opts = deepcopy(spontaneous_opts)
-        my_data_opts['brain_region'] = brain_region
-        plotter = MRLPlotter(experiment, lfp=initializer.init_lfp_experiment())
-        plotter.mrl_vals_plot(spontaneous_opts, graph_opts)
+    my_lfp_opts, graph_opts = assign_vars([spontaneous_opts, graph_opts], [SPONTANEOUS_MRL_OPTS, CAROLINA_GRAPH_OPTS])
+    plotter = MRLPlotter(experiment, lfp=initializer.init_lfp_experiment())
+    for brain_region in my_lfp_opts['brain_regions']:
+        my_lfp_opts['current_brain_region'] = brain_region
+        for fb in my_lfp_opts['frequency_bands']:
+            my_lfp_opts['current_frequency_band'] = fb
+            copy_lfp_opts = deepcopy(my_lfp_opts)
+            plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)

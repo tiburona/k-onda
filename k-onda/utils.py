@@ -134,4 +134,10 @@ def get_descendants(obj, level=None):
     return descendants
 
 
-
+def is_empty(container):
+    if isinstance(container, list):
+        return not container  # True if the list is empty
+    elif isinstance(container, np.ndarray):
+        return container.size == 0  # True if the NumPy array is empty
+    else:
+        raise TypeError("Unsupported container type")

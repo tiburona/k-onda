@@ -5,11 +5,12 @@ import numpy as np
 
 from data import Data, TimeBin
 from block_constructor import BlockConstructor
+from neuron_pair_iterator import NeuronPairIterator
 from context import Subscriber
 from matlab_interface import MatlabInterface
 from utils import cache_method
 from plotting_helpers import formatted_now
-from math_functions import calc_rates, spectrum, trim_and_normalize_ac
+from math_functions import calc_rates, spectrum, trim_and_normalize_ac, cross_correlation
 
 """
 This module defines Level, Experiment, Group, Animal, Unit, and event. Level inherits from Base, which defines a few 
@@ -45,7 +46,7 @@ class Level(Data):
         return self.get_average('get_spontaneous_firing', stop_at='unit')
 
     def get_cross_correlations(self):
-        return self.get_average('get_cross_correlations')
+        return self.get_average('get_cross_correlations', stop_at=self.data_opts.get('base', 'block'))
 
     @cache_method
     def proportion_score(self):
@@ -301,7 +302,7 @@ class Unit(Level, BlockConstructor):
                        if block.block_type in block_types])
 
 
-class Block(Level):
+class Block(Level, NeuronPairIterator):
     name = 'block'
 
     def __init__(self, unit, index, block_type, block_info, onset, events=None, paired_block=None, is_reference=False):
@@ -355,8 +356,6 @@ class Block(Level):
         for i, start in enumerate(event_starts):
             spikes = self.unit.find_spikes(start - pre_stim, start + post_stim)
             self._events.append(Event(self, self.unit, [((spike - start) / self.sampling_rate) for spike in spikes], i))
-        if self.selected_block_type == 'pretone':
-            a = 'foo'
 
     @cache_method
     def get_spikes_by_events(self):  # TODO: This method repeated for unit and block could be mixin
@@ -364,14 +363,44 @@ class Block(Level):
 
     @cache_method
     def get_unadjusted_rates(self):
-        return [event.get_rates() for event in self.events]
+        return [event.get_unadjusted_rates() for event in self.events]
+
+    @cache_method
+    def get_flattened_rates(self):
+        return np.array(self.get_unadjusted_rates()).flatten()
 
     @cache_method
     def mean_firing_rate(self):
         return np.mean(self.get_unadjusted_rates())
 
+    # def get_cross_correlations(self):
+    #     cross_correlations = []
+    #     neuron_type_pair = self.data_opts['neuron_type_pair']
+    #     if self.unit.neuron_type == neuron_type_pair[0]:
+    #         if all([getattr(self.animal, neuron_type) for neuron_type in neuron_type_pair]):
+    #             pairs = [self.find_equivalent(unit=unit) for unit in getattr(self.unit.animal, neuron_type_pair[1])]
+    #             for pair in pairs:
+    #                 cross_correlations.append(cross_correlation(self.get_flattened_rates(), pair.get_flattened_rates(),
+    #                                                             mode=self.data_opts.get('correlation_mode', 'full')))
+    #     return np.nanmean(np.array(cross_correlations), axis=0)
 
-class Event(Level):
+    def get_cross_correlations(self):
+        return self.iterate_through_neuron_pairs('_get_cross_correlations', self.events)
+
+    def get_correlogram(self):
+        return self.iterate_through_neuron_pairs('_get_correlogram', self.events)
+
+    def _get_cross_correlations(self, pair, _):
+        return cross_correlation(self.get_flattened_rates(), pair.get_flattened_rates(), mode='full')
+
+    def find_equivalent(self, unit=None):
+        if unit:
+            return [block for block in unit.children][self.identifier]
+        else:
+            return self.paired_block
+
+
+class Event(Level, NeuronPairIterator):
     """A single event in the experiment, the child of a unit. Aspects of an event, for instance, the start and end of
     relevant data, can change when the context is updated. Most methods on event are the base case of the recursive
     methods on Level."""
@@ -394,7 +423,7 @@ class Event(Level):
 
     @cache_method
     def get_psth(self):  # default is to subtract pretone average from tone
-        rates = self.get_rates()
+        rates = self.get_unadjusted_rates()
         if self.parent.is_reference or self.data_opts.get('adjustment') == 'none':
             return rates
         rates -= self.parent.paired_block.mean_firing_rate()
@@ -404,7 +433,7 @@ class Event(Level):
         return rates
 
     @cache_method
-    def get_rates(self):
+    def get_unadjusted_rates(self):
         bin_size = self.data_opts['bin_size']
         spike_range = (-self.pre_stim, self.post_stim)
         return calc_rates(self.spikes, self.num_bins_per_event, spike_range, bin_size)
@@ -414,27 +443,33 @@ class Event(Level):
         return {'events': self._calculate_autocorrelation(self.get_demeaned_rates())}
 
     def get_cross_correlations(self):
-        cross_correlations = []
-        neuron_type_pair = self.data_opts['neuron_type_pair']
-        if self.unit.neuron_type == neuron_type_pair[0]:
-            if all([getattr(self.unit.animal, neuron_type) for neuron_type in neuron_type_pair]):
-                pairs = [self.find_equivalent(unit=unit) for unit in getattr(self.unit.animal, neuron_type_pair[1])]
-                for pair in pairs:
-                    if len(pair.spikes) == 0:
-                        continue
-                    x = self.get_demeaned_rates()
-                    y = pair.get_demeaned_rates()
-                    cross_corr = np.correlate(x, y, mode='full')
-                    norm_factor = np.std(x) * np.std(y) * len(x)
-                    normalized_cross_corr = cross_corr / norm_factor
-                    cross_correlations.append(normalized_cross_corr)
-        return np.nanmean(np.array(cross_correlations), axis=0)
+        return self.iterate_through_neuron_pairs('_get_cross_correlations', self.spikes)
 
-    def find_equivalent(self, unit=None):  # TODO: Can I improve this?  Can I just index into the paired block events?
-        if unit:
-            return [block for block in unit.children][self.block.identifier].events[self.identifier]
-        else:
-            return self.block.reference_block.events[self.identifier]
+    def get_correlogram(self):
+        return self.iterate_through_neuron_pairs('_get_correlogram', self.spikes)
+
+    def _get_cross_correlations(self, pair, _):
+        return cross_correlation(self.get_unadjusted_rates(), pair.get_unadjusted_rates(),  mode='full')
+
+    def _get_correlogram(self, pair, num_pairs):
+        max_lags, bin_size = (self.data_opts[opt] for opt in ['max_lags', 'bin_size'])
+        correlogram = np.zeros(max_lags * 2 + 1)
+
+        for lag in range(max_lags): # TODO, check this logic in debugger
+            pos_lag_bins = [(spike + lag * bin_size, spike + ((lag+1) * bin_size)) for spike in self.spikes]
+            neg_lag_bins = [(spike - lag * bin_size, spike + lag * bin_size) for spike in self.spikes]
+            correlogram[max_lags + lag] += sum(
+                pos_lag_bin[0] <= spike < pos_lag_bin[1] for pos_lag_bin in pos_lag_bins for spike in
+                pair.spikes) / num_pairs
+            correlogram[max_lags - lag] += sum(
+                neg_lag_bin[0] <= spike < neg_lag_bin[1] for neg_lag_bin in neg_lag_bins for spike in
+                pair.spikes) / num_pairs
+
+        return correlogram
+
+    def find_equivalent(self, unit=None):
+        return self.block.find_equivalent(unit).events[self.identifier]
+
 
 
 

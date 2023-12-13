@@ -331,13 +331,15 @@ class PeriStimulusSubplotter(PlottingMixin):
 
     def plot_cross_correlations(self):
         opts = self.data_opts
-        boundary = int(opts['post_stim']/opts['bin_size'])
+        boundary = int(opts['max_lag']/opts['bin_size'])
         tick_step = self.plotter.graph_opts['tick_step']
-        self.ax.bar(np.linspace(-boundary, boundary, 2*boundary-1), self.y)
+        midpoint = self.y.size // 2
+        self.ax.bar(np.linspace(-boundary, boundary, 2*boundary+1), self.y[midpoint-boundary:midpoint+boundary+1])
         tick_positions = np.arange(-boundary, boundary + 1, tick_step)
-        tick_labels = np.arange(-opts['post_stim'], opts['post_stim'] + opts['bin_size'], tick_step/boundary)
+        tick_labels = np.arange(-opts['max_lag'], opts['max_lag'] + opts['bin_size'],
+                                tick_step*self.data_opts['bin_size'])
         self.ax.set_xticks(tick_positions)
-        self.ax.set_xticklabels([f'{label:.1f}' for label in tick_labels])
+        self.ax.set_xticklabels([f'{label:.2f}' for label in tick_labels])
 
     def plot_data(self):
         getattr(self, f"plot_{self.data_type}")()
@@ -473,9 +475,9 @@ class PiePlotter(Plotter):
 class SpontaneousFiringPlotter(Plotter):
     """Constructs a pie chart of up- or down-regulation of individual neurons"""
 
-    def __init__(self, experiment, context, graph_opts=None,
+    def __init__(self, experiment, graph_opts=None,
                  plot_type='standalone'):
-        super().__init__(experiment, context, graph_opts=graph_opts, plot_type=plot_type)
+        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_unit_pie_chart(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type=None)
@@ -500,8 +502,8 @@ class SpontaneousFiringPlotter(Plotter):
 
 class NeuronTypePlotter(Plotter):
 
-    def __init__(self, experiment, context, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, context, graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
     def scatterplot(self):
 
@@ -568,8 +570,8 @@ class NeuronTypePlotter(Plotter):
 
 
 class MRLPlotter(Plotter):
-    def __init__(self, experiment, context, lfp=None, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, context, lfp=lfp, graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, lfp=None, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, lfp=lfp, graph_opts=graph_opts, plot_type=plot_type)
 
     def make_plot(self, data_opts, graph_opts, plot_type='rose'):
         if plot_type == 'rose':
@@ -639,14 +641,14 @@ class MRLPlotter(Plotter):
 
         data = []
         if data_opts.get('spontaneous'):
-            for neuron_type in self.neuron_types:
+            for neuron_type in self.experiment.neuron_types:
                 self.selected_neuron_type = neuron_type
                 for group in self.lfp.groups:
                     data.append([neuron_type, group.identifier, group.data, group.sem, group.scatter,
                                  group.grandchildren_scatter])
             df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Average MRL', 'sem', 'scatter', 'unit_scatter'])
         else:
-            for neuron_type in self.neuron_types:
+            for neuron_type in self.experiment.neuron_types:
                 self.selected_neuron_type = neuron_type
                 for group in self.lfp.groups:
                     for period_type in ['pretone', 'tone']:
