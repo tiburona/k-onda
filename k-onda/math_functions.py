@@ -152,4 +152,17 @@ def cross_correlation(x, y, mode='valid'):
     return normalized_cross_corr
 
 
+def correlogram(lags, bin_size, spikes1, spikes2, num_pairs):
+    to_return = np.zeros(lags * 2 + 1)
+    for bn in range(len(to_return)):
+        lag = bn - lags
+        bin_edge = lag * bin_size
+        spike_bins = [(spike + bin_edge - .5 * bin_size, spike + bin_edge + .5 * bin_size) for spike in spikes1]
+        to_return[bn] += sum([1 for spike in spikes2 for start, end in spike_bins if start <= spike < end]) / num_pairs
+    return to_return
+
+
+
+
+
 

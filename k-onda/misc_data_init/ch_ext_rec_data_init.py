@@ -33,6 +33,7 @@ for animal in json_data:
     block_info['pretone']['reference'] = True
     block_info['pretone']['target'] = 'tone'
     block_info['pretone']['shift'] = 30
+    block_info['pretone']['duration'] = 30
     block_info['pretone']['lfp_padding'] = [1, 1]
     animal_info['block_info'] = block_info
     animal_info['units'] = animal['units']

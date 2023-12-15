@@ -95,9 +95,9 @@ SPONTANEOUS_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_c
 
 
 CROSS_CORR_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative',
-                   'data_type': 'cross_correlations', 'pre_stim': 0, 'post_stim': 1, 'adjustment': 'none',
+                   'data_type': 'correlogram', 'pre_stim': 0, 'post_stim': 1, 'adjustment': 'none',
                    'bin_size': 0.01, 'events': (0, 300), 'periods': list(range(10)), 'period_types': ['pretone', 'tone'],
-                   'neuron_type_pair': ('ACH', 'PV_IN'), 'max_lag': .2}
+                   'neuron_type_pair': ('PV_IN', 'ACH'), 'max_lag': .2}
 
 SPONTANEOUS_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 'spontaneous': (0, 120),
                         'events': (0, 300),  'frequency_bands': ['theta_1'], 'brain_regions': ['bla', 'il', 'bf'],

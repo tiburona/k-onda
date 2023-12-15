@@ -86,14 +86,14 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.close_plot('groups')
 
     def plot_groups_data(self):
-        subdivision = 'block' if self.data_type == 'cross_correlations' else 'neuron'
+        subdivision = 'block' if self.data_type in ['cross_correlations', 'correlogram'] else 'neuron'
         if self.data_type in ['psth']:
             self.selected_block_type = self.data_opts.get('data_block_type', 'tone')
         self.iterate_through_group_subdivisions(subdivision)
         self.set_y_scales()
         if self.data_type not in ['spontaneous_firing', 'cross_correlations']:
             self.set_pip_patches()
-        if self.data_type == 'cross_correlations':
+        if self.data_type in ['cross_correlations', 'correlogram']:
             n1, n2 = self.data_opts['neuron_type_pair']
             self.set_labels(x_and_y_labels=('Lags (s)', f"{n1} to {n2}"))
         else:
@@ -333,13 +333,15 @@ class PeriStimulusSubplotter(PlottingMixin):
         opts = self.data_opts
         boundary = int(opts['max_lag']/opts['bin_size'])
         tick_step = self.plotter.graph_opts['tick_step']
-        midpoint = self.y.size // 2
-        self.ax.bar(np.linspace(-boundary, boundary, 2*boundary+1), self.y[midpoint-boundary:midpoint+boundary+1])
+        self.ax.bar(np.linspace(-boundary, boundary, 2 * boundary + 1), self.y)
         tick_positions = np.arange(-boundary, boundary + 1, tick_step)
         tick_labels = np.arange(-opts['max_lag'], opts['max_lag'] + opts['bin_size'],
                                 tick_step*self.data_opts['bin_size'])
         self.ax.set_xticks(tick_positions)
         self.ax.set_xticklabels([f'{label:.2f}' for label in tick_labels])
+
+    def plot_correlogram(self):
+        self.plot_cross_correlations()
 
     def plot_data(self):
         getattr(self, f"plot_{self.data_type}")()

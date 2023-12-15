@@ -4,7 +4,7 @@ import os
 import shutil
 from datetime import datetime
 
-DEBUG_MODE = 2
+DEBUG_MODE = 0
 
 
 """Cache Utils"""

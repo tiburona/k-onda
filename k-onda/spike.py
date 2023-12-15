@@ -10,7 +10,7 @@ from context import Subscriber
 from matlab_interface import MatlabInterface
 from utils import cache_method
 from plotting_helpers import formatted_now
-from math_functions import calc_rates, spectrum, trim_and_normalize_ac, cross_correlation
+from math_functions import calc_rates, spectrum, trim_and_normalize_ac, cross_correlation, correlogram
 
 """
 This module defines Level, Experiment, Group, Animal, Unit, and event. Level inherits from Base, which defines a few 
@@ -47,6 +47,9 @@ class Level(Data):
 
     def get_cross_correlations(self):
         return self.get_average('get_cross_correlations', stop_at=self.data_opts.get('base', 'block'))
+
+    def get_correlogram(self):
+        return self.get_average('get_correlogram', stop_at=self.data_opts.get('base', 'block'))
 
     @cache_method
     def proportion_score(self):
@@ -355,7 +358,8 @@ class Block(Level, NeuronPairIterator):
             event_starts = self.event_starts
         for i, start in enumerate(event_starts):
             spikes = self.unit.find_spikes(start - pre_stim, start + post_stim)
-            self._events.append(Event(self, self.unit, [((spike - start) / self.sampling_rate) for spike in spikes], i))
+            self._events.append(Event(self, self.unit, [((spike - start) / self.sampling_rate) for spike in spikes],
+                                      [(spike / self.sampling_rate) for spike in spikes], i))
 
     @cache_method
     def get_spikes_by_events(self):  # TODO: This method repeated for unit and block could be mixin
@@ -367,22 +371,15 @@ class Block(Level, NeuronPairIterator):
 
     @cache_method
     def get_flattened_rates(self):
-        return np.array(self.get_unadjusted_rates()).flatten()
+        return [rate for event in self.get_unadjusted_rates() for rate in event]
+
+    @cache_method
+    def get_flattened_spikes(self):
+        return [spike for event in self.events for spike in event.spikes_original_times]
 
     @cache_method
     def mean_firing_rate(self):
         return np.mean(self.get_unadjusted_rates())
-
-    # def get_cross_correlations(self):
-    #     cross_correlations = []
-    #     neuron_type_pair = self.data_opts['neuron_type_pair']
-    #     if self.unit.neuron_type == neuron_type_pair[0]:
-    #         if all([getattr(self.animal, neuron_type) for neuron_type in neuron_type_pair]):
-    #             pairs = [self.find_equivalent(unit=unit) for unit in getattr(self.unit.animal, neuron_type_pair[1])]
-    #             for pair in pairs:
-    #                 cross_correlations.append(cross_correlation(self.get_flattened_rates(), pair.get_flattened_rates(),
-    #                                                             mode=self.data_opts.get('correlation_mode', 'full')))
-    #     return np.nanmean(np.array(cross_correlations), axis=0)
 
     def get_cross_correlations(self):
         return self.iterate_through_neuron_pairs('_get_cross_correlations', self.events)
@@ -391,7 +388,18 @@ class Block(Level, NeuronPairIterator):
         return self.iterate_through_neuron_pairs('_get_correlogram', self.events)
 
     def _get_cross_correlations(self, pair, _):
-        return cross_correlation(self.get_flattened_rates(), pair.get_flattened_rates(), mode='full')
+        cross_corr = cross_correlation(self.get_unadjusted_rates(), pair.get_unadjusted_rates(), mode='full')
+        boundary = int(self.data_opts['max_lag'] / self.data_opts['bin_size'])
+        midpoint = cross_corr.size // 2
+        return cross_corr[midpoint - boundary:midpoint + boundary + 1]
+
+    def _get_correlogram(self, pair, num_pairs):
+        max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
+        lags = int(max_lag / bin_size)
+        onset_in_secs = self.onset/self.sampling_rate
+        self_spikes = [spike for spike in self.get_flattened_spikes()  # filter spikes to only include those who
+                       if onset_in_secs + max_lag < spike < onset_in_secs + self.duration - max_lag]
+        return correlogram(lags, bin_size, self_spikes, pair.get_flattened_spikes(), num_pairs)
 
     def find_equivalent(self, unit=None):
         if unit:
@@ -408,11 +416,12 @@ class Event(Level, NeuronPairIterator):
     name = 'event'
     instances = []
 
-    def __init__(self, block, unit, spikes, index):
+    def __init__(self, block, unit, spikes, spikes_original_times, index):
         self.unit = unit
         if self.unit.category == 'good':
             self.instances.append(self)
         self.spikes = spikes
+        self.spikes_original_times = spikes_original_times
         self.identifier = index
         self.block = block
         self.block_type = self.block.block_type
@@ -449,23 +458,15 @@ class Event(Level, NeuronPairIterator):
         return self.iterate_through_neuron_pairs('_get_correlogram', self.spikes)
 
     def _get_cross_correlations(self, pair, _):
-        return cross_correlation(self.get_unadjusted_rates(), pair.get_unadjusted_rates(),  mode='full')
+        cross_corr = cross_correlation(self.get_unadjusted_rates(), pair.get_unadjusted_rates(), mode='full')
+        boundary = int(self.data_opts['max_lag'] / self.data_opts['bin_size'])
+        midpoint = cross_corr.size // 2
+        return cross_corr[midpoint - boundary:midpoint + boundary + 1]
 
     def _get_correlogram(self, pair, num_pairs):
-        max_lags, bin_size = (self.data_opts[opt] for opt in ['max_lags', 'bin_size'])
-        correlogram = np.zeros(max_lags * 2 + 1)
-
-        for lag in range(max_lags): # TODO, check this logic in debugger
-            pos_lag_bins = [(spike + lag * bin_size, spike + ((lag+1) * bin_size)) for spike in self.spikes]
-            neg_lag_bins = [(spike - lag * bin_size, spike + lag * bin_size) for spike in self.spikes]
-            correlogram[max_lags + lag] += sum(
-                pos_lag_bin[0] <= spike < pos_lag_bin[1] for pos_lag_bin in pos_lag_bins for spike in
-                pair.spikes) / num_pairs
-            correlogram[max_lags - lag] += sum(
-                neg_lag_bin[0] <= spike < neg_lag_bin[1] for neg_lag_bin in neg_lag_bins for spike in
-                pair.spikes) / num_pairs
-
-        return correlogram
+        max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
+        lags = int(max_lag/bin_size)
+        return correlogram(lags, bin_size, self.spikes, pair.spikes, num_pairs)
 
     def find_equivalent(self, unit=None):
         return self.block.find_equivalent(unit).events[self.identifier]

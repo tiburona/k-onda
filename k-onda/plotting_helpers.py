@@ -7,7 +7,7 @@ class PlottingMixin:
         adjustment = self.data_opts.get('adjustment')
         if not adjustment:
             adjustment = ''
-        Hz = '' if adjustment == 'normalized' else ' Hz'
+        Hz = '' if adjustment == 'normalized' else ' Spikes per Second'
         base = self.data_opts.get('base') if self.data_opts.get('base') else ''
 
         return {'psth': ('Time (s)', f'{adjustment.capitalize()} Firing Rate{Hz}'),
@@ -15,7 +15,8 @@ class PlottingMixin:
                 'autocorr': ('Lags (s)', 'Autocorrelation'),
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum'),
                 'spontaneous_firing': ('Time(s)', 'Firing Rate (Samples per Second)'),
-                'cross_correlations': ('Lags (s)', 'Cross-Correlation')}
+                'cross_correlations': ('Lags (s)', 'Cross-Correlation'),
+                'correlogram':  ('Lags (s)', 'Normalized Spikes')}
 
     def set_labels(self, x_and_y_labels=(None, None)):
         canonical_labels = self.get_labels().get(self.data_type)
