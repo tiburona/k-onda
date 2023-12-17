@@ -7,10 +7,6 @@ class BlockConstructor:
     def earliest_block(self):
         return self.all_blocks.sort(key=lambda x: x.onset)[0]
 
-    @property
-    def all_blocks(self):
-        return [block for block_type in self.blocks for block in self.blocks[block_type]]
-
     def prepare_blocks(self):
         for boo, function in zip((False, True), (self.construct_blocks, self.construct_reference_blocks)):
             try:

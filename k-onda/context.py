@@ -19,9 +19,9 @@ class Context:
 
     def set_val(self, name, new_val):
         if isinstance(self.vals.get(name), dict) and isinstance(new_val, dict):
-            if self.val.items() == new_val.items():
+            if self.vals[name].items() == new_val.items():
                 return
-        elif new_val in [self.vals.get(name), None] and name != 'neuron_type':
+        if new_val in [self.vals.get(name), None] and name != 'neuron_type':
             return
         else:
             self.vals[name] = new_val

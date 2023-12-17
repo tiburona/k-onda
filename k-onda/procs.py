@@ -246,7 +246,7 @@ def plot_spontaneous_firing(spontaneous_opts=None, graph_opts=None):
 
 def plot_cross_correlations(cross_corr_opts=None, graph_opts=None):
     cross_corr_opts, graph_opts = assign_vars([cross_corr_opts, graph_opts], [CROSS_CORR_OPTS, CAROLINA_GRAPH_OPTS])
-    plot(cross_corr_opts, graph_opts, levels=['group'], n_types=['PV_IN', 'ACH'])
+    plot(cross_corr_opts, graph_opts, levels=['group'])
 
 
 def plot_spontaneous_mrl(spontaneous_opts=None, graph_opts=None):
@@ -255,8 +255,8 @@ def plot_spontaneous_mrl(spontaneous_opts=None, graph_opts=None):
     my_lfp_opts, graph_opts = assign_vars([spontaneous_opts, graph_opts], [SPONTANEOUS_MRL_OPTS, CAROLINA_GRAPH_OPTS])
     plotter = MRLPlotter(experiment, lfp=initializer.init_lfp_experiment())
     for brain_region in my_lfp_opts['brain_regions']:
-        my_lfp_opts['current_brain_region'] = brain_region
+        my_lfp_opts['brain_region'] = brain_region
         for fb in my_lfp_opts['frequency_bands']:
-            my_lfp_opts['current_frequency_band'] = fb
+            my_lfp_opts['frequency_band'] = fb
             copy_lfp_opts = deepcopy(my_lfp_opts)
             plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)

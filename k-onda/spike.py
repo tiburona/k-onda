@@ -156,7 +156,7 @@ class Experiment(Level, Subscriber):
         for group in self.groups:
             group.parent = self
         self.block_types = set(block_type for animal in self.all_animals for block_type in animal.block_info)
-        self.neuron_types = set([unit.neuron_type for unit in self.all_units])
+        self._neuron_types = set([unit.neuron_type for unit in self.all_units])
 
     @property
     def all_units(self):
@@ -274,9 +274,6 @@ class Unit(Level, BlockConstructor):
         self.children = self.blocks[self.selected_block_type] if self.selected_block_type else [
             b for block_type, blocks in self.blocks.items() for b in blocks]
 
-    def block_append(self, i, block_type, block_info, onset, block_events):
-        self.blocks[block_type].append(Block(self, i, block_type, block_info, onset, block_events))
-
     @cache_method
     def find_spikes(self, start, stop):
         return np.array(self.spike_times[bs_left(self.spike_times, start): bs_right(self.spike_times, stop)])
@@ -388,7 +385,7 @@ class Block(Level, NeuronPairIterator):
         return self.iterate_through_neuron_pairs('_get_correlogram', self.events)
 
     def _get_cross_correlations(self, pair, _):
-        cross_corr = cross_correlation(self.get_unadjusted_rates(), pair.get_unadjusted_rates(), mode='full')
+        cross_corr = cross_correlation(self.get_flattened_rates(), pair.get_flattened_rates(), mode='full')
         boundary = int(self.data_opts['max_lag'] / self.data_opts['bin_size'])
         midpoint = cross_corr.size // 2
         return cross_corr[midpoint - boundary:midpoint + boundary + 1]

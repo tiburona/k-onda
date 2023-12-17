@@ -2,6 +2,7 @@ import os
 import pickle
 
 from scipy.signal import cwt, morlet
+from collections import defaultdict
 
 
 from data import Data
@@ -11,7 +12,6 @@ from context import Subscriber
 from matlab_interface import MatlabInterface
 from math_functions import *
 from utils import cache_method, get_ancestors
-
 
 
 FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
@@ -34,10 +34,6 @@ class LFPData(Data):
     @property
     def time_bins(self):
         return self.get_time_bins()
-
-    @property
-    def current_frequency_band(self):
-        return self.data_opts.get('frequency_band')
 
     @property
     def freq_range(self):
@@ -69,7 +65,7 @@ class LFPExperiment(LFPData, Subscriber):
         self.experiment = experiment
         self.subscribe(experiment_context)
         self._sampling_rate = info['lfp_sampling_rate']
-        self.all_animals = [LFPAnimal(animal, raw_lfp[animal.identifier])
+        self.all_animals = [LFPAnimal(animal, raw_lfp[animal.identifier], self._sampling_rate)
                             for animal in self.experiment.all_animals]
         self.groups = [LFPGroup(group, self) for group in self.experiment.groups]
         self.all_groups = self.groups
@@ -82,16 +78,19 @@ class LFPExperiment(LFPData, Subscriber):
     def all_blocks(self):
         blocks = []
         for animal in self.all_animals:
-            [blocks.extend(animal_blocks) for animal_blocks in animal.all_blocks.values()]
+            [blocks.extend(animal_blocks) for animal_blocks in animal.blocks.values()]
         return blocks
 
     @property
     def all_mrl_calculators(self):
-        return [mrl_calc for animal in self.all_animals for mrl_calc in animal.mrl_calculators]
+        mrl_calculators = []
+        for animal in self.all_animals:
+            [mrl_calculators.extend(animal_blocks) for animal_blocks in animal.mrl_calculators.values()]
+        return mrl_calculators
 
     @property
     def all_events(self):
-        if self.data_class == 'mrl':
+        if self.data_type == 'mrl':
             raise ValueError("You can't extract events from MRL data")
         events = [event for block in self.all_blocks for event in block.events]
         return events
@@ -121,7 +120,10 @@ class LFPGroup(LFPData):
         self.spike_target = group
         self.experiment = lfp_experiment
         self.identifier = self.spike_target.identifier
+        self.parent = lfp_experiment
         self.children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
+        for animal in self.children:
+            animal.parent = self
 
     @property
     def mrl_calculators(self):
@@ -174,15 +176,23 @@ class LFPAnimal(LFPData, BlockConstructor):
 
     name = 'animal'
 
-    def __init__(self, animal, raw_lfp):
+    def __init__(self, animal, raw_lfp, sampling_rate):
         self.spike_target = animal
         self.raw_lfp = raw_lfp
+        self._sampling_rate = sampling_rate
         self.block_class = LFPBlock
-        self.all_mrl_calculators = None
+        self.blocks = defaultdict(list)
+        self.mrl_calculators = defaultdict(list)
 
     @property
     def children(self):
-        return self.mrl_calculators if self.data_type == 'mrl' else self.blocks
+        children_type = self.mrl_calculators if self.data_type == 'mrl' else self.blocks
+        if self.data_opts.get('spontaneous'):
+            return children_type['spontaneous']
+        elif self.selected_block_type is not None:
+            return children_type[self.selected_block_type]
+        else:
+            return [child for key in children_type for child in children_type[key]]
 
     def __getattr__(self, name):
         # Check if 'name' is a property in the class
@@ -197,30 +207,10 @@ class LFPAnimal(LFPData, BlockConstructor):
     def frequency_args(self):
         return set(tuple(args) for fb, args in FREQUENCY_ARGS.items() if fb in self.data_opts['fb'])
 
-    @property
-    def mrl_calculators(self):
-        if self.selected_block_type is None:
-            if self.data_opts.get('spontaneous'):
-                calcs = self.all_mrl_calculators['spontaneous']
-            else:
-                calcs = self.all_mrl_calculators['tone'] + self.all_mrl_calculators['pretone']
-        else:
-            calcs = self.all_mrl_calculators[self.selected_block_type]
-        return [calc for calc in calcs if calc.unit in self.spike_target.children and calc.is_valid]
-
-    @property
-    def blocks(self):
-        if self.all_blocks is None:
-            self.all_blocks = self.prepare_blocks()
-        if self.selected_block_type:
-            return self.all_blocks[self.selected_block_type]
-        else:
-            return [block for key, val in self.all_blocks for block in val]
-
     def update_children(self):
-        self.all_blocks = self.prepare_blocks()
+        self.prepare_blocks()
         if 'mrl' in self.data_type:
-            self.all_mrl_calculators = self.prepare_mrl_calculators()
+            self.prepare_mrl_calculators()
 
     def prepare_mrl_calculators(self):
         if self.data_opts.get('spontaneous'):
@@ -230,7 +220,7 @@ class LFPAnimal(LFPData, BlockConstructor):
             mrl_calculators = {block_type: [BlockMRLCalculator(unit, block=block) for block in blocks
                                             for unit in self.spike_target.units['good']]
                                for block_type, blocks in self.all_blocks.items()}
-        return mrl_calculators
+        self.mrl_calculators = mrl_calculators
 
     @cache_method
     def get_power(self):
@@ -289,13 +279,15 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         self.identifier = i
         self.block_type = block_type
         self.event_starts = events if events is not None else []
-        self.onset = onset * self.sampling_rate / self.animal.spike_target.sampling_rate
+        self.onset = int(onset * self.sampling_rate / self.animal.spike_target.sampling_rate)
         self.convolution_padding = block_info['lfp_padding']
         self.duration = block_info.get('duration')
         self.event_duration = block_info.get('event_duration')
-        start = (self.onset - self.convolution_padding[0]) * self.sampling_rate
-        stop = (self.onset + self.duration + self.convolution_padding[1]) * self.sampling_rate
-        self.raw_data = self.animal.raw_lfp[self.brain_region][slice(*(start, stop))]
+        self.paired_block = paired_block
+        self.is_reference = is_reference
+        start = self.onset - (self.convolution_padding[0]) * self.sampling_rate
+        stop = self.onset + (self.duration + self.convolution_padding[1]) * self.sampling_rate
+        self.raw_data = self.animal.raw_lfp[self.brain_region][start:stop]
         self.processed_data = self.process_lfp(self.raw_data)
         self.mrl_data = self.processed_data[onset:onset + self.duration * self.sampling_rate]
         self.parent = lfp_animal
@@ -452,7 +444,6 @@ class MRLCalculator(LFPData):
 
     def __init__(self, unit):
         self.unit = unit
-        self.parent = self.unit.parent
 
     @property
     def mean_over_frequency(self):
@@ -554,6 +545,7 @@ class BlockMRLCalculator(MRLCalculator):
         self.spikes = [int((spike + i) * self.sampling_rate) for i, event in enumerate(self.spike_block.events)
                        for spike in event.spikes]
         self.num_events = len(self.spikes)
+        self.parent = self.block.parent
 
     @property
     def ancestors(self):
@@ -562,7 +554,7 @@ class BlockMRLCalculator(MRLCalculator):
     @property
     def equivalent_calculator(self):
         other_stage = self.spike_block.reference_block_type
-        return [calc for calc in self.parent.all_mrl_calculators[other_stage] if calc.identifier == self.identifier][0]
+        return [calc for calc in self.parent.mrl_calculators[other_stage] if calc.identifier == self.identifier][0]
 
     @property
     def is_valid(self):
@@ -580,14 +572,20 @@ class SpontaneousMRLCalculator(MRLCalculator):
     def __init__(self, unit, animal):
         super().__init__(unit)
         self.animal = animal
+        self.parent = self.animal
         self.block_type = self.identifier = 'spontaneous'
         self.spikes = self.unit.get_spontaneous_firing()
         self.num_events = len(self.spikes)
         self.raw = self.animal.raw_lfp[self.brain_region]
-        self.start, self.end = np.array(self.data_opts['spontaneous_interval'])*self.sampling_rate
+        if len(self.data_opts['spontaneous']) > 1:
+            self.start, self.end = np.array(self.data_opts['spontaneous']) * self.sampling_rate
+        else:
+            self.end = self.animal.earliest_period.onset
+            self.start = self.end - self.data_opts['spontaneous'] * self.sampling_rate
         self.mrl_data = self.raw[self.start:self.end]
 
-    def get_weights(self):  # TODO: don't hard code 120
+
+    def get_weights(self):
         return np.array([1 if weight in self.spikes else float('nan') for weight in range(self.start, self.end)])
 
     @property

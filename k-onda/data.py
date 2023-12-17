@@ -6,6 +6,9 @@ from math_functions import sem
 from utils import cache_method, is_empty
 
 
+
+
+
 class Base:
 
     context = experiment_context
@@ -18,19 +21,33 @@ class Base:
     def data_opts(self, opts):
         self.context.set_val('data', opts)
 
+    def update_data_opts(self, key, value):
+        data_opts = deepcopy(self.data_opts)
+        data_opts[key] = value
+        self.data_opts = data_opts
+
     @property
     def data_type(self):
         return self.data_opts['data_type']
+
+    @data_type.setter
+    def data_type(self, data_type):
+        self.update_data_opts('data_type', data_type)
 
     @property
     def data_class(self):
         return self.data_opts.get('data_class')
 
-    @data_type.setter
-    def data_type(self, data_type):
-        data_opts = deepcopy(self.data_opts)  # necessary to trigger the data context notification TODO: check that this is still necessay
-        data_opts['data_type'] = data_type
-        self.data_opts = data_opts
+    @property
+    def neuron_types(self):
+        if hasattr(self, '_neuron_types'):
+            return self._neuron_types
+        elif hasattr(self, 'experiment'):
+            return self.experiment.neuron_types
+        elif hasattr(self, 'parent'):
+            return self.parent.neuron_types
+        else:
+            return None
 
     @property
     def selected_neuron_type(self):
@@ -54,7 +71,17 @@ class Base:
 
     @current_frequency_band.setter
     def current_frequency_band(self, frequency_band):
-        self.data_opts['frequency_band'] = frequency_band
+        self.update_data_opts('frequency_band', frequency_band)
+
+    @property
+    def current_brain_region(self):
+        return self.data_opts.get('brain_region')
+
+    @current_brain_region.setter
+    def current_brain_region(self, brain_region):
+        if brain_region == 'il':
+            a = 'foo'
+        self.update_data_opts('brain_region', brain_region)
 
 
 class Data(Base):
@@ -90,6 +117,15 @@ class Data(Base):
         return get_descendants(self)
 
     @property
+    def sampling_rate(self):
+        if hasattr(self, '_sampling_rate'):
+            return self._sampling_rate
+        elif self.parent is not None:
+            return self.parent.sampling_rate
+        else:
+            return None
+
+    @property
     def sem(self):
         return self.get_sem()
 
@@ -101,15 +137,6 @@ class Data(Base):
     def num_bins_per_event(self):
         pre_stim, post_stim, bin_size = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim', 'bin_size'])
         return int((pre_stim + post_stim) / bin_size)
-
-    @property
-    def sampling_rate(self):
-        if hasattr(self, '_sampling_rate'):
-            return self._sampling_rate
-        elif self.parent is not None:
-            return self.parent.sampling_rate
-        else:
-            return None
 
     @cache_method
     def get_average(self, base_method, stop_at='event', axis=0):  # Trial is the default base case, but not always

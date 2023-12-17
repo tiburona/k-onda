@@ -72,21 +72,17 @@ class Initializer:
         reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
         reader.parse_header()
         data_to_return = {region: reader.nsx_datas[3][0][:, val] for region, val in self.exp_info['lfp_electrodes'].items()}
-        if self.exp_info.get('lfp_from_stereotrode_electrodes') is not None:
+        if self.exp_info.get('lfp_from_stereotrodes') is not None:
             data_to_return = self.get_lfp_from_stereotrodes(animal, data_to_return, file_path)
         return data_to_return
 
     def get_lfp_from_stereotrodes(self, animal, data_to_return, file_path):
-        lfp_from_stereotrodes_info = self.exp_info['lfp_from_stereotrodes_info']
+        lfp_from_stereotrodes_info = self.exp_info['lfp_from_stereotrodes']
         nsx_num = lfp_from_stereotrodes_info['nsx_num']
         reader = BlackrockRawIO(filename=file_path, nsx_to_load=nsx_num)
         reader.parse_header()
-        for region, region_data in lfp_from_stereotrodes_info['regions'].items():
-            animal_specific = region_data.get('animal_specific')
-            if animal_specific is not None:
-                electrodes = animal_specific[animal.identifier]
-            else:
-                electrodes = region_data['electrodes']
+        for region, region_data in lfp_from_stereotrodes_info['electrodes'].items():
+            electrodes = region_data if isinstance(region_data, list) else region_data[animal.identifier]
             data = np.mean([reader.nsx_datas[nsx_num][0][:, electrode] for electrode in electrodes], axis=0)
             num_samples = len(data)
             new_num_samples = int(num_samples * self.exp_info['lfp_sampling_rate'] / self.exp_info['sampling_rate'])

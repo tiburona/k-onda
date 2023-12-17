@@ -611,7 +611,7 @@ class MRLPlotter(Plotter):
 
     def set_dir_and_filename(self, basename):
         frequency_band = str(self.lfp.current_frequency_band)
-        tags = [frequency_band, self.lfp.brain_region]
+        tags = [frequency_band, self.current_brain_region]
         self.dir_tags = [self.data_type]
         for opt in ['phase', 'adjustment']:
             if self.data_opts.get(opt):
@@ -643,19 +643,19 @@ class MRLPlotter(Plotter):
 
         data = []
         if data_opts.get('spontaneous'):
-            for neuron_type in self.experiment.neuron_types:
+            for neuron_type in self.neuron_types:
                 self.selected_neuron_type = neuron_type
                 for group in self.lfp.groups:
                     data.append([neuron_type, group.identifier, group.data, group.sem, group.scatter,
                                  group.grandchildren_scatter])
             df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Average MRL', 'sem', 'scatter', 'unit_scatter'])
         else:
-            for neuron_type in self.experiment.neuron_types:
+            for neuron_type in self.neuron_types:
                 self.selected_neuron_type = neuron_type
                 for group in self.lfp.groups:
-                    for period_type in ['pretone', 'tone']:
-                        self.selected_period_type = period_type
-                        data.append([neuron_type, group.identifier, period_type, group.data, group.sem, group.scatter,
+                    for block_type in ['pretone', 'tone']:
+                        self.selected_block_type = block_type
+                        data.append([neuron_type, group.identifier, block_type, group.data, group.sem, group.scatter,
                                      group.grandchildren_scatter])
             df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Period', 'Average MRL', 'sem', 'scatter',
                                              'unit_scatter'])
