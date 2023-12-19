@@ -577,13 +577,12 @@ class SpontaneousMRLCalculator(MRLCalculator):
         self.spikes = self.unit.get_spontaneous_firing()
         self.num_events = len(self.spikes)
         self.raw = self.animal.raw_lfp[self.brain_region]
-        if len(self.data_opts['spontaneous']) > 1:
+        if isinstance(self.data_opts['spontaneous'], tuple):
             self.start, self.end = np.array(self.data_opts['spontaneous']) * self.sampling_rate
         else:
-            self.end = self.animal.earliest_period.onset
+            self.end = self.animal.earliest_block.onset
             self.start = self.end - self.data_opts['spontaneous'] * self.sampling_rate
         self.mrl_data = self.raw[self.start:self.end]
-
 
     def get_weights(self):
         return np.array([1 if weight in self.spikes else float('nan') for weight in range(self.start, self.end)])

@@ -69,7 +69,7 @@ CAROLINA_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH_fo
 
 
 CAROLINA_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4,
-                       'tick_step': 5, 'sem': False, 'footer': False, 'equal_y_scales': True,
+                       'tick_step': 10, 'sem': False, 'footer': False, 'equal_y_scales': True,
                        'group_colors': {'control': '#76BD4E', 'arch': '#F2A354'}, 'force_recalc': False,
                        'neuron_type_colors': {'PV_IN': '#5679C7', 'ACH': '#C75B56'}, 'animal_id': 'CH272',
                        'cluster_ids': [10, 101], 'electrodes_for_waveform': [[7], [3, 5]],
@@ -85,7 +85,7 @@ CAROLINA_GROUP_STAT_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustm
 
 SPONTANEOUS_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative',
                     'data_type': 'spontaneous_firing', 'bin_size': 0.1, 'selected_animals': ['CH272', 'CH274', 'CH275'],
-                    'spontaneous': (0, 120)}
+                    'spontaneous': 120}
 
 
 SPONTANEOUS_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4, 'tick_step': 100,
@@ -95,10 +95,10 @@ SPONTANEOUS_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_c
 
 
 CROSS_CORR_OPTS = {'data_class': 'spike', 'data_type': 'cross_correlations', 'pre_stim': 0, 'post_stim': 1,
-                   'adjustment': 'none', 'bin_size': 0.01, 'events': (0, 300), 'periods': list(range(10)),
-                   'period_types': ['pretone', 'tone'], 'neuron_type_pair': ('ACH', 'PV_IN'), 'max_lag': .2}
+                   'adjustment': 'none', 'bin_size': 0.001, 'events': (0, 300), 'periods': list(range(10)),
+                   'period_types': ['pretone', 'tone'], 'unit_pairs': ['ACH,PV_IN'], 'max_lag': .05}
 
-SPONTANEOUS_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 'spontaneous': (0, 120),
+SPONTANEOUS_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 'spontaneous': 120,
                         'events': (0, 300),  'frequency_bands': ['theta_1'], 'brain_regions': ['bla', 'il', 'bf'],
                         'sem_level': 'mrl_calculator'}
 

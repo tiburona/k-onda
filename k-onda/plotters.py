@@ -94,7 +94,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         if self.data_type not in ['spontaneous_firing', 'cross_correlations']:
             self.set_pip_patches()
         if self.data_type in ['cross_correlations', 'correlogram']:
-            n1, n2 = self.data_opts['neuron_type_pair']
+            n1, n2 = self.data_opts['unit_pairs'][0].split(',')
             self.set_labels(x_and_y_labels=('Lags (s)', f"{n1} to {n2}"))
         else:
             self.set_labels()
@@ -664,7 +664,7 @@ class MRLPlotter(Plotter):
 
         # Plot creation
         if data_opts.get('spontaneous'):
-            g = sns.catplot(data=df, x='Group', y='Average MRL', hue='Group', row='Neuron Type', kind='bar',
+            g = sns.catplot(data=df, x='Group', y='Average MRL', row='Neuron Type', kind='bar',
                             height=4, aspect=1.5, dodge=False, legend=False, order=group_order)
         else:
             period_order = ['pretone', 'tone']

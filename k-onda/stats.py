@@ -273,7 +273,6 @@ class Stats(Base):
             with open(self.spreadsheet_fname, 'w', newline='') as f:
                 self.write_csv(f, df_name)
 
-
     def write_csv(self, f, df_name):
         for opts_dict in self.opts_dicts:
             line = ', '.join([f"{str(key).replace(',', '_')}: {str(value).replace(',', '_')}" for key, value in
@@ -291,7 +290,8 @@ class Stats(Base):
 
         r_script = self.write_spike_post_hoc_r_script()
 
-        self.script_path = os.path.join(self.data_opts['data_path'], self.data_type, 'post_hoc', self.data_type + '_r_script.r')
+        self.script_path = os.path.join(self.data_opts['data_path'], self.data_type, 'post_hoc', self.data_type +
+                                        '_r_script.r')
         with open(self.script_path, 'w') as f:
             f.write(r_script)
 
@@ -300,14 +300,19 @@ class Stats(Base):
         error_suffix = error_suffix + '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else error_suffix
 
         if self.data_opts['post_hoc_type'] == 'beta':
-            model_formula = f'glmmTMB(formula = {self.data_col} ~ group +  (1|animal{error_suffix}), family = beta_family(link = "logit"), data = data)'
-            interaction_model_formula = f'glmmTMB(formula = {self.data_col} ~ group * neuron_type + (1|animal{error_suffix}), family = beta_family(link = "logit"), data = sub_df)'
+            model_formula = f'glmmTMB(formula = {self.data_col} ~ group + (1|animal{error_suffix}), ' \
+                            f'family = beta_family(link = "logit"), data = data)'
+            interaction_model_formula = f'glmmTMB(formula = {self.data_col} ~ group * neuron_type + ' \
+                                        f'(1|animal{error_suffix}), ' \
+                                        f'family = beta_family(link = "logit"), data = sub_df)'
             p_val_index = 'coefficients$cond[2, 4]'
             interaction_p_val_index = 'coefficients$cond["groupstressed:neuron_typePN", 4]'
-            zero_adjustment_line = f'df$"{self.data_col}"[df$"{self.data_col}" == 0] <- df$"{self.data_col}"[df$"{self.data_col}" == 0] + 1e-6'
+            zero_adjustment_line = f'df$"{self.data_col}"[df$"{self.data_col}" == 0] ' \
+                                   f'<- df$"{self.data_col}"[df$"{self.data_col}" == 0] + 1e-6'
         elif self.data_opts['post_hoc_type'] == 'lmer':
             model_formula = f'lmer({self.data_col} ~ group +  (1|animal{error_suffix}), data = data)'
-            interaction_model_formula = f'lmer({self.data_col} ~ group * neuron_type + (1|animal{error_suffix}), data = sub_df)'
+            interaction_model_formula = f'lmer({self.data_col} ~ group * neuron_type + (1|animal{error_suffix}), ' \
+                                        f'data = sub_df)'
             p_val_index = 'coefficients[2, 5]'
             interaction_p_val_index = 'coefficients[4, 5]'
             zero_adjustment_line = ''

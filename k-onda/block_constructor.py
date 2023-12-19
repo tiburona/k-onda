@@ -4,8 +4,12 @@ import numpy as np
 class BlockConstructor:
 
     @property
+    def all_blocks(self):
+        return [block for block_type, block_list in self.blocks.items() for block in block_list]
+
+    @property
     def earliest_block(self):
-        return self.all_blocks.sort(key=lambda x: x.onset)[0]
+        return sorted(self.all_blocks, key=lambda x: x.onset)[0]
 
     def prepare_blocks(self):
         for boo, function in zip((False, True), (self.construct_blocks, self.construct_reference_blocks)):

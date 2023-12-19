@@ -79,8 +79,6 @@ class Base:
 
     @current_brain_region.setter
     def current_brain_region(self, brain_region):
-        if brain_region == 'il':
-            a = 'foo'
         self.update_data_opts('brain_region', brain_region)
 
 
@@ -138,8 +136,7 @@ class Data(Base):
         pre_stim, post_stim, bin_size = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim', 'bin_size'])
         return int((pre_stim + post_stim) / bin_size)
 
-    @cache_method
-    def get_average(self, base_method, stop_at='event', axis=0):  # Trial is the default base case, but not always
+    def get_average(self, base_method, stop_at='event', axis=0, **kwargs):
         """
         Recursively calculates the average of the values of the computation in the base method on the object's
         descendants.
@@ -147,18 +144,21 @@ class Data(Base):
         Parameters:
         - base_method (str): Name of the method to be called when the recursion reaches the base case.
         - stop_at (str): The 'name' attribute of the base case object upon which `base_method` should be called.
-        - axis (int or None): When the 'data' property of an object returns a vector or matrix instead of a single
-        number, this specifies the axis across which to compute the mean. Default is 0, which preserves the original
-        shape of the data and averages over dimensions like units and animals. If set to None, the mean is computed
-        over all dimensions.
+        - axis (int or None): Specifies the axis across which to compute the mean.
+        - **kwargs: Additional keyword arguments to be passed to the base method.
 
         Returns:
         float or np.array: The mean of the data values from the object's descendants.
         """
         if self.name == stop_at:  # we are at the base case and will call the base method
-            return getattr(self, base_method)()
+            if hasattr(self, base_method) and callable(getattr(self, base_method)):
+                return getattr(self, base_method)(**kwargs)
+            else:
+                raise ValueError(f"Invalid base method: {base_method}")
+
         else:  # recursively call
-            child_vals = [child.get_average(base_method, stop_at=stop_at) for child in self.children]
+            child_vals = [child.get_average(base_method, axis=axis, stop_at=stop_at, **kwargs) for child in
+                          self.children]
             # Filter out nan values and arrays that are all NaN
             child_vals_filtered = [x for x in child_vals
                                    if not (isinstance(x, np.ndarray) and np.isnan(x).all())

@@ -32,7 +32,7 @@ for animal in json_data:
     block_info['tone']['lfp_padding'] = [1, 1]
     block_info['pretone']['reference'] = True
     block_info['pretone']['target'] = 'tone'
-    block_info['pretone']['shift'] = 30
+    block_info['pretone']['shift'] = 30  # TODO: sometimes we might want reference blocks that are forward in time; this would clearer if it were negative here and added rather than subtracted later
     block_info['pretone']['duration'] = 30
     block_info['pretone']['lfp_padding'] = [1, 1]
     animal_info['block_info'] = block_info

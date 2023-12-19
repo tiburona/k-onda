@@ -3,9 +3,9 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 
+
 from data import Data, TimeBin
 from block_constructor import BlockConstructor
-from neuron_pair_iterator import NeuronPairIterator
 from context import Subscriber
 from matlab_interface import MatlabInterface
 from utils import cache_method
@@ -13,14 +13,13 @@ from plotting_helpers import formatted_now
 from math_functions import calc_rates, spectrum, trim_and_normalize_ac, cross_correlation, correlogram
 
 """
-This module defines Level, Experiment, Group, Animal, Unit, and event. Level inherits from Base, which defines a few 
-common properties. The rest of the classes inherit from Level and some incorporate NeuronTypeMixin for methods related 
-to updating the selected neuron type. Several of Level's methods are recursive, and are overwritten by the base case, 
-most frequently event.  
+This module defines SpikeData, Experiment, Group, Animal, Unit, and event. Level inherits from Data, which defines 
+common properties and methods to data representations.  The rest of the classes inherit from SpikeData. Several of 
+SpikeData's methods are recursive, and are overwritten by the base case, most frequently Event.  
 """
 
 
-class Level(Data):
+class SpikeData(Data):
 
     @property
     def time_bins(self):
@@ -34,6 +33,10 @@ class Level(Data):
     def autocorr_key(self):
         return self.get_autocorr_key()
 
+    @property
+    def unit_pairs(self):
+        return [pair for pair in self.children.unit_pairs]
+
     @cache_method
     def get_demeaned_rates(self):
         rates = self.get_average('get_rates')
@@ -46,10 +49,10 @@ class Level(Data):
         return self.get_average('get_spontaneous_firing', stop_at='unit')
 
     def get_cross_correlations(self):
-        return self.get_average('get_cross_correlations', stop_at=self.data_opts.get('base', 'block'))
+        return self.get_average('get_cross_correlations', stop_at='unit')
 
     def get_correlogram(self):
-        return self.get_average('get_correlogram', stop_at=self.data_opts.get('base', 'block'))
+        return self.get_average('get_correlogram', stop_at='unit')
 
     @cache_method
     def proportion_score(self):
@@ -135,7 +138,7 @@ class Level(Data):
             return 0
 
 
-class Experiment(Level, Subscriber):
+class Experiment(SpikeData, Subscriber):
     """The experiment. Parent of groups."""
 
     name = 'experiment'
@@ -170,6 +173,10 @@ class Experiment(Level, Subscriber):
     def all_events(self):
         return [event for block in self.all_blocks for event in block]
 
+    @property
+    def all_unit_pairs(self):
+        return [unit_pair for unit in self.all_units for unit_pair in unit.get_pairs()]
+
     def update(self, name):
         if name == 'data':
             event_vals = [self.data_opts[key] for key in ['pre_stim', 'post_stim', 'bin_size', 'events']
@@ -191,7 +198,7 @@ class Experiment(Level, Subscriber):
                 [unit.update_children() for unit in self.all_units]
 
 
-class Group(Level):
+class Group(SpikeData):
     """A group in the experiment, i.e., a collection of animals assigned to a condition, the child of an Experiment,
     parent of animals. Limits its children to the active neuron type."""
 
@@ -216,7 +223,7 @@ class Group(Level):
                              if child.identifier in self.data_opts.get('selected_animals')]
 
 
-class Animal(Level):
+class Animal(SpikeData):
     """An animal in the experiment, the child of a Group, parent of units. Updates its children, i.e., the active units
     for analysis, when the selected neuron type is altered in the context.
 
@@ -237,6 +244,10 @@ class Animal(Level):
         self.children = None
         self.parent = None
 
+    @property
+    def unit_pairs(self):
+        return [pair for unit in self.units['good'] for pair in unit.pairs]
+
     def update_children(self):
         if self.context.vals['neuron_type'] is None:
             self.children = self.units['good']
@@ -244,7 +255,7 @@ class Animal(Level):
             self.children = getattr(self, self.context.vals['neuron_type'])
 
 
-class Unit(Level, BlockConstructor):
+class Unit(SpikeData, BlockConstructor):
     """A unit that was recorded from in the experiment, the child of an Animal, parent of events. Updates its events
     when the event definitions in the context change."""
 
@@ -267,6 +278,19 @@ class Unit(Level, BlockConstructor):
     @property
     def firing_rate(self):
         return self.animal.sampling_rate * len(self.spike_times) / float(self.spike_times[-1] - self.spike_times[0])
+
+    @property
+    def unit_pairs(self):
+        all_unit_pairs = self.get_pairs()
+        pairs_to_select = self.data_opts.get('unit_pairs')
+        if pairs_to_select is None:
+            return all_unit_pairs
+        else:
+            return [unit_pair for unit_pair in all_unit_pairs
+                    if ','.join([unit_pair.unit.neuron_type, unit_pair.pair.neuron_type]) in pairs_to_select]
+
+    def get_pairs(self):
+        return [UnitPair(self, other) for other in [unit for unit in self.animal if unit.identifier != self.identifier]]
 
     def update_children(self):
         if not self.blocks:
@@ -301,8 +325,17 @@ class Unit(Level, BlockConstructor):
         return np.std([rate for block in self.children for rate in block.get_unadjusted_rates()
                        if block.block_type in block_types])
 
+    def get_cross_correlations(self, axis=0, **kwargs):
+        to_return = np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.data_opts.get('base', 'block'), **kwargs)
+                        for pair in self.unit_pairs], axis=axis)
+        return to_return
 
-class Block(Level, NeuronPairIterator):
+    def get_correlogram(self, **kwargs):
+        kwargs['stop_at'] = self.data_opts.get('base', 'block')
+        return np.mean([pair.get_correlogram(**kwargs) for pair in self.unit_pairs], axis=kwargs['axis'])
+
+
+class Block(SpikeData):
     name = 'block'
 
     def __init__(self, unit, index, block_type, block_info, onset, events=None, paired_block=None, is_reference=False):
@@ -378,19 +411,16 @@ class Block(Level, NeuronPairIterator):
     def mean_firing_rate(self):
         return np.mean(self.get_unadjusted_rates())
 
-    def get_cross_correlations(self):
-        return self.iterate_through_neuron_pairs('_get_cross_correlations', self.events)
-
-    def get_correlogram(self):
-        return self.iterate_through_neuron_pairs('_get_correlogram', self.events)
-
-    def _get_cross_correlations(self, pair, _):
-        cross_corr = cross_correlation(self.get_flattened_rates(), pair.get_flattened_rates(), mode='full')
+    @cache_method
+    def get_cross_correlations(self, pair=None):
+        other = pair.blocks[self.block_type][self.identifier]
+        cross_corr = cross_correlation(self.get_flattened_rates(), other.get_flattened_rates(), mode='full')
         boundary = int(self.data_opts['max_lag'] / self.data_opts['bin_size'])
         midpoint = cross_corr.size // 2
         return cross_corr[midpoint - boundary:midpoint + boundary + 1]
 
-    def _get_correlogram(self, pair, num_pairs):
+    @cache_method
+    def get_correlogram(self, pair, num_pairs):
         max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = int(max_lag / bin_size)
         onset_in_secs = self.onset/self.sampling_rate
@@ -405,18 +435,15 @@ class Block(Level, NeuronPairIterator):
             return self.paired_block
 
 
-class Event(Level, NeuronPairIterator):
+class Event(SpikeData):
     """A single event in the experiment, the child of a unit. Aspects of an event, for instance, the start and end of
     relevant data, can change when the context is updated. Most methods on event are the base case of the recursive
     methods on Level."""
 
     name = 'event'
-    instances = []
 
     def __init__(self, block, unit, spikes, spikes_original_times, index):
         self.unit = unit
-        if self.unit.category == 'good':
-            self.instances.append(self)
         self.spikes = spikes
         self.spikes_original_times = spikes_original_times
         self.identifier = index
@@ -448,25 +475,37 @@ class Event(Level, NeuronPairIterator):
     def get_all_autocorrelations(self):
         return {'events': self._calculate_autocorrelation(self.get_demeaned_rates())}
 
-    def get_cross_correlations(self):
-        return self.iterate_through_neuron_pairs('_get_cross_correlations', self.spikes)
-
-    def get_correlogram(self):
-        return self.iterate_through_neuron_pairs('_get_correlogram', self.spikes)
-
-    def _get_cross_correlations(self, pair, _):
-        cross_corr = cross_correlation(self.get_unadjusted_rates(), pair.get_unadjusted_rates(), mode='full')
+    def get_cross_correlations(self, pair=None):
+        other = pair.blocks[self.block_type][self.block.identifier].events[self.identifier]
+        cross_corr = cross_correlation(self.get_unadjusted_rates(), other.get_unadjusted_rates(), mode='full')
         boundary = int(self.data_opts['max_lag'] / self.data_opts['bin_size'])
         midpoint = cross_corr.size // 2
         return cross_corr[midpoint - boundary:midpoint + boundary + 1]
 
-    def _get_correlogram(self, pair, num_pairs):
+    def get_correlogram(self, pair=None, num_pairs=None):
         max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = int(max_lag/bin_size)
         return correlogram(lags, bin_size, self.spikes, pair.spikes, num_pairs)
 
     def find_equivalent(self, unit=None):
         return self.block.find_equivalent(unit).events[self.identifier]
+
+
+class UnitPair(SpikeData):
+
+    name = 'unit_pair'
+
+    def __init__(self, unit, pair):
+        self.parent = unit.parent
+        self.unit = unit
+        self.pair = pair
+        self.children = self.unit.children
+
+    def get_cross_correlations(self, **kwargs):
+        return self.get_average('get_cross_correlations', pair=self.pair, **kwargs)
+
+    def get_correlogram(self, **kwargs):
+        return self.get_average('get_correlogram', pair=self.pair, **kwargs)  # TODO: what is num_pairs
 
 
 
