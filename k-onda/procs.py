@@ -260,3 +260,9 @@ def plot_spontaneous_mrl(spontaneous_opts=None, graph_opts=None):
             my_lfp_opts['frequency_band'] = fb
             copy_lfp_opts = deepcopy(my_lfp_opts)
             plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)
+
+
+def plot_cross_correlations_by_unit_pair(cross_corr_opts=None, graph_opts=None):
+    cross_corr_opts, graph_opts = assign_vars([cross_corr_opts, graph_opts], [CROSS_CORR_OPTS, CAROLINA_GRAPH_OPTS])
+    plot(cross_corr_opts, graph_opts, levels=['unit_pair'])
+

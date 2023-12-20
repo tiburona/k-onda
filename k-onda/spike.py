@@ -326,9 +326,8 @@ class Unit(SpikeData, BlockConstructor):
                        if block.block_type in block_types])
 
     def get_cross_correlations(self, axis=0, **kwargs):
-        to_return = np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.data_opts.get('base', 'block'), **kwargs)
+        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.data_opts.get('base', 'block'), **kwargs)
                         for pair in self.unit_pairs], axis=axis)
-        return to_return
 
     def get_correlogram(self, **kwargs):
         kwargs['stop_at'] = self.data_opts.get('base', 'block')
@@ -499,9 +498,13 @@ class UnitPair(SpikeData):
         self.parent = unit.parent
         self.unit = unit
         self.pair = pair
+        self.identifier = str((unit.identifier, pair.identifier))
+        self.pair_category = ','.join([unit.neuron_type, pair.neuron_type])
         self.children = self.unit.children
 
     def get_cross_correlations(self, **kwargs):
+        for kwarg, default in zip(['axis', 'stop_at'], [0, self.data_opts.get('base', 'block')]):
+            kwargs[kwarg] = kwargs[kwarg] if kwarg in kwargs else default
         return self.get_average('get_cross_correlations', pair=self.pair, **kwargs)
 
     def get_correlogram(self, **kwargs):

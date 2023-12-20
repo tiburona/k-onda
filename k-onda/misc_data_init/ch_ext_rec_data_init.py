@@ -10,10 +10,10 @@ with open('/Users/katie/likhtik/CH_for_katie_less_conservative/single_cell_data.
     data = file.read()
     json_data = json.loads(data)
 
-neuron_classification_rule = dict(column_name='cluster_assignment', classifications={'PV_IN': [3], 'ACH': [1, 2]})
+neuron_classification_rule = dict(column_name='cluster_assignment', classifications={'PV': [3], 'ACH': [1, 2]})
 
 exp_info = dict(conditions=['arch', 'control'], identifier='CH_EXTREC', sampling_rate=30000,
-                neuron_types=['ACH', 'PV_IN'], neuron_classification_rule=neuron_classification_rule,
+                neuron_types=['ACH', 'PV'], neuron_classification_rule=neuron_classification_rule,
                 lfp_sampling_rate=2000, lfp_root='/Users/katie/likhtik/CH_for_katie_less_conservative',
                 lfp_path_constructor=['EXTREC'], lfp_electrodes={'bla': 0, 'il': 2},
                 lfp_from_stereotrodes={'nsx_num': 5, 'electrodes': {'bf':  [0, 1]}}, lost_signal=.5)

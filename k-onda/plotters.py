@@ -76,6 +76,8 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
                 self.plot_animals(group)
         elif level == 'unit':
              [self.plot_units(animal) for group in self.experiment.groups for animal in group.children]
+        elif level == 'unit_pair':
+            [self.plot_unit_pairs(unit) for unit in self.experiment.all_units]
         else:
             print('unrecognized plot type')
 
@@ -139,30 +141,40 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             subplotter.add_sem()
         self.prettify_subplot(ax, title=title, y_min=min(subplotter.y), y_max=max(subplotter.y))
 
+    def plot_unit_pairs(self, unit):
+        unit_pairs = unit.unit_pairs
+        pair_categories = set([unit_pair.pair_category for unit_pair in unit_pairs])
+        for pair_category in pair_categories:
+            data_sources = [pair for pair in unit_pairs if pair.pair_category == pair_category]
+            for i in range(0, len(data_sources), self.graph_opts['units_in_fig']):
+                self.plot_units_level_data(data_sources, i)
+                marker2 = min(i + self.graph_opts['units_in_fig'], len(data_sources))
+                self.close_plot(f"{unit.animal.identifier} {pair_category} unit {unit.identifier} pair {i + 1} to {marker2}")
+
     def plot_units(self, animal):
-        multi = 2 if self.data_type == 'psth' else 1
         for i in range(0, len(animal.children), self.graph_opts['units_in_fig']):
-            n_subplots = min(self.graph_opts['units_in_fig'], len(animal.children) - i)
-            self.fig = plt.figure(figsize=(15, 3 * multi * n_subplots))
-            self.fig.subplots_adjust(bottom=0.14)
-            gs = GridSpec(n_subplots * multi, 1, figure=self.fig)
-
-            for j in range(i, i + n_subplots):
-                if self.data_type == 'psth':
-                    axes = [self.fig.add_subplot(gs[2 * (j - i), 0]), self.fig.add_subplot(gs[2 * (j - i) + 1, 0])]
-                elif self.data_type in ['autocorr', 'spectrum', 'proportion']:
-                    axes = [self.fig.add_subplot(gs[j - i, 0])]
-                self.plot_unit(animal.children[j], axes)
-
-            self.set_units_plot_frame_and_spacing()
-
+            self.plot_units_level_data(animal.children, i)
             marker2 = min(i + self.graph_opts['units_in_fig'], len(animal.children))
             self.close_plot(f"{animal.identifier} unit {i + 1} to {marker2}")
 
-    def plot_unit(self, unit, axes):
+    def plot_units_level_data(self, data_sources, i):
+        multi = 2 if self.data_type == 'psth' else 1
+        n_subplots = min(self.graph_opts['units_in_fig'], len(data_sources) - i)
+        self.fig = plt.figure(figsize=(15, 3 * multi * n_subplots))
+        self.fig.subplots_adjust(top=0.8, bottom=.14)
+        gs = GridSpec(n_subplots * multi, 1, figure=self.fig)
+        for j in range(i, i + n_subplots):
+            if self.data_type == 'psth':
+                axes = [self.fig.add_subplot(gs[2 * (j - i), 0]), self.fig.add_subplot(gs[2 * (j - i) + 1, 0])]
+            else:
+                axes = [self.fig.add_subplot(gs[j - i, 0])]
+            self.plot_unit_level_data(data_sources[j], axes)
+        self.set_units_plot_frame_and_spacing()
+
+    def plot_unit_level_data(self, data_source, axes):
         if self.data_type == 'psth':
-            self.add_raster(unit, axes)
-        subplotter = PeriStimulusSubplotter(self, unit, self.data_opts, self.graph_opts, axes[-1])
+            self.add_raster(data_source, axes)
+        subplotter = PeriStimulusSubplotter(self, data_source, self.data_opts, self.graph_opts, axes[-1])
         plotting_func = getattr(subplotter, f"plot_{self.data_type}")
         plotting_func()
         if self.graph_opts.get('sem'):
@@ -177,8 +189,10 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         # Add a big subplot without frame and set the x and y labels for this subplot
         big_subplot = self.fig.add_subplot(111, frame_on=False)
         big_subplot.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        big_subplot.set_xlabel(self.get_labels()[self.data_type][0], labelpad=30, fontsize=14)
-        plt.subplots_adjust(hspace=0.5)  # Add space between subplots
+        big_subplot.set_xlabel(self.get_labels()[self.data_type][0], labelpad=10, fontsize=14)
+        if not self.data_type == 'psth':
+            self.set_labels(x_and_y_labels=('', self.get_labels()[self.data_type][1]))
+        self.fig.subplots_adjust(top=0.8, bottom=0.2, hspace=0.5)
 
     def get_ylim(self, ax, y_min, y_max):
         self.y_min = min(self.y_min, ax.get_ylim()[0], y_min)

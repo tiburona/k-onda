@@ -50,7 +50,6 @@ class Initializer:
         for category in ['good', 'MUA']:
             for unit_info in units_info[category]:
                 unit = Unit(animal, category, unit_info['spike_times'])
-                animal.units[category].append(unit)
                 if category == 'good':
                     classification_val = unit_info[self.neuron_classification_rule['column_name']]
                     classifications = self.neuron_classification_rule['classifications']
