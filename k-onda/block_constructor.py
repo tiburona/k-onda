@@ -9,7 +9,7 @@ class BlockConstructor:
 
     @property
     def earliest_block(self):
-        return sorted(self.all_blocks, key=lambda x: x.onset)[0]
+        return sorted([block for block in self.all_blocks if not block.is_reference], key=lambda x: x.onset)[0]
 
     def prepare_blocks(self):
         for boo, function in zip((False, True), (self.construct_blocks, self.construct_reference_blocks)):

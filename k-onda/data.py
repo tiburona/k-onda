@@ -162,8 +162,7 @@ class Data(Base):
             # Filter out nan values and arrays that are all NaN
             child_vals_filtered = [x for x in child_vals
                                    if not (isinstance(x, np.ndarray) and np.isnan(x).all())
-                                   and not (isinstance(x, float) and np.isnan(x))
-                                   and not is_empty(x)]
+                                   and not (isinstance(x, float) and np.isnan(x))]
             if axis is None:  # compute mean over all dimensions
                 return np.nanmean(np.array(child_vals_filtered))
             else:  # compute mean over provided dimension

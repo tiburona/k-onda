@@ -191,7 +191,7 @@ class Experiment(SpikeData, Subscriber):
         if name == 'neuron_type':
             if self.selected_neuron_type != self.last_neuron_type:
                 [entity.update_children() for entity in self.all_groups + self.all_animals]
-                self.last_neuron_type = self.selected_neuron_type
+                self.last_neuron_type = self.selected_neuron_type  # TODO: think about whether `last_neuron_type` should be shared among all data
 
         if name == 'block_type':
             if self.selected_block_type != self.last_block_type:

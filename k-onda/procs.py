@@ -4,7 +4,7 @@ from copy import deepcopy
 from opts_library import PSTH_OPTS, AUTOCORR_OPTS, SPECTRUM_OPTS, SPREADSHEET_OPTS, PROPORTION_OPTS, GRAPH_OPTS, \
     GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS, AC_KEYS, AC_METHODS, FIGURE_1_OPTS, LFP_OPTS, ROSE_PLOT_OPTS, \
     HEAT_MAP_DATA_OPTS, BEHAVIOR_OPTS, CAROLINA_OPTS, CAROLINA_GRAPH_OPTS, CAROLINA_GROUP_STAT_OPTS, SPONTANEOUS_OPTS, \
-    SPONTANEOUS_GRAPH_OPTS, CROSS_CORR_OPTS, SPONTANEOUS_MRL_OPTS
+    SPONTANEOUS_GRAPH_OPTS, CROSS_CORR_OPTS, SPONTANEOUS_MRL_OPTS, CAROLINA_MRL_OPTS
 from initialize_experiment import Initializer
 from stats import Stats
 from plotters import Plotter, MRLPlotter, NeuronTypePlotter, PeriStimulusPlotter, GroupStatsPlotter
@@ -265,4 +265,15 @@ def plot_spontaneous_mrl(spontaneous_opts=None, graph_opts=None):
 def plot_cross_correlations_by_unit_pair(cross_corr_opts=None, graph_opts=None):
     cross_corr_opts, graph_opts = assign_vars([cross_corr_opts, graph_opts], [CROSS_CORR_OPTS, CAROLINA_GRAPH_OPTS])
     plot(cross_corr_opts, graph_opts, levels=['unit_pair'])
+
+
+def make_carolina_mrl_plots(lfp_opts=None, graph_opts=None):
+    my_lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [CAROLINA_MRL_OPTS, CAROLINA_GRAPH_OPTS])
+    plotter = MRLPlotter(experiment, lfp=initializer.init_lfp_experiment())
+    for brain_region in my_lfp_opts['brain_regions']:
+        my_lfp_opts['brain_region'] = brain_region
+        for fb in my_lfp_opts['frequency_bands']:
+            my_lfp_opts['frequency_band'] = fb
+            copy_lfp_opts = deepcopy(my_lfp_opts)
+            plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)
 

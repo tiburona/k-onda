@@ -75,7 +75,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             for group in self.experiment.groups:
                 self.plot_animals(group)
         elif level == 'unit':
-             [self.plot_units(animal) for group in self.experiment.groups for animal in group.children]
+            [self.plot_units(animal) for group in self.experiment.groups for animal in group.children]
         elif level == 'unit_pair':
             [self.plot_unit_pairs(unit) for unit in self.experiment.all_units]
         else:
@@ -121,7 +121,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             if i < num_animals:
                 row = i // 3  # index based on 3 columns
                 col = i % 3  # index based on 3 columns
-                ax = self.axs[row, col] if nrows > 1 else self.axs[i//3]
+                ax = self.axs[row, col] if nrows > 1 else self.axs[i // 3]
                 animal = group.children[i]
                 self.make_subplot(animal, ax, f"{animal.identifier} {animal.selected_neuron_type}")
             else:
@@ -149,7 +149,8 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             for i in range(0, len(data_sources), self.graph_opts['units_in_fig']):
                 self.plot_units_level_data(data_sources, i)
                 marker2 = min(i + self.graph_opts['units_in_fig'], len(data_sources))
-                self.close_plot(f"{unit.animal.identifier} {pair_category} unit {unit.identifier} pair {i + 1} to {marker2}")
+                self.close_plot(
+                    f"{unit.animal.identifier} {pair_category} unit {unit.identifier} pair {i + 1} to {marker2}")
 
     def plot_units(self, animal):
         for i in range(0, len(animal.children), self.graph_opts['units_in_fig']):
@@ -207,7 +208,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
 
     def prettify_subplot(self, ax, title, y_min, y_max):
         self.get_ylim(ax, y_min, y_max)
-        ax.set_title(title, fontsize=17*self.multiplier)
+        ax.set_title(title, fontsize=17 * self.multiplier)
 
     def make_footer(self):
         text_vals = [('bin size', self.data_opts['bin_size']), ('selected events', self.join_events(' ')),
@@ -263,6 +264,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
 
 class PeriStimulusSubplotter(PlottingMixin):
     """Constructs a subplot of a PeriStimulusPlot."""
+
     def __init__(self, plotter, data_source, data_opts, graph_opts, ax, parent_type='standalone', multiplier=1):
         self.plotter = plotter
         self.data_source = data_source
@@ -280,10 +282,10 @@ class PeriStimulusSubplotter(PlottingMixin):
         self.ax.set_xlim(x_min, x_max)
         xticks = np.arange(x_tick_min, x_max, step=x_step)
         self.ax.set_xticks(xticks)
-        self.ax.tick_params(axis='both', which='major', labelsize=10*self.multiplier, length=5*self.multiplier,
-                            width=2*self.multiplier)
+        self.ax.tick_params(axis='both', which='major', labelsize=10 * self.multiplier, length=5 * self.multiplier,
+                            width=2 * self.multiplier)
         if self.data_type in ['spontaneous_firing', 'cross_correlations']:
-            self.ax.set_xticklabels(xticks*self.data_opts['bin_size'])
+            self.ax.set_xticklabels(xticks * self.data_opts['bin_size'])
 
         if y_min is not None and y_max is not None:
             self.ax.set_ylim(y_min, y_max)
@@ -328,7 +330,7 @@ class PeriStimulusSubplotter(PlottingMixin):
 
     def plot_autocorr(self):
         opts = self.data_opts
-        self.plot_bar(width=opts['bin_size']*.95, x_min=opts['bin_size'],  x_max=opts['max_lag']*opts['bin_size'],
+        self.plot_bar(width=opts['bin_size'] * .95, x_min=opts['bin_size'], x_max=opts['max_lag'] * opts['bin_size'],
                       num=opts['max_lag'], x_tick_min=0, x_step=self.g_opts['tick_step'], y_min=min(self.y),
                       y_max=max(self.y))
 
@@ -340,17 +342,17 @@ class PeriStimulusSubplotter(PlottingMixin):
 
     def plot_spontaneous_firing(self):  # TODO: don't hardcode period
         opts = self.data_opts
-        self.plot_bar(width=opts['bin_size'], x_min=0, x_max=int(120/self.data_opts['bin_size']), num=len(self.y),
+        self.plot_bar(width=opts['bin_size'], x_min=0, x_max=int(120 / self.data_opts['bin_size']), num=len(self.y),
                       x_tick_min=0, x_step=self.g_opts['tick_step'], y_label='Firing Rate (Spikes per Second')
 
     def plot_cross_correlations(self):
         opts = self.data_opts
-        boundary = int(opts['max_lag']/opts['bin_size'])
+        boundary = int(opts['max_lag'] / opts['bin_size'])
         tick_step = self.plotter.graph_opts['tick_step']
         self.ax.bar(np.linspace(-boundary, boundary, 2 * boundary + 1), self.y)
         tick_positions = np.arange(-boundary, boundary + 1, tick_step)
         tick_labels = np.arange(-opts['max_lag'], opts['max_lag'] + opts['bin_size'],
-                                tick_step*self.data_opts['bin_size'])
+                                tick_step * self.data_opts['bin_size'])
         self.ax.set_xticks(tick_positions)
         self.ax.set_xticklabels([f'{label:.2f}' for label in tick_labels])
 
@@ -382,7 +384,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
 
     def plot_group_stats_data(self, sig_markers=True):
         self.stats = Stats(self.experiment, self.data_opts)
-        force_recalc = self.graph_opts['force_recalc'] # TODO: this isn't doing anything.
+        force_recalc = self.graph_opts['force_recalc']  # TODO: this isn't doing anything.
         if sig_markers:
             interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
 
@@ -401,11 +403,11 @@ class GroupStatsPlotter(PeriStimulusPlotter):
                 sem = group.get_sem()
                 self.axs[row].fill_between(x, y - sem, y + sem, color=color, alpha=0.2)
 
-            self.axs[row].set_title(f"{neuron_type}", fontsize=17*self.multiplier, loc='left')
+            self.axs[row].set_title(f"{neuron_type}", fontsize=17 * self.multiplier, loc='left')
             self.axs[row].set_xticks(np.arange(self.data_opts['pre_stim'], self.data_opts['post_stim'],
-                                                   step=self.graph_opts['tick_step']))
-            self.axs[row].tick_params(axis='both', which='major', labelsize=10*self.multiplier,
-                                      length=5*self.multiplier, width=2*self.multiplier)
+                                               step=self.graph_opts['tick_step']))
+            self.axs[row].tick_params(axis='both', which='major', labelsize=10 * self.multiplier,
+                                      length=5 * self.multiplier, width=2 * self.multiplier)
             self.current_ax = self.axs[row]
             self.set_labels()
 
@@ -444,7 +446,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
         if self.plot_type == 'standalone':
             left = self.axs[0].get_position().xmin
             right = self.axs[0].get_position().xmax
-            x = left + (right-left) * x
+            x = left + (right - left) * x
 
         else:
             gridspec_position = self.grid.get_subplot_params(self.fig)
@@ -554,7 +556,7 @@ class NeuronTypePlotter(Plotter):
             waveform = phy_interface.get_mean_waveforms(cluster_id, electrodes_for_waveform[i])
             waveform = waveform[20:-20]
             if self.graph_opts.get('normalize_waveform'):
-                waveform = waveform/abs((np.max(waveform) - np.min(waveform)))
+                waveform = waveform / abs((np.max(waveform) - np.min(waveform)))
                 waveform -= np.mean(waveform)
                 y_text = 'Normalized Amplitude'
             else:
@@ -667,11 +669,11 @@ class MRLPlotter(Plotter):
             for neuron_type in self.neuron_types:
                 self.selected_neuron_type = neuron_type
                 for group in self.lfp.groups:
-                    for block_type in ['pretone', 'tone']:
+                    for block_type in self.experiment.block_types:
                         self.selected_block_type = block_type
                         data.append([neuron_type, group.identifier, block_type, group.data, group.sem, group.scatter,
                                      group.grandchildren_scatter])
-            df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Period', 'Average MRL', 'sem', 'scatter',
+            df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Block', 'Average MRL', 'sem', 'scatter',
                                              'unit_scatter'])
 
         group_order = df['Group'].unique()
@@ -681,9 +683,9 @@ class MRLPlotter(Plotter):
             g = sns.catplot(data=df, x='Group', y='Average MRL', row='Neuron Type', kind='bar',
                             height=4, aspect=1.5, dodge=False, legend=False, order=group_order)
         else:
-            period_order = ['pretone', 'tone']
-            g = sns.catplot(data=df, x='Group', y='Average MRL', hue='Period', row='Neuron Type', kind='bar',
-                            height=4, aspect=1.5, dodge=True, legend=False, hue_order=period_order, order=group_order)
+            block_order = self.graph_opts['block_order']
+            g = sns.catplot(data=df, x='Group', y='Average MRL', hue='Block', hue_order=block_order, row='Neuron Type', kind='bar',
+                            height=4, aspect=1.5, dodge=True, legend=False, order=group_order)
 
         g.set_axis_labels("", "Average MRL")
         g.fig.subplots_adjust(top=0.85, hspace=0.4, right=0.85)
@@ -692,20 +694,20 @@ class MRLPlotter(Plotter):
         for ax, neuron_type in zip(g.axes.flat, self.neuron_types):
             bars = ax.patches
             num_groups = len(group_order)
-            num_periods = len(period_order) if not data_opts.get('spontaneous') else 1
-            total_bars = num_groups * num_periods
+            num_blocks = len(block_order) if not data_opts.get('spontaneous') else 1
+            total_bars = num_groups * num_blocks
 
             for i in range(total_bars):
                 group = group_order[i % num_groups]
                 row_selector = {'Neuron Type': neuron_type, 'Group': group}
+                bar = bars[i]
+                bar.set_facecolor(self.graph_opts['group_colors'][group])
                 if not data_opts.get('spontaneous'):
-                    row_selector['Period'] = period_order[i // num_groups]
+                    block = block_order[i // num_blocks]
+                    row_selector['Block'] = block
+                    block_hatches = self.graph_opts.get('block_hatches', {'tone': '/', 'pretone': ''})
+                    bar.set_hatch(block_hatches[block])
                 row = df[(df[list(row_selector)] == pd.Series(row_selector)).all(axis=1)].iloc[0]
-
-                # Set color and hatch for spontaneous case
-                bar = bars[i]  # Get the correct bar
-                if data_opts.get('spontaneous'):
-                    bar.set_facecolor(self.graph_opts['group_colors'][group])
 
                 # Plotting the error bars and scatter points
                 bar_x = bar.get_x() + bar.get_width() / 2
@@ -721,10 +723,9 @@ class MRLPlotter(Plotter):
 
         # Additional customizations for the non-spontaneous case
         if not data_opts.get('spontaneous'):
-            period_hatches = {'pretone': '/', 'tone': None}
             legend_elements = [
-                Patch(facecolor='white', hatch=period_hatches[stage], edgecolor='black', label=stage.upper()) for stage
-                in period_order]
+                Patch(facecolor='white', hatch=block_hatches[block_type]*3, edgecolor='black', label=block_type.upper())
+                for block_type in block_order]
             g.fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, .9))
 
         # Saving the plot
@@ -733,23 +734,8 @@ class MRLPlotter(Plotter):
         self.close_plot(title)
 
     def make_footer(self):
-        pass # todo: make this do something
+        pass  # todo: make this do something
 
     def add_significance_markers(self):
         self.stats = Stats(self.experiment, self.context, self.data_opts, lfp=self.lfp)
         # TODO: implement this
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

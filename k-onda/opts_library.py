@@ -63,19 +63,20 @@ BEHAVIOR_OPTS = {'data_class': 'behavior', 'data_type': 'percent_freezing', 'row
                  'period_types': ['pretone', 'tone'], 'selected_animals': STANDARD_ANIMALS,
                  'data_path': '/Users/katie/likhtik/data'}
 
-CAROLINA_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative', 'data_type': 'psth', 'base': 'trial',
-                    'pre_stim': .05, 'post_stim': .65, 'adjustment': 'normalized', 'bin_size': 0.01, 'trials': (0, 150),
-                    'row_type': 'trial', 'periods': list(range(5)), 'period_types': ['pretone', 'tone']}
+CAROLINA_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative',
+                 'data_type': 'psth', 'base': 'trial', 'pre_stim': .05, 'post_stim': .65, 'adjustment': 'normalized',
+                 'bin_size': 0.01, 'events': (0, 300), 'row_type': 'trial', 'periods': list(range(5)),
+                 'period_types': ['pretone', 'tone']}
 
 
 CAROLINA_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4,
-                       'tick_step': 10, 'sem': False, 'footer': False, 'equal_y_scales': True,
-                       'group_colors': {'control': '#76BD4E', 'arch': '#F2A354'}, 'force_recalc': False,
+                       'tick_step': .1, 'sem': False, 'footer': False, 'equal_y_scales': True,
+                       'group_colors': {'control': '#9F9FA3', 'arch': '#32B44A'}, 'force_recalc': False,
                        'neuron_type_colors': {'PV': '#5679C7', 'ACH': '#C75B56'}, 'animal_id': 'CH272',
                        'cluster_ids': [10, 101], 'electrodes_for_waveform': [[7], [3, 5]],
                        'electrodes_for_feature': [13, 15], 'el_inds': [1, 1], 'pc_inds': [0, 1],
                        'annot_coords': (-0.11, 1.1), 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative',
-                       'normalize_waveform': True}
+                       'normalize_waveform': True, 'block_order': ['pretone', 'tone']}
 
 CAROLINA_GROUP_STAT_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment': 'normalized',
                             'time_type': 'continuous', 'pre_stim': 0.0, 'post_stim': 0.70, 'bin_size': 0.01,
@@ -90,7 +91,7 @@ SPONTANEOUS_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/CH
 
 SPONTANEOUS_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4, 'tick_step': 100,
                           'sem': False, 'footer': False, 'equal_y_scales': True,
-                          'group_colors': {'control': '#76BD4E', 'arch': '#F2A354'}, 'force_recalc': False,
+                          'group_colors': {'control': '#9F9FA3', 'arch': '#32B44A'}, 'force_recalc': False,
                           'neuron_type_colors': {'PV': '#5679C7', 'ACH': '#C75B56'}}
 
 
@@ -98,9 +99,13 @@ CROSS_CORR_OPTS = {'data_class': 'spike', 'data_type': 'cross_correlations', 'pr
                    'adjustment': 'none', 'bin_size': 0.001, 'events': (0, 300), 'periods': list(range(10)),
                    'period_types': ['pretone', 'tone'], 'unit_pairs': ['ACH,PV'], 'max_lag': .05}
 
-SPONTANEOUS_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 'spontaneous': 120,
+SPONTANEOUS_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 'spontaneous': (0, 120),
                         'events': (0, 300),  'frequency_bands': ['theta_1'], 'brain_regions': ['bla', 'il', 'bf'],
                         'sem_level': 'mrl_calculator'}
+
+CAROLINA_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 'pre_stim': 0, 'post_stim': .3,
+                     'events': (0, 300),  'frequency_bands': ['theta_1'], 'brain_regions': ['bla', 'il', 'bf'],
+                     'sem_level': 'mrl_calculator'}
 
 AC_KEYS = {
     'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',

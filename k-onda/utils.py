@@ -4,7 +4,7 @@ import os
 import shutil
 from datetime import datetime
 
-DEBUG_MODE = 0
+DEBUG_MODE = 2
 
 
 """Cache Utils"""
@@ -134,10 +134,23 @@ def get_descendants(obj, level=None):
     return descendants
 
 
+def is_iterable(obj):
+    try:
+        iter(obj)
+        return True
+    except TypeError:
+        return False
+
+
 def is_empty(container):
     if isinstance(container, list):
         return not container  # True if the list is empty
     elif isinstance(container, np.ndarray):
         return container.size == 0  # True if the NumPy array is empty
+    elif not is_iterable(container):
+        return False
     else:
         raise TypeError("Unsupported container type")
+
+
+

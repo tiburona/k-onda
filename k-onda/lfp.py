@@ -24,10 +24,6 @@ FREQUENCY_ARGS = {fb: LO_FREQ_ARGS for fb in ['delta', 'theta_1', 'theta_2', 'de
 class LFPData(Data):
 
     @property
-    def brain_region(self):
-        return self.data_opts.get('brain_region')
-
-    @property
     def frequency_bins(self):
         return [FrequencyBin(i, data_point, self) for i, data_point in enumerate(self.data)]
 
@@ -96,6 +92,8 @@ class LFPExperiment(LFPData, Subscriber):
         return events
 
     def update(self, name):
+        if self.current_brain_region == 'il':
+            a = 'foo'
         if name == 'data':
             if self.data_class == 'lfp' and self.last_brain_region != self.data_opts.get('brain_region'):
                 [animal.update_children() for animal in self.all_animals]
@@ -186,13 +184,16 @@ class LFPAnimal(LFPData, BlockConstructor):
 
     @property
     def children(self):
-        children_type = self.mrl_calculators if self.data_type == 'mrl' else self.blocks
+        kids = self.mrl_calculators if self.data_type == 'mrl' else self.blocks
         if self.data_opts.get('spontaneous'):
-            return children_type['spontaneous']
+            kids = kids['spontaneous']
         elif self.selected_block_type is not None:
-            return children_type[self.selected_block_type]
+            kids = kids[self.selected_block_type]
         else:
-            return [child for key in children_type for child in children_type[key]]
+            kids = [child for key in kids for child in kids[key]]
+        if self.data_type == 'mrl':
+            kids = [calc for calc in kids if calc.unit.neuron_type == self.selected_neuron_type]
+        return kids
 
     def __getattr__(self, name):
         # Check if 'name' is a property in the class
@@ -219,7 +220,7 @@ class LFPAnimal(LFPData, BlockConstructor):
         else:
             mrl_calculators = {block_type: [BlockMRLCalculator(unit, block=block) for block in blocks
                                             for unit in self.spike_target.units['good']]
-                               for block_type, blocks in self.all_blocks.items()}
+                               for block_type, blocks in self.blocks.items()}
         self.mrl_calculators = mrl_calculators
 
     @cache_method
@@ -287,9 +288,10 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         self.is_reference = is_reference
         start = self.onset - (self.convolution_padding[0]) * self.sampling_rate
         stop = self.onset + (self.duration + self.convolution_padding[1]) * self.sampling_rate
-        self.raw_data = self.animal.raw_lfp[self.brain_region][start:stop]
+        self.raw_data = self.animal.raw_lfp[self.current_brain_region][start:stop]
         self.processed_data = self.process_lfp(self.raw_data)
-        self.mrl_data = self.processed_data[onset:onset + self.duration * self.sampling_rate]
+        self.mrl_data = self.processed_data[self.convolution_padding[0] * self.sampling_rate:
+                                            -self.convolution_padding[1] * self.sampling_rate]
         self.parent = lfp_animal
         self._spectrogram = None
         self.last_brain_region = None
@@ -300,9 +302,9 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
 
     @property
     def spectrogram(self):
-        if self._spectrogram is None or self.brain_region != self.last_brain_region:
+        if self._spectrogram is None or self.current_brain_region != self.last_brain_region:
             self._spectrogram = self.calc_cross_spectrogram()
-            self.last_brain_region = self.brain_region
+            self.last_brain_region = self.current_brain_region
         return self._spectrogram
 
     def get_lost_signal(self):
@@ -538,14 +540,16 @@ class BlockMRLCalculator(MRLCalculator):
 
     def __init__(self, unit, block):
         super().__init__(unit)
+        self.block = block
         self.block_type = block.block_type
-        self.mrl_data = self.block.mrl_data
+        self.mrl_data = block.mrl_data
+        self.duration = block.duration
         self.identifier = f"{self.block.identifier}_{self.unit.identifier}"
+        self.parent = self.block.parent
         self.spike_block = self.unit.blocks[self.block_type][self.block.identifier]
         self.spikes = [int((spike + i) * self.sampling_rate) for i, event in enumerate(self.spike_block.events)
                        for spike in event.spikes]
         self.num_events = len(self.spikes)
-        self.parent = self.block.parent
 
     @property
     def ancestors(self):
