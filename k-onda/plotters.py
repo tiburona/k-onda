@@ -101,7 +101,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         else:
             self.set_labels()
 
-    def iterate_through_group_subdivisions(self, subdivision):
+    def iterate_through_group_subdivisions(self, subdivision):  # TODO: why do autocorr and spectrum graph these in different orders
         types_attribute = getattr(self.experiment, f"{subdivision}_types")
         for row, typ in enumerate(types_attribute):
             # Set the selected type based on the subdivision
@@ -233,14 +233,17 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
         if self.data_type in ['autocorr', 'spectrum']:
-            for key in ['ac_program', 'ac_key']:
-                tags += [self.data_opts[key]]
+            tags += [self.data_opts['ac_key']]
         if self.data_opts.get('base'):
             tags += [self.data_opts.get('base')]
         self.fname = f"{'_'.join(tags)}.png"
 
     def join_events(self, s):
-        return s.join([str(t) for t in self.data_opts['events']])
+        tag = ''
+        for key in self.data_opts:
+            if 'event' in key:
+                tag += key + '_' + s.join([str(t) for t in self.data_opts[key]])
+        return tag
 
     def set_gridspec_axes(self, fig, gridspec, numrows, numcols, invisible_ax=None):
         self.fig = fig
@@ -279,7 +282,7 @@ class PeriStimulusSubplotter(PlottingMixin):
         self.plot_type = 'subplot'
 
     def set_limits_and_ticks(self, x_min, x_max, x_tick_min, x_step, y_min=None, y_max=None):
-        self.ax.set_xlim(x_min, x_max)
+        self.ax.set_xlim(x_min, x_max)  # TODO: it would be nice if autocorrelation and cross-correlation took the same units of tick step
         xticks = np.arange(x_tick_min, x_max, step=x_step)
         self.ax.set_xticks(xticks)
         self.ax.tick_params(axis='both', which='major', labelsize=10 * self.multiplier, length=5 * self.multiplier,

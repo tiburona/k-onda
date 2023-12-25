@@ -55,10 +55,6 @@ class MatlabInterface:
 
         return result
 
-    def xcorr(self, data, lags):
-        execution_line = f"result = xcorr(data, {lags}, 'coeff');\n"
-        result = self.execute_function(data, execution_line)
-        return result
 
 
 

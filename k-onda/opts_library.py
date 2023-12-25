@@ -9,11 +9,13 @@ PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'pre_stim':
                    'bin_size': 0.01, 'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial',
                    'time': 'continuous', 'row_type': 'trial'}
 
-AUTOCORR_OPTS = {'data_class': 'spike', 'data_type': 'autocorr', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
-                 'max_lag': 99}
+AUTOCORR_OPTS = {'data_class': 'spike', 'data_type': 'autocorr', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01,
+                 'tone_events': (0, 300, 30), 'pretone_events': (0, 300, 30), 'max_lag': 99,
+                 'ac_keys': ['group_by_animal_by_unit_by_block_by_event_by_rates'], 'block_types': ['tone']}
 
-SPECTRUM_OPTS = {'data_class': 'spike', 'data_type': 'spectrum', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01, 'trials': (0, 150, 30),
-                 'max_lag': 99, 'freq_range': (3, 60)}
+SPECTRUM_OPTS = {'data_class': 'spike', 'data_type': 'spectrum', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01,
+                 'tone_events': (0, 300, 30), 'pretone_events': (0, 300, 30), 'max_lag': 99, 'freq_range': (3, 60),
+                 'ac_keys': ['group_by_animal_by_unit_by_block_by_event_by_rates'], 'block_types': ['tone']}
 
 SPREADSHEET_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
                     'pre_stim': 0.0, 'post_stim': .05, 'adjustment': 'none', 'bin_size': 0.01, 'trials': (0, 150),
@@ -47,10 +49,9 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
                  'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'hist_color': '#9678D3', 'force_recalc':
                  False}
 
-LFP_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'block',
-            'brain_region': 'hpc',  'frequency_type': 'block', 'data_type': 'power', 'fb': ['theta_1'],
-            'row_type': 'trial', 'pretone_trials': True, 'pre_stim': .3, 'post_stim': .05,
-            'frequency_band': 'theta_1', 'period_types': ['pretone', 'tone'], 'selected_animals': STANDARD_ANIMALS,
+LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
+            'brain_regions': ['bla', 'il', 'bf'],  'frequency_type': 'block', 'row_type': 'event',
+            'pretone_trials': True, 'pre_stim': 0, 'post_stim': .30, 'period_types': ['pretone', 'tone'],
             'power_deviation': False, 'wavelet': False}
 
 HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period',
@@ -95,7 +96,7 @@ SPONTANEOUS_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_c
                           'neuron_type_colors': {'PV': '#5679C7', 'ACH': '#C75B56'}}
 
 
-CROSS_CORR_OPTS = {'data_class': 'spike', 'data_type': 'cross_correlations', 'pre_stim': 0, 'post_stim': 1,
+CROSS_CORR_OPTS = {'data_class': 'spike', 'data_type': 'correlogram', 'pre_stim': 0, 'post_stim': 1,
                    'adjustment': 'none', 'bin_size': 0.001, 'events': (0, 300), 'periods': list(range(10)),
                    'period_types': ['pretone', 'tone'], 'unit_pairs': ['ACH,PV'], 'max_lag': .05}
 

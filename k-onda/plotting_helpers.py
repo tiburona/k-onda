@@ -16,7 +16,7 @@ class PlottingMixin:
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum'),
                 'spontaneous_firing': ('Time(s)', 'Firing Rate (Samples per Second)'),
                 'cross_correlations': ('Lags (s)', 'Cross-Correlation'),
-                'correlogram':  ('Lags (s)', 'Normalized Spikes')}
+                'correlogram':  ('Lags (s)', 'Spikes')}
 
     def set_labels(self, x_and_y_labels=(None, None)):
         canonical_labels = self.get_labels().get(self.data_type)

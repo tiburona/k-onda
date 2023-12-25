@@ -25,7 +25,7 @@ experiment = initializer.init_experiment()
 #  Proc Helper Functions
 ###
 
-def plot(data_opts, graph_opts, levels=None, n_types=None, sig_markers=True):
+def plot(data_opts, graph_opts, levels=None, neuron_types=None, sig_markers=True):
     if levels is None:
         plotter = GroupStatsPlotter(experiment)
         plotter.initialize(data_opts, graph_opts)
@@ -34,20 +34,11 @@ def plot(data_opts, graph_opts, levels=None, n_types=None, sig_markers=True):
     plotter = PeriStimulusPlotter(experiment)
     for level in levels:
         if level == 'animal':
-            n_types = n_types or ['PN', 'IN']
+            n_types = neuron_types or experiment.neuron_types
             for nt in n_types:
                 plotter.plot(data_opts, graph_opts, level, neuron_type=nt)
         else:
             plotter.plot(data_opts, graph_opts, level)
-
-
-def add_ac_keys_and_plot(levels, data_opts, graph_opts, ac_methods, ac_keys):
-    for program in ac_methods:
-        for level in levels:
-            keys = ac_keys.get(level, [])
-            for key in keys:
-                ac_data_opts = {'ac_key': key, 'ac_program': program, **data_opts}
-                plot(ac_data_opts, graph_opts, [level], n_types=['PN', 'IN'] if level == 'animal' else None)
 
 
 def assign_vars(variables, defaults):
@@ -62,23 +53,25 @@ def assign_vars(variables, defaults):
 ###
 
 
-def plot_autocorr_or_spectrum(levels, data_opts, graph_opts, ac_methods, ac_keys, opts_constant):
-    data_opts, graph_opts, ac_methods, ac_keys = assign_vars([data_opts, graph_opts, ac_methods, ac_keys],
-                                                             [opts_constant, GRAPH_OPTS, AC_METHODS, AC_KEYS])
-    add_ac_keys_and_plot(levels, data_opts, graph_opts, ac_methods, ac_keys)
-
-
 def plot_psth(levels, psth_opts=None, graph_opts=None):
     psth_opts, graph_opts = assign_vars([psth_opts, graph_opts], [PSTH_OPTS, CAROLINA_GRAPH_OPTS])
     plot(psth_opts, graph_opts, levels=levels)
 
 
-def plot_autocorr(levels, autocorr_opts=None, graph_opts=None, ac_methods=None, ac_keys=None):
-    plot_autocorr_or_spectrum(levels, autocorr_opts, graph_opts, ac_methods, ac_keys, AUTOCORR_OPTS)
+def plot_autocorr(levels, data_opts=None, graph_opts=None):
+    my_data_opts, graph_opts = assign_vars([data_opts, graph_opts], [AUTOCORR_OPTS, CAROLINA_GRAPH_OPTS])
+    for ac_key in my_data_opts['ac_keys']:
+        my_data_opts['ac_key'] = ac_key
+        data_opts_copy = deepcopy(my_data_opts)
+        plot(data_opts_copy, graph_opts, levels=levels)
 
 
-def plot_spectrum(levels, spectrum_opts=None, graph_opts=None, ac_methods=None, ac_keys=None):
-    plot_autocorr_or_spectrum(levels, spectrum_opts, graph_opts, ac_methods, ac_keys, SPECTRUM_OPTS)
+def plot_spectrum(levels, data_opts=None, graph_opts=None, ac_methods=None, ac_keys=None):
+    my_data_opts, graph_opts = assign_vars([data_opts, graph_opts], [SPECTRUM_OPTS, CAROLINA_GRAPH_OPTS])
+    for ac_key in my_data_opts['ac_keys']:
+        my_data_opts['ac_key'] = ac_key
+        data_opts_copy = deepcopy(my_data_opts)
+        plot(data_opts_copy, graph_opts, levels=levels)
 
 
 def plot_proportion_score(levels, proportion_opts=None, graph_opts=None):
@@ -119,7 +112,7 @@ def make_lfp_spreadsheet(lfp_opts=None):
     lfp_opts = assign_vars([lfp_opts], [LFP_OPTS])
     stats = Stats(experiment, lfp_opts[0], lfp=initializer.init_lfp_experiment())
     df_name = stats.make_dfs(lfp_opts, )
-    stats.make_spreadsheet(df_name, name_suffix='lfp_power_bla_by_period')
+    stats.make_spreadsheet(df_name)
 
 
 def make_all_mrl_spreadsheets(lfp_opts=None):

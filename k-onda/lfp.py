@@ -92,8 +92,6 @@ class LFPExperiment(LFPData, Subscriber):
         return events
 
     def update(self, name):
-        if self.current_brain_region == 'il':
-            a = 'foo'
         if name == 'data':
             if self.data_class == 'lfp' and self.last_brain_region != self.data_opts.get('brain_region'):
                 [animal.update_children() for animal in self.all_animals]
@@ -311,7 +309,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         return self.block_info['lost_signal']
 
     def get_events(self):
-        true_beginning = -self.convolution_padding + self.get_lost_signal()
+        true_beginning = self.convolution_padding[0] - self.get_lost_signal()
         starts = np.arange(true_beginning, true_beginning + self.duration + .0001, int(self.event_duration))
         time_bins = np.array(self.spectrogram[2])
         events = []

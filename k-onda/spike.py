@@ -39,7 +39,7 @@ class SpikeData(Data):
 
     @cache_method
     def get_demeaned_rates(self):
-        rates = self.get_average('get_rates')
+        rates = self.get_average('get_unadjusted_rates')
         return rates - np.mean(rates)
 
     def get_psth(self):
@@ -80,20 +80,9 @@ class SpikeData(Data):
             # appropriate key for the child, the latter portion of the parent's key
             return key[key.find(self.name):]
 
-    def _calculate_autocorrelation(self, x):
-        opts = self.data_opts
-        max_lag = opts['max_lag']
-        if not len(x):
-            return np.array([])
-        if opts['ac_program'] == 'np':
-            return trim_and_normalize_ac(np.correlate(x, x, mode='full'), max_lag)
-        elif opts['ac_program'] == 'ml':
-            ml = MatlabInterface()
-            return trim_and_normalize_ac(ml.xcorr(x, max_lag), max_lag)
-        elif opts['ac_program'] == 'pd':
-            return np.array([pd.Series(x).autocorr(lag=lag) for lag in range(max_lag + 1)])[1:]
-        else:
-            raise "unknown autocorr type"
+    def _calculate_autocorrelation(self):
+        x = self.get_demeaned_rates()
+        return trim_and_normalize_ac(np.correlate(x, x, mode='full'), self.data_opts['max_lag'])
 
     @cache_method
     def get_all_autocorrelations(self):
@@ -101,7 +90,7 @@ class SpikeData(Data):
         Recursively generates a dictionary of firing rate autocorrelation series, calculated in every permutation of
         taking the autocorrelation of the rates associated with the object, or averaging autocorrelations taken of the
         rates of an object at a lower level. For example, the 'group_by_rates' key in the dictionary will have, as a
-        value, autocorrelation of the groups average firing rate, and the 'group_by_animal_by_rates will calculate the
+        value, autocorrelation of the groups average firing rate, and the 'group_by_animal_by_rates1 will calculate the
         average of the autocorrelations of the individual animals' rates, and so on.
 
         Returns:
@@ -109,14 +98,14 @@ class SpikeData(Data):
         """
 
         # Calculate the autocorrelation of the rates for this node
-        ac_results = {f"{self.name}_by_rates": self._calculate_autocorrelation(self.get_demeaned_rates())}
+        ac_results = {f"{self.name}_by_rates": self._calculate_autocorrelation()}
 
         # Calculate the autocorrelation by children for this node, i.e. the average of the children's autocorrelations
         # We need to ask each child to calculate its autocorrelations first.
         children_autocorrs = [child.get_all_autocorrelations() for child in self.children]
 
         for key in children_autocorrs[0]:  # Assuming all children have the same autocorrelation keys
-            ac_results[f"{self.name}_by_{key}"] = np.mean(
+            ac_results[f"{self.name}_by_{key}"] = np.nanmean(
                 [child_autocorrs[key] for child_autocorrs in children_autocorrs], axis=0)
         return ac_results
 
@@ -264,7 +253,6 @@ class Unit(SpikeData, BlockConstructor):
     def __init__(self, animal, category, spike_times, neuron_type=None):
         self.animal = animal
         self.parent = animal
-        self.events = []
         self.category = category
         self.animal.units[category].append(self)
         self.identifier = str(self.animal.units[category].index(self) + 1)
@@ -272,7 +260,6 @@ class Unit(SpikeData, BlockConstructor):
         self.block_class = Block
         self.blocks = defaultdict(list)
         self.spike_times = np.array(spike_times)
-        self.events_opts = None
         self.children = None
 
     @property
@@ -297,6 +284,8 @@ class Unit(SpikeData, BlockConstructor):
             self.prepare_blocks()
         self.children = self.blocks[self.selected_block_type] if self.selected_block_type else [
             b for block_type, blocks in self.blocks.items() for b in blocks]
+        if self.data_opts.get('block_types'):
+            self.children = [child for child in self.children if child.block_type in self.data_opts['block_types']]
 
     @cache_method
     def find_spikes(self, start, stop):
@@ -304,7 +293,7 @@ class Unit(SpikeData, BlockConstructor):
 
     @cache_method
     def get_spikes_by_events(self):
-        return [event.spikes for event in self.events]
+        return [event.spikes for block in self.children for event in block.children]
 
     @cache_method
     def get_spontaneous_firing(self):
@@ -325,13 +314,15 @@ class Unit(SpikeData, BlockConstructor):
         return np.std([rate for block in self.children for rate in block.get_unadjusted_rates()
                        if block.block_type in block_types])
 
+    @cache_method
     def get_cross_correlations(self, axis=0, **kwargs):
         return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.data_opts.get('base', 'block'), **kwargs)
                         for pair in self.unit_pairs], axis=axis)
 
-    def get_correlogram(self, **kwargs):
-        kwargs['stop_at'] = self.data_opts.get('base', 'block')
-        return np.mean([pair.get_correlogram(**kwargs) for pair in self.unit_pairs], axis=kwargs['axis'])
+    @cache_method
+    def get_correlogram(self, axis=0, **kwargs):
+        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.data_opts.get('base', 'block'), **kwargs)
+                        for pair in self.unit_pairs], axis=axis)
 
 
 class Block(SpikeData):
@@ -391,10 +382,6 @@ class Block(SpikeData):
                                       [(spike / self.sampling_rate) for spike in spikes], i))
 
     @cache_method
-    def get_spikes_by_events(self):  # TODO: This method repeated for unit and block could be mixin
-        return np.array([event.spikes for event in self.events])
-
-    @cache_method
     def get_unadjusted_rates(self):
         return [event.get_unadjusted_rates() for event in self.events]
 
@@ -419,13 +406,14 @@ class Block(SpikeData):
         return cross_corr[midpoint - boundary:midpoint + boundary + 1]
 
     @cache_method
-    def get_correlogram(self, pair, num_pairs):
+    def get_correlogram(self, pair=None, num_pairs=None):
+        other = pair.blocks[self.block_type][self.identifier]
         max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = int(max_lag / bin_size)
         onset_in_secs = self.onset/self.sampling_rate
         self_spikes = [spike for spike in self.get_flattened_spikes()  # filter spikes to only include those who
                        if onset_in_secs + max_lag < spike < onset_in_secs + self.duration - max_lag]
-        return correlogram(lags, bin_size, self_spikes, pair.get_flattened_spikes(), num_pairs)
+        return correlogram(lags, bin_size, self_spikes, other.get_flattened_spikes(), num_pairs)
 
     def find_equivalent(self, unit=None):
         if unit:
@@ -472,7 +460,7 @@ class Event(SpikeData):
 
     @cache_method
     def get_all_autocorrelations(self):
-        return {'events': self._calculate_autocorrelation(self.get_demeaned_rates())}
+        return {'event_by_rates': self._calculate_autocorrelation()}
 
     def get_cross_correlations(self, pair=None):
         other = pair.blocks[self.block_type][self.block.identifier].events[self.identifier]
@@ -508,7 +496,9 @@ class UnitPair(SpikeData):
         return self.get_average('get_cross_correlations', pair=self.pair, **kwargs)
 
     def get_correlogram(self, **kwargs):
-        return self.get_average('get_correlogram', pair=self.pair, **kwargs)  # TODO: what is num_pairs
+        for kwarg, default in zip(['axis', 'stop_at'], [0, self.data_opts.get('base', 'block')]):
+            kwargs[kwarg] = kwargs[kwarg] if kwarg in kwargs else default
+        return self.get_average('get_correlogram', pair=self.pair, num_pairs=len(self.unit.unit_pairs), **kwargs)
 
 
 

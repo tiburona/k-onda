@@ -28,10 +28,11 @@ class Stats(Base):
     def rows(self):
         return self.get_rows()
 
-    def set_attributes(self, fb=None):
+    def set_attributes(self, brain_region=None, frequency_band=None):
         if self.data_class == 'lfp':
-            self.current_frequency_band = fb
-            self.data_col = f"{self.data_opts['brain_region']}_{self.current_frequency_band}_{self.data_type}"
+            self.current_brain_region = brain_region
+            self.current_frequency_band = frequency_band
+            self.data_col = f"{self.current_brain_region}_{self.current_frequency_band}_{self.data_type}"
         else:
             self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
 
@@ -54,14 +55,15 @@ class Stats(Base):
         for opts in opts_dicts:
             self.data_opts = opts
             if 'lfp' in self.data_class:
-                for fb in self.data_opts['fb']:
-                    self.make_df(fb=fb)
+                for brain_region in self.data_opts['brain_regions']:
+                    for frequency_band in self.data_opts['frequency_bands']:
+                        self.make_df(brain_region=brain_region, frequency_band=frequency_band)
             else:
                 self.make_df()
         return self.merge_dfs()
 
-    def make_df(self, fb=None):
-        self.set_attributes(fb=fb)
+    def make_df(self, brain_region=None, frequency_band=None):
+        self.set_attributes(brain_region=brain_region, frequency_band=frequency_band)
         self.opts_dicts.append(deepcopy(self.data_opts))
         name = self.set_df_name()
         df = pd.DataFrame(self.rows)
@@ -147,7 +149,7 @@ class Stats(Base):
         if 'lfp' in self.data_class:
             if self.data_type in ['mrl']:
                 level = 'mrl_calculator'
-                other_attributes += ['frequency', 'fb', 'neuron_type']
+                other_attributes += ['frequency', 'fb', 'neuron_type']  # TODO: figure out what fb should be changed to post refactor
                 inclusion_criteria.append(lambda x: x.is_valid)
             else:
                 level = self.data_opts['row_type']
@@ -159,7 +161,7 @@ class Stats(Base):
             other_attributes += ['category', 'neuron_type']
             level = self.data_opts['row_type']
 
-        if level in ['period', 'trial', 'mrl_calculator']:
+        if level in ['period', 'event', 'mrl_calculator']:
             inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'period_type') in self.data_opts.get(
                 'period_types', ['tone'])]
         if self.data_opts.get('selected_animals') is not None:
@@ -296,7 +298,7 @@ class Stats(Base):
             f.write(r_script)
 
     def write_spike_post_hoc_r_script(self):
-        error_suffix = '/unit' if self.data_opts['row_type'] == 'trial' else ''
+        error_suffix = '/unit' if self.data_opts['row_type'] == 'event' else ''
         error_suffix = error_suffix + '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else error_suffix
 
         if self.data_opts['post_hoc_type'] == 'beta':
