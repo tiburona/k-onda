@@ -390,20 +390,21 @@ class Stats(Base):
     def construct_lfp_post_hoc_results(self, results):
         return results
 
-    def write_lfp_post_hoc_r_script(self):
+    def write_lfp_post_hoc_r_script(self):  # TODO: this should really be moved to a separate R interface class so that brittle R methods are isolated
+        # TODO: why, below, are frequency band and brain region evoked with current and without on separate lines.
         prepare_df_script = f"""
         prepare_df <- function(frequency_band, brain_region, evoked=FALSE) {{
             csv_name = sprintf('mrl_%s_continuous_period_frequency_bins_wavelet_%s.csv', frequency_band, brain_region)
             csv_file = paste('{os.path.join(self.data_path, 'lfp', 'mrl')}', csv_name, sep='/')
             df <- read.csv(csv_file, comment.char="#")
 
-            factor_vars <- c('animal', 'group', 'period_type', 'neuron_type', 'unit')
+            factor_vars <- c('animal', 'group', 'block_type', 'neuron_type', 'unit')
             df[factor_vars] <- lapply(df[factor_vars], factor)
 
             mrl_column <- sym(paste0(frequency_band, "_mrl"))
 
             averaged_over_unit_result <- df %>%
-                group_by(animal, period_type, period, neuron_type, group, frequency_bin) %>%
+                group_by(animal, period_type, block, neuron_type, group, frequency_bin) %>%
                 summarize(
                     mean_mrl = mean(!!mrl_column, na.rm = TRUE)
                 ) %>%
@@ -412,10 +413,10 @@ class Stats(Base):
             data_to_return <- averaged_over_unit_result
 
             if (evoked) {{
-                pretone_data <- subset(averaged_over_unit_result, period_type == "pretone")
-                tone_data <- subset(averaged_over_unit_result, period_type == "tone")
+                pretone_data <- subset(averaged_over_unit_result, block_type == "pretone")
+                tone_data <- subset(averaged_over_unit_result, block_type == "tone")
 
-                merged_data <- merge(pretone_data, tone_data, by = setdiff(names(averaged_over_unit_result), c("mean_mrl", "period_type")))
+                merged_data <- merge(pretone_data, tone_data, by = setdiff(names(averaged_over_unit_result), c("mean_mrl", "block_type")))
                 merged_data$mrl_diff <- merged_data$mean_mrl.x - merged_data$mean_mrl.y
                 data_to_return <- merged_data
             }}
@@ -433,7 +434,7 @@ class Stats(Base):
             return(results)
         }}
 
-        data <- prepare_df('{self.current_frequency_band}', '{self.lfp.brain_region}')
+        data <- prepare_df('{self.current_frequency_band}', '{self.lfp.brain_region}')  
         evoked_data <- prepare_df('{self.frequency_band}', '{self.brain_region}', evoked=TRUE)
 
         results <- rbind(perform_tests(data), perform_tests(evoked_data, evoked=TRUE))

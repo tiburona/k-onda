@@ -66,7 +66,7 @@ def plot_autocorr(levels, data_opts=None, graph_opts=None):
         plot(data_opts_copy, graph_opts, levels=levels)
 
 
-def plot_spectrum(levels, data_opts=None, graph_opts=None, ac_methods=None, ac_keys=None):
+def plot_spectrum(levels, data_opts=None, graph_opts=None):
     my_data_opts, graph_opts = assign_vars([data_opts, graph_opts], [SPECTRUM_OPTS, CAROLINA_GRAPH_OPTS])
     for ac_key in my_data_opts['ac_keys']:
         my_data_opts['ac_key'] = ac_key

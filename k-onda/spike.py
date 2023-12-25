@@ -1,25 +1,32 @@
 from bisect import bisect_left as bs_left, bisect_right as bs_right
 from collections import defaultdict
-import pandas as pd
 import numpy as np
 
 
 from data import Data, TimeBin
 from block_constructor import BlockConstructor
 from context import Subscriber
-from matlab_interface import MatlabInterface
 from utils import cache_method
 from plotting_helpers import formatted_now
 from math_functions import calc_rates, spectrum, trim_and_normalize_ac, cross_correlation, correlogram
 
 """
-This module defines SpikeData, Experiment, Group, Animal, Unit, and event. Level inherits from Data, which defines 
-common properties and methods to data representations.  The rest of the classes inherit from SpikeData. Several of 
-SpikeData's methods are recursive, and are overwritten by the base case, most frequently Event.  
+This module defines SpikeData, Experiment, Group, Animal, Unit, Block, and Event, which comprise a hierarchical data 
+model. (It also defines UnitPair, a bit of a special case.) SpikeData inherits from Data, which defines common 
+properties and methods to data representations.  The rest of the classes inherit from SpikeData. Several of SpikeData's 
+methods call `get_average`, a method that recurses down levels of the hierarchy to each object's children, and is 
+overwritten by the base case, most frequently Event.  
 """
 
 
 class SpikeData(Data):
+
+    @property
+    def last_event_vals(self):
+        if hasattr(self, '_last_event_vals'):
+            return self._last_event_vals
+        else:
+            return self.parent.last_event_vals
 
     @property
     def time_bins(self):
@@ -30,8 +37,8 @@ class SpikeData(Data):
         return np.mean(self.data)
 
     @property
-    def autocorr_key(self):
-        return self.get_autocorr_key()
+    def autocorrelation_key(self):
+        return self.get_autocorrelation_key()
 
     @property
     def unit_pairs(self):
@@ -63,15 +70,19 @@ class SpikeData(Data):
         return self.get_average('proportion_score', stop_at=self.data_opts.get('base'))
 
     @cache_method
-    def get_autocorr(self):
-        return self.get_all_autocorrelations()[self.autocorr_key]
+    def get_autocorrelation(self):
+        return self.get_all_autocorrelations()[self.autocorrelation_key]
 
     @cache_method
     def get_spectrum(self):
         freq_range, max_lag, bin_size = (self.data_opts[opt] for opt in ['freq_range', 'max_lag', 'bin_size'])
-        return spectrum(self.get_autocorr(), freq_range, max_lag, bin_size)
+        if self.data_opts.get('average_of_the_spectra'):
+            return self.get_average('get_spectrum', stop_at=self.data_opts.get('base', 'event'))
+        else:  # spectrum of the average; this is the default
+            series = self.data_opts.get('spectrum_series', 'get_autocorrelation')
+            return spectrum(getattr(self, series)(), freq_range, max_lag, bin_size)
 
-    def get_autocorr_key(self):
+    def get_autocorrelation_key(self):
         key = self.data_opts.get('ac_key')
         if key is None:
             return key
@@ -87,26 +98,26 @@ class SpikeData(Data):
     @cache_method
     def get_all_autocorrelations(self):
         """
-        Recursively generates a dictionary of firing rate autocorrelation series, calculated in every permutation of
-        taking the autocorrelation of the rates associated with the object, or averaging autocorrelations taken of the
-        rates of an object at a lower level. For example, the 'group_by_rates' key in the dictionary will have, as a
-        value, autocorrelation of the groups average firing rate, and the 'group_by_animal_by_rates1 will calculate the
-        average of the autocorrelations of the individual animals' rates, and so on.
+        Recursively generates a dictionary of firing rate autocorrelationelation series, calculated in every permutation
+        of taking the autocorrelation of the rates associated with the object, or averaging autocorrelations taken of
+        the rates of an object at a lower level. For example, the 'group_by_rates' key in the dictionary will have, as a
+        value, autocorrelationelation of the groups average firing rate, and the 'group_by_animal_by_rates' will
+        calculate the average of the autocorrelations of the individual animals' rates, and so on.
 
         Returns:
             dict: Dictionary containing all autocorrelations.
         """
 
-        # Calculate the autocorrelation of the rates for this node
+        # Calculate the autocorrelationelation of the rates for this node
         ac_results = {f"{self.name}_by_rates": self._calculate_autocorrelation()}
 
-        # Calculate the autocorrelation by children for this node, i.e. the average of the children's autocorrelations
-        # We need to ask each child to calculate its autocorrelations first.
-        children_autocorrs = [child.get_all_autocorrelations() for child in self.children]
+        # Calculate the autocorrelationelation by children for this node, i.e. the average of the children's autocorrelationelations
+        # We need to ask each child to calculate its autocorrelationelations first.
+        children_autocorrelations = [child.get_all_autocorrelations() for child in self.children]
 
-        for key in children_autocorrs[0]:  # Assuming all children have the same autocorrelation keys
+        for key in children_autocorrelations[0]:  # Assuming all children have the same autocorrelationelation keys
             ac_results[f"{self.name}_by_{key}"] = np.nanmean(
-                [child_autocorrs[key] for child_autocorrs in children_autocorrs], axis=0)
+                [child_autocorrelations[key] for child_autocorrelations in children_autocorrelations], axis=0)
         return ac_results
 
     @cache_method
@@ -128,7 +139,9 @@ class SpikeData(Data):
 
 
 class Experiment(SpikeData, Subscriber):
-    """The experiment. Parent of groups."""
+    """The experiment. Parent of groups. Subscribes to the context and notifies its descendants in the tree when changes
+    in the context require them to update their children. Via the attributes and properties that begin with 'all'
+    maintains a comprehensive record of entities and their associated values."""
 
     name = 'experiment'
 
@@ -140,7 +153,7 @@ class Experiment(SpikeData, Subscriber):
         self.groups = groups
         self.all_groups = self.groups
         self.all_animals = [animal for group in self.groups for animal in group]
-        self.last_event_vals = None
+        self._last_event_vals = None
         self.last_neuron_type = 'uninitialized'
         self.last_block_type = 'uninitialized'
         self.selected_animals = None  # None means all animals will be included; it's the default state
@@ -169,7 +182,7 @@ class Experiment(SpikeData, Subscriber):
     def update(self, name):
         if name == 'data':
             event_vals = [self.data_opts[key] for key in ['pre_stim', 'post_stim', 'bin_size', 'events']
-                          if key in self.data_opts]
+                          if key in self.data_opts]  # Note: this may need to be changed to accommodate needing to be sensitive to different event structures for different periods
             if event_vals != self.last_event_vals:
                 [unit.update_children() for unit in self.all_units]
                 self.last_event_vals = event_vals
@@ -213,7 +226,7 @@ class Group(SpikeData):
 
 
 class Animal(SpikeData):
-    """An animal in the experiment, the child of a Group, parent of units. Updates its children, i.e., the active units
+    """An animal in the experiment, the child of a group, parent of units. Updates its children, i.e., the active units
     for analysis, when the selected neuron type is altered in the context.
 
     Note that the `units` property is not a list, but rather a dictionary with keys for different categories in list.
@@ -234,7 +247,7 @@ class Animal(SpikeData):
         self.parent = None
 
     @property
-    def unit_pairs(self):
+    def unit_pairs(self):  # TODO: is this being used for anything? Can it be deleted?
         return [pair for unit in self.units['good'] for pair in unit.pairs]
 
     def update_children(self):
@@ -245,8 +258,9 @@ class Animal(SpikeData):
 
 
 class Unit(SpikeData, BlockConstructor):
-    """A unit that was recorded from in the experiment, the child of an Animal, parent of events. Updates its events
-    when the event definitions in the context change."""
+    """A unit that was recorded from in the experiment, the child of an animal, parent of blocks. Inherits from
+    BlockConstructorUpdates to build its children. Updates its children when the `selected_block_type` or the events
+    structure (from data_opts) changes."""
 
     name = 'unit'
 
@@ -280,7 +294,7 @@ class Unit(SpikeData, BlockConstructor):
         return [UnitPair(self, other) for other in [unit for unit in self.animal if unit.identifier != self.identifier]]
 
     def update_children(self):
-        if not self.blocks:
+        if not self.blocks or self.data_opts['events'] != self.last_event_vals:
             self.prepare_blocks()
         self.children = self.blocks[self.selected_block_type] if self.selected_block_type else [
             b for block_type, blocks in self.blocks.items() for b in blocks]
@@ -315,17 +329,19 @@ class Unit(SpikeData, BlockConstructor):
                        if block.block_type in block_types])
 
     @cache_method
-    def get_cross_correlations(self, axis=0, **kwargs):
-        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.data_opts.get('base', 'block'), **kwargs)
+    def get_cross_correlations(self, axis=0):
+        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.data_opts.get('base', 'block'))
                         for pair in self.unit_pairs], axis=axis)
 
     @cache_method
-    def get_correlogram(self, axis=0, **kwargs):
-        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.data_opts.get('base', 'block'), **kwargs)
+    def get_correlogram(self, axis=0):
+        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.data_opts.get('base', 'block'))
                         for pair in self.unit_pairs], axis=axis)
 
 
 class Block(SpikeData):
+    """A block of time in the recording of a unit. The child of a unit, the parent of events."""
+
     name = 'block'
 
     def __init__(self, unit, index, block_type, block_info, onset, events=None, paired_block=None, is_reference=False):
@@ -386,34 +402,8 @@ class Block(SpikeData):
         return [event.get_unadjusted_rates() for event in self.events]
 
     @cache_method
-    def get_flattened_rates(self):
-        return [rate for event in self.get_unadjusted_rates() for rate in event]
-
-    @cache_method
-    def get_flattened_spikes(self):
-        return [spike for event in self.events for spike in event.spikes_original_times]
-
-    @cache_method
     def mean_firing_rate(self):
         return np.mean(self.get_unadjusted_rates())
-
-    @cache_method
-    def get_cross_correlations(self, pair=None):
-        other = pair.blocks[self.block_type][self.identifier]
-        cross_corr = cross_correlation(self.get_flattened_rates(), other.get_flattened_rates(), mode='full')
-        boundary = int(self.data_opts['max_lag'] / self.data_opts['bin_size'])
-        midpoint = cross_corr.size // 2
-        return cross_corr[midpoint - boundary:midpoint + boundary + 1]
-
-    @cache_method
-    def get_correlogram(self, pair=None, num_pairs=None):
-        other = pair.blocks[self.block_type][self.identifier]
-        max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
-        lags = int(max_lag / bin_size)
-        onset_in_secs = self.onset/self.sampling_rate
-        self_spikes = [spike for spike in self.get_flattened_spikes()  # filter spikes to only include those who
-                       if onset_in_secs + max_lag < spike < onset_in_secs + self.duration - max_lag]
-        return correlogram(lags, bin_size, self_spikes, other.get_flattened_spikes(), num_pairs)
 
     def find_equivalent(self, unit=None):
         if unit:
@@ -473,12 +463,18 @@ class Event(SpikeData):
         max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = int(max_lag/bin_size)
         return correlogram(lags, bin_size, self.spikes, pair.spikes, num_pairs)
+    
+    def get_autocorrelogram(self):
+        max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
+        lags = int(max_lag / bin_size)
+        return correlogram(lags, bin_size, self.spikes, self.spikes, 1)
 
     def find_equivalent(self, unit=None):
         return self.block.find_equivalent(unit).events[self.identifier]
 
 
 class UnitPair(SpikeData):
+    """A pair of two units for the purpose of calculating cross-correlations or correlograms."""
 
     name = 'unit_pair'
 

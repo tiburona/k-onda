@@ -6,9 +6,6 @@ from math_functions import sem
 from utils import cache_method, is_empty
 
 
-
-
-
 class Base:
 
     context = experiment_context
