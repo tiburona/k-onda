@@ -185,7 +185,7 @@ class Experiment(SpikeData, Subscriber):
                           if key in self.data_opts]  # Note: this may need to be changed to accommodate needing to be sensitive to different event structures for different periods
             if event_vals != self.last_event_vals:
                 [unit.update_children() for unit in self.all_units]
-                self.last_event_vals = event_vals
+                self._last_event_vals = event_vals
             if self.data_opts.get('selected_animals') != self.selected_animals:
                 [group.update_children() for group in self.groups]
                 self.selected_animals = self.data_opts.get('selected_animals')

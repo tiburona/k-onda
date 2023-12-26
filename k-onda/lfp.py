@@ -60,7 +60,9 @@ class LFPExperiment(LFPData, Subscriber):
     def __init__(self, experiment, info, raw_lfp):
         self.experiment = experiment
         self.subscribe(experiment_context)
+        self.lfp_root = info['lfp_root']
         self._sampling_rate = info['lfp_sampling_rate']
+        self.lost_signal = info['lost_signal']  # TODO: this is going to need to get more granular at some point but I haven't yet seen an analysis with multiple mtcsg args
         self.all_animals = [LFPAnimal(animal, raw_lfp[animal.identifier], self._sampling_rate)
                             for animal in self.experiment.all_animals]
         self.groups = [LFPGroup(group, self) for group in self.experiment.groups]
@@ -120,6 +122,7 @@ class LFPGroup(LFPData):
         self.children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
         for animal in self.children:
             animal.parent = self
+            animal.group = self
 
     @property
     def mrl_calculators(self):
@@ -179,6 +182,8 @@ class LFPAnimal(LFPData, BlockConstructor):
         self.block_class = LFPBlock
         self.blocks = defaultdict(list)
         self.mrl_calculators = defaultdict(list)
+        self.parent = None
+        self.group = None
 
     @property
     def children(self):
@@ -290,9 +295,9 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         self.processed_data = self.process_lfp(self.raw_data)
         self.mrl_data = self.processed_data[self.convolution_padding[0] * self.sampling_rate:
                                             -self.convolution_padding[1] * self.sampling_rate]
-        self.parent = lfp_animal
         self._spectrogram = None
         self.last_brain_region = None
+        self.experiment = self.animal.group.experiment
 
     @property
     def events(self):
@@ -306,11 +311,12 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         return self._spectrogram
 
     def get_lost_signal(self):
-        return self.block_info['lost_signal']
+        return self.animal.parent.experiment.lost_signal
 
     def get_events(self):
         true_beginning = self.convolution_padding[0] - self.get_lost_signal()
-        starts = np.arange(true_beginning, true_beginning + self.duration + .0001, int(self.event_duration))
+        duration = self.event_duration if self.event_duration else self.event_duration
+        starts = np.arange(true_beginning, true_beginning + self.duration + .0001, duration)
         time_bins = np.array(self.spectrogram[2])
         events = []
         epsilon = 1e-6  # a small offset to avoid floating-point rounding issues
@@ -330,12 +336,17 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
 
     def calc_cross_spectrogram(self):
         arg_set = FREQUENCY_ARGS[self.current_frequency_band]
-        pickle_path = os.path.join(self.data_opts['data_path'], 'lfp', '_'.join(
+        lfp_dir = os.path.join(self.experiment.lfp_root, 'lfp')
+        pickle_dir = os.path.join(lfp_dir, 'pkls')
+        pickle_path = os.path.join(pickle_dir, '_'.join(
             [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] +
             [self.block_type, str(self.identifier)]) + '.pkl')
         if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
             with open(pickle_path, 'rb') as f:
                 return pickle.load(f)
+        for p in [lfp_dir, pickle_dir]:
+            if not os.path.exists(p):
+                os.mkdir(p)
         ml = MatlabInterface()
         result = ml.mtcsg(self.processed_data, *FREQUENCY_ARGS[self.current_frequency_band])
         with open(pickle_path, 'wb') as f:
