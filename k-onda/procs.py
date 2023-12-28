@@ -157,7 +157,6 @@ def make_mrl_plots(lfp_opts=None, graph_opts=None):
             plotter.mrl_vals_plot(copy_lfp_opts, graph_opts)
 
 
-
 def make_mrl_heat_maps(lfp_opts=None, graph_opts=None):
     for brain_region in ['pl', 'bla', 'hpc']:
         my_lfp_opts, graph_opts = assign_vars([lfp_opts, graph_opts], [HEAT_MAP_DATA_OPTS, GRAPH_OPTS])

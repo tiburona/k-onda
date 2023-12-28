@@ -144,7 +144,7 @@ class Stats(Base):
           collect the rows of data.
         """
 
-        other_attributes = ['period_type']
+        other_attributes = ['block_type']
         inclusion_criteria = []
         if 'lfp' in self.data_class:
             if self.data_type in ['mrl']:
@@ -161,9 +161,9 @@ class Stats(Base):
             other_attributes += ['category', 'neuron_type']
             level = self.data_opts['row_type']
 
-        if level in ['period', 'event', 'mrl_calculator']:
-            inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'period_type') in self.data_opts.get(
-                'period_types', ['tone'])]
+        if level in ['block', 'event', 'mrl_calculator']:
+            inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'block_type') in self.data_opts.get(
+                'block_types', ['tone'])]
         if self.data_opts.get('selected_animals') is not None:
             inclusion_criteria += [lambda x: find_ancestor_id(x, 'animal') in self.data_opts['selected_animals']]
 
@@ -260,6 +260,8 @@ class Stats(Base):
                 path = os.path.join(path, 'lfp', self.data_type)
             else:
                 path = os.path.join(path, self.data_type)
+        if not os.path.exists(path):
+            os.mkdir(path)
         name_suffix = name_suffix if name_suffix is not None else self.name_suffix
         self.spreadsheet_fname = os.path.join(path, df_name + '_' + name_suffix + '.csv')
         if os.path.exists(self.spreadsheet_fname) and not force_recalc:

@@ -52,7 +52,7 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
 LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
             'brain_regions': ['bla', 'il', 'bf'],  'frequency_type': 'block', 'row_type': 'event',
             'pretone_trials': True, 'pre_stim': 0, 'post_stim': .30, 'period_types': ['pretone', 'tone'],
-            'power_deviation': False, 'wavelet': False}
+            'power_deviation': False, 'wavelet': False, 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative'}
 
 HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period',
                       'brain_region': 'hpc', 'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl',
