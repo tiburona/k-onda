@@ -3,7 +3,7 @@ HPC_REPLICATION_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174',
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'events': (0, 300),
              'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time_type': 'continuous',
-             'data_path': '/Users/katie/likhtik/data', 'row_type': 'event'}
+             'data_path': '/Users/katie/likhtik/data', 'row_type': 'event', 'levels': ['group']}
 
 PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'pre_stim': 0.05, 'post_stim': 0.65,
                    'bin_size': 0.01, 'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial',
@@ -118,4 +118,7 @@ AC_KEYS = {
 ALL_AC_METHODS = ['np', 'ml', 'pd']
 
 AC_METHODS = ['np']
+
+TEST_RUNNER_OPTS = {'data_opts': PSTH_OPTS, 'graph_opts': CAROLINA_GRAPH_OPTS}
+
 

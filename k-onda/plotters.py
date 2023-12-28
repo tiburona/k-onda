@@ -67,8 +67,9 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
         self.multiplier = 1 if self.plot_type == 'standalone' else 0.5
 
-    def plot(self, data_opts, graph_opts, level=None, neuron_type=None):
+    def plot(self, data_opts, graph_opts, neuron_type=None):
         self.initialize(data_opts, graph_opts, neuron_type)
+        level = self.data_opts['level']
         if level == 'group':
             self.plot_groups()
         elif level == 'animal':
@@ -215,9 +216,8 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
                      ('time generated', formatted_now())]
         [text_vals.append((k, self.data_opts[k])) for k in ['adjustment, average_method'] if k in self.data_opts]
         text = '  '.join([f"{k}: {v}" for k, v in text_vals])
-        if self.data_type in ['autocorr', 'spectrum']:
-            ac_vals = [('program', self.data_opts['ac_program']),
-                       ('method', self.data_opts['ac_key'])]
+        if self.data_type in ['autocorr', 'spectrum']:  # TODO update this with changes made to autocorrelation and spetrum
+            ac_vals = [('method', self.data_opts['ac_key'])]
             ac_text = '  '.join([f"{k}: {v}" for k, v in ac_vals])
             text = f"{text}\n{ac_text}"
         self.fig.text(0.5, 0.02, text, ha='center', va='bottom', fontsize=15)
@@ -232,7 +232,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             tags += [self.selected_neuron_type]
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
-        if self.data_type in ['autocorr', 'spectrum']:
+        if self.data_type in ['autocorrelation', 'spectrum']:
             tags += [self.data_opts['ac_key']]
         if self.data_opts.get('base'):
             tags += [self.data_opts.get('base')]
