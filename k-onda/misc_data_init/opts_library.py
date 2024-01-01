@@ -3,19 +3,18 @@ HPC_REPLICATION_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174',
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01, 'events': (0, 300),
              'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time_type': 'continuous',
-             'data_path': '/Users/katie/likhtik/data', 'row_type': 'event', 'levels': ['group']}
+             'data_path': '/Users/katie/likhtik/data', 'row_type': 'event', 'levels': ['unit']}
 
 PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'pre_stim': 0.05, 'post_stim': 0.65,
                    'bin_size': 0.01, 'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial',
                    'time': 'continuous', 'row_type': 'trial'}
 
 AUTOCORR_OPTS = {'data_class': 'spike', 'data_type': 'autocorr', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01,
-                 'tone_events': (0, 300, 30), 'pretone_events': (0, 300, 30), 'max_lag': 99,
-                 'ac_keys': ['group_by_animal_by_unit_by_block_by_event_by_rates'], 'block_types': ['tone']}
+                 'tone_events': (0, 300, 30), 'pretone_events': (0, 300, 30), 'max_lag': 99, 'block_types': ['tone']}
 
 SPECTRUM_OPTS = {'data_class': 'spike', 'data_type': 'spectrum', 'pre_stim': 0.0, 'post_stim': 30.0, 'bin_size': 0.01,
                  'tone_events': (0, 300, 30), 'pretone_events': (0, 300, 30), 'max_lag': 99, 'freq_range': (3, 60),
-                 'ac_keys': ['group_by_animal_by_unit_by_block_by_event_by_rates'], 'block_types': ['tone']}
+                 'block_types': ['tone']}
 
 SPREADSHEET_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
                     'pre_stim': 0.0, 'post_stim': .05, 'adjustment': 'none', 'bin_size': 0.01, 'trials': (0, 150),
@@ -51,12 +50,12 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
 
 LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
             'brain_regions': ['bla', 'il', 'bf'],  'frequency_type': 'block', 'row_type': 'event',
-            'pretone_trials': True, 'pre_stim': 0, 'post_stim': .30, 'period_types': ['pretone', 'tone'],
+            'pre_stim': 0, 'post_stim': .30, 'period_types': ['pretone', 'tone'],
             'power_deviation': False, 'wavelet': False, 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative'}
 
 HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period',
                       'brain_region': 'hpc', 'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl',
-                      'row_type': 'frequency_bin', 'pretone_trials': True, 'pre_stim': 0, 'post_stim': 0.3,
+                      'row_type': 'frequency_bin', 'pre_stim': 0, 'post_stim': 0.3,
                       'trials': (0, 150), 'adjustment': 'relative', 'frequency_band': (0, 70)}
 
 
@@ -108,17 +107,12 @@ CAROLINA_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 
                      'events': (0, 300),  'frequency_bands': ['theta_1'], 'brain_regions': ['bla', 'il', 'bf'],
                      'sem_level': 'mrl_calculator'}
 
-AC_KEYS = {
-    'group':  ['group_by_animal_by_unit_by_trials', 'group_by_animal_by_unit_by_rates', 'group_by_animal_by_rates',
-               'group_by_rates'],
-    'animal': ['animal_by_unit_by_trials', 'animal_by_unit_by_rates', 'animal_by_rates'],
-    'unit': ['unit_by_trials', 'unit_by_rates']
-}
-
-ALL_AC_METHODS = ['np', 'ml', 'pd']
-
-AC_METHODS = ['np']
 
 TEST_RUNNER_OPTS = {'data_opts': PSTH_OPTS, 'graph_opts': CAROLINA_GRAPH_OPTS}
+
+TEST_LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
+            'brain_regions': ['bla', 'il', 'bf'],  'frequency_type': 'block', 'row_type': 'event',
+            'pre_stim': 0, 'post_stim': .30, 'power_deviation': False, 'wavelet': False,
+                 'matlab_configuration': {'matlab_path': '/Applications/MATLAB_R2022a.app/bin/matlab'}}
 
 

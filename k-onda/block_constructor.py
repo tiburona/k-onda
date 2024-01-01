@@ -24,10 +24,10 @@ class BlockConstructor:
     def construct_blocks(self, block_type, block_info):
         blocks = []
         num_events = len([event for events_list in block_info['events'] for event in events_list])  # all the events for this block type
-        if self.data_opts is not None and self.data_opts.get(f"{block_type}_events"):
-            events = slice(*self.data_opts.get(f"{block_type}_events"))  # the events used in this data analysis
+        if self.data_opts is not None and self.data_opts.get(f"{block_type}_event_selection"):
+            events = slice(*self.data_opts.get(f"{block_type}_event_selection"))  # the events used in this data analysis
         else:
-            events = slice(*(0, num_events))
+            events = slice(*(0, num_events))  # default is to take all events
         selected_event_indices = list(range(num_events))[events]  # indices of the events used in this data analysis
         block_onsets = block_info['onsets']  # the time stamp of the beginning of a block
         block_events = block_info['events']  # the time stamps of things that happen within the block

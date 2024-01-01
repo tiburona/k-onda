@@ -1,23 +1,20 @@
-import cProfile
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 import numpy as np
 
 from plotters import Plotter, PeriStimulusPlotter, GroupStatsPlotter
 from phy_interface import PhyInterface
-from initialize_experiment import experiment as expt, data_type_context as dt_context, neuron_type_context as nt_context, \
-    period_type_context as pt_context
-from opts_library import FIGURE_1_OPTS, PSTH_OPTS, PROPORTION_OPTS, GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS
+from initialize_experiment import Initializer
+from misc_data_init.opts_library import FIGURE_1_OPTS, PSTH_OPTS, PROPORTION_OPTS, GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS
 
 plt.rcParams['font.family'] = 'Arial'
+expt = Initializer.init_experiment('<need to add Itamar config here>')
 
 
 class Figure(Plotter):
     """A class to create a three row figure for the safety paper."""
-    def __init__(self, experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=None,
-                 plot_type='standalone'):
-        super().__init__(experiment, data_type_context, neuron_type_context, period_type_context, graph_opts=graph_opts,
-                         plot_type=plot_type)
+    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
         self.fig = plt.figure()
         self.grid = GridSpec(3, 1, height_ratios=[3, 4, 4])
         self.rows = []
@@ -144,7 +141,7 @@ class Figure(Plotter):
         return ax1
 
 
-figure = Figure(expt, dt_context, nt_context, pt_context, FIGURE_1_OPTS)
+figure = Figure(expt, FIGURE_1_OPTS)
 # cProfile.run('figure.spike_data_figure()', 'output.prof')
 figure.spike_data_figure()
 

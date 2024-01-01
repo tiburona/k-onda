@@ -7,8 +7,8 @@ import time
 
 class MatlabInterface:
 
-    def __init__(self):
-        self.base_directory = '/Users/katie/likhtik/data/temp'
+    def __init__(self, config):
+        self.base_directory = f'/Users/katie/likhtik/data/temp'
         self.data_file_path = ''
         self.script_file_path = ''
         self.result_file_path = ''

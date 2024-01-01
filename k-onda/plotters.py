@@ -37,12 +37,11 @@ class Plotter(Base):
         self.invisible_ax = None
         self.grid = None
 
-    def initialize(self, data_opts, graph_opts, neuron_type=None, block_type=None):
-        """Both initializes values on self and sets values for the contexts and all the contexts' subscribers."""
+    def initialize(self, data_opts, graph_opts, neuron_type=None):
+        """Both initializes values on self and sets values for the context."""
         self.graph_opts = graph_opts
-        self.data_opts = data_opts  # Sets data_opts for all subscribers to data_type_context
+        self.data_opts = data_opts  # Sets data_opts for all subscribers to context
         self.selected_neuron_type = neuron_type
-        self.selected_block_type = block_type
 
     def close_plot(self, basename):
         self.set_dir_and_filename(basename)
@@ -90,8 +89,6 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
 
     def plot_groups_data(self):
         subdivision = 'block' if self.data_type in ['cross_correlations', 'correlogram'] else 'neuron'
-        if self.data_type in ['psth']:
-            self.selected_block_type = self.data_opts.get('data_block_type', 'tone')
         self.iterate_through_group_subdivisions(subdivision)
         self.set_y_scales()
         if self.data_type not in ['spontaneous_firing', 'cross_correlations']:
@@ -470,34 +467,6 @@ class PiePlotter(Plotter):
     """Constructs a pie chart of up- or down-regulation of individual neurons"""
 
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
-
-    def plot_unit_pie_chart(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts, neuron_type=None)
-        labels = ['Up', 'Down', 'No Change']
-        colors = ['red', 'yellow', 'orange']
-
-        for nt in [None, 'PN', 'IN']:
-            self.selected_neuron_type = nt
-            for group in self.experiment.groups:
-                if nt:
-                    units = [unit for unit in self.experiment.all_units
-                             if (unit.neuron_type == nt and unit.animal.condition == group.identifier)]
-                else:
-                    units = self.experiment.all_units
-                sizes = [len([unit for unit in units if unit.upregulated_to_pip() == num]) for num in [1, -1, 0]]
-
-                self.fig = plt.figure()
-                plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%')
-                plt.axis('equal')
-                self.close_plot(f'{group.identifier}_during_pip')
-
-
-class SpontaneousFiringPlotter(Plotter):
-    """Constructs a pie chart of up- or down-regulation of individual neurons"""
-
-    def __init__(self, experiment, graph_opts=None,
-                 plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_unit_pie_chart(self, data_opts, graph_opts):

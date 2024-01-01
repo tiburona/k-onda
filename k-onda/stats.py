@@ -28,46 +28,19 @@ class Stats(Base):
     def rows(self):
         return self.get_rows()
 
-    def set_attributes(self, brain_region=None, frequency_band=None):
+    def set_attributes(self, data_opts):
+        self.data_opts = data_opts
         if self.data_class == 'lfp':
-            self.current_brain_region = brain_region
-            self.current_frequency_band = frequency_band
             self.data_col = f"{self.current_brain_region}_{self.current_frequency_band}_{self.data_type}"
         else:
             self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
 
-    def make_dfs(self, opts_dicts):
-        """
-         Constructs one or more DataFrames based on the provided options dictionaries.
-
-         The function iterates over each options dictionary in `opts_dicts`, sets the object's `data_opts` attribute,
-         and then calls the `self.make_df` method to create a DataFrame. If the data class includes 'lfp', the function
-         creates a DataFrame for each frequency band specified in the options. Otherwise, it creates a single DataFrame
-         based on the object's data type. After constructing all DataFrames, it calls `self.merge_dfs` to merge them.
-
-         Parameters:
-         - opts_dicts (list of dict): A list of dictionaries, where each dictionary contains options that influence how
-           the DataFrame is constructed.
-
-         Returns:
-         DataFrame: A merged DataFrame constructed based on the provided options dictionaries and the object's attributes.
-         """
-        for opts in opts_dicts:
-            self.data_opts = opts
-            if 'lfp' in self.data_class:
-                for brain_region in self.data_opts['brain_regions']:
-                    for frequency_band in self.data_opts['frequency_bands']:
-                        self.make_df(brain_region=brain_region, frequency_band=frequency_band)
-            else:
-                self.make_df()
-        return self.merge_dfs()
-
-    def make_df(self, brain_region=None, frequency_band=None):
-        self.set_attributes(brain_region=brain_region, frequency_band=frequency_band)
+    def make_df(self, data_opts):
+        self.set_attributes(data_opts)
         self.opts_dicts.append(deepcopy(self.data_opts))
         name = self.set_df_name()
         df = pd.DataFrame(self.rows)
-        vs = ['unit_num', 'animal', 'category', 'group', 'two_way_split', 'three_way_split', 'frequency']
+        vs = ['unit_num', 'animal', 'category', 'group', 'frequency']
         for var in vs:
             if var in df:
                 df[var] = df[var].astype('category')
@@ -78,7 +51,7 @@ class Stats(Base):
     def set_df_name(self):
         name = self.data_type
         if 'lfp' in self.data_class:
-            name += f"_{self.data_opts['brain_region']}_{self.current_frequency_band}"
+            name += f"_{self.current_brain_region}_{self.current_frequency_band}"
         return name
 
     def merge_dfs(self):
@@ -230,7 +203,7 @@ class Stats(Base):
 
         return rows
 
-    def make_spreadsheet(self, df_name=None, path=None, force_recalc=True, name_suffix=None):
+    def make_spreadsheet(self, path=None, filename=None, force_recalc=True):
         """
         Creates a spreadsheet (CSV file) from a specified DataFrame stored within the object.
 
@@ -238,41 +211,38 @@ class Stats(Base):
         the file already exists and `force_recalc` is set to False, the function will not overwrite the existing file.
 
         Parameters:
-        - df_name (str, optional): Name of the DataFrame to be written to the spreadsheet. Defaults to the object's
-          `data_type` attribute if not provided.
         - path (str, optional): Directory path where the spreadsheet should be saved. If not provided, it defaults to
           the `data_path` attribute from the object's `data_opts`.
+        - filename (str, optional): Name of the CSV file.  Will be generated automatically if absent.
         - force_recalc (bool, optional): If set to True, the function will overwrite an existing file with the same
           name. Defaults to True.
-        - name_suffix (str, optional): String to append to a spreadsheet name to allow writing multiple similar files to
-          the same directory.  Defaults to None, which means a random six character string will be written to the file.
 
         Returns:
         None: The function saves the spreadsheet to the specified path and updates the `spreadsheet_fname` attribute
            of the object.
         """
-        if not len(self.dfs):
+        if len(self.dfs):
+            df_name = self.merge_dfs()
+        else:
             self.make_df()
-        df_name = df_name if df_name else self.data_type
-        if not path:
-            path = self.data_opts.get('data_path')
-            if 'mrl' in df_name or 'power' in df_name:
-                path = os.path.join(path, 'lfp', self.data_type)
-            else:
-                path = os.path.join(path, self.data_type)
+            df_name = self.data_type
+        if path is None:
+            path = self.data_opts['data_path']
+        path = os.path.join(path, self.data_type)
         if not os.path.exists(path):
             os.mkdir(path)
-        name_suffix = name_suffix if name_suffix is not None else self.name_suffix
-        self.spreadsheet_fname = os.path.join(path, df_name + '_' + name_suffix + '.csv')
+        if filename:
+            self.spreadsheet_fname = filename
+        else:
+            self.spreadsheet_fname = os.path.join(path, df_name + '.csv')
         if os.path.exists(self.spreadsheet_fname) and not force_recalc:
             return
         try:
             with open(self.spreadsheet_fname, 'w', newline='') as f:
                 self.write_csv(f, df_name)
-        except OSError:
+        except OSError:  # automatically generated name is too long
             self.spreadsheet_fname = self.spreadsheet_fname[0:75] + self.name_suffix
-            if name_suffix != self.name_suffix:
-                self.spreadsheet_fname += name_suffix
+            self.spreadsheet_fname += self.name_suffix
             self.spreadsheet_fname += '.csv'
             with open(self.spreadsheet_fname, 'w', newline='') as f:
                 self.write_csv(f, df_name)

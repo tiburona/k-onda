@@ -347,7 +347,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         for p in [lfp_dir, pickle_dir]:
             if not os.path.exists(p):
                 os.mkdir(p)
-        ml = MatlabInterface()
+        ml = MatlabInterface(self.data_opts['matlab_configuration'])
         result = ml.mtcsg(self.processed_data, *FREQUENCY_ARGS[self.current_frequency_band])
         with open(pickle_path, 'wb') as f:
             pickle.dump(result, f)
@@ -366,7 +366,6 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
 
     @cache_method
     def get_power_deviations(self, moving_window=.15):
-        print(self.identifier, self.animal.identifier)
         parent_mean = self.parent.mean_data
         parent_sd = self.parent.sd_data
         moving_avgs = np.zeros(int(self.duration/.01))

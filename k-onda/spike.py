@@ -37,10 +37,6 @@ class SpikeData(Data):
         return np.mean(self.data)
 
     @property
-    def autocorrelation_key(self):
-        return self.get_autocorrelation_key()
-
-    @property
     def unit_pairs(self):
         return [pair for pair in self.children.unit_pairs]
 
@@ -67,11 +63,15 @@ class SpikeData(Data):
 
     @cache_method
     def get_proportion(self):
-        return self.get_average('proportion_score', stop_at=self.data_opts.get('base'))
+        return self.get_average('proportion_score', stop_at=self.data_opts.get('base', 'event'))
 
     @cache_method
     def get_autocorrelation(self):
-        return self.get_all_autocorrelations()[self.autocorrelation_key]
+        return self.get_average('_calculate_autocorrelation', stop_at=self.data_opts.get('base'))
+
+    def _calculate_autocorrelation(self):
+        x = self.get_demeaned_rates()
+        return trim_and_normalize_ac(np.correlate(x, x, mode='full'), self.data_opts['max_lag'])
 
     @cache_method
     def get_spectrum(self):
@@ -79,46 +79,8 @@ class SpikeData(Data):
         if self.data_opts.get('average_of_the_spectra'):
             return self.get_average('get_spectrum', stop_at=self.data_opts.get('base', 'event'))
         else:  # spectrum of the average; this is the default
-            series = self.data_opts.get('spectrum_series', 'get_autocorrelation')
+            series = self.data_opts.get(   c, 'get_autocorrelation')
             return spectrum(getattr(self, series)(), freq_range, max_lag, bin_size)
-
-    def get_autocorrelation_key(self):
-        key = self.data_opts.get('ac_key')
-        if key is None:
-            return key
-        else:
-            # if self is the level being plotted, this will return the key in opts, or else it will return the
-            # appropriate key for the child, the latter portion of the parent's key
-            return key[key.find(self.name):]
-
-    def _calculate_autocorrelation(self):
-        x = self.get_demeaned_rates()
-        return trim_and_normalize_ac(np.correlate(x, x, mode='full'), self.data_opts['max_lag'])
-
-    @cache_method
-    def get_all_autocorrelations(self):
-        """
-        Recursively generates a dictionary of firing rate autocorrelationelation series, calculated in every permutation
-        of taking the autocorrelation of the rates associated with the object, or averaging autocorrelations taken of
-        the rates of an object at a lower level. For example, the 'group_by_rates' key in the dictionary will have, as a
-        value, autocorrelationelation of the groups average firing rate, and the 'group_by_animal_by_rates' will
-        calculate the average of the autocorrelations of the individual animals' rates, and so on.
-
-        Returns:
-            dict: Dictionary containing all autocorrelations.
-        """
-
-        # Calculate the autocorrelationelation of the rates for this node
-        ac_results = {f"{self.name}_by_rates": self._calculate_autocorrelation()}
-
-        # Calculate the autocorrelationelation by children for this node, i.e. the average of the children's autocorrelationelations
-        # We need to ask each child to calculate its autocorrelationelations first.
-        children_autocorrelations = [child.get_all_autocorrelations() for child in self.children]
-
-        for key in children_autocorrelations[0]:  # Assuming all children have the same autocorrelationelation keys
-            ac_results[f"{self.name}_by_{key}"] = np.nanmean(
-                [child_autocorrelations[key] for child_autocorrelations in children_autocorrelations], axis=0)
-        return ac_results
 
     @cache_method
     def upregulated(self, duration, std_dev=.5):
@@ -432,7 +394,7 @@ class Event(SpikeData):
         self.duration = self.pre_stim + self.post_stim
 
     @cache_method
-    def get_psth(self):  # default is to subtract pretone average from tone
+    def get_psth(self):  # default is to normalize
         rates = self.get_unadjusted_rates()
         if self.parent.is_reference or self.data_opts.get('adjustment') == 'none':
             return rates
