@@ -1,23 +1,27 @@
 import json
 import os
 
-from plotters import PeriStimulusPlotter, GroupStatsPlotter
+from plotters import PeriStimulusPlotter, GroupStatsPlotter, PiePlotter, NeuronTypePlotter, MRLPlotter
 from stats import Stats
 from initialize_experiment import Initializer
 
-PROCEDURE_DICT = {
-    f"plot_{data_type}": {'class': PeriStimulusPlotter, 'data_category': 'spike', 'method': 'plot'}
+peristimulus_plots = {
+    f"plot_{data_type}": {'class': PeriStimulusPlotter, 'method': 'plot'}
     for data_type in [
         'psth', 'proportion_score', 'autocorrelation', 'spectrum', 'cross_correlation,' 'autocorrelogram'
     ]}
 
+mrl_procs = {meth: {'class': MRLPlotter, 'method': meth} for meth in ['mrl_bar_plot', 'mrl_rose_plot', 'mrl_heat_map']}
+
 other_procedures = {
-    'plot_group_stats': {'class': GroupStatsPlotter, 'data_category': 'spike', 'method': 'plot_group_stats'},
-    'make_spreadsheet': {'class': Stats, 'method': 'make_df', 'follow_up': 'make_spreadsheet'}
+    'plot_group_stats': {'class': GroupStatsPlotter, 'method': 'plot_group_stats'},
+    'make_spreadsheet': {'class': Stats, 'method': 'make_df', 'follow_up': 'make_spreadsheet'},
+    'unit_upregulation_pie_chart': {'class': PiePlotter, 'method': 'unit_upreguulation_pie_chart'},
+    'neuron_type_scatterplot': {'class': NeuronTypePlotter, 'method': 'scatterplot'},
+    'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'}
 }
 
-# TODO: one idea is to make sure the Runner class keeps track of its executing classes with their name, and always checks
-# whether one exists before creating a new one.  That way all the created dfs will exist on the same stats instance
+PROCEDURE_DICT = {**peristimulus_plots, **mrl_procs, **other_procedures}
 
 
 class Runner:
@@ -57,7 +61,10 @@ class Runner:
             self.executing_instance = self.executing_instances[self.executing_class.__name__]
         else:
             self.executing_instance = self.executing_class(self.experiment, **kwargs)
-        self.executing_method = getattr(self.executing_instance, PROCEDURE_DICT[self.proc_name]['method'])
+        method = PROCEDURE_DICT[self.proc_name].get('method')
+        if method is None:
+            method = self.proc_name
+        self.executing_method = getattr(self.executing_instance, method)
         self.follow_up_method = PROCEDURE_DICT[self.proc_name].get('follow_up')
         self.get_loop_lists()
 
@@ -78,7 +85,7 @@ class Runner:
             self.graph_opts = opts.get('graph_opts', None)
 
     def get_loop_lists(self):
-        for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'ac_keys']:
+        for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs']:
             opt_list = self.current_data_opts.get(opt_list_key)
             if opt_list is not None:
                 self.loop_lists[opt_list_key] = opt_list

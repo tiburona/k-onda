@@ -14,7 +14,7 @@ from math_functions import *
 from utils import cache_method, get_ancestors
 
 
-FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
+FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(3, 6), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
                        hgamma=(70, 120))
 LO_FREQ_ARGS = (2048, 2000, 1000, 980, 2)
 FREQUENCY_ARGS = {fb: LO_FREQ_ARGS for fb in ['delta', 'theta_1', 'theta_2', 'delta_theta', 'gamma', 'hgamma']}

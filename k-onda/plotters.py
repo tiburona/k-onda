@@ -222,7 +222,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
     def set_dir_and_filename(self, basename):
         tags = [self.data_type]
         if self.data_type != 'spontaneous_firing':
-            self.dir_tags = tags + [f"events_{self.join_events('_')}"]
+            self.dir_tags = tags + [self.join_events('_')]
 
         tags.insert(0, basename)
         if self.selected_neuron_type:
@@ -349,7 +349,12 @@ class PeriStimulusSubplotter(PlottingMixin):
         opts = self.data_opts
         boundary = int(opts['max_lag'] / opts['bin_size'])
         tick_step = self.plotter.graph_opts['tick_step']
+        if self.data_source.name == 'group' and 'group_colors' in self.g_opts:
+            color = self.g_opts['group_colors'][self.data_source.identifier]
+        else:
+            color = 'black'
         self.ax.bar(np.linspace(-boundary, boundary, 2 * boundary + 1), self.y)
+        self.ax.bar(self.x, self.y, color=color)
         tick_positions = np.arange(-boundary, boundary + 1, tick_step)
         tick_labels = np.arange(-opts['max_lag'], opts['max_lag'] + opts['bin_size'],
                                 tick_step * self.data_opts['bin_size'])
@@ -376,7 +381,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
-    def plot_group_stats(self, sig_markers=True):
+    def plot_group_stats(self, data_opts, graph_opts=None, sig_markers=True):
         self.fig, self.axs = plt.subplots(2, 1, figsize=(15, 15))
         self.current_ax = None
         self.plot_group_stats_data(sig_markers=sig_markers)
@@ -469,12 +474,12 @@ class PiePlotter(Plotter):
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
-    def plot_unit_pie_chart(self, data_opts, graph_opts):
+    def unit_upregulation_pie_chart(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type=None)
         labels = ['Up', 'Down', 'No Change']
-        colors = ['red', 'yellow', 'orange']
+        colors = ['yellow', 'blue', 'green']
 
-        for nt in [None, 'PN', 'IN']:
+        for nt in self.neuron_types + [None]:
             self.selected_neuron_type = nt
             for group in self.experiment.groups:
                 if nt:
@@ -482,12 +487,12 @@ class PiePlotter(Plotter):
                              if (unit.neuron_type == nt and unit.animal.condition == group.identifier)]
                 else:
                     units = self.experiment.all_units
-                sizes = [len([unit for unit in units if unit.upregulated_to_pip() == num]) for num in [1, -1, 0]]
+                sizes = [len([unit for unit in units if unit.upregulated() == num]) for num in [1, -1, 0]]
 
                 self.fig = plt.figure()
                 plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%')
                 plt.axis('equal')
-                self.close_plot(f'{group.identifier}_during_pip')
+                self.close_plot(f'{group.identifier}')
 
 
 class NeuronTypePlotter(Plotter):
@@ -495,7 +500,7 @@ class NeuronTypePlotter(Plotter):
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
-    def scatterplot(self):
+    def scatterplot(self, _):
 
         x = [unit.fwhm_microseconds for unit in self.experiment.all_units]
         y = [unit.firing_rate for unit in self.experiment.all_units]
@@ -513,7 +518,7 @@ class NeuronTypePlotter(Plotter):
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=15)
         self.fname = f"{basename}.png"
 
-    def phy_graphs(self):
+    def plot_waveforms(self, _):
         self.fig = plt.figure()
 
         keys = ['data_path', 'animal_id', 'cluster_ids', 'electrodes_for_feature', 'electrodes_for_waveform',
@@ -563,16 +568,13 @@ class MRLPlotter(Plotter):
     def __init__(self, experiment, lfp=None, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, lfp=lfp, graph_opts=graph_opts, plot_type=plot_type)
 
-    def make_plot(self, data_opts, graph_opts, plot_type='rose'):
-        if plot_type == 'rose':
-            basename = 'rose_plot'
-            plot_func = self.make_rose_plot
-            projection = 'polar'
-        else:
-            basename = 'heat_map'
-            plot_func = self.make_heat_map
-            projection = None
+    def mrl_rose_plot(self, data_opts, graph_opts):
+        self.make_plot(data_opts, graph_opts, 'rose_plot', self.make_rose_plot, 'polar')
 
+    def mrl_heat_map(self, data_opts, graph_opts):
+        self.make_plot(data_opts, graph_opts, 'heat_map', self.make_heat_map, None)
+
+    def make_plot(self, data_opts, graph_opts, basename, plot_func, projection):
         self.initialize(data_opts, graph_opts, neuron_type=None)
         self.fig = plt.figure(figsize=(15, 15))
 
@@ -585,7 +587,7 @@ class MRLPlotter(Plotter):
 
         for i, neuron_type in enumerate(self.neuron_types):
             self.selected_neuron_type = neuron_type
-            for j, group in enumerate(self.lfp.groups):
+            for j, group in enumerate(self.lfp.groups): # TODO: think about how this should work now with multiple periods
                 if self.data_opts.get('adjustment') == 'relative':
                     self.selected_period_type = 'tone'
                     plot_func(group, self.axs[i][j], title=f"{group.identifier.capitalize()} {neuron_type}")
@@ -626,7 +628,7 @@ class MRLPlotter(Plotter):
         cbar = ax.figure.colorbar(im, ax=ax, label='MRL')
         ax.set_title(title)
 
-    def mrl_vals_plot(self, data_opts, graph_opts):
+    def mrl_bar_plot(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type=None)
 
         data = []

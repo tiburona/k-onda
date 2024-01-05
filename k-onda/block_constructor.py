@@ -43,7 +43,10 @@ class BlockConstructor:
         shift = block_info['shift']
         duration = block_info.get('duration')
         paired_blocks = self.blocks[block_info['target']]
+
         for i, paired_block in enumerate(paired_blocks):
+            if self.name == 'animal':  # if self is animal this is an lfp block
+                shift += sum(paired_block.convolution_padding)
             onset = paired_block.onset - shift * self.sampling_rate
             duration = duration if duration else paired_block.duration
             reference_block = self.block_class(self, i, block_type, block_info, onset, paired_block=paired_block,

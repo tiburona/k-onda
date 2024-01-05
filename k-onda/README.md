@@ -39,27 +39,46 @@ def main():
 
 ### Procedures you can run
 
-All plotting functions can generate plots at multiple levels of the data hierarchy -- usually Group, Animal, and Unit. 
-The higher levels are averaged over the lower ones.
+### Plots
+
+The plotting functions that have the form plot_<data_type> can generate plots at multiple levels of the data hierarchy -- 
+Group, Animal, and Unit (or UnitPair for cross-correlation/cross-correlogram). The higher levels are averaged over the 
+lower ones. Starting with "plot_group_stats" in the following list, plots are currently enabled only at the group level.
 
 - plot_psth: plots the peri-stimulus time histogram of firing rates
 ![a sample psth plot by groups](sample_images/psth_group.png)
 - plot_autocorrelation: plots the autocorrelation of a firing rate series
-- plot_autocorrelogram: plots the Phy-style histogram of firing in the vicinity of other spikes
+- plot_autocorrelogram*: plots the Phy-style histogram of firing in the vicinity of other spikes
 - plot_spectrum: plot a frequency-domain spectrum of the time series from any other data type in the experiment
-- plot_cross_correlation: plot pairwise cross correlation of different units, either individually or averaged over types 
-of unit pairs
-- plot_cross_correlogram: plot the analogous Phy-style cross-correlogram
+- plot_cross_correlation: plot pairwise cross correlation of different units (from the same animal), either individually 
+or averaged over types of unit pairs
+- plot_cross_correlogram*: plot the analogous Phy-style cross-correlogram
 - plot_group_stats: a graph with the data series for groups overlaid on each other as line plots, and significance 
 markers to show in which time bins post hoc significance tests differ significantly from each other.
+- mrl_rose_plot: a polar histogram of angles of the LFP signal in a given frequency range at the moment at which a unit 
+fired (not strictly MRL, that is Mean Resultant Length, but rather a different way of visualizing the underlying phase 
+data -- as counts)
+- mrl_heat_map: a heat map on a grid of dimensions period x frequency, displaying frequency values at finer granularity.
+- mrl_bar_plot: a bar plot of MRL values, by group, period type, and neuron type
+- unit_upregulation_pie_chart: generates pie charts, one per group, showing the percentage of units whose data were 
+up or down regulated, or showed no change.
+- neuron_type_scatterplot: make a scatterplot of firing rate versus full-width half minimum for every unit in the 
+experiment, color-coded by neuron type.
+- plot_waveforms: make a superimposed graph of mean extracted waveforms from individual neurons, color-coded by neuron 
+type
 
-TODO: insert all the lfp options here
+There is also a [figures](/figures) directory that contains code for a custom figure (which also contains a 
+demonstration of plots extracted from Phy).
+
+### Spreadsheet
 
 - make_spreadsheet: outputs a CSV file with any combination of calculations from data from the same experiment. When 
 multiple kinds of calculations are done, they are merged into a single spreadsheet by the values they have in common.
 
-There is also a [figures](/figures) directory that contains code for a custom figure (which also contains a demonstration of 
-plots extracted from Phy, using the [PhyInterface](/phy_interface.py) class, which isn't yet integrated with the main code.
+In addition to the data types discussed in the context of plots, your spreadsheet can also include power, which is 
+extracted from the LFP raw data via the multitaper time-frequency cross spectrogram program, implemented in Matlab, and 
+behavior, which is at this writing still specific to a specific format of percent freezing data and has not yet been
+abstracted.
 
 * note that I've adopted Phy's usage of "correlogram" and it's not typical of the wider world.
 
@@ -76,12 +95,12 @@ children are Events.  Values for plots are calculated on objects, averaging over
 
 The Context class is defined in [context.py](context.py).  It keeps track of state variables like `data_opts`, 
 `neuron_type` and `period_type` and notifies subscribers when they change. Each of the three types of data, spike, lfp, 
-and behavior, has a top level experiment class, whose responsibility it is to receive notifications of relevant context 
-changes and update their descendants when necessary.  For example, when the current `neuron_type` changes to 'IN', the 
-spike experiment will be notified and call a function on all the animals in the experiment to change the constituents 
-of their `children` property to be just IN's.  This tends to me more important for making graphs and figures, which 
-aggregate data by category, as opposed to csv files. `data_opts` also contains state variables that require updating; 
-units update their constituent events depending on which events are indicated for inclusion in `data_opts`.
+and behavior, has a top level experiment class, which subscribes to notifications of context changes and updates its 
+descendants when necessary.  For example, when the current `neuron_type` changes to 'IN', the spike experiment will be 
+notified and call a function on all the animals in the experiment to change the constituents of their `children` 
+property to be just IN's.  This tends to me more important for making graphs and figures, which aggregate data by 
+category, as opposed to csv files. `data_opts` also contains state variables that require updating; units update their 
+constituent periods depending on which events are indicated for inclusion by `data_opts`.
 
 Another module which builds on the content of `data_opts` is [data.py](data.py).  Most classes in the app inherit from 
 `Base`, and nearly every class that is a data representation (e.g. `Period`, `LFPAnimal`) inherits from Data. (`TimeBin` 

@@ -75,12 +75,14 @@ class SpikeData(Data):
 
     @cache_method
     def get_spectrum(self):
+        # default: returns spectrum of data of current object; average over spectra with a different spectrum_base
+        return self.get_average('_get_spectrum', stop_at=self.data_opts.get('spectrum_base', self.name))
+
+    @cache_method
+    def _get_spectrum(self):
         freq_range, max_lag, bin_size = (self.data_opts[opt] for opt in ['freq_range', 'max_lag', 'bin_size'])
-        if self.data_opts.get('average_of_the_spectra'):
-            return self.get_average('get_spectrum', stop_at=self.data_opts.get('base', 'event'))
-        else:  # spectrum of the average; this is the default
-            series = self.data_opts.get(   c, 'get_autocorrelation')
-            return spectrum(getattr(self, series)(), freq_range, max_lag, bin_size)
+        series = self.data_opts.get('spectrum_series', 'get_autocorrelation')
+        return spectrum(getattr(self, series)(), freq_range, max_lag, bin_size)
 
     @cache_method
     def upregulated(self, duration, std_dev=.5):
@@ -143,8 +145,8 @@ class Experiment(SpikeData, Subscriber):
 
     def update(self, name):
         if name == 'data':
-            event_vals = [self.data_opts[key] for key in ['pre_stim', 'post_stim', 'bin_size', 'events']
-                          if key in self.data_opts]  # Note: this may need to be changed to accommodate needing to be sensitive to different event structures for different periods
+            event_vals = [self.data_opts[key] for key in ['pre_stim', 'post_stim', 'bin_size'] if key in self.data_opts]  # Note: this may need to be changed to accommodate needing to be sensitive to different event structures for different periods
+            event_vals += [self.data_opts[key] for key in self.data_opts if 'events' in key]
             if event_vals != self.last_event_vals:
                 [unit.update_children() for unit in self.all_units]
                 self._last_event_vals = event_vals
@@ -245,19 +247,18 @@ class Unit(SpikeData, BlockConstructor):
     @property
     def unit_pairs(self):
         all_unit_pairs = self.get_pairs()
-        pairs_to_select = self.data_opts.get('unit_pairs')
+        pairs_to_select = self.data_opts.get('unit_pair')
         if pairs_to_select is None:
             return all_unit_pairs
         else:
             return [unit_pair for unit_pair in all_unit_pairs
-                    if ','.join([unit_pair.unit.neuron_type, unit_pair.pair.neuron_type]) in pairs_to_select]
+                    if ','.join([unit_pair.unit.neuron_type, unit_pair.pair.neuron_type]) == pairs_to_select]
 
     def get_pairs(self):
         return [UnitPair(self, other) for other in [unit for unit in self.animal if unit.identifier != self.identifier]]
 
     def update_children(self):
-        if not self.blocks or self.data_opts['events'] != self.last_event_vals:
-            self.prepare_blocks()
+        self.prepare_blocks()
         self.children = self.blocks[self.selected_block_type] if self.selected_block_type else [
             b for block_type, blocks in self.blocks.items() for b in blocks]
         if self.data_opts.get('block_types'):
@@ -409,10 +410,6 @@ class Event(SpikeData):
         bin_size = self.data_opts['bin_size']
         spike_range = (-self.pre_stim, self.post_stim)
         return calc_rates(self.spikes, self.num_bins_per_event, spike_range, bin_size)
-
-    @cache_method
-    def get_all_autocorrelations(self):
-        return {'event_by_rates': self._calculate_autocorrelation()}
 
     def get_cross_correlations(self, pair=None):
         other = pair.blocks[self.block_type][self.block.identifier].events[self.identifier]

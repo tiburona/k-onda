@@ -113,11 +113,12 @@ Configuration is as for PSTH with an addition.
 "event" or "unit".  Defaults to event, so that proportion is the proportion of upregulated events.
 
 Note: it would make sense to make the definition of up- or down-regulated configurable, in which case that would become 
-an opt here.
+an opt here.  Right now upregulated means greater than 0. Also, be sure to note that the meaning of > 0 changes 
+depending on "adjustment".
 
 ```{
   "data_opts":  {"data_class": "spike", "data_type": "proportion", "pre_stim": 0.05, "post_stim": 0.65, "bin_size": 0.01,
-    "tone_event_selection": [0, 300], "adjustment": "none", "time_type": "continuous", "row_type": "event",
+    "tone_event_selection": [0, 300], "adjustment": "normalized", "time_type": "continuous", "row_type": "event",
     "levels": ["group"], "block_types": ["tone"]}
 ```
 
@@ -141,7 +142,7 @@ to 0, post_stim equal to your period duration, and make sure to select only one 
 
 ## AUTOCORRELOGRAM ##
 
-The same as for autocorrelation.  
+The same as for autocorrelation (just change "data_type" to "autocorrelogram").  
 
 ## SPECTRUM ##
 
@@ -151,9 +152,45 @@ necessary opts for the underlying calculation must be specified. 'get_psth' woul
 "freq_range": an array, or a Python iterable, indicating the endpoints of the range of frequencies through which to 
 display the spectrum. It's a good idea to start above the frequency of the stimulus or it dwarfs other variation.  If 
 you pick an upper frequency bound that's greater than the Nyquist frequency determined by the bin size, it won't cause
-an error; the higher frequencies just won't be displayed.  
+an error; the higher frequencies just won't be displayed.
+
+"spectrum_base" (optional): a string that indicates which level of the hierarchy at which to stop averaging and take the
+spectrum of the data for that object. The default behavior is to return a spectrum for the averaged data of the current 
+object, so, for instance, if you are plotting the spectrum of group data you will get a spectrum of that group's average 
+data.  If you would rather average over spectra, specify a "spectrum_base".  If you plotted group data and your 
+"spectrum_base" were "unit", you would take the spectrum of the unit average for that data, and then average over units 
+and animals to get a group value.
 
 ## CROSS-CORRELATION ##
+
+Cross-correlations are performed with NumPy mode equal to 'full'. Configuration is as for autocorrelation, with one 
+addition and one change.
+
+"max_lag": the time in seconds to display on the cross-correlation graph (for autocorrelation it was an integer, the 
+number of lags -- yes it would be great to make this consistent).
+
+"unit_pair" (or "unit_pairs"): a string (or an array/iterable of strings) of the form 'NT1,NT2' that indicates what 
+kinds of units to cross-correlate.  If, for instance, you are interested in seeing the relationship between acetycholine 
+and parvalbumin neurons, labeled ACH and PV in your experiment, "unit_pair" would be "ACH,PV" (with ACH as the fixed 
+time series and PV as the 'sliding' one).  
+
+In this example configuration, the cross-correlations between ACH and PV cells are computed both for individual unit 
+pairs and averaged over animal.  A smaller bin size and a max lag of 50 ms are used to see finer grained temporal 
+dynamics between neurons.  All period types are selected -- if you were interested in understanding how 
+cross-correlation changed via experimental condition you would take a different approach.  Adjustment is 'none' because 
+we are interested in the raw data.  Pre-stim is 0 and post-stim is 1 because our event length is one second -- in this 
+analysis we are taking all the data.
+
+```
+CROSS_CORR_OPTS = {'data_class': 'spike', 'data_type': 'cross-correlation', 'pre_stim': 0, 'post_stim': 1,
+                   'adjustment': 'none', 'bin_size': 0.001, 'levels': ['animal', 'unit_pair'], 
+                   'period_types': ['pretone', 'tone'], 'unit_pairs': ['ACH,PV'], 'max_lag': .05}
+                   
+```
+
+## CORRELOGRAM ##
+
+Same as for cross-correlation, just change "data_type" to "correlogram".
 
 # LFP ANALYSIS # 
 

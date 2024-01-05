@@ -8,8 +8,8 @@ The top-level module for calling spike processing functions.
 
 
 def main():
-    runner = Runner(config_file='/Users/katie/likhtik/CH_for_katie_less_conservative/init_config.json')
-    runner.run('plot_psth', TEST_RUNNER_OPTS)
+    runner = Runner(config_file='/Users/katie/likhtik/CH_for_katie_less_conservative/init_config.json', lfp=True)
+    runner.run('mrl_bar_plot', TEST_RUNNER_OPTS)
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 
