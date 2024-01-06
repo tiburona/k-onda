@@ -8,7 +8,10 @@ import time
 class MatlabInterface:
 
     def __init__(self, config):
-        self.base_directory = f'/Users/katie/likhtik/data/temp'
+        self.path_to_matlab = config['path_to_matlab']
+        self.paths_to_add = config.get('paths_to_add', [])
+        self.recursive_paths_to_add = config.get('recursive_paths_to_add', [])
+        self.base_directory = config['base_directory']
         self.data_file_path = ''
         self.script_file_path = ''
         self.result_file_path = ''
@@ -35,13 +38,16 @@ class MatlabInterface:
         np.savetxt(self.data_file_path, data)
         results_paths = [os.path.join(self.session_directory, result + '.txt') for result in results]
         with open(self.script_file_path, 'w') as script_file:
-            script_file.write(f"addpath(genpath('/Users/katie/likhtik'));\n")
+            for p in self.recursive_paths_to_add:
+                script_file.write(f"addpath(genpath('{p}'));\n")
+            for p in self.paths_to_add:
+                script_file.write(f"addpath('{p}');\n")
             script_file.write(f"data = load('{self.data_file_path}');\n")
             script_file.write(execution_line)
             for result in results:
                 result_path = os.path.join(self.session_directory, result + '.txt')
                 script_file.write(f"save('{result_path}', '{result}', '-ascii');\n")
-        subprocess.run(["/Applications/MATLAB_R2022a.app/bin/matlab", "-batch", f"run('{self.script_file_path}')"])
+        subprocess.run([self.path_to_matlab, "-batch", f"run('{self.script_file_path}')"])
 
         timeout = 120
         start_time = time.time()

@@ -337,7 +337,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
     def calc_cross_spectrogram(self):
         arg_set = FREQUENCY_ARGS[self.current_frequency_band]
         lfp_dir = os.path.join(self.experiment.lfp_root, 'lfp')
-        pickle_dir = os.path.join(lfp_dir, 'pkls')
+        pickle_dir = os.path.join(lfp_dir, 'spectrogram_pkls')
         pickle_path = os.path.join(pickle_dir, '_'.join(
             [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] +
             [self.block_type, str(self.identifier)]) + '.pkl')

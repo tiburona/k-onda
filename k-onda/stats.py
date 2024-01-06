@@ -11,11 +11,10 @@ from utils import find_ancestor_attribute, find_ancestor_id
 
 class Stats(Base):
     """A class to construct dataframes, write out csv files, and call R for statistical tests."""
-    def __init__(self, experiment, data_opts, lfp=None, behavior=None):
+    def __init__(self, experiment, lfp=None, behavior=None):
         self.experiment = experiment
         self.lfp = lfp
         self.behavior = behavior
-        self.data_opts = data_opts
         self.dfs = {}
         self.data_col = None
         self.spreadsheet_fname = None

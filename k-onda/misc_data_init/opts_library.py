@@ -48,10 +48,7 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
                  'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'hist_color': '#9678D3', 'force_recalc':
                  False}
 
-LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
-            'brain_regions': ['bla', 'il', 'bf'],  'frequency_type': 'block', 'row_type': 'event',
-            'pre_stim': 0, 'post_stim': .30, 'period_types': ['pretone', 'tone'],
-            'power_deviation': False, 'wavelet': False, 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative'}
+
 
 HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period',
                       'brain_region': 'hpc', 'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl',
@@ -107,12 +104,18 @@ CAROLINA_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 
                      'frequency_bands': ['theta_1'], 'brain_regions': ['bla', 'il', 'bf'],
                      'sem_level': 'mrl_calculator'}
 
+LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
+            'brain_regions': ['pl', 'hpc', 'bla'],  'frequency_type': 'block', 'row_type': 'event',
+            'pre_stim': 0, 'post_stim': .30, 'period_types': ['pretone', 'tone'],
+            'power_deviation': False, 'wavelet': False,
+            'matlab_configuration': {
+                'path_to_matlab': '/Applications/MATLAB_R2022a.app/bin/matlab',
+                'paths_to_add': [], 'recursive_paths_to_add': ['/Users/katie/likhtik/software'],
+                'base_directory': '/Users/katie/likhtik/data/temp'}}
 
 TEST_RUNNER_OPTS = {'data_opts': CAROLINA_MRL_OPTS, 'graph_opts': CAROLINA_GRAPH_OPTS}
 
-TEST_LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
-            'brain_regions': ['bla', 'il', 'bf'],  'frequency_type': 'block', 'row_type': 'event',
-            'pre_stim': 0, 'post_stim': .30, 'power_deviation': False, 'wavelet': False,
-                 'matlab_configuration': {'matlab_path': '/Applications/MATLAB_R2022a.app/bin/matlab'}}
+TEST_RUNNER_OPTS = {'data_opts': LFP_OPTS}
+
 
 

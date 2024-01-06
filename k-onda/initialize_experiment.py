@@ -3,6 +3,7 @@ import json
 import numpy as np
 from neo.rawio import BlackrockRawIO
 from scipy.signal import resample
+from copy import deepcopy
 
 from spike import Experiment, Group, Animal, Unit
 from lfp import LFPExperiment
@@ -22,7 +23,7 @@ class Initializer:
         self.conditions = self.exp_info['conditions']
         self.animals_info = self.exp_info['animals']
         self.neuron_types = self.exp_info['neuron_types']
-        self.neuron_classification_rule = self.exp_info['neuron_classification_rule']
+        self.neuron_classification_rule = self.exp_info.get('neuron_classification_rule')
         self.sampling_rate = self.exp_info['sampling_rate']
         self.experiment = None
         self.groups = None
@@ -33,16 +34,16 @@ class Initializer:
     def init_experiment(self):
         self.animals = [self.init_animal(animal_info) for animal_info in self.animals_info]
         for animal, animal_info in zip(self.animals, self.animals_info):
-            self.init_units(animal_info['units'], animal)
+            if 'units' in animal_info:
+                self.init_units(animal_info['units'], animal)
         self.groups = [
             Group(name=condition, animals=[animal for animal in self.animals if animal.condition == condition])
             for condition in self.conditions]
         self.experiment = Experiment(self.exp_info, self.groups)
         return self.experiment
 
-    def init_animal(self, animal_info):
-        animal = Animal(animal_info['identifier'], animal_info['condition'],
-                        block_info=animal_info['block_info'],
+    def init_animal(self, animal_info):  # TODO make sure animal info gets all animal info so it can pass it to lfp
+        animal = Animal(animal_info['identifier'], animal_info['condition'], animal_info=animal_info,
                         neuron_types=self.neuron_types)
         return animal
 
@@ -67,16 +68,20 @@ class Initializer:
         return self.lfp_experiment
 
     def get_raw_lfp(self, animal):
-        file_path = os.path.join(self.exp_info['lfp_root'], animal.identifier, *self.exp_info['lfp_path_constructor'])
+        path_constructor = deepcopy(self.exp_info['lfp_path_constructor'])
+        if path_constructor[-1] == 'identifier':
+            path_constructor[-1] = animal.identifier
+        file_path = os.path.join(self.exp_info['lfp_root'], animal.identifier, *path_constructor)
         reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
         reader.parse_header()
-        data_to_return = {region: reader.nsx_datas[3][0][:, val] for region, val in self.exp_info['lfp_electrodes'].items()}
-        if self.exp_info.get('lfp_from_stereotrodes') is not None:
+        data_to_return = {region: reader.nsx_datas[3][0][:, val]
+                          for region, val in animal.animal_info['lfp_electrodes'].items()}
+        if animal.animal_info.get('lfp_from_stereotrodes') is not None:
             data_to_return = self.get_lfp_from_stereotrodes(animal, data_to_return, file_path)
         return data_to_return
 
     def get_lfp_from_stereotrodes(self, animal, data_to_return, file_path):
-        lfp_from_stereotrodes_info = self.exp_info['lfp_from_stereotrodes']
+        lfp_from_stereotrodes_info = animal.animal_info['lfp_from_stereotrodes']
         nsx_num = lfp_from_stereotrodes_info['nsx_num']
         reader = BlackrockRawIO(filename=file_path, nsx_to_load=nsx_num)
         reader.parse_header()

@@ -199,12 +199,14 @@ class Animal(SpikeData):
 
     name = 'animal'
 
-    def __init__(self, identifier, condition, block_info=None, neuron_types=('IN', 'PN')):
+    def __init__(self, identifier, condition, animal_info, neuron_types=None):
         self.identifier = identifier
         self.condition = condition
-        self.block_info = block_info if block_info is not None else {}
-        for nt in neuron_types:
-            setattr(self, nt, [])
+        self.animal_info = animal_info
+        self.block_info = animal_info['block_info'] if 'block_info' in animal_info is not None else {}
+        if neuron_types is not None:
+            for nt in neuron_types:
+                setattr(self, nt, [])
         self.units = defaultdict(list)
         self.raw_lfp = None
         self.children = None
