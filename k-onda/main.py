@@ -9,7 +9,8 @@ The top-level module for calling spike processing functions.
 
 def main():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json', lfp=True)
-    runner.run('make_spreadsheet', TEST_RUNNER_OPTS)
+    runner.run('make_spreadsheet', TEST_RUNNER_OPTS, path='/Users/katie/likhtik/IG_INED_Safety_Recall/',
+               filename='PFC_Theta_Power')
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

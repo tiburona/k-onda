@@ -30,10 +30,15 @@ class MatlabInterface:
     def mtcsg(self, data, *args):
         str_args = ','.join([str(arg) for arg in args])
         execution_line = f"[yo, fo, to] = mtcsg(data, {str_args});\n"
-        result = self.execute_function(data, execution_line, results=('yo', 'fo', 'to'))
+        result = self.execute_function(data, execution_line, results=['yo', 'fo', 'to'])
         return result
 
-    def execute_function(self, data, execution_line, results=('result')):
+    def filter(self, data):
+        execution_line = f"filtered_data = removeLineNoise_SpectrumEstimation(data', 2000, ['NH=5','LF=60']);"
+        result = self.execute_function(data, execution_line, results=['filtered_data'])
+        return result
+
+    def execute_function(self, data, execution_line, results=['result']):
         self.init_session()
         np.savetxt(self.data_file_path, data)
         results_paths = [os.path.join(self.session_directory, result + '.txt') for result in results]
@@ -52,7 +57,7 @@ class MatlabInterface:
         timeout = 120
         start_time = time.time()
         while not all([os.path.exists(path) for path in results_paths]):
-            if time.time() - start_time >= timeout: #
+            if time.time() - start_time >= timeout:
                 raise TimeoutError(f"Timeout after {timeout} seconds while waiting for file {self.result_file_path}")
             time.sleep(1)  # Wait for 1 second
 

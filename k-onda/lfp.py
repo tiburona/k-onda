@@ -38,6 +38,15 @@ class LFPData(Data):
         else:
             return self.current_frequency_band
 
+    @property
+    def lfp_root(self):
+        if hasattr(self, '_lfp_root'):
+            return self._lfp_root
+        elif hasattr(self, 'parent'):
+            return self.parent.lfp_root
+        else:
+            return None
+
     def get_mrl(self):
         axis = 0 if not self.data_opts.get('collapse_matrix') else None
         return self.get_average('get_mrl', stop_at='mrl_calculator', axis=axis)
@@ -53,6 +62,23 @@ class LFPData(Data):
         else:
             return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
 
+    def pickle_load(self, calc_name, other_identifiers):
+        lfp_dir = os.path.join(self.lfp_root, 'lfp')
+        pickle_dir = os.path.join(lfp_dir, f"{calc_name}_pkls")
+        for p in [lfp_dir, pickle_dir]:
+            if not os.path.exists(p):
+                os.mkdir(p)
+        pickle_path = os.path.join(pickle_dir, '_'.join(other_identifiers) + '.pkl')
+        if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
+            with open(pickle_path, 'rb') as f:
+                return True, pickle.load(f), pickle_path
+        else:
+            return False, None, pickle_path
+
+    def pickle_save(self, result, pickle_path):
+        with open(pickle_path, 'wb') as f:
+            pickle.dump(result, f)
+
 
 class LFPExperiment(LFPData, Subscriber):
     name = 'experiment'
@@ -60,7 +86,7 @@ class LFPExperiment(LFPData, Subscriber):
     def __init__(self, experiment, info, raw_lfp):
         self.experiment = experiment
         self.subscribe(experiment_context)
-        self.lfp_root = info['lfp_root']
+        self._lfp_root = info['lfp_root']
         self._sampling_rate = info['lfp_sampling_rate']
         self.lost_signal = info['lost_signal']  # TODO: this is going to need to get more granular at some point but I haven't yet seen an analysis with multiple mtcsg args
         self.all_animals = [LFPAnimal(animal, raw_lfp[animal.identifier], self._sampling_rate)
@@ -208,6 +234,10 @@ class LFPAnimal(LFPData, BlockConstructor):
         return getattr(self.spike_target, name)
 
     @property
+    def processed_lfp(self):
+        return self.process_lfp(self.raw_lfp)
+
+    @property
     def frequency_args(self):
         return set(tuple(args) for fb, args in FREQUENCY_ARGS.items() if fb in self.data_opts['fb'])
 
@@ -215,6 +245,24 @@ class LFPAnimal(LFPData, BlockConstructor):
         self.prepare_blocks()
         if 'mrl' in self.data_type:
             self.prepare_mrl_calculators()
+
+    def process_lfp(self, raw):
+        filtered_data = {}
+        for key in raw:
+            data = raw[key]/4
+            saved_calc_exists, result, pickle_path = self.pickle_load('notch_filter', [self.identifier, key])
+            if saved_calc_exists:
+                filtered = result
+            else:
+                ml = MatlabInterface(self.data_opts['matlab_configuration'])
+                result = ml.filter(data)
+                filtered = result[0]
+                self.pickle_save(filtered, pickle_path)
+
+            # filtered = filter_60_hz(data, 2000)
+            normed = divide_by_rms(filtered)
+            filtered_data[key] = normed
+        return filtered_data
 
     def prepare_mrl_calculators(self):
         if self.data_opts.get('spontaneous'):
@@ -292,7 +340,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         start = self.onset - (self.convolution_padding[0]) * self.sampling_rate
         stop = self.onset + (self.duration + self.convolution_padding[1]) * self.sampling_rate
         self.raw_data = self.animal.raw_lfp[self.current_brain_region][start:stop]
-        self.processed_data = self.process_lfp(self.raw_data)
+        self.processed_data = self.animal.processed_lfp[self.current_brain_region][start:stop]
         self.mrl_data = self.processed_data[self.convolution_padding[0] * self.sampling_rate:
                                             -self.convolution_padding[1] * self.sampling_rate]
         self._spectrogram = None
@@ -314,15 +362,16 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         return self.animal.parent.experiment.lost_signal
 
     def get_events(self):
-        true_beginning = self.convolution_padding[0] - self.get_lost_signal()
-        duration = self.event_duration if self.event_duration else self.event_duration
-        starts = np.arange(true_beginning, true_beginning + self.duration + .0001, duration)
+        true_beginning = self.convolution_padding[0] - self.get_lost_signal()/2
+        duration = self.event_duration if self.event_duration else self.paired_block.event_duration
+        starts = np.arange(true_beginning, true_beginning + self.duration, duration)
         time_bins = np.array(self.spectrogram[2])
         events = []
         epsilon = 1e-6  # a small offset to avoid floating-point rounding issues
         for i, start in enumerate(starts):
+            start -= self.data_opts['pre_stim']
             end = start + self.data_opts['post_stim']
-            num_points = int(np.ceil((end - start) / .01 - epsilon))
+            num_points = int(np.ceil((end - start) / .01 - epsilon)) # TODO: all the .01s in here depend on the mtcsg args
             event_times = np.linspace(start, start + (num_points * .01), num_points, endpoint=False)
             event_times = event_times[event_times < end]
             mask = (np.abs(time_bins[:, None] - event_times) <= 1e-6).any(axis=1)
@@ -336,21 +385,13 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
 
     def calc_cross_spectrogram(self):
         arg_set = FREQUENCY_ARGS[self.current_frequency_band]
-        lfp_dir = os.path.join(self.experiment.lfp_root, 'lfp')
-        pickle_dir = os.path.join(lfp_dir, 'spectrogram_pkls')
-        pickle_path = os.path.join(pickle_dir, '_'.join(
-            [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] +
-            [self.block_type, str(self.identifier)]) + '.pkl')
-        if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
-            with open(pickle_path, 'rb') as f:
-                return pickle.load(f)
-        for p in [lfp_dir, pickle_dir]:
-            if not os.path.exists(p):
-                os.mkdir(p)
-        ml = MatlabInterface(self.data_opts['matlab_configuration'])
-        result = ml.mtcsg(self.processed_data, *FREQUENCY_ARGS[self.current_frequency_band])
-        with open(pickle_path, 'wb') as f:
-            pickle.dump(result, f)
+        pickle_args = [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] + \
+                      [self.block_type, str(self.identifier)]
+        saved_calc_exists, result, pickle_path = self.pickle_load('spectrogram', pickle_args)
+        if not saved_calc_exists:
+            ml = MatlabInterface(self.data_opts['matlab_configuration'])
+            result = ml.mtcsg(self.processed_data, *arg_set)
+            self.pickle_save(result, pickle_path)
         return result
 
     @cache_method

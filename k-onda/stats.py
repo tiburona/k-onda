@@ -230,10 +230,9 @@ class Stats(Base):
         path = os.path.join(path, self.data_type)
         if not os.path.exists(path):
             os.mkdir(path)
-        if filename:
-            self.spreadsheet_fname = filename
-        else:
-            self.spreadsheet_fname = os.path.join(path, df_name + '.csv')
+        if filename is None:
+            filename = df_name
+        self.spreadsheet_fname = os.path.join(path, filename + '.csv')
         if os.path.exists(self.spreadsheet_fname) and not force_recalc:
             return
         try:
@@ -270,7 +269,7 @@ class Stats(Base):
 
     def write_spike_post_hoc_r_script(self):
         error_suffix = '/unit' if self.data_opts['row_type'] == 'event' else ''
-        error_suffix = error_suffix + '/time_bin' if self.data_opts['post_hoc_bin_size'] > 1 else error_suffix
+        error_suffix = error_suffix + '/time_bin' if self.data_opts.get('post_hoc_bin_size', 1) > 1 else error_suffix
 
         if self.data_opts['post_hoc_type'] == 'beta':
             model_formula = f'glmmTMB(formula = {self.data_col} ~ group + (1|animal{error_suffix}), ' \

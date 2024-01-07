@@ -76,7 +76,8 @@ than "levels". '"levels":["group"]' and '"level":"group"' are equivalent.
 
 "period_types" (optional): the period types which will be included in the analysis for plots. Ignored for making CSVs. 
 Although not strictly obligatory for plotting, if not given values from all periods will be included, which would be 
-particularly nonsensical if any value for "adjustment" other than "none" is chosen.
+particularly nonsensical if any value for "adjustment" other than "none" is chosen. **Watch out for this. If you don't 
+include it, the program will run without error, and you will get results that make sense, but they will be wrong.**
 
 
 ### Opts for `make_spreadsheet` ###
@@ -96,9 +97,11 @@ argument to Runner.run(), but it must be somewhere.
 
 ### Opts for `plot_group_stats` ###
 
+These plots are, frankly, very specific to Itamar's analysis and likely to be quite brittle
+
 Opts are as for `plot_psth` with some additions:
 
-"post_hoc_bin_size": 
+"post_hoc_bin_size" (optional):  
 "post_hoc_type"
 "data_path"
 

@@ -23,7 +23,7 @@ for animal in defeat_ig_st + control_ig_st:
             dst = os.path.join(root, animal, animal + ext)
             shutil.copyfile(src, dst)
 
-ined_lfp_electrodes = {'bla': [1], 'bf': [2], 'pl': [3]}
+ined_lfp_electrodes = {'bla': 1, 'bf': 2, 'pl': 3}
 
 control_ined = ['INED18', 'INED17', 'INED16', 'INED05', 'INED04']
 defeat_ined = ['INED06', 'INED07', 'INED09', 'INED11', 'INED12']
@@ -62,7 +62,7 @@ exp_info = {
     'lfp_sampling_rate': 2000,
     'lfp_root': root,
     'lfp_path_constructor': ['identifier'],
-    'lost_signal': .75
+    'lost_signal': .5
 }
 
 mice_with_no_light = ['IG175', 'IG176', 'IG177', 'IG178', 'IG179', 'IG180']
@@ -76,6 +76,8 @@ for animal in animal_info:
     with open(animal_file, 'r', encoding='utf-8') as file:
         data = file.read()
         json_data = json.loads(data)
+        if animal == 'INED18':
+            a = 'foo'
         time_stamps = json_data['NEV']['Data']['SerialDigitalIO']['TimeStamp']
         unparsed_data = json_data['NEV']['Data']['SerialDigitalIO']['UnparsedData']
         tone_onsets = [ts for i, ts in enumerate(time_stamps) if unparsed_data[i] == tone_on_code]

@@ -49,7 +49,6 @@ FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/
                  False}
 
 
-
 HEAT_MAP_DATA_OPTS = {'data_class': 'lfp', 'data_path': '/Users/katie/likhtik/data', 'time_type': 'period',
                       'brain_region': 'hpc', 'fb': ['gamma'], 'frequency_type': 'continuous', 'data_type': 'mrl',
                       'row_type': 'frequency_bin', 'pre_stim': 0, 'post_stim': 0.3,
@@ -91,7 +90,6 @@ SPONTANEOUS_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_c
                           'group_colors': {'control': '#9F9FA3', 'arch': '#32B44A'}, 'force_recalc': False,
                           'neuron_type_colors': {'PV': '#5679C7', 'ACH': '#C75B56'}}
 
-
 CROSS_CORR_OPTS = {'data_class': 'spike', 'data_type': 'correlogram', 'pre_stim': 0, 'post_stim': 1,
                    'adjustment': 'none', 'bin_size': 0.001, 'events': (0, 300), 'periods': list(range(10)),
                    'period_types': ['pretone', 'tone'], 'unit_pairs': ['ACH,PV'], 'max_lag': .05}
@@ -104,10 +102,16 @@ CAROLINA_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 
                      'frequency_bands': ['theta_1'], 'brain_regions': ['bla', 'il', 'bf'],
                      'sem_level': 'mrl_calculator'}
 
+PFC_THETA_POWER_ANIMALS = [
+    'IG160', 'IG163', 'IG171', 'IG176', 'IG178', 'IG180', 'INED04', 'INED16', 'INED18', 'IG154', 'IG156', 'IG158',
+    'IG172', 'IG174', 'IG175', 'IG177', 'IG179', 'INED07', 'INED06', 'INED09', 'INED11', 'INED12'
+]
+
+
 LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
-            'brain_regions': ['pl', 'hpc', 'bla'],  'frequency_type': 'block', 'row_type': 'event',
-            'pre_stim': 0, 'post_stim': .30, 'period_types': ['pretone', 'tone'],
-            'power_deviation': False, 'wavelet': False,
+            'brain_regions': ['pl'],  'frequency_type': 'block', 'row_type': 'event',
+            'pre_stim': 0, 'post_stim': .30, 'block_types': ['pretone', 'tone'], 'filter': 'Itamar',
+            'power_deviation': False, 'wavelet': False, 'selected_animals': PFC_THETA_POWER_ANIMALS,
             'matlab_configuration': {
                 'path_to_matlab': '/Applications/MATLAB_R2022a.app/bin/matlab',
                 'paths_to_add': [], 'recursive_paths_to_add': ['/Users/katie/likhtik/software'],

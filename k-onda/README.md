@@ -2,6 +2,9 @@ This is a nascent application for analyzing electrophysiology experiments in Pyt
 paradigms.  It takes as input Phy-curated spike data, raw local field potential data, and/or behavioral data and outputs 
 plots and/or csv files for further data analysis. 
 
+As a first step, activate the virtual environment by navigating to the `spike_data_processing` directory in your shell 
+and executing the command `source venv/bin/activate` (on Unix-like systems).
+
 The file that you execute to make one of those things happen is [main.py](main.py). The `main` function initializes a 
 `Runner`, which must receive three things: the name of the procedure you're going to run, the configuration of your 
 experiment, and the configuration of the procedure you're going to run.  The two configurations can be paths to JSON 
@@ -65,7 +68,7 @@ up or down regulated, or showed no change.
 - neuron_type_scatterplot: make a scatterplot of firing rate versus full-width half minimum for every unit in the 
 experiment, color-coded by neuron type.
 - plot_waveforms: make a superimposed graph of mean extracted waveforms from individual neurons, color-coded by neuron 
-type
+type 
 
 There is also a [figures](/figures) directory that contains code for a custom figure (which also contains a 
 demonstration of plots extracted from Phy).
@@ -81,6 +84,21 @@ behavior, which is at this writing still specific to a specific format of percen
 abstracted.
 
 * note that I've adopted Phy's usage of "correlogram" and it's not typical of the wider world.
+
+### Requirements
+
+In addition to the Python packages specified in venv/lib, some functionality depends on other applications installed on 
+your computer.  Calculations of power and coherence from raw LFP data depend on having a working version of Matlab 
+installed, along with two scripts from Professor Kenneth Harris's lab (`mtcsg.m` and `mtchg.m`) and their dependencies.
+These scripts are not distributed with this repo; if you need them, please email the author in the very remote chance 
+you are someone reading this who is not in the Likhtik lab, or if you are, Whatsapp her.
+
+The `plot_group_stats` function depends on having a working R installation, along with the following R packages: `lme4`,  
+`glmmTMB`, `lmerTest`, and `readr`.  
+
+This functionality was tested with Matlab 2022a and R version 4.2.1, readr_2.1.4, lmerTest_3.1-3, lme4_1.1-30, and 
+glmmTMB_1.1.7. 
+
 
 ### Notes for developers and troubleshooters
 
