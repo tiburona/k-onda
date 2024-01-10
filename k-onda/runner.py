@@ -1,7 +1,7 @@
 import json
 import os
 
-from plotters import PeriStimulusPlotter, GroupStatsPlotter, PiePlotter, NeuronTypePlotter, MRLPlotter
+from plotters import PeriStimulusPlotter, GroupStatsPlotter, PiePlotter, NeuronTypePlotter, MRLPlotter, LFPPlotter
 from stats import Stats
 from initialize_experiment import Initializer
 
@@ -18,7 +18,8 @@ other_procedures = {
     'make_spreadsheet': {'class': Stats, 'method': 'make_df', 'follow_up': 'make_spreadsheet'},
     'unit_upregulation_pie_chart': {'class': PiePlotter, 'method': 'unit_upreguulation_pie_chart'},
     'neuron_type_scatterplot': {'class': NeuronTypePlotter, 'method': 'scatterplot'},
-    'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'}
+    'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'},
+    'plot_power': {'class': LFPPlotter, 'method': 'plot_power'}
 }
 
 PROCEDURE_DICT = {**peristimulus_plots, **mrl_procs, **other_procedures}

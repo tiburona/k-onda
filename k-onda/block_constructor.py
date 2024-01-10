@@ -55,3 +55,20 @@ class BlockConstructor:
             blocks.append(reference_block)
         return blocks
 
+    def filter_by_selected_blocks(self, blocks):
+        # Difference between self.selected_block_type and self.data_opts.get('blocks'): the former comes from the
+        # context, and is set internally to the program by a plotter that iterates over block types.  The latter comes
+        # from the user's analysis config, and is used to restrict a plot to a subset of blocks
+
+        if self.selected_block_type is not None:
+            children = blocks[self.selected_block_type]
+        else:
+            children = [block for block_type in blocks for block in blocks[block_type]]
+        selected_blocks = self.data_opts.get('blocks')
+        if selected_blocks is None:
+            return children
+        else:
+            return [child for child in children if child.block_type in selected_blocks and
+                    child.identifier in selected_blocks[child.block_type]]
+
+

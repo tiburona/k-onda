@@ -3,6 +3,7 @@ import pickle
 
 from scipy.signal import cwt, morlet
 from collections import defaultdict
+from copy import deepcopy
 
 
 from data import Data
@@ -14,7 +15,7 @@ from math_functions import *
 from utils import cache_method, get_ancestors
 
 
-FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(3, 6), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
+FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
                        hgamma=(70, 120))
 LO_FREQ_ARGS = (2048, 2000, 1000, 980, 2)
 FREQUENCY_ARGS = {fb: LO_FREQ_ARGS for fb in ['delta', 'theta_1', 'theta_2', 'delta_theta', 'gamma', 'hgamma']}
@@ -50,6 +51,9 @@ class LFPData(Data):
     def get_mrl(self):
         axis = 0 if not self.data_opts.get('collapse_matrix') else None
         return self.get_average('get_mrl', stop_at='mrl_calculator', axis=axis)
+
+    def get_power(self):
+        return self.get_average('get_power', stop_at='event')
 
     def get_time_bins(self):
         tbs = []
@@ -211,27 +215,22 @@ class LFPAnimal(LFPData, BlockConstructor):
         self.parent = None
         self.group = None
 
-    @property
-    def children(self):
-        kids = self.mrl_calculators if self.data_type == 'mrl' else self.blocks
-        if self.data_opts.get('spontaneous'):
-            kids = kids['spontaneous']
-        elif self.selected_block_type is not None:
-            kids = kids[self.selected_block_type]
-        else:
-            kids = [child for key in kids for child in kids[key]]
-        if self.data_type == 'mrl':
-            kids = [calc for calc in kids if calc.unit.neuron_type == self.selected_neuron_type]
-        return kids
-
     def __getattr__(self, name):
-        # Check if 'name' is a property in the class
         prop = getattr(type(self), name, None)
         if isinstance(prop, property):
-            # If it's a property, return its value using the property's fget
             return prop.fget(self)
-        # Otherwise, delegate to spike_target
         return getattr(self.spike_target, name)
+
+    @property
+    def children(self):
+        children = self.mrl_calculators if self.data_type == 'mrl' else self.blocks
+        if self.data_opts.get('spontaneous'):
+            children = children['spontaneous']
+        else:
+            children = self.filter_by_selected_blocks(children)
+        if self.data_type == 'mrl':
+            children = [calc for calc in children if calc.unit.neuron_type == self.selected_neuron_type]
+        return children
 
     @property
     def processed_lfp(self):
@@ -250,16 +249,7 @@ class LFPAnimal(LFPData, BlockConstructor):
         filtered_data = {}
         for key in raw:
             data = raw[key]/4
-            saved_calc_exists, result, pickle_path = self.pickle_load('notch_filter', [self.identifier, key])
-            if saved_calc_exists:
-                filtered = result
-            else:
-                ml = MatlabInterface(self.data_opts['matlab_configuration'])
-                result = ml.filter(data)
-                filtered = result[0]
-                self.pickle_save(filtered, pickle_path)
-
-            # filtered = filter_60_hz(data, 2000)
+            filtered = filter_60_hz(data, 2000)
             normed = divide_by_rms(filtered)
             filtered_data[key] = normed
         return filtered_data
@@ -273,10 +263,6 @@ class LFPAnimal(LFPData, BlockConstructor):
                                             for unit in self.spike_target.units['good']]
                                for block_type, blocks in self.blocks.items()}
         self.mrl_calculators = mrl_calculators
-
-    @cache_method
-    def get_power(self):
-        return [block.get_power() for block in self.blocks]
 
 
 class LFPDataSelector:
@@ -304,9 +290,10 @@ class LFPDataSelector:
 
     @cache_method
     def slice_spectrogram(self):
-        indices = np.where(self.spectrogram[1] <= self.freq_range[0])
+        tolerance = .2  # todo: this might change with different mtcsg args
+        indices = np.where(self.spectrogram[1] - tolerance <= self.freq_range[0])
         ind1 = indices[0][-1] if indices[0].size > 0 else None  # last index that's <= start of the freq range
-        ind2 = np.argmax(self.spectrogram[1] > self.freq_range[1])  # first index >= end of freq range
+        ind2 = np.argmax(self.spectrogram[1] > self.freq_range[1] + tolerance)  # first index > end of freq range
         return self.spectrogram[0][ind1:ind2, :]
 
     @cache_method
@@ -346,6 +333,10 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         self._spectrogram = None
         self.last_brain_region = None
         self.experiment = self.animal.group.experiment
+
+    @property
+    def children(self):
+        return self.events
 
     @property
     def events(self):
@@ -394,13 +385,6 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
             self.pickle_save(result, pickle_path)
         return result
 
-    @cache_method
-    def get_power(self):
-        power = np.mean([event.data for event in self.get_events()], axis=0)
-        if self.data_opts.get('evoked') and not self.reference:
-            power -= self.paired_block.get_power()
-        return power
-
     @property
     def power_deviations(self):
         return self.get_power_deviations()
@@ -433,8 +417,16 @@ class LFPEvent(LFPData, LFPDataSelector):
         self.spectrogram = self.parent.spectrogram
 
     @cache_method
-    def get_power(self):
+    def get_unadjusted_power(self):
         return np.array(self.sliced_spectrogram)[:, self.mask]
+
+    @cache_method
+    def get_power(self):
+        power = self.get_unadjusted_power()
+        if self.parent.is_reference or self.data_opts.get('adjustment') is None:
+            return power
+        power -= np.mean(self.parent.paired_block.get_power())
+        return power
 
 
 class FrequencyBin(LFPData):

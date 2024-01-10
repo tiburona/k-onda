@@ -179,7 +179,7 @@ class Group(SpikeData):
         self.parent = None
 
     def update_children(self):
-        if self.context.vals.get('neuron_type') is None:
+        if self.context.vals.get('neuron_type', 'all') == 'all':
             self.children = self.animals
         else:
             self.children = [animal for animal in self.animals
@@ -217,7 +217,7 @@ class Animal(SpikeData):
         return [pair for unit in self.units['good'] for pair in unit.pairs]
 
     def update_children(self):
-        if self.context.vals['neuron_type'] is None:
+        if self.context.vals['neuron_type'] == 'all':
             self.children = self.units['good']
         else:
             self.children = getattr(self, self.context.vals['neuron_type'])
@@ -240,7 +240,10 @@ class Unit(SpikeData, BlockConstructor):
         self.block_class = Block
         self.blocks = defaultdict(list)
         self.spike_times = np.array(spike_times)
-        self.children = None
+
+    @property
+    def children(self):
+        return self.filter_by_selected_blocks(self.blocks)
 
     @property
     def firing_rate(self):
@@ -261,10 +264,6 @@ class Unit(SpikeData, BlockConstructor):
 
     def update_children(self):
         self.prepare_blocks()
-        self.children = self.blocks[self.selected_block_type] if self.selected_block_type else [
-            b for block_type, blocks in self.blocks.items() for b in blocks]
-        if self.data_opts.get('block_types'):
-            self.children = [child for child in self.children if child.block_type in self.data_opts['block_types']]
 
     @cache_method
     def find_spikes(self, start, stop):

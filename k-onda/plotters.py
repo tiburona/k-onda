@@ -3,11 +3,15 @@ import math
 import numpy as np
 import seaborn as sns
 import pandas as pd
+from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+import matplotlib.ticker as ticker
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
+import matplotlib.ticker as ticker
+
 
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts
 from plotting_helpers import smart_title_case, formatted_now, PlottingMixin
@@ -37,7 +41,7 @@ class Plotter(Base):
         self.invisible_ax = None
         self.grid = None
 
-    def initialize(self, data_opts, graph_opts, neuron_type=None):
+    def initialize(self, data_opts, graph_opts, neuron_type='all'):
         """Both initializes values on self and sets values for the context."""
         self.graph_opts = graph_opts
         self.data_opts = data_opts  # Sets data_opts for all subscribers to context
@@ -66,7 +70,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
         self.multiplier = 1 if self.plot_type == 'standalone' else 0.5
 
-    def plot(self, data_opts, graph_opts, neuron_type=None):
+    def plot(self, data_opts, graph_opts, neuron_type='all'):
         self.initialize(data_opts, graph_opts, neuron_type)
         level = self.data_opts['level']
         if level == 'group':
@@ -221,16 +225,12 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
 
     def set_dir_and_filename(self, basename):
         tags = [self.data_type]
-        if self.data_type != 'spontaneous_firing':
-            self.dir_tags = tags + [self.join_events('_')]
-
+        self.dir_tags = tags + [self.join_events('_')]
         tags.insert(0, basename)
         if self.selected_neuron_type:
             tags += [self.selected_neuron_type]
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
-        if self.data_type in ['autocorrelation', 'spectrum']:
-            tags += [self.data_opts['ac_key']]
         if self.data_opts.get('base'):
             tags += [self.data_opts.get('base')]
         self.fname = f"{'_'.join(tags)}.png"
@@ -475,7 +475,7 @@ class PiePlotter(Plotter):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
     def unit_upregulation_pie_chart(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts, neuron_type=None)
+        self.initialize(data_opts, graph_opts, neuron_type='all')
         labels = ['Up', 'Down', 'No Change']
         colors = ['yellow', 'blue', 'green']
 
@@ -575,7 +575,7 @@ class MRLPlotter(Plotter):
         self.make_plot(data_opts, graph_opts, 'heat_map', self.make_heat_map, None)
 
     def make_plot(self, data_opts, graph_opts, basename, plot_func, projection):
-        self.initialize(data_opts, graph_opts, neuron_type=None)
+        self.initialize(data_opts, graph_opts, neuron_type='all')
         self.fig = plt.figure(figsize=(15, 15))
 
         ncols = 2 if self.data_opts.get('adjustment') == 'relative' else 4
@@ -621,7 +621,7 @@ class MRLPlotter(Plotter):
         ax.set_title(title)
 
     def make_heat_map(self, group, ax, title=""):
-        data = group.data_by_period
+        data = group.data_by_period  # Todo put this back/figure out what it should be now
         im = ax.imshow(data.T, cmap='jet', interpolation='nearest', aspect='auto',
                        extent=[0.5, 5.5, self.current_frequency_band[0], self.current_frequency_band[1]],
                        origin='lower')
@@ -629,7 +629,7 @@ class MRLPlotter(Plotter):
         ax.set_title(title)
 
     def mrl_bar_plot(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts, neuron_type=None)
+        self.initialize(data_opts, graph_opts, neuron_type='all')
 
         data = []
         if data_opts.get('spontaneous'):
@@ -713,3 +713,56 @@ class MRLPlotter(Plotter):
     def add_significance_markers(self):
         self.stats = Stats(self.experiment, self.context, self.data_opts, lfp=self.lfp)
         # TODO: implement this
+
+
+class LFPPlotter(Plotter):
+    def __init__(self, experiment, lfp=None, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, lfp=lfp, graph_opts=graph_opts, plot_type=plot_type)
+
+    def plot_power(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts)
+        data = []
+        blocks = deepcopy(self.data_opts['blocks'])
+        for group in self.lfp.groups:
+            for block_type in blocks:
+                self.selected_block_type = block_type
+                for block in blocks[block_type]:
+                    self.update_data_opts(['blocks', block_type], [block])
+                    data.append([group.identifier, block + 1, block_type, group.mean_data, group.sem, group.scatter])
+
+        df = pd.DataFrame(data, columns=['Group', 'Block', 'Block_Type', 'Power', 'SEM', 'Scatter'])
+
+        # Plotting
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(5, 5), sharey=True)
+
+        # Iterate over each group
+        for i, (ax, (group, group_df)) in enumerate(zip(axes, df.groupby('Group'))):
+            # Iterate over each block type within the group
+            for block_type, block_df in group_df.groupby('Block_Type'):
+                ax.errorbar(block_df['Block'], block_df['Power'], yerr=block_df['SEM'], label=block_type.capitalize(),
+                            fmt='-o', color=self.graph_opts['block_colors'][block_type])  # Adjust fmt for desired line/marker style
+
+            ax.set_title(smart_title_case(f'{group} Group'))
+            ax.set_xlabel('Trial')
+            if i == 0:
+                ax.set_ylabel('Power')
+            ax.legend(title='Trial Type')
+            ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85)  # Adjust this value as needed
+
+        self.fig = fig
+        self.close_plot("power")
+
+    def set_dir_and_filename(self, basename):
+        title_string = f"{'_'.join([self.current_brain_region, self.current_frequency_band, basename])}"
+        self.title = smart_title_case(title_string.replace('_', ' '))
+        self.fig.suptitle(self.title, weight='bold', y=.98, fontsize=14)
+        self.fname = f"{title_string}.png"
+
+    def make_footer(self):
+        pass
+
+
+

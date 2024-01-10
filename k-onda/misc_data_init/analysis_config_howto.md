@@ -33,7 +33,7 @@ spreadsheet with PSTH values broken out by event and time bin.
 {
   "data_opts":  {"data_class": "spike", "data_type": "psth", "pre_stim": 0.05, "post_stim": 0.65, "bin_size": 0.01,
     "tone_event_selection": [0, 300], "adjustment": "normalized", "time_type": "continuous", "row_type": "event",
-    "levels": ["group"], "block_types": ["tone"], "data_path": "</path/where/csvs/are/written>},
+    "levels": ["group"], "block_types": {"tone": [0,1,2,3,4]}, "data_path": "</path/where/csvs/are/written>},
   "graph_opts": {"graph_dir": "/Users/katie/likhtik/data/graphs", "units_in_fig": 4, "tick_step": 0.1, "sem": false,
     "footer": true, "equal_y_scales": true, "group_colors": {"control": "#76BD4E", "stressed": "#F2A354"}}
 }
@@ -74,7 +74,8 @@ There is thus far no option to plot periods or events separately, but unit plots
 event over the selected period type.  Alternatively, if you only want to plot one level, you may specify "level" rather 
 than "levels". '"levels":["group"]' and '"level":"group"' are equivalent.
 
-"period_types" (optional): the period types which will be included in the analysis for plots. Ignored for making CSVs. 
+"periods" (optional): a dictionary whose keys are the period types which will be included in the analysis for plots, and
+whose values are arrays/Python iterables with the integer indices of the periods to include. Ignored for making CSVs. 
 Although not strictly obligatory for plotting, if not given values from all periods will be included, which would be 
 particularly nonsensical if any value for "adjustment" other than "none" is chosen. **Watch out for this. If you don't 
 include it, the program will run without error, and you will get results that make sense, but they will be wrong.**

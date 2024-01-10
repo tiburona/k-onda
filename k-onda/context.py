@@ -1,3 +1,5 @@
+import copy
+
 from utils import to_hashable
 
 
@@ -9,6 +11,7 @@ class Context:
         self.observers = []
         self.cache_id = None
         self.vals = {}
+        self.old_vals = {}
 
     def subscribe(self, observer):
         self.observers.append(observer)
@@ -18,15 +21,22 @@ class Context:
             observer.update(name)
 
     def set_val(self, name, new_val):
-        if isinstance(self.vals.get(name), dict) and isinstance(new_val, dict):
-            if self.vals[name].items() == new_val.items():
-                return
-        if new_val in [self.vals.get(name), None] and name != 'neuron_type':
+        # Compare with old value if it exists
+        old_val = self.old_vals.get(name)
+        if old_val is not None and self._compare(old_val, new_val):
             return
+
+        # Update the value and notify observers
+        self.vals[name] = new_val
+        self.old_vals[name] = copy.deepcopy(new_val)  # Store a deep copy
+        self.cache_id = to_hashable(self.vals)
+        self.notify(name)
+
+    def _compare(self, old_val, new_val):
+        if isinstance(old_val, dict):
+            return old_val.items() == new_val.items()
         else:
-            self.vals[name] = new_val
-            self.cache_id = to_hashable(self.vals)
-            self.notify(name)
+            return old_val == new_val
 
 
 class Subscriber:

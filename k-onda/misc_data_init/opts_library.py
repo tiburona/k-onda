@@ -107,19 +107,23 @@ PFC_THETA_POWER_ANIMALS = [
     'IG172', 'IG174', 'IG175', 'IG177', 'IG179', 'INED07', 'INED06', 'INED09', 'INED11', 'INED12'
 ]
 
+GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
+              'sem': False, 'footer': True, 'equal_y_scales': True, 'force_recalc': False,
+              'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'block_colors':
+                  {'pretone': 'gray', 'tone': 'black'},
+              }
 
 LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
-            'brain_regions': ['pl'],  'frequency_type': 'block', 'row_type': 'event',
-            'pre_stim': 0, 'post_stim': .30, 'block_types': ['pretone', 'tone'], 'filter': 'Itamar',
-            'power_deviation': False, 'wavelet': False, 'selected_animals': PFC_THETA_POWER_ANIMALS,
+            'brain_regions': ['pl', 'bla', 'il'],  'frequency_type': 'block', 'row_type': 'event', 'pre_stim': 0, 'post_stim': .30,
+            'blocks': {'tone': range(2), 'pretone': range(2)}, 'power_deviation': False, 'collapse_sem_data': True,
+            'selected_animals': PFC_THETA_POWER_ANIMALS, 'events': {'pretone': {'pre_stim': 0, 'post_stim': 1},
+                                                                    'tone': {'pre_stim': 0, 'post_stim': 3}},
             'matlab_configuration': {
                 'path_to_matlab': '/Applications/MATLAB_R2022a.app/bin/matlab',
                 'paths_to_add': [], 'recursive_paths_to_add': ['/Users/katie/likhtik/software'],
                 'base_directory': '/Users/katie/likhtik/data/temp'}}
 
-TEST_RUNNER_OPTS = {'data_opts': CAROLINA_MRL_OPTS, 'graph_opts': CAROLINA_GRAPH_OPTS}
-
-TEST_RUNNER_OPTS = {'data_opts': LFP_OPTS}
+TEST_RUNNER_OPTS = {'data_opts': LFP_OPTS, 'graph_opts': GRAPH_OPTS}
 
 
 
