@@ -729,11 +729,14 @@ class LFPPlotter(Plotter):
                 for block in blocks[block_type]:
                     self.update_data_opts(['blocks', block_type], [block])
                     data.append([group.identifier, block + 1, block_type, group.mean_data, group.sem, group.scatter])
+        self.update_data_opts(['blocks'], blocks)  # put this key, val pair back the way it was for further graphs
 
         df = pd.DataFrame(data, columns=['Group', 'Block', 'Block_Type', 'Power', 'SEM', 'Scatter'])
 
+
         # Plotting
-        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(5, 5), sharey=True)
+        fig_x_dim = 2.5 * len(sorted(self.data_opts['blocks'].values(), key=len)[-1])
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(fig_x_dim, 5), sharey=True)
 
         # Iterate over each group
         for i, (ax, (group, group_df)) in enumerate(zip(axes, df.groupby('Group'))):

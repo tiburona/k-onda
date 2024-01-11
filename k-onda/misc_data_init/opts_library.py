@@ -1,5 +1,5 @@
 STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156', 'IG158', 'IG177', 'IG179']
-HPC_REPLICATION_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174', 'IG175', 'IG179']
+
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01,
              'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time_type': 'continuous',
@@ -107,6 +107,15 @@ PFC_THETA_POWER_ANIMALS = [
     'IG172', 'IG174', 'IG175', 'IG177', 'IG179', 'INED07', 'INED06', 'INED09', 'INED11', 'INED12'
 ]
 
+BLA_THETA_POWER_ANIMALS = [
+    'IG160', 'IG161', 'IG162', 'IG163', 'IG171', 'IG173', 'IG176', 'IG178', 'IG180', 'INED04', 'INED05', 'INED17',
+    'INED18', 'IG154', 'IG155', 'IG156', 'IG158', 'IG172', 'IG174', 'IG175', 'IG179', 'INED01', 'INED07', 'INED09',
+    'INED12'
+]
+
+HPC_THETA_POWER_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174', 'IG175', 'IG179']
+
+
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
               'sem': False, 'footer': True, 'equal_y_scales': True, 'force_recalc': False,
               'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'block_colors':
@@ -114,10 +123,12 @@ GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_
               }
 
 LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
-            'brain_regions': ['pl', 'bla', 'il'],  'frequency_type': 'block', 'row_type': 'event', 'pre_stim': 0, 'post_stim': .30,
-            'blocks': {'tone': range(2), 'pretone': range(2)}, 'power_deviation': False, 'collapse_sem_data': True,
-            'selected_animals': PFC_THETA_POWER_ANIMALS, 'events': {'pretone': {'pre_stim': 0, 'post_stim': 1},
-                                                                    'tone': {'pre_stim': 0, 'post_stim': 3}},
+            'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block', 'row_type': 'event', 'pre_stim': 0, 'post_stim': .30,
+            'blocks': {'tone': range(5), 'pretone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
+            'events': {'pretone': {'pre_stim': 0, 'post_stim': 1}, 'tone': {'pre_stim': 0, 'post_stim': 3}},
+            'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
+                                       'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
+                                       'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
             'matlab_configuration': {
                 'path_to_matlab': '/Applications/MATLAB_R2022a.app/bin/matlab',
                 'paths_to_add': [], 'recursive_paths_to_add': ['/Users/katie/likhtik/software'],

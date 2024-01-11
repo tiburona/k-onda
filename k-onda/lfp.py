@@ -124,20 +124,27 @@ class LFPExperiment(LFPData, Subscriber):
         return events
 
     def update(self, name):
+
         if name == 'data':
-            if self.data_class == 'lfp' and self.last_brain_region != self.data_opts.get('brain_region'):
-                [animal.update_children() for animal in self.all_animals]
-                self.last_brain_region = self.data_opts.get('brain_region')
             if self.data_opts.get('selected_animals') != self.selected_animals:
                 [group.update_children() for group in self.groups]
+                # insurance to make sure animals didn't miss an update while they were unselected
+                [animal.update_children for group in self.groups for animal in group]
                 self.selected_animals = self.data_opts.get('selected_animals')
+            if self.data_class == 'lfp' and self.last_brain_region != self.data_opts.get('brain_region'):
+                [animal.update_children() for animal in self.all_animals
+                 if self.data_opts.get('brain_region') in animal.raw_lfp]
+                self.last_brain_region = self.data_opts.get('brain_region')
+
         if name == 'block_type':
             if self.selected_block_type != self.last_block_type:
-                [animal.update_children() for animal in self.all_animals]
+                [animal.update_children() for animal in self.all_animals
+                 if self.data_opts.get('brain_region') in animal.raw_lfp]
                 self.last_block_type = self.selected_block_type
         if name == 'neuron_type':
             if self.selected_neuron_type != self.last_neuron_type:
-                [animal.update_children() for animal in self.all_animals]
+                [animal.update_children() for animal in self.all_animals
+                 if self.data_opts.get('brain_region') in animal.raw_lfp]
                 self.last_neuron_type = self.selected_neuron_type
 
 

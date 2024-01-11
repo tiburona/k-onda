@@ -119,15 +119,10 @@ class Runner:
         for data_key, conditions in rules.items():
             if data_key not in self.data_opts:
                 raise ValueError(f"Key '{data_key}' not found in data_opts")
-
-            data_value = self.current_data_opts[data_key]
-            for condition in conditions:
-                if not (isinstance(condition, tuple) and len(condition) == 2):
-                    raise ValueError(f"Condition '{condition}' is not a valid tuple of length 2")
-
-                condition_key, condition_value = condition
-                if data_value == condition_key:
-                    self.current_data_opts[condition_key] = condition_value
+            for trigger_val, vals_to_assign in conditions.items():
+                for target_key, val_to_assign in vals_to_assign:
+                    if self.current_data_opts[data_key] == trigger_val:
+                        self.current_data_opts[target_key] = val_to_assign
 
     def execute(self):
         if self.current_data_opts.get('rules'):
@@ -135,6 +130,10 @@ class Runner:
         if self.graph_opts is not None:
             self.executing_method(self.current_data_opts, self.graph_opts)
         else:
+            print("\nin runner")
+            print(id(self.current_data_opts))
+            print(self.current_data_opts)
+            print("\n")
             self.executing_method(self.current_data_opts)
 
 

@@ -3,6 +3,7 @@ import numpy as np
 import os
 import shutil
 from datetime import datetime
+from collections.abc import Iterable
 
 DEBUG_MODE = 0
 
@@ -10,7 +11,7 @@ DEBUG_MODE = 0
 """Cache Utils"""
 
 
-def to_hashable(item, max_depth=5):
+def to_hashable(item, max_depth=10):
     """Converts a non hashable input into a hashable type for the purpose of using it as a part of the key in an
     instance's cache of calculated values."""
     if max_depth < 0:
@@ -18,7 +19,7 @@ def to_hashable(item, max_depth=5):
 
     if isinstance(item, dict):
         return tuple(sorted((k, to_hashable(v, max_depth - 1)) for k, v in item.items()))
-    elif isinstance(item, (list, set)):
+    elif isinstance(item, Iterable) and not isinstance(item, (str, bytes)):
         return tuple(to_hashable(i, max_depth - 1) for i in item)
     elif isinstance(item, np.ndarray):
         return tuple(to_hashable(i, max_depth - 1) for i in item.tolist())
@@ -26,7 +27,6 @@ def to_hashable(item, max_depth=5):
         return id(item)  # return the memory address of the object
     else:
         return item
-
 
 def cache_method(method):
     """

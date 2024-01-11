@@ -1,4 +1,3 @@
-from copy import deepcopy
 from context import experiment_context
 from utils import get_ancestors, get_descendants
 import numpy as np
@@ -18,18 +17,13 @@ class Base:
     def data_opts(self, opts):
         self.context.set_val('data', opts)
 
-    def update_data_opts(self, key, value):
-        data_opts = deepcopy(self.data_opts)
-        data_opts[key] = value
-        self.data_opts = data_opts
-
     @property
     def data_type(self):
         return self.data_opts['data_type']
 
     @data_type.setter
     def data_type(self, data_type):
-        self.update_data_opts('data_type', data_type)
+        self.update_data_opts(['data_type'], data_type)
 
     @property
     def data_class(self):
@@ -68,7 +62,7 @@ class Base:
 
     @current_frequency_band.setter
     def current_frequency_band(self, frequency_band):
-        self.update_data_opts('frequency_band', frequency_band)
+        self.update_data_opts(['frequency_band'], frequency_band)
 
     @property
     def current_brain_region(self):
@@ -76,21 +70,17 @@ class Base:
 
     @current_brain_region.setter
     def current_brain_region(self, brain_region):
-        self.update_data_opts('brain_region', brain_region)
+        self.update_data_opts(['brain_region'], brain_region)
 
     def update_data_opts(self, path, value):
-        data_opts = self.data_opts.copy()
-
-        current_level = data_opts
+        current_level = self.data_opts
         for key in path[:-1]:
             if key not in current_level or not isinstance(current_level[key], dict):
                 current_level[key] = {}
             current_level = current_level[key]
-
         current_level[path[-1]] = value
 
-        self.data_opts = data_opts  # This triggers the setter
-
+        self.data_opts = self.data_opts  # Reassign to trigger the setter
 
 
 class Data(Base):
