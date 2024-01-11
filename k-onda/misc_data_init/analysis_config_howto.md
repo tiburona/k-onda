@@ -41,17 +41,24 @@ spreadsheet with PSTH values broken out by event and time bin.
 
 ### Opts for both plotting and making spreadsheets ###
 
-"pre_stim" and "post_stim": the time in seconds before and after the onset of an event you want to take data from.
-A pre_stim of .05 will take 50 ms before event start.  A post-stim of .65 will take 650 ms after the event.  A pre_stim 
-of -.05 would start 50 ms after the event.
-
 "bin_size": the size in seconds of the histogram bins into which to place spike events for further analyses.
 
-"<period_type>_event_selection" (optional): if input is in JSON, an array enclosed in brackets, or if in Python, some kind of 
-iterable with arguments for Python's [`slice` function](https://www.w3schools.com/python/ref_func_slice.asp), that will 
-indicate which events for the relevant period_type to use in the analysis.  For example, if there are 5 tone periods 
-with 30 events each, but you are only interested in the first period, you can specify "tone_events": [0, 30].
-The default is to take all events.  
+"events" (optional): a dictionary to specify the event structure for each period type, with period types as keys and 
+nested dictionaries as values.  The dictionaries contain three values that are strictly optional but two of which you 
+probably want to specify.  These two are "pre_stim" and "post_stim": the time in seconds before and after the onset of 
+an event you want to take data from.  A pre_stim of .05 will take 50 ms before event start.  A post-stim of .65 will 
+take 650 ms after the event.  A pre_stim of -.05 would start 50 ms after the event. The current defaults are 0 and 1 for 
+pre and post, respectively. The last key is "selection" -- if input is in JSON, an array enclosed in brackets, or if in 
+Python, some kind of iterable with arguments for Python's 
+[`slice` function](https://www.w3schools.com/python/ref_func_slice.asp), that will indicate which events for the 
+relevant period_type to use in the analysis.  For example, if there are 5 tone periods 30 events each, but you are only 
+interested in the first period, you can specify "selection": [0, 30]. The default is to take all events. A sample key,
+value pair could look like 
+```
+"events": {"pretone": {"pre_stim": .05, "post_stim": .65, "selection": [0, 150]},
+           "tone": {"pre_stim": .05, "post_stim": .65, "selection": [0, 150]}
+           }
+```
 
 "adjustment" (optional): You can extract 
 - raw rates ("adjustment" : "none"), 

@@ -120,8 +120,7 @@ class LFPExperiment(LFPData, Subscriber):
     def all_events(self):
         if self.data_type == 'mrl':
             raise ValueError("You can't extract events from MRL data")
-        events = [event for block in self.all_blocks for event in block.events]
-        return events
+        return [event for block in self.all_blocks for event in block.events]
 
     def update(self, name):
 
@@ -135,7 +134,6 @@ class LFPExperiment(LFPData, Subscriber):
                 [animal.update_children() for animal in self.all_animals
                  if self.data_opts.get('brain_region') in animal.raw_lfp]
                 self.last_brain_region = self.data_opts.get('brain_region')
-
         if name == 'block_type':
             if self.selected_block_type != self.last_block_type:
                 [animal.update_children() for animal in self.all_animals
@@ -367,12 +365,12 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         events = []
         epsilon = 1e-6  # a small offset to avoid floating-point rounding issues
         for i, start in enumerate(starts):
-            start -= self.data_opts['pre_stim']
-            end = start + self.data_opts['post_stim']
+            start -= self.data_opts['events'][self.block_type]['pre_stim']
+            end = start + self.data_opts['events'][self.block_type]['post_stim']
             num_points = int(np.ceil((end - start) / .01 - epsilon)) # TODO: all the .01s in here depend on the mtcsg args
             event_times = np.linspace(start, start + (num_points * .01), num_points, endpoint=False)
             event_times = event_times[event_times < end]
-            mask = (np.abs(time_bins[:, None] - event_times) <= 1e-6).any(axis=1)
+            mask = (np.abs(time_bins[:, None] - event_times) <= epsilon).any(axis=1)
             events.append(LFPEvent(i, event_times, mask, self))
         return events
 

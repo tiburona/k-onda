@@ -145,8 +145,7 @@ class Experiment(SpikeData, Subscriber):
 
     def update(self, name):
         if name == 'data':
-            event_vals = [self.data_opts[key] for key in ['pre_stim', 'post_stim', 'bin_size'] if key in self.data_opts]  # Note: this may need to be changed to accommodate needing to be sensitive to different event structures for different periods
-            event_vals += [self.data_opts[key] for key in self.data_opts if 'events' in key]
+            event_vals = list(self.data_opts.get('events')) + [self.data_opts.get('bin_size')]
             if event_vals != self.last_event_vals:
                 [unit.update_children() for unit in self.all_units]
                 self._last_event_vals = event_vals
@@ -350,8 +349,8 @@ class Block(SpikeData):
         return self._events
 
     def update_children(self):
-        pre_stim, post_stim = (self.data_opts.get(opt, default) * self.sampling_rate
-                               for opt, default in [('pre_stim', 0), ('post_stim', 1)])
+        events_settings = self.data_opts['events'].get(self.block_type, {'pre_stim': 0, 'post_stim': 1})
+        pre_stim, post_stim = (events_settings[opt] * self.sampling_rate for opt in ['pre_stim', 'post_stim'])
         if self.is_reference:
             event_starts = self.paired_block.event_starts - self.shift * self.sampling_rate
         else:
@@ -359,7 +358,7 @@ class Block(SpikeData):
         for i, start in enumerate(event_starts):
             spikes = self.unit.find_spikes(start - pre_stim, start + post_stim)
             self._events.append(Event(self, self.unit, [((spike - start) / self.sampling_rate) for spike in spikes],
-                                      [(spike / self.sampling_rate) for spike in spikes], i))
+                                      [(spike / self.sampling_rate) for spike in spikes], pre_stim, post_stim, i))
 
     @cache_method
     def get_unadjusted_rates(self):
@@ -383,7 +382,7 @@ class Event(SpikeData):
 
     name = 'event'
 
-    def __init__(self, block, unit, spikes, spikes_original_times, index):
+    def __init__(self, block, unit, spikes, spikes_original_times, pre_stim, post_stim, index):
         self.unit = unit
         self.spikes = spikes
         self.spikes_original_times = spikes_original_times
@@ -392,7 +391,8 @@ class Event(SpikeData):
         self.block_type = self.block.block_type
         self.children = None
         self.parent = block
-        self.pre_stim, self.post_stim = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim'])
+        self.pre_stim = pre_stim
+        self.post_stim = post_stim
         self.duration = self.pre_stim + self.post_stim
 
     @cache_method
