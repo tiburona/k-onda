@@ -118,8 +118,8 @@ HPC_THETA_POWER_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174',
 
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
               'sem': False, 'footer': True, 'equal_y_scales': True, 'force_recalc': False,
-              'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'block_colors':
-                  {'pretone': 'gray', 'tone': 'black'},
+              'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'}, 'block_colors':
+                  {'pretone': 'gray', 'tone': 'black'}, 'block_order': ['pretone', 'tone']
               }
 
 LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
@@ -133,6 +133,16 @@ LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
                 'path_to_matlab': '/Applications/MATLAB_R2022a.app/bin/matlab',
                 'paths_to_add': [], 'recursive_paths_to_add': ['/Users/katie/likhtik/software'],
                 'base_directory': '/Users/katie/likhtik/data/temp'}}
+
+MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'mrl',
+            'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block',
+            'blocks': {'tone': range(5), 'pretone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
+            'events': {'pretone': {'pre_stim': 0, 'post_stim': 1}, 'tone': {'pre_stim': 0, 'post_stim': .3}},
+            'rules': {'brain_region': {'pl': [('selected_animals', STANDARD_ANIMALS)],
+                                       'bla': [('selected_animals', STANDARD_ANIMALS)],
+                                       'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
+            }
+
 
 TEST_RUNNER_OPTS = {'data_opts': LFP_OPTS, 'graph_opts': GRAPH_OPTS}
 

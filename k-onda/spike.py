@@ -307,7 +307,7 @@ class Block(SpikeData):
 
     name = 'block'
 
-    def __init__(self, unit, index, block_type, block_info, onset, events=None, paired_block=None, is_reference=False):
+    def __init__(self, unit, index, block_type, block_info, onset, events=None, target_block=None, is_relative=False):
         self.unit = unit
         self.identifier = index
         self.block_type = block_type
@@ -317,26 +317,10 @@ class Block(SpikeData):
         self.shift = block_info.get('shift')
         self.duration = block_info.get('duration')
         self.reference_block_type = block_info.get('reference_block_type')
-        self.paired_block = paired_block
-        self.is_reference = is_reference
+        self.target_block = target_block
+        self._is_relative = is_relative
         self.animal = self.unit.animal
         self.parent = unit
-
-    @property
-    def reference_block(self):
-        if self._is_reference:
-            return None
-        else:
-            return [block for block in self.parent.blocks[self.reference_block_type]
-                    if block.identifier == self.identifier][0]
-
-    @property
-    def data(self):
-        data = getattr(self, f"get_{self.data_type}")()
-        if self.data_opts.get('evoked'):
-            if not self.is_reference:
-                data -= self.reference_block.data
-        return data
 
     @property
     def children(self):
@@ -351,8 +335,8 @@ class Block(SpikeData):
     def update_children(self):
         events_settings = self.data_opts['events'].get(self.block_type, {'pre_stim': 0, 'post_stim': 1})
         pre_stim, post_stim = (events_settings[opt] * self.sampling_rate for opt in ['pre_stim', 'post_stim'])
-        if self.is_reference:
-            event_starts = self.paired_block.event_starts - self.shift * self.sampling_rate
+        if self.is_relative:
+            event_starts = self.target_block.event_starts - self.shift * self.sampling_rate
         else:
             event_starts = self.event_starts
         for i, start in enumerate(event_starts):
@@ -368,11 +352,8 @@ class Block(SpikeData):
     def mean_firing_rate(self):
         return np.mean(self.get_unadjusted_rates())
 
-    def find_equivalent(self, unit=None):
-        if unit:
-            return [block for block in unit.children][self.identifier]
-        else:
-            return self.paired_block
+    def find_equivalent(self, unit):
+        return [block for block in unit.children][self.identifier]
 
 
 class Event(SpikeData):
@@ -398,9 +379,9 @@ class Event(SpikeData):
     @cache_method
     def get_psth(self):  # default is to normalize
         rates = self.get_unadjusted_rates()
-        if self.parent.is_reference or self.data_opts.get('adjustment') == 'none':
+        if not self.reference or self.data_opts.get('adjustment') == 'none':
             return rates
-        rates -= self.parent.paired_block.mean_firing_rate()
+        rates -= self.reference.mean_firing_rate()
         if self.data_opts.get('adjustment') == 'relative':
             return rates
         rates /= self.unit.get_firing_std_dev(block_types=self.block_type,)  # same as dividing unit psth by std dev
@@ -429,7 +410,7 @@ class Event(SpikeData):
         lags = int(max_lag / bin_size)
         return correlogram(lags, bin_size, self.spikes, self.spikes, 1)
 
-    def find_equivalent(self, unit=None):
+    def find_equivalent(self, unit):
         return self.block.find_equivalent(unit).events[self.identifier]
 
 

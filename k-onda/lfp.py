@@ -316,7 +316,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
 
     name = 'block'
 
-    def __init__(self, lfp_animal, i, block_type, block_info, onset, events=None, paired_block=None, is_reference=False):
+    def __init__(self, lfp_animal, i, block_type, block_info, onset, events=None, target_block=None, is_relative=False):
         LFPDataSelector.__init__(self)
         self.animal = lfp_animal
         self.parent = lfp_animal
@@ -327,8 +327,9 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         self.convolution_padding = block_info['lfp_padding']
         self.duration = block_info.get('duration')
         self.event_duration = block_info.get('event_duration')
-        self.paired_block = paired_block
-        self.is_reference = is_reference
+        self.target_block = target_block
+        self.reference_block_type = block_info.get('reference_block_type')
+        self._is_relative = is_relative
         start = self.onset - (self.convolution_padding[0]) * self.sampling_rate
         stop = self.onset + (self.duration + self.convolution_padding[1]) * self.sampling_rate
         self.raw_data = self.animal.raw_lfp[self.current_brain_region][start:stop]
@@ -359,7 +360,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
 
     def get_events(self):
         true_beginning = self.convolution_padding[0] - self.get_lost_signal()/2
-        duration = self.event_duration if self.event_duration else self.paired_block.event_duration
+        duration = self.event_duration if self.event_duration else self.target_block.event_duration
         starts = np.arange(true_beginning, true_beginning + self.duration, duration)
         time_bins = np.array(self.spectrogram[2])
         events = []
@@ -422,15 +423,8 @@ class LFPEvent(LFPData, LFPDataSelector):
         self.spectrogram = self.parent.spectrogram
 
     @cache_method
-    def get_unadjusted_power(self):
-        return np.array(self.sliced_spectrogram)[:, self.mask]
-
-    @cache_method
     def get_power(self):
-        power = self.get_unadjusted_power()
-        if self.parent.is_reference or self.data_opts.get('adjustment') is None:
-            return power
-        power -= np.mean(self.parent.paired_block.get_power())
+        power = np.array(self.sliced_spectrogram)[:, self.mask]
         return power
 
 
@@ -550,7 +544,7 @@ class MRLCalculator(LFPData):
 
         return adjusted_phases
 
-    def get_angle_counts(self):
+    def get_angle_counts(self): # TODO: give this a data type and make it use data
         n_bins = 36
         bin_edges = np.linspace(0, 2 * np.pi, n_bins + 1)
         angles = self.get_angles()
@@ -608,7 +602,7 @@ class BlockMRLCalculator(MRLCalculator):
 
     @property
     def is_valid(self):
-        if self.data_opts.get('evoked') == 'relative':
+        if self.data_opts.get('evoked'):
             return self.num_events > 4 and self.equivalent_calculator.num_events > 4
         else:
             return self.num_events > 4

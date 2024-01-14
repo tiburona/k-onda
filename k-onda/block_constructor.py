@@ -9,15 +9,15 @@ class BlockConstructor:
 
     @property
     def earliest_block(self):
-        return sorted([block for block in self.all_blocks if not block.is_reference], key=lambda x: x.onset)[0]
+        return sorted([block for block in self.all_blocks if not block.is_relative], key=lambda x: x.onset)[0]
 
     def prepare_blocks(self):
-        for boo, function in zip((False, True), (self.construct_blocks, self.construct_reference_blocks)):
+        for boo, function in zip((False, True), (self.construct_blocks, self.construct_relative_blocks)):
             try:
                 block_info = self.block_info
             except AttributeError:
                 block_info = self.parent.block_info
-            filtered_block_info = {k: v for k, v in block_info.items() if bool(v.get('reference')) == bool(boo)}
+            filtered_block_info = {k: v for k, v in block_info.items() if bool(v.get('relative')) == bool(boo)}
             for block_type in filtered_block_info:
                 self.blocks[block_type] = function(block_type, filtered_block_info[block_type])
 
@@ -38,7 +38,7 @@ class BlockConstructor:
             blocks.append(self.block_class(self, i, block_type, block_info, onset, events=block_events))
         return blocks
 
-    def construct_reference_blocks(self, block_type, block_info):
+    def construct_relative_blocks(self, block_type, block_info):
         blocks = []
         shift = block_info['shift']
         duration = block_info.get('duration')
@@ -49,8 +49,8 @@ class BlockConstructor:
                 shift += sum(paired_block.convolution_padding)
             onset = paired_block.onset - shift * self.sampling_rate
             duration = duration if duration else paired_block.duration
-            reference_block = self.block_class(self, i, block_type, block_info, onset, paired_block=paired_block,
-                                               is_reference=True)
+            reference_block = self.block_class(self, i, block_type, block_info, onset, target_block=paired_block,
+                                               is_relative=True)
             paired_block.paired_block = reference_block
             blocks.append(reference_block)
         return blocks
@@ -68,7 +68,8 @@ class BlockConstructor:
         if selected_blocks is None:
             return children
         else:
+            id = lambda x: x.block.identifier if self.data_type == 'mrl' else x.identifier
             return [child for child in children if child.block_type in selected_blocks and
-                    child.identifier in selected_blocks[child.block_type]]
+                    id(child) in selected_blocks[child.block_type]]
 
 

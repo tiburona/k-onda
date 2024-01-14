@@ -20,9 +20,7 @@ that each have the config for an individual analysis, but there are other option
 
 To learn more about configuration for analyses that need to iterate over multiple versions of `data_opts`, click here.
 
-
 # Spike Analyses #
-
 
 ## PSTH ##
 
@@ -31,11 +29,12 @@ spreadsheet with PSTH values broken out by event and time bin.
 
 ```
 {
-  "data_opts":  {"data_class": "spike", "data_type": "psth", "pre_stim": 0.05, "post_stim": 0.65, "bin_size": 0.01,
-    "tone_event_selection": [0, 300], "adjustment": "normalized", "time_type": "continuous", "row_type": "event",
-    "levels": ["group"], "block_types": {"tone": [0,1,2,3,4]}, "data_path": "</path/where/csvs/are/written>},
-  "graph_opts": {"graph_dir": "/Users/katie/likhtik/data/graphs", "units_in_fig": 4, "tick_step": 0.1, "sem": false,
-    "footer": true, "equal_y_scales": true, "group_colors": {"control": "#76BD4E", "stressed": "#F2A354"}}
+  "data_opts":  {"data_class": "spike", "data_type": "psth", "bin_size": 0.01, "adjustment": "normalized", 
+  "events": {"pretone": {"pre_stim": 0, "post_stim": 1}, "tone": {"pre_stim": .05, "post_stim": .65}}, 
+  "time_type": "continuous", "row_type": "event", "levels": ["group"], "block_types": {"tone": [0,1,2,3,4]}, 
+  "data_path": "</path/where/csvs/are/written>}, 
+  "graph_opts": {"graph_dir": "/Users/katie/likhtik/data/graphs", "units_in_fig": 4, "tick_step": 0.1, "sem": false, 
+  "footer": true, "equal_y_scales": true, "group_colors": {"control": "#76BD4E", "stressed": "#F2A354"}}
 }
 ```
 
@@ -48,16 +47,19 @@ nested dictionaries as values.  The dictionaries contain three values that are s
 probably want to specify.  These two are "pre_stim" and "post_stim": the time in seconds before and after the onset of 
 an event you want to take data from.  A pre_stim of .05 will take 50 ms before event start.  A post-stim of .65 will 
 take 650 ms after the event.  A pre_stim of -.05 would start 50 ms after the event. The current defaults are 0 and 1 for 
-pre and post, respectively. The last key is "selection" -- if input is in JSON, an array enclosed in brackets, or if in 
-Python, some kind of iterable with arguments for Python's 
-[`slice` function](https://www.w3schools.com/python/ref_func_slice.asp), that will indicate which events for the 
-relevant period_type to use in the analysis.  For example, if there are 5 tone periods 30 events each, but you are only 
-interested in the first period, you can specify "selection": [0, 30]. The default is to take all events. A sample key,
-value pair could look like 
+pre and post, respectively. If you would like to take data from your entire reference period, but only data from the 
+period surrounding the stimulus in your target period, you can specify the event characteristics as in the above example:
+the pretone data will be the entire period, without interruption, but the tone data will only be the .05s before and the 
+.65s after the stimulus.
+
+The last key is "selection" -- if input is in JSON, an array enclosed in brackets, or if in Python, some kind of 
+iterable with arguments for Python's [`slice` function](https://www.w3schools.com/python/ref_func_slice.asp), that will 
+indicate which events for the relevant period_type to use in the analysis.  For example, if there are 5 tone periods 30 
+events each, but you are only interested in the first period, you can specify "selection": [0, 30]. The default is to 
+take all events. A sample key, value pair could look like 
 ```
 "events": {"pretone": {"pre_stim": .05, "post_stim": .65, "selection": [0, 150]},
-           "tone": {"pre_stim": .05, "post_stim": .65, "selection": [0, 150]}
-           }
+           "tone": {"pre_stim": .05, "post_stim": .65, "selection": [0, 150]}}
 ```
 
 "adjustment" (optional): You can extract 
@@ -83,7 +85,7 @@ than "levels". '"levels":["group"]' and '"level":"group"' are equivalent.
 
 "periods" (optional): a dictionary whose keys are the period types which will be included in the analysis for plots, and
 whose values are arrays/Python iterables with the integer indices of the periods to include. Ignored for making CSVs. 
-Although not strictly obligatory for plotting, if not given values from all periods will be included, which would be 
+Although not strictly obligatory for plotting, if not provided, values from all periods will be included, which would be 
 particularly nonsensical if any value for "adjustment" other than "none" is chosen. **Watch out for this. If you don't 
 include it, the program will run without error, and you will get results that make sense, but they will be wrong.**
 
@@ -103,22 +105,10 @@ break out your data, "continuous" must be specified.
 "data_path" (optional): the path where the csv file will be written.  This is optional because you can pass it as an 
 argument to Runner.run(), but it must be somewhere.
 
-### Opts for `plot_group_stats` ###
-
-These plots are, frankly, very specific to Itamar's analysis and likely to be quite brittle
-
-Opts are as for `plot_psth` with some additions:
-
-"post_hoc_bin_size" (optional):  
-"post_hoc_type"
-"data_path"
-
-""
-
 
 ## PROPORTION ##
 
-Configuration is as for PSTH with an addition.  
+Configuration is as for PSTH with an addition and a change.  
 
 "base" (optional): the level of the hierarchy whose proportion of being upregulated is being calculated.  Most commonly 
 "event" or "unit".  Defaults to event, so that proportion is the proportion of upregulated events.
@@ -127,10 +117,17 @@ Note: it would make sense to make the definition of up- or down-regulated config
 an opt here.  Right now upregulated means greater than 0. Also, be sure to note that the meaning of > 0 changes 
 depending on "adjustment".
 
+"evoked" (optional): a boolean which indicates whether to subtract the values from the reference period. **It does not make sense 
+to use this if you have chosen something other than 'none' for adjustment**. Keep in mind: "adjustment" applies to the 
+*underlying rates*, while the "evoked" subtraction will be applied to the further calculation you do using those rates 
+(this is also relevant for the various kind of correlation calculations described below). The default is False.
+
+Here's an example proportion config:
+
 ```{
-  "data_opts":  {"data_class": "spike", "data_type": "proportion", "pre_stim": 0.05, "post_stim": 0.65, "bin_size": 0.01,
-    "tone_event_selection": [0, 300], "adjustment": "normalized", "time_type": "continuous", "row_type": "event",
-    "levels": ["group"], "block_types": ["tone"]}
+  "data_opts":  {"data_class": "spike", "data_type": "proportion", "bin_size": 0.01, "adjustment": "normalized",
+   "events": {"pretone": {"pre_stim": 0, "post_stim": 1}, "tone": {"pre_stim": .05, "post_stim": .65}},
+    "time_type": "continuous", "row_type": "event", "levels": ["group"], "block_types": ["tone"]}
 ```
 
 ## AUTOCORRELATION ##
@@ -149,7 +146,15 @@ autocorrelation of the original time series of binned rates.
 A note about events specification: if you are interested in calculating autocorrelation using data from  a longer span 
 of time than, for instance, a one-second stimulus duration, one good way to accomplish this is by setting pre_stim equal 
 to 0, post_stim equal to your period duration, and make sure to select only one event per period with the 
-"<period_type>_events" opt.  See the `sample_autocorr_config` for an example.
+"events" opt. Here is an example autocorrelation config:
+
+```
+{"data_class": "spike", "data_type": "autocorrelation",  'bin_size': 0.01, 'max_lag': 99,
+"events": {"pretone": {"pre_stim": 0, "post_stim": 1, "selected": [0, 150, 30]}, 
+"tone": {"pre_stim": .05, "post_stim": .65}, "selected": [0, 150, 30]},  'block_types': ['tone']}
+```
+
+"evoked": as described in the discussion of ["proportion"](#proportion)
 
 ## AUTOCORRELOGRAM ##
 
@@ -202,6 +207,19 @@ CROSS_CORR_OPTS = {'data_class': 'spike', 'data_type': 'cross-correlation', 'pre
 ## CORRELOGRAM ##
 
 Same as for cross-correlation, just change "data_type" to "correlogram".
+
+
+### Opts for `plot_group_stats` ###
+
+These plots are, frankly, very specific to Itamar's analysis and likely to be quite brittle
+
+Opts are as for `plot_psth` with some additions:
+
+"post_hoc_bin_size" (optional):  
+"post_hoc_type"
+"data_path"
+
+""
 
 # LFP ANALYSIS # 
 

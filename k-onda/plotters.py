@@ -758,6 +758,21 @@ class LFPPlotter(Plotter):
         self.fig = fig
         self.close_plot("power")
 
+    def plot_spectrogram(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts)
+
+        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(10, 5), sharex=True)
+
+        for group, ax in zip(self.lfp.groups, axes):
+            data = group.data
+            im = ax.imshow(data, cmap='jet', interpolation='nearest', aspect='auto',
+                       extent=[0.5, 5.5, self.current_frequency_band[0], self.current_frequency_band[1]],
+                       origin='lower')
+        cbar = ax.figure.colorbar(im, ax=ax, label='Spectrogram')
+        ax.set_title(f"{group.identifier}")
+
+        self.close_plot("spectrogram")
+
     def set_dir_and_filename(self, basename):
         title_string = f"{'_'.join([self.current_brain_region, self.current_frequency_band, basename])}"
         self.title = smart_title_case(title_string.replace('_', ' '))

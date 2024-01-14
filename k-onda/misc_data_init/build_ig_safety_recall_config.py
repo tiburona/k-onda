@@ -4,13 +4,14 @@ import shutil
 
 root = '/Users/katie/likhtik/IG_INED_Safety_Recall'
 
+STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156', 'IG158', 'IG177', 'IG179']
 
-defeat_ig_st = ['IG154', 'IG155', 'IG156', 'IG158', 'IG175', 'IG179']
+defeat_ig_st = ['IG154', 'IG155', 'IG156', 'IG158', 'IG175', 'IG177', 'IG179']
 control_ig_st = ['IG160', 'IG161', 'IG162', 'IG163', 'IG176', 'IG178', 'IG180']
 
 animal_dirs = os.listdir(root)
 
-single_cell_dir = '/Users/katie/likhtik/data/single_cell_data'
+single_cell_dir = '/Users/katie/likhtik/single_cell_data/single_cell_data'
 
 for animal in defeat_ig_st + control_ig_st:
     new_animal_dir = os.path.join(root, animal)
@@ -51,18 +52,22 @@ defeat_ig_no_st = ['IG172', 'IG174']
 control_ig_no_st_dict = {animal: {'condition': 'control', 'lfp_electrodes': no_st_electrodes} for animal in control_ig_st}
 defeat_ig_no_st_dict = {animal: {'condition': 'defeat', 'lfp_electrodes': no_st_electrodes} for animal in defeat_ig_st}
 
-animal_info = {**control_ined_dict, **defeat_ined_dict, **control_ig_dict, **defeat_ig_dict, **control_ig_no_st_dict}
+animal_info = {**control_ined_dict, **defeat_ined_dict, **control_ig_dict, **defeat_ig_dict, **control_ig_no_st_dict,
+               **defeat_ig_no_st_dict}
+
+neuron_classification_rule = dict(column_name='cluster_assignment', classifications={'IN': [2], 'PN': [1]})
 
 
 exp_info = {
     'conditions': ['defeat', 'control'],
-    'identifier': 'IG_INED_Safety_Recall_Duplication',
-    'neuron_types': [],
+    'identifier': 'IG_Safety_Recall',
+    'neuron_types': ['PN', 'IN'],
     'sampling_rate': 30000,
     'lfp_sampling_rate': 2000,
     'lfp_root': root,
     'lfp_path_constructor': ['identifier'],
-    'lost_signal': .5
+    'lost_signal': .5,
+    'neuron_classification_rule': neuron_classification_rule
 }
 
 mice_with_no_light = ['IG175', 'IG176', 'IG177', 'IG178', 'IG179', 'IG180']
@@ -76,16 +81,23 @@ for animal in animal_info:
     with open(animal_file, 'r', encoding='utf-8') as file:
         data = file.read()
         json_data = json.loads(data)
-        if animal == 'INED18':
-            a = 'foo'
         time_stamps = json_data['NEV']['Data']['SerialDigitalIO']['TimeStamp']
         unparsed_data = json_data['NEV']['Data']['SerialDigitalIO']['UnparsedData']
         tone_onsets = [ts for i, ts in enumerate(time_stamps) if unparsed_data[i] == tone_on_code]
         events = [[onset + i * 30000 for i in range(30)] for onset in tone_onsets]
-        pretone = {'reference': True, 'target': 'tone', 'shift': 30, 'duration': 30, 'lfp_padding': [1, 1]}
+        pretone = {'relative': True, 'target': 'tone', 'shift': 30, 'duration': 30, 'lfp_padding': [1, 1]}
         tone = {'onsets': tone_onsets, 'events': events, 'duration': 30, 'lfp_padding': [1, 1],
                 'event_duration': 1}
         animals.append({'identifier': animal, 'block_info': {'tone': tone, 'pretone': pretone}, **animal_info[animal]})
+
+with open(os.path.join(root, 'single_cell_data', 'single_cell_data.json'), 'r', encoding='utf-8') as file:
+    data = file.read()
+    single_cell_data_info = json.loads(data)
+    single_cell_data_dict = {animal['animal']: animal for animal in single_cell_data_info['single_cell_data']}
+
+for i, animal in enumerate(animals):
+    if animal['identifier'] in single_cell_data_dict:
+        animals[i]['units'] = single_cell_data_dict[animal['identifier']]['units']
 
 exp_info['animals'] = animals
 

@@ -19,7 +19,8 @@ other_procedures = {
     'unit_upregulation_pie_chart': {'class': PiePlotter, 'method': 'unit_upreguulation_pie_chart'},
     'neuron_type_scatterplot': {'class': NeuronTypePlotter, 'method': 'scatterplot'},
     'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'},
-    'plot_power': {'class': LFPPlotter, 'method': 'plot_power'}
+    'plot_power': {'class': LFPPlotter, 'method': 'plot_power'},
+    'plot_spectrogram': {'class': LFPPlotter, 'method': 'plot_spectrogram'}
 }
 
 PROCEDURE_DICT = {**peristimulus_plots, **mrl_procs, **other_procedures}

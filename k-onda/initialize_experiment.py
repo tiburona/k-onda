@@ -48,7 +48,7 @@ class Initializer:
         return animal
 
     def init_units(self, units_info, animal):
-        for category in ['good', 'MUA']:
+        for category in [cat for cat in ['good', 'MUA'] if cat in units_info]:
             for unit_info in units_info[category]:
                 unit = Unit(animal, category, unit_info['spike_times'])
                 if category == 'good':

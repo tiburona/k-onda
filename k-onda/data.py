@@ -92,11 +92,18 @@ class Data(Base):
     @property
     def data(self):
         """
-
         Returns:
         float or np.array: The mean of the data values from the object's descendants.
         """
-        return getattr(self, f"get_{self.data_type}")()
+        data = getattr(self, f"get_{self.data_type}")()
+
+        if self.data_opts.get('evoked'):
+            current_block_type = self.selected_block_type
+            self.selected_block_type = self.reference_block_type_of_current_block_type()
+            reference_data = getattr(self, f"get_{self.data_type}")()
+            self.selected_block_type = current_block_type
+            data -= reference_data
+        return data
 
     @property
     def mean_data(self):
@@ -122,6 +129,29 @@ class Data(Base):
             return self.parent.sampling_rate
         else:
             return None
+
+    @property
+    def is_relative(self):
+        if hasattr(self, '_is_relative'):
+            return self._is_relative
+        elif self.parent is not None:
+            return self.parent.is_relative
+        else:
+            return None
+
+    @property
+    def reference(self):
+        if not self.reference_block_type:
+            return None
+        else:
+            if self.name == 'block':
+                return [block for block in self.parent.blocks[self.reference_block_type] if self is block.target][0]
+            if self.name == 'mrl_calculator':
+                return [calc for calc in self.parent.mrl_calculators[self.reference_block_type]
+                        if self is calc.block.target and self.unit is calc.unit][0]
+            if self.name == 'event':
+                return self.parent.reference.events[self.identifier]
+        return None
 
     @property
     def sem(self):
@@ -194,6 +224,23 @@ class Data(Base):
         if not self.children:
             return []
         return [np.nanmean(child.data) for child in self.children]
+
+    def find_experiment(self):
+        if self.name == 'experiment':
+            return self
+        elif hasattr(self, 'experiment'):
+            return self.experiment
+        elif hasattr(self, 'parent'):
+            return self.parent.find_experiment()
+        else:
+            return None
+
+    def reference_block_type_of_current_block_type(self):
+        current_type = self.selected_block_type
+        if current_type is None:
+            return None
+        exp = self.find_experiment()
+        return [b for b in exp.all_blocks if b.block_type == current_type][0].reference_block_type
 
 
 class TimeBin:
