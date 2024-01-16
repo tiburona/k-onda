@@ -62,6 +62,7 @@ class Base:
 
     @current_frequency_band.setter
     def current_frequency_band(self, frequency_band):
+
         self.update_data_opts(['frequency_band'], frequency_band)
 
     @property
@@ -83,6 +84,22 @@ class Base:
         self.data_opts = self.data_opts  # Reassign to trigger the setter
 
 
+class Evoked:
+    def __init__(self, method):
+        self.method = method
+
+    def __call__(self, *args, **kwargs):
+        self_instance = args[0]
+        if self_instance.data_opts.get('evoked') == 'individual_reference':
+            if 'stop_at' not in kwargs or kwargs['stop_at'] == self_instance.name:
+                ref_data = self_instance.reference.data
+                mean = np.mean(ref_data) if ref_data.shape[0] == 1 else np.mean(ref_data, axis=1)[:, np.newaxis]
+                result = self.method(*args, **kwargs)
+                return result - mean
+
+        return self.method(*args, **kwargs)
+
+
 class Data(Base):
 
     def __iter__(self):
@@ -95,15 +112,7 @@ class Data(Base):
         Returns:
         float or np.array: The mean of the data values from the object's descendants.
         """
-        data = getattr(self, f"get_{self.data_type}")()
-
-        if self.data_opts.get('evoked'):
-            current_block_type = self.selected_block_type
-            self.selected_block_type = self.reference_block_type_of_current_block_type()
-            reference_data = getattr(self, f"get_{self.data_type}")()
-            self.selected_block_type = current_block_type
-            data -= reference_data
-        return data
+        return getattr(self, f"get_{self.data_type}")()
 
     @property
     def mean_data(self):
@@ -141,11 +150,13 @@ class Data(Base):
 
     @property
     def reference(self):
-        if not self.reference_block_type:
+        if hasattr(self, 'block') and not self.block.reference_block_type:
+            return None
+        elif hasattr(self, 'reference_block_type') and not self.reference_block_type:
             return None
         else:
             if self.name == 'block':
-                return [block for block in self.parent.blocks[self.reference_block_type] if self is block.target][0]
+                return [blk for blk in self.parent.blocks[self.reference_block_type] if self is blk.target_block][0]
             if self.name == 'mrl_calculator':
                 return [calc for calc in self.parent.mrl_calculators[self.reference_block_type]
                         if self is calc.block.target and self.unit is calc.unit][0]
@@ -165,6 +176,27 @@ class Data(Base):
     def num_bins_per_event(self):
         pre_stim, post_stim, bin_size = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim', 'bin_size'])
         return int((pre_stim + post_stim) / bin_size)
+
+    @property
+    def current_reference_block_type(self):
+        exp = self.find_experiment()
+        return [blk for blk in exp.all_blocks if blk.block_type == self.selected_block_type][0].reference_block_type
+
+    def refer(self, data, stop_at='', is_spectrum=False):
+        if (  # all the conditions in which reference data should not be subtracted
+                not self.data_opts.get('evoked') or
+                self.block_type == self.current_reference_block_type or
+                (stop_at and stop_at != self.name) or
+                (self.data_type == 'spectrum' and not is_spectrum)
+        ):
+            return data
+        if self.reference.name == 'block':
+            ref_data = self.reference.data
+        else:
+            ref_data = self.reference.block.data
+        mean_ref_data = np.mean(ref_data) if ref_data.shape[0] == 1 else np.mean(ref_data, axis=1)[:, np.newaxis]
+        data -= mean_ref_data
+        return data
 
     def get_average(self, base_method, stop_at='event', axis=0, **kwargs):
         """
@@ -235,13 +267,6 @@ class Data(Base):
         else:
             return None
 
-    def reference_block_type_of_current_block_type(self):
-        current_type = self.selected_block_type
-        if current_type is None:
-            return None
-        exp = self.find_experiment()
-        return [b for b in exp.all_blocks if b.block_type == current_type][0].reference_block_type
-
 
 class TimeBin:
     name = 'time_bin'
@@ -255,8 +280,5 @@ class TimeBin:
 
     def position_in_block_time_series(self):
         return self.parent.num_bins * self.parent.identifier + self.identifier
-
-
-
 
 

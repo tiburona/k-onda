@@ -59,7 +59,7 @@ class SpikeData(Data):
 
     @cache_method
     def proportion_score(self):
-        return [1 if rate > 0 else 0 for rate in self.get_psth()]
+        return self.refer([1 if rate > 0 else 0 for rate in self.get_psth()])
 
     @cache_method
     def get_proportion(self):
@@ -67,7 +67,8 @@ class SpikeData(Data):
 
     @cache_method
     def get_autocorrelation(self):
-        return self.get_average('_calculate_autocorrelation', stop_at=self.data_opts.get('base'))
+        stop = self.data_opts.get('base')
+        return self.refer(self.get_average('_calculate_autocorrelation', stop_at=stop), stop_at=stop)
 
     def _calculate_autocorrelation(self):
         x = self.get_demeaned_rates()
@@ -76,7 +77,8 @@ class SpikeData(Data):
     @cache_method
     def get_spectrum(self):
         # default: returns spectrum of data of current object; average over spectra with a different spectrum_base
-        return self.get_average('_get_spectrum', stop_at=self.data_opts.get('spectrum_base', self.name))
+        stop = self.data_opts.get('spectrum_base', self.name)
+        return self.refer(self.get_average('_get_spectrum', stop_at=stop), stop_at=stop, is_spectrum=True)
 
     @cache_method
     def _get_spectrum(self):
@@ -113,6 +115,7 @@ class Experiment(SpikeData, Subscriber):
         self.identifier = info['identifier'] + formatted_now()
         self.conditions = info['conditions']
         self._sampling_rate = info['sampling_rate']
+        self.stimulus_duration = info['stimulus_duration']
         self.subscribe(self.context)
         self.groups = groups
         self.all_groups = self.groups
@@ -404,11 +407,11 @@ class Event(SpikeData):
         max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = int(max_lag/bin_size)
         return correlogram(lags, bin_size, self.spikes, pair.spikes, num_pairs)
-    
+
     def get_autocorrelogram(self):
         max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = int(max_lag / bin_size)
-        return correlogram(lags, bin_size, self.spikes, self.spikes, 1)
+        return self.refer(correlogram(lags, bin_size, self.spikes, self.spikes, 1))
 
     def find_equivalent(self, unit):
         return self.block.find_equivalent(unit).events[self.identifier]

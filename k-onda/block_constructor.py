@@ -23,9 +23,11 @@ class BlockConstructor:
 
     def construct_blocks(self, block_type, block_info):
         blocks = []
-        num_events = len([event for events_list in block_info['events'] for event in events_list])  # all the events for this block type
+        num_events = len([event for events_list in block_info['events'] for event in
+                          events_list])  # all the events for this block type
         if self.data_opts is not None and self.data_opts['events'][block_type].get('selection'):
-            events = slice(*self.data_opts['events'][block_type].get('selection'))  # the events used in this data analysis
+            events = slice(
+                *self.data_opts['events'][block_type].get('selection'))  # the events used in this data analysis
         else:
             events = slice(*(0, num_events))  # default is to take all events
         selected_event_indices = list(range(num_events))[events]  # indices of the events used in this data analysis
@@ -68,8 +70,8 @@ class BlockConstructor:
         if selected_blocks is None:
             return children
         else:
-            id = lambda x: x.block.identifier if self.data_type == 'mrl' else x.identifier
-            return [child for child in children if child.block_type in selected_blocks and
-                    id(child) in selected_blocks[child.block_type]]
+            return [child for child in children if self.is_selected(child, selected_blocks)]
 
-
+    def is_selected(self, x, selected_blocks):
+        child_id = lambda x: x.block.identifier if self.data_type == 'mrl' else x.identifier
+        return x.block_type not in selected_blocks or child_id(x) in selected_blocks[x.block_type]

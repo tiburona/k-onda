@@ -6,7 +6,7 @@ from collections import defaultdict
 from copy import deepcopy
 
 
-from data import Data
+from data import Data, Evoked
 from context import experiment_context
 from block_constructor import BlockConstructor
 from context import Subscriber
@@ -48,10 +48,13 @@ class LFPData(Data):
         else:
             return None
 
+    @cache_method
     def get_mrl(self):
         axis = 0 if not self.data_opts.get('collapse_matrix') else None
         return self.get_average('get_mrl', stop_at='mrl_calculator', axis=axis)
 
+
+    @cache_method
     def get_power(self):
         return self.get_average('get_power', stop_at='event')
 
@@ -365,9 +368,10 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         time_bins = np.array(self.spectrogram[2])
         events = []
         epsilon = 1e-6  # a small offset to avoid floating-point rounding issues
+        pre_stim = self.data_opts['events'][self.block_type]['pre_stim']
         for i, start in enumerate(starts):
-            start -= self.data_opts['events'][self.block_type]['pre_stim']
-            end = start + self.data_opts['events'][self.block_type]['post_stim']
+            start -= pre_stim
+            end = start + pre_stim + self.data_opts['events'][self.block_type]['post_stim']
             num_points = int(np.ceil((end - start) / .01 - epsilon)) # TODO: all the .01s in here depend on the mtcsg args
             event_times = np.linspace(start, start + (num_points * .01), num_points, endpoint=False)
             event_times = event_times[event_times < end]
@@ -381,7 +385,10 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         return divide_by_rms(filtered)
 
     def calc_cross_spectrogram(self):
-        arg_set = FREQUENCY_ARGS[self.current_frequency_band]
+        if str(self.current_frequency_band) in FREQUENCY_ARGS:
+            arg_set = FREQUENCY_ARGS[self.current_frequency_band]
+        else:
+            arg_set = self.data_opts['power_arg_set']
         pickle_args = [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] + \
                       [self.block_type, str(self.identifier)]
         saved_calc_exists, result, pickle_path = self.pickle_load('spectrogram', pickle_args)
@@ -413,19 +420,20 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
 class LFPEvent(LFPData, LFPDataSelector):
     name = 'event'
 
-    def __init__(self, id, event_times, mask, parent):
+    def __init__(self, id, event_times, mask, block):
         LFPDataSelector.__init__(self)
         self.identifier = id
         self.event_times = event_times
         self.mask = mask
-        self.parent = parent
+        self.block = block
+        self.parent = block
         self.block_type = self.parent.block_type
         self.spectrogram = self.parent.spectrogram
 
     @cache_method
     def get_power(self):
         power = np.array(self.sliced_spectrogram)[:, self.mask]
-        return power
+        return self.refer(power)
 
 
 class FrequencyBin(LFPData):
@@ -437,10 +445,10 @@ class FrequencyBin(LFPData):
     def __init__(self, index, val, parent, unit=None):
         self.parent = parent
         self.val = val
-        if isinstance(parent, LFPBlock):
-            self.identifier = self.block.spectrogram[1][index]
-        else:  # parent is MRLCalculator  # TODO: this is really an approximation of what frequencies these actually were; make more exact
-            self.identifier = list(range(*self.freq_range))[index]
+        if self.parent.name == 'block':
+            self.identifier = self.parent.spectrogram[1][index]
+        elif hasattr(self.parent, 'block'):
+            self.identifier = self.parent.block.spectrogram[1][index]
         self.block_type = self.parent.block_type
         self.unit = unit
         self.is_valid = self.parent.is_valid if hasattr(self.parent, 'is_valid') else True
@@ -571,9 +579,9 @@ class MRLCalculator(LFPData):
             w[np.isnan(alpha)] = np.nan
 
         if self.data_opts.get('mrl_func') == 'ppc':
-            return circ_r2_unbiased(alpha, w, dim=dim)
+            return self.refer(circ_r2_unbiased(alpha, w, dim=dim))
         else:
-            return compute_mrl(alpha, w, dim=dim)
+            return self.refer(compute_mrl(alpha, w, dim=dim))
 
 
 class BlockMRLCalculator(MRLCalculator):

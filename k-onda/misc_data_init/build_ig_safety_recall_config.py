@@ -67,7 +67,8 @@ exp_info = {
     'lfp_root': root,
     'lfp_path_constructor': ['identifier'],
     'lost_signal': .5,
-    'neuron_classification_rule': neuron_classification_rule
+    'neuron_classification_rule': neuron_classification_rule,
+    'stimulus_duration': .05
 }
 
 mice_with_no_light = ['IG175', 'IG176', 'IG177', 'IG178', 'IG179', 'IG180']
@@ -87,7 +88,7 @@ for animal in animal_info:
         events = [[onset + i * 30000 for i in range(30)] for onset in tone_onsets]
         pretone = {'relative': True, 'target': 'tone', 'shift': 30, 'duration': 30, 'lfp_padding': [1, 1]}
         tone = {'onsets': tone_onsets, 'events': events, 'duration': 30, 'lfp_padding': [1, 1],
-                'event_duration': 1}
+                'event_duration': 1, 'reference_block_type': 'pretone'}
         animals.append({'identifier': animal, 'block_info': {'tone': tone, 'pretone': pretone}, **animal_info[animal]})
 
 with open(os.path.join(root, 'single_cell_data', 'single_cell_data.json'), 'r', encoding='utf-8') as file:

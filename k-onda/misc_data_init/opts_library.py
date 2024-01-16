@@ -134,6 +134,14 @@ LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
                 'paths_to_add': [], 'recursive_paths_to_add': ['/Users/katie/likhtik/software'],
                 'base_directory': '/Users/katie/likhtik/data/temp'}}
 
+SPECTROGRAM_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': [(0, 15)], 'data_type': 'power',
+                    'brain_regions': ['pl', 'bla', 'hpc'],  'evoked': True, 'power_arg_set': (2048, 2000, 1000, 980, 2),
+                    'blocks': {'tone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
+                    'events': {'pretone': {'pre_stim': .05, 'post_stim': .3}, 'tone': {'pre_stim': .05, 'post_stim': .3}},
+                    'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
+                                               'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
+                                               'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}}}
+
 MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'mrl',
             'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block',
             'blocks': {'tone': range(5), 'pretone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
@@ -143,8 +151,21 @@ MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
                                        'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
             }
 
+POWER_SPREADSHEET_OPTS = {
+    'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': [(0, 15)], 'data_type': 'power',
+    'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'continuous', 'row_type': 'event',
+    'time_type': 'continuous',  'power_arg_set': (2048, 2000, 1000, 980, 2),
+    'blocks': {'tone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
+    'events': {'pretone': {'pre_stim': .05, 'post_stim': .3}, 'tone': {'pre_stim': .05, 'post_stim': .3}},
+    'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
+                               'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
+                               'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}}
+}
 
-TEST_RUNNER_OPTS = {'data_opts': LFP_OPTS, 'graph_opts': GRAPH_OPTS}
+
+#TEST_RUNNER_OPTS = {'data_opts': SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
+
+TEST_RUNNER_OPTS = {'data_opts': POWER_SPREADSHEET_OPTS}
 
 
 

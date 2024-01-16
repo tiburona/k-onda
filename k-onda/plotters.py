@@ -7,7 +7,7 @@ from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
-import matplotlib.ticker as ticker
+from matplotlib.cm import ScalarMappable
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
 import matplotlib.ticker as ticker
@@ -206,7 +206,8 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             [ax.set_ylim(self.y_min, self.y_max) for ax in self.axs.flatten()]
 
     def set_pip_patches(self):
-        [ax.fill_betweenx([self.y_min, self.y_max], 0, 0.05, color='k', alpha=0.2) for ax in self.axs.flatten()]
+        [ax.fill_betweenx([self.y_min, self.y_max], 0, self.experiment.stimulus_duration, color='k', alpha=0.2)
+         for ax in self.axs.flatten()]
 
     def prettify_subplot(self, ax, title, y_min, y_max):
         self.get_ylim(ax, y_min, y_max)
@@ -589,13 +590,13 @@ class MRLPlotter(Plotter):
             self.selected_neuron_type = neuron_type
             for j, group in enumerate(self.lfp.groups): # TODO: think about how this should work now with multiple periods
                 if self.data_opts.get('adjustment') == 'relative':
-                    self.selected_period_type = 'tone'
+                    self.selected_block_type = 'tone'
                     plot_func(group, self.axs[i][j], title=f"{group.identifier.capitalize()} {neuron_type}")
                 else:
-                    for k, period_type in enumerate(['pretone', 'tone']):
-                        self.selected_period_type = period_type
+                    for k, block_type in enumerate(self.experiment.block_types):
+                        self.selected_block_type = block_type
                         plot_func(group, self.axs[i][j * 2 + k],
-                                  title=f"{group.identifier.capitalize()} {neuron_type} {period_type}")
+                                  title=f"{group.identifier.capitalize()} {neuron_type} {block_type}")
         self.selected_neuron_type = None
         self.close_plot(basename)
 
@@ -761,20 +762,45 @@ class LFPPlotter(Plotter):
     def plot_spectrogram(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
 
-        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(10, 5), sharex=True)
+        # Create a figure and axes for subplots
+        ncols = len(self.data_opts['blocks'])
+        self.fig, axes = plt.subplots(nrows=len(self.lfp.groups), ncols=len(self.data_opts['blocks']),
+                                      figsize=(10, ncols*5), sharex=True)
 
-        for group, ax in zip(self.lfp.groups, axes):
-            data = group.data
-            im = ax.imshow(data, cmap='jet', interpolation='nearest', aspect='auto',
-                       extent=[0.5, 5.5, self.current_frequency_band[0], self.current_frequency_band[1]],
-                       origin='lower')
-        cbar = ax.figure.colorbar(im, ax=ax, label='Spectrogram')
-        ax.set_title(f"{group.identifier}")
+        # Initialize an empty list to store ScalarMappable objects
+        min_value = float('inf')
+        max_value = float('-inf')
 
+        for i, group in enumerate(self.lfp.groups):
+            for block_type in self.data_opts['blocks']:
+                self.selected_block_type = block_type
+                data = group.data
+                pre_stim, post_stim = (self.data_opts['events'][self.selected_block_type][opt]
+                                       for opt in ('pre_stim', 'post_stim'))
+                im = axes[i].imshow(data, cmap='jet', interpolation='nearest', aspect='auto', # todo: fix this to work with multiple blocks
+                                       extent=[-pre_stim, post_stim, self.current_frequency_band[0],
+                                               self.current_frequency_band[1]], origin='lower')
+                data_min = data.min()
+                data_max = data.max()
+                if data_min < min_value:
+                    min_value = data_min
+                if data_max > max_value:
+                    max_value = data_max
+
+                #xticks = np.arange(-pre_stim, post_stim, step=self.graph_opts['tick_step'])
+                #axes[i].set_xticks(xticks)
+                axes[i].set_title(f"{group.identifier}")
+
+        [ax.fill_betweenx(self.lfp.freq_range, 0, self.experiment.stimulus_duration,color='k',
+                          alpha=0.2)
+            for ax in axes]
+        cbar = self.fig.colorbar(im, ax=axes,  shrink=0.7)
+        im.set_clim(min_value, max_value)
+        cbar.ax.set_position(cbar.ax.get_position().translated(0.1, 0))
         self.close_plot("spectrogram")
 
     def set_dir_and_filename(self, basename):
-        title_string = f"{'_'.join([self.current_brain_region, self.current_frequency_band, basename])}"
+        title_string = f"{'_'.join([self.current_brain_region, str(self.current_frequency_band), basename])}"
         self.title = smart_title_case(title_string.replace('_', ' '))
         self.fig.suptitle(self.title, weight='bold', y=.98, fontsize=14)
         self.fname = f"{title_string}.png"

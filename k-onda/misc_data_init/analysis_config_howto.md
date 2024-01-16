@@ -236,6 +236,8 @@ so long as every subdirectory can be added to the Matlab path without interferin
 - "temp_file_path": a path to a directory where a temp subdirectory will be written that will allow the creation of 
 files for the program execution
 
+"frequency_band" (string )
+
 "power_deviation" (optional): a boolean that indicates whether to include in the CSV an idiosyncratic calculation that 
 records how far above or below the local moving average a time bin is. Check the `lfp` module for `get_power_deviation` 
 to see the implementation details. 

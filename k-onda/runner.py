@@ -131,10 +131,6 @@ class Runner:
         if self.graph_opts is not None:
             self.executing_method(self.current_data_opts, self.graph_opts)
         else:
-            print("\nin runner")
-            print(id(self.current_data_opts))
-            print(self.current_data_opts)
-            print("\n")
             self.executing_method(self.current_data_opts)
 
 
