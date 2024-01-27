@@ -27,10 +27,10 @@ for animal in defeat_ig_st + control_ig_st:
 ined_lfp_electrodes = {'bla': 1, 'bf': 2, 'pl': 3}
 
 control_ined = ['INED18', 'INED17', 'INED16', 'INED05', 'INED04']
-defeat_ined = ['INED06', 'INED07', 'INED09', 'INED11', 'INED12']
+defeat_ined = ['INED01', 'INED06', 'INED07', 'INED09', 'INED11', 'INED12']
 
 control_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'condition': 'control'} for animal in control_ined}
-defeat_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'condition': 'defeat'} for animal in control_ined}
+defeat_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'condition': 'defeat'} for animal in defeat_ined}
 
 pl_electrodes = {
     'IG154': (4, 6), 'IG155': (12, 14), 'IG156': (12, 14), 'IG158': (7, 14), 'IG160': (1, 8), 'IG161': (9, 11),
@@ -49,8 +49,8 @@ control_ig_dict, defeat_ig_dict = ({
 no_st_electrodes = {'hpc': 0, 'bla': 1, 'pl': 3}
 control_ig_no_st = ['IG171', 'IG173']
 defeat_ig_no_st = ['IG172', 'IG174']
-control_ig_no_st_dict = {animal: {'condition': 'control', 'lfp_electrodes': no_st_electrodes} for animal in control_ig_st}
-defeat_ig_no_st_dict = {animal: {'condition': 'defeat', 'lfp_electrodes': no_st_electrodes} for animal in defeat_ig_st}
+control_ig_no_st_dict = {animal: {'condition': 'control', 'lfp_electrodes': no_st_electrodes} for animal in control_ig_no_st}
+defeat_ig_no_st_dict = {animal: {'condition': 'defeat', 'lfp_electrodes': no_st_electrodes} for animal in defeat_ig_no_st}
 
 animal_info = {**control_ined_dict, **defeat_ined_dict, **control_ig_dict, **defeat_ig_dict, **control_ig_no_st_dict,
                **defeat_ig_no_st_dict}
@@ -71,14 +71,14 @@ exp_info = {
     'stimulus_duration': .05
 }
 
-mice_with_no_light = ['IG175', 'IG176', 'IG177', 'IG178', 'IG179', 'IG180']
+mice_with_alt_code = ['IG171', 'IG172', 'IG173', 'IG174', 'IG175', 'IG176', 'IG177', 'IG178', 'IG179', 'IG180']
 
 
 animals = []
 
 for animal in animal_info:
     animal_file = os.path.join(root, animal, animal + '.json')
-    tone_on_code = 65502 if animal not in mice_with_no_light else 65436
+    tone_on_code = 65502 if animal not in mice_with_alt_code else 65436
     with open(animal_file, 'r', encoding='utf-8') as file:
         data = file.read()
         json_data = json.loads(data)

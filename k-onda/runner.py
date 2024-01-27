@@ -128,10 +128,17 @@ class Runner:
     def execute(self):
         if self.current_data_opts.get('rules'):
             self.apply_rules()
+        self.validate()
         if self.graph_opts is not None:
             self.executing_method(self.current_data_opts, self.graph_opts)
         else:
             self.executing_method(self.current_data_opts)
+
+    def validate(self):
+        all_animal_ids = [animal.identifier for animal in self.experiment.all_animals]
+        selected_animals = self.current_data_opts.get('selected_animals')
+        if selected_animals is not None and not all([id in all_animal_ids for id in selected_animals]):
+            raise ValueError("Missing animals")
 
 
 

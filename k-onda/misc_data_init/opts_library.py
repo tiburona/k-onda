@@ -117,10 +117,15 @@ HPC_THETA_POWER_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174',
 
 
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
-              'sem': False, 'footer': True, 'equal_y_scales': True, 'force_recalc': False,
+              'sem': False, 'footer': True, 'equal_y_scales': True, 'force_recalc': False, 'equal_color_scales': 'within_group',
               'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'}, 'block_colors':
                   {'pretone': 'gray', 'tone': 'black'}, 'block_order': ['pretone', 'tone']
               }
+
+MATLAB_CONFIG = {
+                'path_to_matlab': '/Applications/MATLAB_R2022a.app/bin/matlab',
+                'paths_to_add': [], 'recursive_paths_to_add': ['/Users/katie/likhtik/software'],
+                'base_directory': '/Users/katie/likhtik/data/temp'}
 
 LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
             'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block', 'row_type': 'event',
@@ -129,18 +134,17 @@ LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
             'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
                                        'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
                                        'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
-            'matlab_configuration': {
-                'path_to_matlab': '/Applications/MATLAB_R2022a.app/bin/matlab',
-                'paths_to_add': [], 'recursive_paths_to_add': ['/Users/katie/likhtik/software'],
-                'base_directory': '/Users/katie/likhtik/data/temp'}}
+            'matlab_configuration': MATLAB_CONFIG}
 
 SPECTROGRAM_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': [(0, 15)], 'data_type': 'power',
                     'brain_regions': ['pl', 'bla', 'hpc'],  'evoked': True, 'power_arg_set': (2048, 2000, 1000, 980, 2),
-                    'blocks': {'tone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
+                    'blocks': {'tone': [0]}, 'power_deviation': False, 'collapse_sem_data': True,
                     'events': {'pretone': {'pre_stim': .05, 'post_stim': .3}, 'tone': {'pre_stim': .05, 'post_stim': .3}},
                     'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
                                                'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
-                                               'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}}}
+                                               'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
+                    'matlab_configuration': MATLAB_CONFIG
+                    }
 
 MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'mrl',
             'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block',
@@ -152,20 +156,33 @@ MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
             }
 
 POWER_SPREADSHEET_OPTS = {
-    'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': [(0, 15)], 'data_type': 'power',
+    'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
     'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'continuous', 'row_type': 'event',
     'time_type': 'continuous',  'power_arg_set': (2048, 2000, 1000, 980, 2),
-    'blocks': {'tone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
+    'blocks': {'tone': range(5), 'pretone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
     'events': {'pretone': {'pre_stim': .05, 'post_stim': .3}, 'tone': {'pre_stim': .05, 'post_stim': .3}},
     'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
                                'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
-                               'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}}
+                               'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
+    'matlab_configuration': MATLAB_CONFIG
 }
 
+TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': [(0, 15)], 'data_type': 'power',
+                         'brain_regions': ['hpc', 'bla', 'pl'], 'evoked': False, 'store': 'pkl',
+                         'blocks': {'pretone': [0], 'tone': [0]}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
+                         'power_deviation': False, 'collapse_sem_data': True, 'filter': 'spectrum_estimation',
+                         'events': {'pretone': {'pre_stim': .05, 'post_stim': .6},
+                                    'tone': {'pre_stim': .05, 'post_stim': .6}},
+                         'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
+                                                    'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
+                                                    'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
+                         'matlab_configuration': MATLAB_CONFIG
+                    }
 
-#TEST_RUNNER_OPTS = {'data_opts': SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
 
-TEST_RUNNER_OPTS = {'data_opts': POWER_SPREADSHEET_OPTS}
+TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
+
+#TEST_RUNNER_OPTS = {'data_opts': POWER_SPREADSHEET_OPTS}
 
 
 

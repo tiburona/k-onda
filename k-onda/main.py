@@ -9,8 +9,8 @@ The top-level module for calling spike processing functions.
 
 def main():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json', lfp=True)
-    runner.run('make_spreadsheet', TEST_RUNNER_OPTS, path='/Users/katie/likhtik/IG_INED_Safety_Recall',
-               name='kick_tires_on_power')
+    # runner.run('make_spreadsheet', TEST_RUNNER_OPTS, path='/Users/katie/likhtik/IG_INED_Safety_Recall', filename='kick_tires')
+    runner.run('plot_spectrogram', TEST_RUNNER_OPTS)
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

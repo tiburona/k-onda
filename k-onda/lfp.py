@@ -1,4 +1,5 @@
 import os
+import json
 import pickle
 
 from scipy.signal import cwt, morlet
@@ -69,22 +70,33 @@ class LFPData(Data):
         else:
             return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
 
-    def pickle_load(self, calc_name, other_identifiers):
+    def load(self, calc_name, other_identifiers):
+        store = self.data_opts.get('store', 'pkl')
         lfp_dir = os.path.join(self.lfp_root, 'lfp')
-        pickle_dir = os.path.join(lfp_dir, f"{calc_name}_pkls")
-        for p in [lfp_dir, pickle_dir]:
+        store_dir = os.path.join(lfp_dir, f"{calc_name}_{store}s")
+        for p in [lfp_dir, store_dir]:
             if not os.path.exists(p):
                 os.mkdir(p)
-        pickle_path = os.path.join(pickle_dir, '_'.join(other_identifiers) + '.pkl')
-        if os.path.exists(pickle_path) and not self.data_opts.get('force_recalc'):
-            with open(pickle_path, 'rb') as f:
-                return True, pickle.load(f), pickle_path
+        store_path = os.path.join(store_dir, '_'.join(other_identifiers) + f".{store}")
+        if os.path.exists(store_path) and not self.data_opts.get('force_recalc'):
+            with open(store_path, 'rb') as f:
+                if store == 'pkl':
+                    return_val = pickle.load(f)
+                else:
+                    return_val = json.load(f)
+                return True, return_val, store_path
         else:
-            return False, None, pickle_path
+            return False, None, store_path
 
-    def pickle_save(self, result, pickle_path):
-        with open(pickle_path, 'wb') as f:
-            pickle.dump(result, f)
+    def save(self, result, store_path):
+        store = self.data_opts.get('store', 'pkl')
+        mode = 'wb' if store == 'pkl' else 'w'
+        with open(store_path, mode) as f:
+            if store == 'pkl':
+                return pickle.dump(result, f)
+            else:
+                result_str = json.dumps([arr.tolist() for arr in result])
+                f.write(result_str)
 
 
 class LFPExperiment(LFPData, Subscriber):
@@ -108,14 +120,14 @@ class LFPExperiment(LFPData, Subscriber):
     @property
     def all_blocks(self):
         blocks = []
-        for animal in self.all_animals:
+        for animal in [animal for animal in self.all_animals if self.in_selected_animals(animal)]:
             [blocks.extend(animal_blocks) for animal_blocks in animal.blocks.values()]
         return blocks
 
     @property
     def all_mrl_calculators(self):
         mrl_calculators = []
-        for animal in self.all_animals:
+        for animal in [animal for animal in self.all_animals if self.in_selected_animals(animal)]:
             [mrl_calculators.extend(animal_blocks) for animal_blocks in animal.mrl_calculators.values()]
         return mrl_calculators
 
@@ -124,6 +136,13 @@ class LFPExperiment(LFPData, Subscriber):
         if self.data_type == 'mrl':
             raise ValueError("You can't extract events from MRL data")
         return [event for block in self.all_blocks for event in block.events]
+
+    def in_selected_animals(self, x):
+        selected = self.data_opts.get('selected_animals')
+        if not selected:
+            return True
+        else:
+            return [ancestor for ancestor in get_ancestors(x) if ancestor.name == 'animal'][0].identifier in selected
 
     def update(self, name):
 
@@ -222,6 +241,7 @@ class LFPAnimal(LFPData, BlockConstructor):
         self.mrl_calculators = defaultdict(list)
         self.parent = None
         self.group = None
+        self._processed_lfp = {}
 
     def __getattr__(self, name):
         prop = getattr(type(self), name, None)
@@ -242,7 +262,9 @@ class LFPAnimal(LFPData, BlockConstructor):
 
     @property
     def processed_lfp(self):
-        return self.process_lfp(self.raw_lfp)
+        if self.current_brain_region not in self._processed_lfp:
+            self.process_lfp()
+        return self._processed_lfp
 
     @property
     def frequency_args(self):
@@ -253,14 +275,23 @@ class LFPAnimal(LFPData, BlockConstructor):
         if 'mrl' in self.data_type:
             self.prepare_mrl_calculators()
 
-    def process_lfp(self, raw):
-        filtered_data = {}
-        for key in raw:
-            data = raw[key]/4
-            filtered = filter_60_hz(data, 2000)
-            normed = divide_by_rms(filtered)
-            filtered_data[key] = normed
-        return filtered_data
+    def process_lfp(self):
+        data = self.raw_lfp[self.current_brain_region]/4
+        filter = self.data_opts.get('filter', 'filtfilt')
+        if filter == 'filtfilt':
+            filtered = filter_60_hz(data, self.sampling_rate)
+        elif filter == 'spectrum_estimation':
+            ids = [self.identifier, self.data_opts['brain_region']]
+            saved_calc_exists, filtered, pickle_path = self.load('filter', ids)
+            if not saved_calc_exists:
+                ml = MatlabInterface(self.data_opts['matlab_configuration'])
+                filtered = ml.filter(data)
+                self.save(filtered, pickle_path)
+            filtered = np.squeeze(np.array(filtered))
+        else:
+            raise ValueError("Unknown filter")
+        normed = divide_by_rms(filtered)
+        self._processed_lfp[self.current_brain_region] = normed
 
     def prepare_mrl_calculators(self):
         if self.data_opts.get('spontaneous'):
@@ -333,8 +364,8 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         self.target_block = target_block
         self.reference_block_type = block_info.get('reference_block_type')
         self._is_relative = is_relative
-        start = self.onset - (self.convolution_padding[0]) * self.sampling_rate
-        stop = self.onset + (self.duration + self.convolution_padding[1]) * self.sampling_rate
+        start = self.onset - (self.convolution_padding[0]) * self.sampling_rate - 1
+        stop = self.onset + (self.duration + self.convolution_padding[1]) * self.sampling_rate - 1
         self.raw_data = self.animal.raw_lfp[self.current_brain_region][start:stop]
         self.processed_data = self.animal.processed_lfp[self.current_brain_region][start:stop]
         self.mrl_data = self.processed_data[self.convolution_padding[0] * self.sampling_rate:
@@ -372,7 +403,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         for i, start in enumerate(starts):
             start -= pre_stim
             end = start + pre_stim + self.data_opts['events'][self.block_type]['post_stim']
-            num_points = int(np.ceil((end - start) / .01 - epsilon)) # TODO: all the .01s in here depend on the mtcsg args
+            num_points = int(np.ceil((end - start) / .01 - epsilon))  # TODO: all the .01s in here depend on the mtcsg args
             event_times = np.linspace(start, start + (num_points * .01), num_points, endpoint=False)
             event_times = event_times[event_times < end]
             mask = (np.abs(time_bins[:, None] - event_times) <= epsilon).any(axis=1)
@@ -391,12 +422,12 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
             arg_set = self.data_opts['power_arg_set']
         pickle_args = [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] + \
                       [self.block_type, str(self.identifier)]
-        saved_calc_exists, result, pickle_path = self.pickle_load('spectrogram', pickle_args)
+        saved_calc_exists, result, pickle_path = self.load('spectrogram', pickle_args)
         if not saved_calc_exists:
             ml = MatlabInterface(self.data_opts['matlab_configuration'])
             result = ml.mtcsg(self.processed_data, *arg_set)
-            self.pickle_save(result, pickle_path)
-        return result
+            self.save(result, pickle_path)
+        return [np.array(arr) for arr in result]
 
     @property
     def power_deviations(self):

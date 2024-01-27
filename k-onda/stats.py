@@ -30,7 +30,11 @@ class Stats(Base):
     def set_attributes(self, data_opts):
         self.data_opts = data_opts
         if self.data_class == 'lfp':
-            self.data_col = f"{self.current_brain_region}_{self.current_frequency_band}_{self.data_type}"
+            fb = self.current_frequency_band
+            if not isinstance(self.current_frequency_band, str):
+                translation_table = str.maketrans({k: '_' for k in '[]'})
+                fb = list(fb).translate(translation_table)
+            self.data_col = f"{self.current_brain_region}_{fb}_{self.data_type}"
         else:
             self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
 
@@ -92,6 +96,44 @@ class Stats(Base):
         self.dfs[new_df_name] = result
         return new_df_name
 
+    def merge_dfs_animal_by_animal(self):
+        df_items = list(self.dfs.items())
+        _, dfs = zip(*df_items)
+
+        # Extract unique animals across all data frames
+        unique_animals = pd.concat([df['animal'] for df in dfs]).unique()
+
+        # List to hold merged data for each animal
+        merged_data_per_animal = []
+
+        for animal in unique_animals:
+            # Data frames filtered for the current animal
+            dfs_per_animal = [df[df['animal'] == animal].drop(columns=['animal']) for df in dfs if
+                              animal in df['animal'].values]
+
+            if not dfs_per_animal:
+                continue
+
+            # Merge data for this animal
+            merged_animal_df = dfs_per_animal[0]
+            for df in dfs_per_animal[1:]:
+                # Merge on identical columns
+                merged_animal_df = pd.merge(merged_animal_df, df, how='outer')
+
+            # Add the animal identifier back to the merged data
+            merged_animal_df['animal'] = animal
+
+            # Append to the list
+            merged_data_per_animal.append(merged_animal_df)
+
+        # Concatenate all merged data
+        final_merged_df = pd.concat(merged_data_per_animal, ignore_index=True)
+
+        # Store or return the final merged DataFrame
+        new_df_name = '_'.join([name for name, _ in df_items])
+        self.dfs[new_df_name] = final_merged_df
+        return new_df_name
+
     def get_rows(self):
         """
         Prepares the necessary parameters and then calls `self.get_data` to collect rows of data based on the specified
@@ -132,10 +174,6 @@ class Stats(Base):
         else:
             other_attributes += ['category', 'neuron_type']
             level = self.data_opts['row_type']
-
-        if level in ['block', 'event', 'mrl_calculator']:
-            inclusion_criteria += [lambda x: find_ancestor_attribute(x, 'block_type') in self.data_opts.get(
-                'block_types', ['tone'])]
         if self.data_opts.get('selected_animals') is not None:
             inclusion_criteria += [lambda x: find_ancestor_id(x, 'animal') in self.data_opts['selected_animals']]
 
@@ -221,7 +259,7 @@ class Stats(Base):
            of the object.
         """
         if len(self.dfs):
-            df_name = self.merge_dfs()
+            df_name = self.merge_dfs_animal_by_animal()
         else:
             self.make_df()
             df_name = self.data_type

@@ -1,7 +1,9 @@
 import numpy as np
 import math
 from scipy import signal
-from scipy.signal import hilbert, butter, filtfilt
+from scipy.signal import hilbert, butter, filtfilt, hann, hamming
+from scipy.fft import fft, ifft
+from scipy.optimize import curve_fit
 
 
 def calc_hist(spikes, num_bins, spike_range):
@@ -78,7 +80,7 @@ def filter_60_hz(signal_with_noise, fs):
     f0 = 60  # Frequency to be removed
     Q = 30  # Quality factor (controls the width of the notch)
     b, a = signal.iirnotch(f0, Q, fs)
-    return signal.lfilter(b, a, signal_with_noise)
+    return signal.filtfilt(b, a, signal_with_noise)
 
 
 def divide_by_rms(arr):
@@ -160,6 +162,93 @@ def correlogram(lags, bin_size, spikes1, spikes2, num_pairs):
         spike_bins = [(spike + bin_edge - .5 * bin_size, spike + bin_edge + .5 * bin_size) for spike in spikes1]
         to_return[bn] += sum([1 for spike in spikes2 for start, end in spike_bins if start <= spike < end]) / num_pairs
     return to_return
+
+
+def remove_line_noise_spectrum_estimation(wave, fs=1, opts=''):
+    # Adapted from: removeLineNoise_SpectrumEstimation
+    # an implementation of the technique presented in Mewett, Nazeran, and Reynolds. "Removing power line noise from
+    # recorded EMG," EMBS, IEEE 2001 DOI: 10.1109/IEMBS.2001.1017205.
+
+    # Example usage
+    # wave = np.random.randn(10, 1000)  # Replace with your data
+    # fs = 1000  # Sampling frequency
+    # opts = 'LF=60, NH=5, M=2048'  # Options
+    # cleaned_wave = remove_line_noise_spectrum_estimation(wave, fs, opts)
+
+    # Parse options
+    if opts is None:
+        opts = {}
+
+        # Parse options from the dictionary
+    n_harmonics = int(opts.get('nh', 1))
+    line_hz = int(opts.get('lf', 50)) * np.arange(1, n_harmonics + 1)
+    err_tolerance = float(opts.get('tol', 0.01))
+    hw = int(opts.get('hw', 2))
+    m = int(opts.get('m', 0))
+    window_type = opts.get('win', 'hanning')
+
+    if wave.ndim == 1:
+        wave = wave[np.newaxis, :]
+
+    # Determine window size if not specified
+    if m == 0:
+        z, err, id = 4, np.inf, -1
+        while err / line_hz[0] > err_tolerance or id < hw * 2 - 1:
+            z += 1
+            W = fs * np.linspace(0, 1, 2 ** z)
+            err, id = min((abs(w - line_hz[0]), i) for i, w in enumerate(W))
+        m = 2 ** z
+
+    # Create window
+    if window_type == 'hamming':
+        window = hamming(m, sym=False)
+    else:
+        window = hann(m, sym=False)
+
+    # Prepare for line noise removal
+    W = fs * np.linspace(0, 1, m)
+    line_id = [np.argmin(abs(W - hz)) for hz in line_hz]
+
+    # Remove line noise
+    for cc in range(wave.shape[0]):
+        # Padding
+        pad_start = _fourier_pad(wave[cc, :m//2], m, fs)
+        pad_end = _fourier_pad(wave[cc, -m//2:], m, fs, reverse=True)
+        pad_wave = np.concatenate([pad_start, wave[cc, :], pad_end])
+
+        # Filter wave
+        filt_wave = np.zeros((2, pad_wave.shape[0]))
+        for tt in range(0, pad_wave.shape[0] - m, m // 2):
+            snip = pad_wave[tt:tt + m] * window
+            spect = fft(snip)
+            # Correct the spectrum
+            for ii in range(n_harmonics):
+                kk = np.arange(-hw, hw + 1) + line_id[ii]
+                est = np.linspace(abs(spect[kk[0]]), abs(spect[kk[-1]]), 2 * hw + 1)
+                spect[kk] = spect[kk] / np.abs(spect[kk]) * est
+                spect[m - kk + 2] = np.conj(spect[kk])
+            filt_wave[tt // (m // 2) % 2, tt:tt + m] = ifft(spect)
+
+        filt_wave = np.sum(filt_wave, axis=0) / np.mean(window + np.roll(window, m // 2))
+        wave[cc, :] = filt_wave[m//2:-m//2]
+
+    return wave
+
+def _fourier_pad(segment, m, fs, reverse=False):
+    # Fit a Fourier series to the segment
+    def fourier_series(x, a0, a1, b1, w):
+        return a0 + a1 * np.cos(w * x) + b1 * np.sin(w * x)
+
+    x = np.arange(m // 2) + 1 if not reverse else -np.arange(m // 2) - 1
+    popt, _ = curve_fit(fourier_series, x, segment, bounds=([-np.inf, -np.inf, -np.inf, 40/fs*2*np.pi], [np.inf, np.inf, np.inf, 70/fs*2*np.pi]))
+    fitted = fourier_series(np.arange(m // 2) if not reverse else np.arange(-m, 0), *popt)
+    if reverse:
+        return fitted - fitted[0] + segment[-1]
+    else:
+        return fitted - fitted[-1] + segment[0]
+
+
+
 
 
 
