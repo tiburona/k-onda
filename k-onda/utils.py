@@ -28,6 +28,7 @@ def to_hashable(item, max_depth=10):
     else:
         return item
 
+
 def cache_method(method):
     """
     Decorator that allows the results of a method's calculation to be stored in the instance cache.
@@ -153,4 +154,11 @@ def is_empty(container):
         raise TypeError("Unsupported container type")
 
 
-
+def pad_axes_if_nec(arr, dim='row'):
+    if arr.ndim == 1:
+        if dim == 'row':
+            return arr[np.newaxis, :]
+        else:
+            return arr[:, np.newaxis]
+    else:
+        return arr

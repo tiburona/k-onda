@@ -762,59 +762,81 @@ class LFPPlotter(Plotter):
 
     def plot_spectrogram(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
+        if self.data_opts['level'] == 'group':
+            self.plot_spectrogram_by_groups()
+        elif self.data_opts['level'] == 'animal':
+            self.plot_spectrogram_by_animals()
+        else:
+            raise NotImplementedError
 
-        # Create a figure and axes for subplots
-        ncols = len(self.data_opts['blocks'])
-        nrows = len(self.lfp.groups)
-        self.fig, axes = plt.subplots(nrows=nrows, ncols=ncols,
-                                      figsize=(10, ncols * 5), sharex=True, sharey=True)
+    def plot_spectrogram_by_groups(self):
+        axes = self.create_figure_and_axes(self.lfp)
+        group_info = {}
 
-        if ncols == 1:
-            axes = axes[:, np.newaxis]
-
-        group_vals = {}
-
-        # Collect data and find min/max values if equal_color_scales is True
         for i, group in enumerate(self.lfp.groups):
-            group_min_value = float('inf')
-            group_max_value = float('-inf')
-            group_vals[group.identifier] = {'im': []}
-            for j, block_type in enumerate(self.data_opts['blocks']):
-                self.selected_block_type = block_type
-                data = group.data
-                pre_stim, post_stim = (self.data_opts['events'][self.selected_block_type][opt]
-                                       for opt in ('pre_stim', 'post_stim'))
-                im = axes[i, j].imshow(data, cmap='jet', interpolation='nearest', aspect='auto',
-                                       extent=[-pre_stim, post_stim, self.current_frequency_band[0],
-                                               self.current_frequency_band[1]], origin='lower')
-                block_str = block_type.capitalize() if ncols > 1 else ''
-                axes[i, j].set_title(f"{group.identifier.capitalize()} {block_str}")
-
-                group_vals[group.identifier]['im'].append(im)
-                group_vals[group.identifier]['min'] = min(group_min_value, data.min())
-                group_vals[group.identifier]['max'] = max(group_max_value, data.max())
+            im_list, group_min, group_max = self.make_spectrogram_subplots(group, axes[i])
+            group_info[group.identifier] = {'im': im_list, 'min': group_min, 'max': group_max}
 
         if self.graph_opts.get('equal_color_scales') == 'by_subplot':
-            [im.set_clim(
-                (fun([group_vals[grp][key] for grp in group_vals]) for fun, key in [(min, 'min'), (max, 'max')])
-            ) for group in group_vals for im in group_vals[group]['im']]
-            cbar = self.fig.colorbar(group_vals[group.identifier][0], ax=axes.ravel().tolist(), shrink=0.7)
-            cbar.ax.set_position(cbar.ax.get_position().translated(0.1, 0))
+            global_min = min([group_dict['min'] for group_dict in group_info.values()])
+            global_max = min([group_dict['min'] for group_dict in group_info.values()])
+            ims = [im for group_dict in group_info.values() for im in group_dict['im']]
+            self.set_clim_and_make_colorbar(axes, ims, global_min, global_max)
         elif self.graph_opts.get('equal_color_scales') == 'within_group':
-            for i, group in enumerate(group_vals):
-                [im.set_clim(group_vals[group]['min'], group_vals[group]['max']) for im in group_vals[group]['im']]
-                self.fig.colorbar(group_vals[group]['im'][0], ax=axes[i].ravel().tolist(), shrink=0.7)
+            for i, group in enumerate(group_info):
+                self.set_clim_and_make_colorbar(axes[i, :], *(group_info[group][k] for k in ['im', 'min', 'max']))
         else:
-            for group in enumerate(group_vals):
-                for im in group_vals[group]['im']:
-                    im.set_clim(im.get_array().min(), im.get_array().max())
-                    self.fig.colorbar(im, ax=im.axes, shrink=0.7)
-
-        [ax.fill_betweenx(self.lfp.freq_range, 0, self.experiment.stimulus_duration, color='k', alpha=0.2)
-         for ax in axes.ravel()]
-
+            for im in group_info[group]['im']:
+                self.set_clim_and_make_colorbar([im.axes], [im], im.get_array().min(), im.get_array().max())
+        self.make_stimulus_patch(axes)
         self.close_plot('Spectrogram')
 
+    def plot_spectrogram_by_animals(self):
+        for i, group in enumerate(self.lfp.groups):
+            axes = self.create_figure_and_axes(group)
+            for j, animal in enumerate(group):
+                ims, animal_min, animal_max = self.make_spectrogram_subplots(animal, axes[j])
+                self.set_clim_and_make_colorbar(axes[j,:], ims, animal_min, animal_max)
+            self.make_stimulus_patch(axes)
+            self.close_plot(f"Spectrogram {group.identifier.capitalize()} Animals")
+
+    def create_figure_and_axes(self, parent):
+        ncols = len(self.data_opts['blocks'])
+        nrows = len(parent.children)
+        #multipliers = (8, 3) if self.data_opts['level'] == 'animal' else (3, 5)
+        self.fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*ncols, 4*nrows), sharex=True, sharey=True)
+        if ncols == 1:
+            axes = axes[:, np.newaxis]
+        return axes
+
+    def make_spectrogram_subplots(self, data_source, axes):
+        data_source_min = float('inf')
+        data_source_max = float('-inf')
+        im_list = []
+        for i, block_type in enumerate(self.data_opts['blocks']):
+            self.selected_block_type = block_type
+            data = data_source.data
+            pre_stim, post_stim = (self.data_opts['events'][self.selected_block_type][opt]
+                                   for opt in ('pre_stim', 'post_stim'))
+            im = axes[i].imshow(data, cmap='jet', interpolation='nearest', aspect='auto',
+                                   extent=[-pre_stim, post_stim, *self.current_frequency_band], origin='lower')
+            block_str = block_type.capitalize() if len(self.data_opts['blocks']) > 1 else ''
+            data_id = data_source.identifier
+            if self.data_opts['level'] == 'group':
+                data_id = data_id.capitalize()
+            axes[i].set_title(f"{data_id} {block_str}")
+            im_list.append(im)
+            data_source_min = min(data_source_min, data.min())
+            data_source_max = max(data_source_max, data.max())
+        return im_list, data_source_min, data_source_max
+
+    def set_clim_and_make_colorbar(self, axes, im_list, minimum, maximum):
+        [im.set_clim(minimum, maximum) for im in im_list]
+        cbar = self.fig.colorbar(im_list[0], ax=axes.ravel().tolist(), shrink=0.7)
+
+    def make_stimulus_patch(self, axes):
+        [ax.fill_betweenx(self.lfp.freq_range, 0, self.experiment.stimulus_duration, color='k', alpha=0.2)
+         for ax in axes.ravel()]
 
     def set_dir_and_filename(self, basename):
         title_string = f"{'_'.join([self.current_brain_region, str(self.current_frequency_band), basename])}"

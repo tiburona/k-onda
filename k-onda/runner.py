@@ -16,7 +16,7 @@ mrl_procs = {meth: {'class': MRLPlotter, 'method': meth} for meth in ['mrl_bar_p
 other_procedures = {
     'plot_group_stats': {'class': GroupStatsPlotter, 'method': 'plot_group_stats'},
     'make_spreadsheet': {'class': Stats, 'method': 'make_df', 'follow_up': 'make_spreadsheet'},
-    'unit_upregulation_pie_chart': {'class': PiePlotter, 'method': 'unit_upreguulation_pie_chart'},
+    'unit_upregulation_pie_chart': {'class': PiePlotter, 'method': 'unit_upregulation_pie_chart'},
     'neuron_type_scatterplot': {'class': NeuronTypePlotter, 'method': 'scatterplot'},
     'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'},
     'plot_power': {'class': LFPPlotter, 'method': 'plot_power'},

@@ -384,7 +384,7 @@ class Event(SpikeData):
         rates = self.get_unadjusted_rates()
         if not self.reference or self.data_opts.get('adjustment') == 'none':
             return rates
-        rates -= self.reference.mean_firing_rate()
+        rates -= self.reference.mean_firing_rate() # TODO: does this make sense? Maybe this should be the block reference
         if self.data_opts.get('adjustment') == 'relative':
             return rates
         rates /= self.unit.get_firing_std_dev(block_types=self.block_type,)  # same as dividing unit psth by std dev
