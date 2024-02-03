@@ -102,8 +102,13 @@ CAROLINA_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 
                      'frequency_bands': ['theta_1'], 'brain_regions': ['bla', 'il', 'bf'],
                      'sem_level': 'mrl_calculator'}
 
+# PFC_THETA_POWER_ANIMALS = [
+#     'IG160', 'IG163', 'IG171', 'IG176', 'IG180', 'INED04', 'INED16', 'INED18', 'IG154', 'IG156', 'IG158', 'IG172',
+#     'IG174', 'IG175', 'IG177', 'IG179', 'INED07', 'INED06', 'INED09', 'INED11', 'INED12'
+# ]
+
 PFC_THETA_POWER_ANIMALS = [
-    'IG160', 'IG163', 'IG171', 'IG176', 'IG180', 'INED04', 'INED16', 'INED18', 'IG154', 'IG156', 'IG158', 'IG172',
+    'IG160', 'IG163', 'IG171', 'IG176', 'IG180', 'INED04', 'INED16', 'INED18', 'IG156', 'IG158', 'IG172',
     'IG174', 'IG175', 'IG177', 'IG179', 'INED07', 'INED06', 'INED09', 'INED11', 'INED12'
 ]
 
@@ -148,8 +153,8 @@ SPECTROGRAM_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands'
                     }
 
 MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'mrl',
-            'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block',
-            'blocks': {'tone': range(5), 'pretone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
+            'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block', 'power_deviation': False,
+            'blocks': {'tone': range(5), 'pretone': range(5)},
             'events': {'pretone': {'pre_stim': 0, 'post_stim': 1}, 'tone': {'pre_stim': 0, 'post_stim': .3}},
             'rules': {'brain_region': {'pl': [('selected_animals', STANDARD_ANIMALS)],
                                        'bla': [('selected_animals', STANDARD_ANIMALS)],
@@ -171,8 +176,8 @@ POWER_SPREADSHEET_OPTS = {
 TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': [(0, 15)], 'data_type': 'power',
                          'brain_regions': ['hpc', 'bla', 'pl'], 'evoked': False, 'store': 'pkl',
                          'blocks': {'pretone': [0], 'tone': [0]}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
-                         'power_deviation': False, 'collapse_sem_data': True, 'filter': 'spectrum_estimation',
-                         'levels': ['group', 'animal'], 'validate_events': False,
+                         'power_deviation': False, 'filter': 'spectrum_estimation',
+                         'levels': ['group', 'animal'], 'validate_events': True,
                          'events': {'pretone': {'pre_stim': .6, 'post_stim': .6},
                                     'tone': {'pre_stim': .6, 'post_stim': .6}},
                          'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],

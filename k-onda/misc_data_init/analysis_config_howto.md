@@ -150,8 +150,8 @@ to 0, post_stim equal to your period duration, and make sure to select only one 
 
 ```
 {"data_class": "spike", "data_type": "autocorrelation",  'bin_size': 0.01, 'max_lag': 99,
-"events": {"pretone": {"pre_stim": 0, "post_stim": 1, "selected": [0, 150, 30]}, 
-"tone": {"pre_stim": .05, "post_stim": .65}, "selected": [0, 150, 30]},  'block_types': ['tone']}
+"events": {"pretone": {"pre_stim": 0, "post_stim": 1, "selection": [0, 150, 30]}, 
+"tone": {"pre_stim": .05, "post_stim": .65}, "selection": [0, 150, 30]},  'block_types': ['tone']}
 ```
 
 "evoked": as described in the discussion of ["proportion"](#proportion)
@@ -236,7 +236,10 @@ so long as every subdirectory can be added to the Matlab path without interferin
 - "temp_file_path": a path to a directory where a temp subdirectory will be written that will allow the creation of 
 files for the program execution
 
-"frequency_band" (string )
+"frequency_band": Either the name of the frequency band, which you've already 
+entered as a key in the `frequency_bands` dictionary in the experiment configuration, or an iterable of two integers 
+which define the frequency range. Alternatively, you can use "frequency_bands" and supply an iterable of frequency 
+bands, e.g. `["delta", "theta"]` pr `[(0, 4), (4, 8)]`
 
 "power_deviation" (optional): a boolean that indicates whether to include in the CSV an idiosyncratic calculation that 
 records how far above or below the local moving average a time bin is. Check the `lfp` module for `get_power_deviation` 

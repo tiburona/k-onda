@@ -36,6 +36,9 @@ class BlockConstructor:
         event_ind = 0
         for i, (onset, events) in enumerate(zip(block_onsets, block_events)):
             block_events = np.array([ev for j, ev in enumerate(events) if event_ind + j in selected_event_indices])
+            if self.name == 'animal': # self is an LFPAnimal
+                onset = onset * self.sampling_rate/self.spike_target.sampling_rate
+                block_events = block_events * self.sampling_rate/self.spike_target.sampling_rate
             event_ind += len(block_info['events'][i])
             blocks.append(self.block_class(self, i, block_type, block_info, onset, events=block_events))
         return blocks
@@ -50,9 +53,10 @@ class BlockConstructor:
             if self.name == 'animal':  # if self is animal this is an lfp block
                 shift += sum(paired_block.convolution_padding)
             onset = paired_block.onset - shift * self.sampling_rate
+            event_starts = paired_block.event_starts - shift * self.sampling_rate
             duration = duration if duration else paired_block.duration
-            reference_block = self.block_class(self, i, block_type, block_info, onset, target_block=paired_block,
-                                               is_relative=True)
+            reference_block = self.block_class(self, i, block_type, block_info, onset, events=event_starts,
+                                               target_block=paired_block, is_relative=True)
             paired_block.paired_block = reference_block
             blocks.append(reference_block)
         return blocks

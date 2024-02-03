@@ -766,6 +766,8 @@ class LFPPlotter(Plotter):
             self.plot_spectrogram_by_groups()
         elif self.data_opts['level'] == 'animal':
             self.plot_spectrogram_by_animals()
+        elif self.data_opts['level'] == 'block':
+            self.plot_spectrogram_blocks()
         else:
             raise NotImplementedError
 
@@ -788,7 +790,7 @@ class LFPPlotter(Plotter):
         else:
             for im in group_info[group]['im']:
                 self.set_clim_and_make_colorbar([im.axes], [im], im.get_array().min(), im.get_array().max())
-        self.make_stimulus_patch(axes)
+        self.set_up_stimulus_patches(axes)
         self.close_plot('Spectrogram')
 
     def plot_spectrogram_by_animals(self):
@@ -797,8 +799,25 @@ class LFPPlotter(Plotter):
             for j, animal in enumerate(group):
                 ims, animal_min, animal_max = self.make_spectrogram_subplots(animal, axes[j])
                 self.set_clim_and_make_colorbar(axes[j,:], ims, animal_min, animal_max)
-            self.make_stimulus_patch(axes)
+            self.set_up_stimulus_patches(axes)
             self.close_plot(f"Spectrogram {group.identifier.capitalize()} Animals")
+
+    def plot_spectrogram_blocks(self):
+        for group in self.lfp.groups:
+            for animal in group:
+                nrows = sum([len(self.data_opts['blocks'][block_type]) for block_type in self.data_opts['blocks']])
+                self.fig, axes = plt.subplots(nrows=nrows, ncols=1, figsize=(30, 5*nrows), sharex=True)
+                i = 0
+                for block_type in self.data_opts['blocks']:
+                    self.selected_block_type = block_type
+                    for block in animal:
+                        im, data = self.generate_image(axes[i], block)
+                        repeat = block.event_duration if block.event_duration else block.target_block.event_duration
+                        #self.set_up_stimulus_patches(np.array([axes[i]]), repeat=repeat)
+                        self.set_clim_and_make_colorbar(np.array([axes[i]]), [im], data.min(), data.max())
+                        axes[i].set_title(f"{animal.identifier} {block_type.capitalize()} {block.identifier+1}")
+                        i += 1
+                self.close_plot(f"Spectrogram {animal.identifier} Blocks")
 
     def create_figure_and_axes(self, parent):
         ncols = len(self.data_opts['blocks'])
@@ -815,11 +834,7 @@ class LFPPlotter(Plotter):
         im_list = []
         for i, block_type in enumerate(self.data_opts['blocks']):
             self.selected_block_type = block_type
-            data = data_source.data
-            pre_stim, post_stim = (self.data_opts['events'][self.selected_block_type][opt]
-                                   for opt in ('pre_stim', 'post_stim'))
-            im = axes[i].imshow(data, cmap='jet', interpolation='nearest', aspect='auto',
-                                   extent=[-pre_stim, post_stim, *self.current_frequency_band], origin='lower')
+            im, data = self.generate_image(axes[i], data_source)
             block_str = block_type.capitalize() if len(self.data_opts['blocks']) > 1 else ''
             data_id = data_source.identifier
             if self.data_opts['level'] == 'group':
@@ -830,12 +845,27 @@ class LFPPlotter(Plotter):
             data_source_max = max(data_source_max, data.max())
         return im_list, data_source_min, data_source_max
 
+    def generate_image(self, ax, data_source):
+        data = data_source.data
+        pre_stim, post_stim = (self.data_opts['events'][self.selected_block_type][opt]
+                               for opt in ('pre_stim', 'post_stim'))
+        im = ax.imshow(data_source.data, cmap='jet', interpolation='nearest', aspect='auto',
+                            extent=[-pre_stim, post_stim, *self.current_frequency_band], origin='lower')
+        return im, data
+
     def set_clim_and_make_colorbar(self, axes, im_list, minimum, maximum):
         [im.set_clim(minimum, maximum) for im in im_list]
         cbar = self.fig.colorbar(im_list[0], ax=axes.ravel().tolist(), shrink=0.7)
 
-    def make_stimulus_patch(self, axes):
-        [ax.fill_betweenx(self.lfp.freq_range, 0, self.experiment.stimulus_duration, color='k', alpha=0.2)
+    def set_up_stimulus_patches(self, axes, repeat=None):
+        if repeat:
+            for start in np.arange(0, self.data_opts['events'][self.selected_block_type]['post_stim'], repeat):
+                self.make_stimulus_patch(axes, start)
+        else:
+            self.make_stimulus_patch(axes, 0)
+
+    def make_stimulus_patch(self, axes, start):
+        [ax.fill_betweenx(self.lfp.freq_range, start, self.experiment.stimulus_duration, color='k', alpha=0.2)
          for ax in axes.ravel()]
 
     def set_dir_and_filename(self, basename):

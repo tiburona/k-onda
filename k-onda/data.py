@@ -166,7 +166,11 @@ class Data(Base):
 
     @property
     def sem(self):
-        return self.get_sem()
+        return self.get_sem(collapse_sem_data=True)
+
+    @property
+    def sem_envelope(self):
+        return self.get_sem(collapse_sem_data=False)
 
     @property
     def scatter(self):
@@ -231,7 +235,7 @@ class Data(Base):
                 return np.nanmean(np.array(child_vals_filtered), axis=axis)
 
     @cache_method
-    def get_sem(self):
+    def get_sem(self, collapse_sem_data=False):
         """
         Calculates the standard error of an object's data. If object's data is a vector, it will always return a float.
         If object's data is a matrix, the `collapse_sem_data` opt will determine whether it returns the standard error
@@ -245,10 +249,44 @@ class Data(Base):
         else:
             sem_children = self.children
 
-        if self.data_opts.get('collapse_sem_data'):
+        if collapse_sem_data:
             return sem([child.mean_data for child in sem_children])
         else:
             return sem([child.data for child in sem_children])
+
+    def get_median(self, stop_at='event', extend_by=None, select_by=None):
+
+        def collect_vals(obj, vals=None):
+            if vals is None:
+                vals = []
+            if obj.name == stop_at or not hasattr(obj, 'children'):
+                vals.append(obj.data)
+            else:
+                if hasattr(obj, 'children'):
+                    for child in obj.children:
+                        if extend_by is not None:
+                            sources = expand_sources(child, extend_by)
+                        [collect_vals(source, vals) for source in sources if select_sources(source, select_by)]
+            return vals
+
+        def expand_sources(obj, extension):
+            sources = [obj]
+            if extension:
+                if 'frequency' in extension:
+                    sources = [freq_bin for src in sources for freq_bin in src.frequency_bins]
+                if 'time' in extension:
+                    sources = [time_bin for src in sources for time_bin in src.time_bins]
+            return sources
+
+        def select_sources(obj, selection):
+            if selection is None: return True
+            for name, key, val in selection:
+                if name == obj.name and hasattr(obj, key) and getattr(obj, key) != val:
+                    return False
+            return True
+
+        vals_to_summarize = collect_vals(self)
+        return np.median(vals_to_summarize)
 
     @cache_method
     def get_scatter_points(self):

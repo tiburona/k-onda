@@ -7,7 +7,7 @@ from collections import defaultdict
 from copy import copy
 
 
-from data import Data, Evoked
+from data import Data
 from context import experiment_context
 from block_constructor import BlockConstructor
 from context import Subscriber
@@ -35,8 +35,9 @@ class LFPData(Data):
 
     @property
     def freq_range(self):
+        exp = self.find_experiment()
         if isinstance(self.current_frequency_band, type('str')):
-            return FREQUENCY_BANDS[self.current_frequency_band]
+            return exp.frequency_bands[self.current_frequency_band]
         else:
             return self.current_frequency_band
 
@@ -107,6 +108,7 @@ class LFPExperiment(LFPData, Subscriber):
         self.subscribe(experiment_context)
         self._lfp_root = info['lfp_root']
         self._sampling_rate = info['lfp_sampling_rate']
+        self.frequency_bands = info['frequency_bands']
         self.lost_signal = info['lost_signal']  # TODO: this is going to need to get more granular at some point but I haven't yet seen an analysis with multiple mtcsg args
         self.all_animals = [LFPAnimal(animal, raw_lfp[animal.identifier], self._sampling_rate)
                             for animal in self.experiment.all_animals]
@@ -385,20 +387,26 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         self.parent = lfp_animal
         self.identifier = i
         self.block_type = block_type
-        self.event_starts = events if events is not None else []
-        self.onset = int(onset * self.sampling_rate / self.animal.spike_target.sampling_rate)
+        self.onset = onset - 1
+        self.target_block = target_block
+        self._is_relative = is_relative
+        if events is not None:
+            self.event_starts = events - 1
+        else:
+            self.event_starts = np.array([])
         self.convolution_padding = block_info['lfp_padding']
         self.duration = block_info.get('duration')
         self.event_duration = block_info.get('event_duration')
-        self.target_block = target_block
+        if self.event_duration is None:
+            self.event_duration = target_block.event_duration
         self.reference_block_type = block_info.get('reference_block_type')
-        self._is_relative = is_relative
-        start = self.onset - (self.convolution_padding[0]) * self.sampling_rate - 1
-        stop = self.onset + (self.duration + self.convolution_padding[1]) * self.sampling_rate - 1
+        start_pad_in_samples, end_pad_in_samples = np.array(self.convolution_padding) * self.sampling_rate
+        duration_in_samples = self.duration * self.sampling_rate
+        start = round(self.onset - start_pad_in_samples)
+        stop = round(self.onset + duration_in_samples + end_pad_in_samples)
         self.raw_data = self.animal.raw_lfp[self.current_brain_region][start:stop]
         self.processed_data = self.animal.processed_lfp[self.current_brain_region][start:stop]
-        self.unpadded_data = self.processed_data[self.convolution_padding[0] * self.sampling_rate:
-                                            -self.convolution_padding[1] * self.sampling_rate]
+        self.unpadded_data = self.processed_data[start_pad_in_samples:-end_pad_in_samples]
         self._spectrogram = None
         self.last_brain_region = None
         self.experiment = self.animal.group.experiment
@@ -421,37 +429,33 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
             self.last_brain_region = self.current_brain_region
         return self._spectrogram
 
-    def get_lost_signal(self):
+    def lost_signal(self):
         return self.animal.parent.experiment.lost_signal
 
     def get_events(self):
-        true_beginning = self.convolution_padding[0] - self.get_lost_signal()/2
+        true_beginning = self.convolution_padding[0] - self.lost_signal()/2
         pre_stim, post_stim = (self.data_opts['events'][self.block_type][opt] for opt in ['pre_stim', 'post_stim'])
-        duration = self.event_duration if self.event_duration else self.target_block.event_duration
-
-        # these times determine where to index into the output of mtcsg
-        starts = np.arange(true_beginning, true_beginning + self.duration, duration) - pre_stim
         time_bins = np.array(self.spectrogram[2])
         events = []
         epsilon = 1e-6  # a small offset to avoid floating-point rounding issues
 
-        for i, start in enumerate(starts):
-            end = start + pre_stim + post_stim
-            normed_data = self.processed_data[int(starts[i]*self.sampling_rate):int(end*self.sampling_rate)]
+        for i, event_start in enumerate(self.event_starts):
+            # get normed data for the event in samples
+            start = round(event_start - self.onset)
+            stop = round(start + self.event_duration*self.sampling_rate)
+            normed_data = self.unpadded_data[start:stop]
 
-            num_points = int(np.ceil((end - start) / .01 - epsilon))  # TODO: all the .01s in here depend on the mtcsg args
-            event_times = np.linspace(start, start + (num_points * .01), num_points, endpoint=False)
-            event_times = event_times[event_times < end]
-
+            # get time points where the event will fall in the spectrogram in seconds
+            spect_start = start/self.sampling_rate + true_beginning - pre_stim
+            spect_end = spect_start + pre_stim + post_stim
+            num_points = int(np.ceil((spect_end - spect_start) / .01 - epsilon))  # TODO: the .01s in here depend on the mtcsg args
+            event_times = np.linspace(spect_start, spect_start + (num_points * .01), num_points, endpoint=False)
+            event_times = event_times[event_times < spect_end]
             # a binary mask that is True when a time bin in the spectrogram belongs to this event
             mask = (np.abs(time_bins[:, None] - event_times) <= epsilon).any(axis=1)
+
             events.append(LFPEvent(i, event_times, normed_data, mask, self))
         return events
-
-    @staticmethod
-    def process_lfp(raw):
-        filtered = filter_60_hz(raw, 2000)
-        return divide_by_rms(filtered)
 
     def calc_cross_spectrogram(self):
         if str(self.current_frequency_band) in FREQUENCY_ARGS:
@@ -511,17 +515,26 @@ class LFPEvent(LFPData, LFPDataSelector):
 
     @property
     def is_valid(self):
-        if self.data_opts.get('validate_events'):
-            animal = self.block.animal
-            if animal.is_mirror:
-                return True
-            if not animal.mirror:
-                animal.make_mirror()
-        standard = animal.mirror.get_summarized_power(self.block_type)
+        animal = self.block.animal
+
+        if (not self.data_opts.get('validate_events')) or animal.is_mirror:
+            return True
+
+        if not animal.mirror:
+            animal.make_mirror()
+
         mirror_event = animal.mirror.blocks[self.block_type][self.block.identifier].events[self.identifier]
-        if abs(np.mean(mirror_event.get_power())) > 10*abs(standard):
-            print('invalidated!')
-            return False
+        mirror_event_frequency_bins = mirror_event.frequency_bins
+
+        for frequency in range(0, 8):
+            standard = animal.mirror.get_median(
+                stop_at='event', extend_by=['frequency', 'time'],
+                select_by=[('block', 'block_type', self.block_type), ('frequency_bin', 'identifier', frequency)])
+            for time_bin in mirror_event_frequency_bins[frequency].time_bins:
+                if time_bin.data > 20 * standard:
+                    print(f"{self.current_brain_region} {animal.identifier} {self.block_type} {self.block.identifier} "
+                          f"{self.identifier} invalid!")
+                    return False
         return True
 
 
