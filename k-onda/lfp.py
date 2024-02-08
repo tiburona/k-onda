@@ -13,28 +13,23 @@ from block_constructor import BlockConstructor
 from context import Subscriber
 from matlab_interface import MatlabInterface
 from math_functions import *
-from utils import cache_method, get_ancestors
-
-
-FREQUENCY_BANDS = dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
-                       hgamma=(70, 120))
-LO_FREQ_ARGS = (2048, 2000, 1000, 980, 2)
-FREQUENCY_ARGS = {fb: LO_FREQ_ARGS for fb in ['delta', 'theta_1', 'theta_2', 'delta_theta', 'gamma', 'hgamma']}
-# TODO: gamma and hgamma don't really belong there, find out what their args should be.
+from utils import cache_method, get_ancestors, find_ancestor_attribute
 
 
 class LFPData(Data):
 
     @property
     def frequency_bins(self):
-        return [FrequencyBin(i, data_point, self) for i, data_point in enumerate(self.data)]
+        return self.get_frequency_bins(self.data)
 
     @property
     def time_bins(self):
-        return self.get_time_bins()
+        return self.get_time_bins(self.data)
 
     @property
     def freq_range(self):
+        if find_ancestor_attribute(self, 'frozen_freq_range') is not None:
+            return find_ancestor_attribute(self, 'frozen_freq_range')
         exp = self.find_experiment()
         if isinstance(self.current_frequency_band, type('str')):
             return exp.frequency_bands[self.current_frequency_band]
@@ -60,16 +55,19 @@ class LFPData(Data):
     def get_power(self):
         return self.get_average('get_power', stop_at='event')
 
-    def get_time_bins(self):
+    def get_time_bins(self, data):
         tbs = []
-        if len(self.data.shape) > 1:
-            for i, data_point in enumerate(range(self.data.shape[1])):
-                column = self.data[:, i]
+        if len(data.shape) > 1:
+            for i, data_point in enumerate(range(data.shape[1])):
+                column = data[:, i]
                 tb = TimeBin(i, column, self)
                 tbs.append(tb)
             return tbs
         else:
-            return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
+            return [TimeBin(i, data_point, self) for i, data_point in enumerate(data)]
+
+    def get_frequency_bins(self, data):
+        return [FrequencyBin(i, data_point, self) for i, data_point in enumerate(data)]
 
     def load(self, calc_name, other_identifiers):
         store = self.data_opts.get('store', 'pkl')
@@ -188,8 +186,8 @@ class LFPGroup(LFPData):
 
     @property
     def data_by_block(self):
-        if self.data_type != 'mrl':  # TODO: What? What does grandchildren scatter have to do with this?
-            raise NotImplementedError("Grandchildren Scatter is currently only implemented for MRL")
+        if self.data_type != 'mrl':
+            raise NotImplementedError("Data by block is currently only implemented for MRL")
         data_by_block = []
         for i in range(5):
             data_by_block.append(
@@ -237,7 +235,8 @@ class LFPAnimal(LFPData, BlockConstructor):
         self.last_frequency_band = None
         self.is_mirror = is_mirror
         self.mirror = None
-        self.summarized_power = {}
+        self.frozen_freq_range = None
+        self.frozen_blocks = None
 
     def __getattr__(self, name):
         prop = getattr(type(self), name, None)
@@ -276,10 +275,6 @@ class LFPAnimal(LFPData, BlockConstructor):
             self.process_lfp()
         return self._processed_lfp
 
-    @property
-    def frequency_args(self):
-        return set(tuple(args) for fb, args in FREQUENCY_ARGS.items() if fb in self.data_opts['fb'])
-
     def update_children(self):
         self.prepare_blocks()
         if 'mrl' in self.data_type:
@@ -314,36 +309,19 @@ class LFPAnimal(LFPData, BlockConstructor):
         self.mrl_calculators = mrl_calculators
 
     def make_mirror(self):
-        # This method permits calculating values to determinie which data points might be noise with one set
-        # frequencies when the actual calculation of interest uses another set. The mirror
-        # holds the memory of the first calculation.  So far it's only the mirror that calls `get_summarized_power`.
+        # This method permits calculating values to determine which data points might be noise with one set
+        # frequencies when the actual calculation of interest uses another set. The mirror holds the memory of the first
+        # calculation.
         self.mirror = LFPAnimal(self.spike_target, self.raw_lfp, self.sampling_rate, is_mirror=True)
+        self.mirror.frozen_freq_range = self.data_opts['validate_events'].get('frequency', (0, 8))
+        self.mirror.frozen_blocks = self.data_opts['validate_events'].get('blocks', self.data_opts.get('blocks'))
         self.mirror.parent = self.parent
         self.mirror.group = self.group
-        frequency_band = copy(self.current_frequency_band)
-        standard_band = self.data_opts.get('standard_band', (0, 8))
-        self.current_frequency_band = standard_band
         self.mirror.update_children()
-        self.current_frequency_band = frequency_band
-
-    #@cache_method
-    def get_summarized_power(self, block_type):
-        if block_type not in self.summarized_power:
-            self.summarized_power[block_type] = np.median([np.mean(event.get_power())
-                                                           for block in self.blocks[block_type] for event in block])
-        return self.summarized_power[block_type]
 
 
 class LFPDataSelector:
     """A class with methods shared by LFPBlock and LFPEvent that are used to return portions of their data."""
-
-    @property
-    def frequency_bins(self):
-        return [FrequencyBin(i, data_point, self) for i, data_point in enumerate(self.data)]
-
-    @property
-    def time_bins(self):
-        return [TimeBin(i, data_column, self) for i, data_column in enumerate(self.data.T)]
 
     @property
     def mean_over_time_bins(self):
@@ -374,7 +352,6 @@ class LFPDataSelector:
         return self.slice_spectrogram()
 
 
-
 class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
     """A block in the experiment. Preprocesses data, initiates calls to Matlab to get the cross-spectrogram, and
     generates LFPEvents. Inherits from LFPSelector to be able to return portions of its data."""
@@ -402,8 +379,8 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         self.reference_block_type = block_info.get('reference_block_type')
         start_pad_in_samples, end_pad_in_samples = np.array(self.convolution_padding) * self.sampling_rate
         duration_in_samples = self.duration * self.sampling_rate
-        start = round(self.onset - start_pad_in_samples)
-        stop = round(self.onset + duration_in_samples + end_pad_in_samples)
+        start = int(self.onset - start_pad_in_samples)
+        stop = int(self.onset + duration_in_samples + end_pad_in_samples)
         self.raw_data = self.animal.raw_lfp[self.current_brain_region][start:stop]
         self.processed_data = self.animal.processed_lfp[self.current_brain_region][start:stop]
         self.unpadded_data = self.processed_data[start_pad_in_samples:-end_pad_in_samples]
@@ -429,6 +406,13 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
             self.last_brain_region = self.current_brain_region
         return self._spectrogram
 
+    @property
+    def extended_data(self):
+        data = self.events[0].data
+        for event in self:
+            data = np.concatenate((data, event.data), axis=1)
+        return data
+
     def lost_signal(self):
         return self.animal.parent.experiment.lost_signal
 
@@ -437,12 +421,12 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         pre_stim, post_stim = (self.data_opts['events'][self.block_type][opt] for opt in ['pre_stim', 'post_stim'])
         time_bins = np.array(self.spectrogram[2])
         events = []
-        epsilon = 1e-6  # a small offset to avoid floating-point rounding issues
+        epsilon = 1e-6  # a small offset to avoid floating-point inting issues
 
         for i, event_start in enumerate(self.event_starts):
             # get normed data for the event in samples
-            start = round(event_start - self.onset)
-            stop = round(start + self.event_duration*self.sampling_rate)
+            start = int(event_start - self.onset)
+            stop = int(start + self.event_duration*self.sampling_rate)
             normed_data = self.unpadded_data[start:stop]
 
             # get time points where the event will fall in the spectrogram in seconds
@@ -458,10 +442,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
         return events
 
     def calc_cross_spectrogram(self):
-        if str(self.current_frequency_band) in FREQUENCY_ARGS:
-            arg_set = FREQUENCY_ARGS[self.current_frequency_band]
-        else:
-            arg_set = self.data_opts['power_arg_set']
+        arg_set = self.data_opts['power_arg_set']
         pickle_args = [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] + \
                       [self.block_type, str(self.identifier)]
         saved_calc_exists, result, pickle_path = self.load('spectrogram', pickle_args)
@@ -503,7 +484,6 @@ class LFPEvent(LFPData, LFPDataSelector):
         self.parent = block
         self.block_type = self.parent.block_type
         self.spectrogram = self.parent.spectrogram
-        self.summarized_power = {}
 
     @cache_method
     def _get_power(self):
@@ -513,10 +493,12 @@ class LFPEvent(LFPData, LFPDataSelector):
     def get_power(self):
         return self.refer(self._get_power())
 
+    def get_original_data(self):
+        return self._get_power()
+
     @property
     def is_valid(self):
         animal = self.block.animal
-
         if (not self.data_opts.get('validate_events')) or animal.is_mirror:
             return True
 
@@ -524,16 +506,21 @@ class LFPEvent(LFPData, LFPDataSelector):
             animal.make_mirror()
 
         mirror_event = animal.mirror.blocks[self.block_type][self.block.identifier].events[self.identifier]
-        mirror_event_frequency_bins = mirror_event.frequency_bins
+        return mirror_event.validate()
 
-        for frequency in range(0, 8):
-            standard = animal.mirror.get_median(
-                stop_at='event', extend_by=['frequency', 'time'],
-                select_by=[('block', 'block_type', self.block_type), ('frequency_bin', 'identifier', frequency)])
-            for time_bin in mirror_event_frequency_bins[frequency].time_bins:
-                if time_bin.data > 20 * standard:
-                    print(f"{self.current_brain_region} {animal.identifier} {self.block_type} {self.block.identifier} "
-                          f"{self.identifier} invalid!")
+    def validate(self):
+        evoked = self.data_opts.get('evoked')
+        frequency_bins = self.get_frequency_bins(self.get_original_data())
+        for frequency in range(*self.data_opts['validate_events'].get('frequency', (0, 8))):
+            self.update_data_opts(['evoked'], False)
+            standard = self.block.animal.mirror.get_median(
+                stop_at='event', extend_by=('frequency', 'time'),
+                select_by=(('block', 'block_type', self.block_type), ('frequency_bin', 'identifier', frequency)))
+            self.update_data_opts(['evoked'], evoked)
+            for time_bin in frequency_bins[frequency].time_bins:
+                if time_bin.data > self.data_opts['validate_events'].get('threshold', 20) * standard:
+                    print(f"{self.current_brain_region} {self.block.animal.identifier} {self.block_type} "
+                          f"{self.block.identifier} {self.identifier} invalid!")
                     return False
         return True
 
@@ -614,7 +601,7 @@ class MRLCalculator(LFPData):
         low = self.freq_range[0] + .05
         high = self.freq_range[1]
         if self.data_opts.get('phase') == 'wavelet':
-            if 'gamma' in self.current_frequency_band:
+            if 'gamma' in self.current_frequency_band: # TODO need to fix this since frequency band can currently be a range of numbers
                 frequencies = np.logspace(np.log10(low), np.log10(high), int((high - low) / 5))
             else:
                 frequencies = np.linspace(low, high, int(high - low) + 1)
@@ -661,7 +648,7 @@ class MRLCalculator(LFPData):
         counts, _ = np.histogram(angles, bins=bin_edges)
         if self.data_opts.get('evoked'):
             counts = counts/len(angles)  # counts must be transformed to proportions for the subtraction to make sense
-            if self.block_type == 'tone':
+            if self.block_type == 'tone':  # TODO: generalize this
                 counts -= self.equivalent_calculator.get_angle_counts()
         return counts
 

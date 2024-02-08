@@ -70,7 +70,10 @@ class BlockConstructor:
             children = blocks[self.selected_block_type]
         else:
             children = [block for block_type in blocks for block in blocks[block_type]]
-        selected_blocks = self.data_opts.get('blocks')
+        if self.frozen_blocks is not None:
+            selected_blocks = self.frozen_blocks
+        else:
+            selected_blocks = self.data_opts.get('blocks')
         if selected_blocks is None:
             return children
         else:

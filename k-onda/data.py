@@ -84,22 +84,6 @@ class Base:
         self.data_opts = self.data_opts  # Reassign to trigger the setter
 
 
-class Evoked:
-    def __init__(self, method):
-        self.method = method
-
-    def __call__(self, *args, **kwargs):
-        self_instance = args[0]
-        if self_instance.data_opts.get('evoked') == 'individual_reference':
-            if 'stop_at' not in kwargs or kwargs['stop_at'] == self_instance.name:
-                ref_data = self_instance.reference.data
-                mean = np.mean(ref_data) if ref_data.shape[0] == 1 else np.mean(ref_data, axis=1)[:, np.newaxis]
-                result = self.method(*args, **kwargs)
-                return result - mean
-
-        return self.method(*args, **kwargs)
-
-
 class Data(Base):
 
     def __iter__(self):
@@ -161,7 +145,7 @@ class Data(Base):
                 return [calc for calc in self.parent.mrl_calculators[self.reference_block_type]
                         if self is calc.block.target and self.unit is calc.unit][0]
             if self.name == 'event':
-                return self.parent.reference.events[self.identifier]
+                return self.parent.reference
         return None
 
     @property
@@ -238,10 +222,10 @@ class Data(Base):
     def get_sem(self, collapse_sem_data=False):
         """
         Calculates the standard error of an object's data. If object's data is a vector, it will always return a float.
-        If object's data is a matrix, the `collapse_sem_data` opt will determine whether it returns the standard error
-        of its children's average data points or whether it computes the standard error over children maintaining the
-        original shape of children's data, as you would want, for instance, if graphing a standard error envelope around
-        firing rate over time.
+        If object's data is a matrix, the `collapse_sem_data` argument will determine whether it returns the standard
+        error of its children's average data points or whether it computes the standard error over children maintaining
+        the original shape of children's data, as you would want, for instance, if graphing a standard error envelope
+        around firing rate over time.
         """
 
         if self.data_opts.get('sem_level'):
@@ -254,8 +238,8 @@ class Data(Base):
         else:
             return sem([child.data for child in sem_children])
 
+    @cache_method
     def get_median(self, stop_at='event', extend_by=None, select_by=None):
-
         def collect_vals(obj, vals=None):
             if vals is None:
                 vals = []

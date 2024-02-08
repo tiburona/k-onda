@@ -1,12 +1,15 @@
 # Configuration for all analyses #
 
+Note: this howto uses the world "iterable" as an umbrella term for what could be a json array defined in square brackets, 
+or if you are defining your configuration in Python code, could be any kind of Python iterable, including but not 
+limited to a list or a tuple.  
 
 ## Plots
 
 If you are plotting, your config must be a dictionary.  It must include the key "data_opts", which must have as its 
 value the data_opts dictionary.  It must also include the key "graph_opts". The data_opts dictionary must include the 
-key "data_type" -- for instance, "psth", "mrl", etc.  This is the type of calculation you are doing.  For right now it must also include 
-the key "data_class" ("spike", "lfp", or "behavior").
+key "data_type" -- for instance, "psth", "mrl", etc.  This is the type of calculation you are doing.  For right now it 
+must also include the key "data_class" ("spike", "lfp", or "behavior").
 
 ## Spreadsheets
 
@@ -74,6 +77,9 @@ time.) The default is "normalized".
 the beginning of the presentation of stimuli, you are analyzing spontaneous activity. If it is an integer, it will take 
 that many seconds before the first period in the experiment (that is not a reference period). If it is an iterable of 
 length two, it will define the beginning and end, in seconds, of the period you want to analyze.  
+
+"selected_animals" (optional): An iterable with the identifiers of animals to use in this analysis, default is to use
+all animals that are defined in the experiment.
 
 ### Opts for the plotting function, `plot_psth` ###
 
@@ -225,9 +231,16 @@ Opts are as for `plot_psth` with some additions:
 
 ## Power ##
 
-A note on implementation here.  Matlab Engine for Python is something that exists, but I wasn't able to get it to work 
-and for current purposes have an acceptable alternative using the subprocess module to call Matlab from the command line.
-It may be worth solving this problem at some point.
+Configuration options that are the same as in spike analyses are "data_class", "data_type", "periods", "events", 
+"time_type", "evoked", and "level". As of this writing "level" is only implemented for plot_spectrogram, the frequency x time power plot (
+the available levels are Group, Animal, and Period). 
+
+A note on implementation here. Power calculations rely on the Matlab program `mtcsg`, and all LFP calculations 
+potentially rely on the Matlab program  `removeLineNoise_SpectrumEstimation`. Matlab Engine for Python is something that 
+exists, but I wasn't able to get it to work and for current purposes have an acceptable alternative using the subprocess 
+module to call Matlab from the command line. It may be worth solving this problem at some point.
+
+The following are keys that are not used in spike analyses.
 
 "matlab_configuration": a dictionary with the keys 
 - "matlab_path": the full path to your Matlab executable 
@@ -236,16 +249,45 @@ so long as every subdirectory can be added to the Matlab path without interferin
 - "temp_file_path": a path to a directory where a temp subdirectory will be written that will allow the creation of 
 files for the program execution
 
+"store" (optional): a string that tells the program how you will write out your filter and mtscg output.  If "pkl", the 
+program writes and reads pickle files (the default), if "json", json.  Most of the time you will want pickle files, but 
+there are occasions when you might want these files to be more easily inspectable outside of Python, in which case you 
+can choose json.
+
 "frequency_band": Either the name of the frequency band, which you've already 
 entered as a key in the `frequency_bands` dictionary in the experiment configuration, or an iterable of two integers 
 which define the frequency range. Alternatively, you can use "frequency_bands" and supply an iterable of frequency 
-bands, e.g. `["delta", "theta"]` pr `[(0, 4), (4, 8)]`
+bands, e.g. `["delta", "theta"]` or `[(0, 4), (4, 8)]`
+
+"power_arg_set": An iterable with the arguments to pass to the Matlab program `mtcsg`, which calculates power.  For 
+lower frequency data, the Likhtik lab has been using `[2048, 2000, 1000, 980, 2]`. If you are doing analyses with 
+multiple frequency bands, you can define a rule such that "power_arg_set" changes with changing frequency bands.
+
+"filter": A string to select which filtering method to use on the raw LFP data. 
+
+"validate_events" (optional): a dictionary with values that determine event validation values. Event validation finds 
+the median power value for the animal over all time bins and a defined range of frequencies, then per event in the 
+analysis, and per time bin and frequency bin in the event, checks whether the value is more than a certain multiple 
+greater than the animal median for that frequency. The default is not to validate.  If you define the event_validation 
+dictionary, the keys in the dictionary are "frequency", an iterable that defines the endpoints (in integers) of the 
+frequencies over which to take the animal median (default (0, 8)), and the threshold multiplier past which an event gets
+marked as noise (default 20).
 
 "power_deviation" (optional): a boolean that indicates whether to include in the CSV an idiosyncratic calculation that 
 records how far above or below the local moving average a time bin is. Check the `lfp` module for `get_power_deviation` 
 to see the implementation details. 
 
+## MRL ##
 
+Configuration options that are the same as in spike analyses are "data_class", "data_type", "periods", "evoked", and 
+"spontaneous".
+
+"phase" (optional): a string that determines whether to get the phases for the MRL calculation using the "wavelet" or 
+the "hilbert" method.  Default is "hilbert".
+
+"mrl_func" (optional): a string that determines whether to perform the classic mean resultant length calculation, where 
+values vary between 0 and 1, and the circ_2_unbiased calculation.  `circ_2_unbiased` is the name of a Matlab function 
+but here it's reimplemented in Python.
 
 
 If you would like to iterate through different values for a key (for instance iterating through brain regions, or levels
@@ -254,5 +296,91 @@ want to iterate through as a value, e.g. "brain_regions": ["il", "bla"].  You ca
 you wish and every combination of the list members will be iterated through.
 
 If you need to change certain values dependent on others (for example, if you are making a csv file with results from 
-multiple kinds of analyses that support different levels of time granularity), you must define a rule.  Rules take this 
-form: {}
+multiple kinds of analyses that support different levels of time granularity), you must define a rule.  Rules are 
+entered into the configuration with the key "rules".
+
+The value of rules itself is a dictionary.  Its keys define the configuration variables you are going to check, and its 
+values are dictionaries whose keys are the values of those variables that trigger a change.  In other words, this:
+
+rules: {some_variable: {some_other_variable: []}}
+
+means if some_variable equals some_other_variable make a change that will be defined in the square bracket.
+
+What goes in the square bracket is an iterable of iterables with config keys that you will change when 
+`some_variable == some_other_variable` and the value you will change it to.
+
+so 
+
+rules: {some_variable: {some_other_variable: [(key1, val1), (key2, val2)]}}
+
+means 
+
+if some_variable == some_other_variable:
+    key1 = val1
+    key2 = val2
+
+Here's a real example rule:
+    ```
+     "rules": {"brain_region": {"pl": [("selected_animals", PFC_THETA_POWER_ANIMALS)],
+                                "bla": [("selected_animals", BLA_THETA_POWER_ANIMALS)]}}
+    ```
+
+This is saying when `brain_region` is "pl", assign `PFC_THETA_POWER_ANIMALS` to the key "selected_animals" in the 
+configuration dictionary, and when `brain_region` is 'bla', assign `BLA_THETA_POWER_ANIMALS`.
+
+## Graph Configuration ##
+
+Any time you plot you must also supply the graph_opts dictionary in the configuration.  Its keys are as follows:
+
+"graph_dir": a string, the directory to which to write the graph
+
+"tick_step": a number, the distance between 
+
+"sem": a boolean which indicates whether to include a standard error envelope on the graph.  This option currently works
+for the plotters for psth, proportion, the various correlation and correlogram plots, and spectrum.
+
+"block_order": currently only used for MRL, an iterable with block names that determines the order in which they are 
+displayed on the graph.
+
+"tick_step": a number, necessary for plots of PSTH, proportion, spectrum, group stats, and the various correlation and 
+correlograms, that determines the spacing of x-axis ticks. Unfortunately, for the correlation graphs this is currently 
+in units of lags (so 1 would mean 1 lag) whereas for the others its in units of seconds (1 would be 1 second, possibly
+entirely off the graph). 
+
+"equal_y_scales" (optional): a boolean that determines whether to force the subplots on a graph to scale their y-axes 
+same.  Defaults to False.  Only operates for PSTH, proportion, spectrum, group stats, and the various correlation and 
+correlograms.
+
+"equal_color_scales" (optional): A string that works for the spectrogram group plot that determines whether the 
+various spectrograms in the plot are on the same color scale.  Possible values are "by_subplot" 
+and "within_group".  To set every subplot in the group on an equal scale, choose "by_subplot".  To set subplots in the
+same group of animals equal, choose "within_group". If it is not set, or set to anything else, the color scales will not
+be set equal.
+
+"group_colors": a dictionary with group names as keys and strings with color names or hex codes as values that determine 
+the colors of the group bars.  Operates for plots of PSTH, proportion, spectrum, group stats, and the various 
+correlations and correlograms, as well as the MRL plots.
+
+"units_in_fig":  (optional if not graphing units): a number, relevant to graphs of units, that specifies how many units 
+to put in a single figure before writing out a new one
+
+### Some graph opts keys specifically used by neuron type categorization plots
+
+Plots that illustrate the neuron type categorization in the experiment have several idiosyncratic configuration options.
+
+"neuron_type_colors": a string with a color name or hex code that determines the color of the neuron category.
+
+"animal_id": a string indicating which animal you're going to take the cluster from in a plot that illustrates the 
+average waveform of a cluster or the position of the cluster spikes in PCA.
+
+"cluster_ids": which cluster
+
+{'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4,
+                       'tick_step': .1, 'sem': False, 'footer': False, 'equal_y_scales': True,
+                       'group_colors': {'control': '#9F9FA3', 'arch': '#32B44A'}, 
+                       'neuron_type_colors': {'PV': '#5679C7', 'ACH': '#C75B56'}, 'animal_id': 'CH272',
+                       'cluster_ids': [10, 101], 'electrodes_for_waveform': [[7], [3, 5]],
+                       'electrodes_for_feature': [13, 15], 'el_inds': [1, 1], 'pc_inds': [0, 1],
+                       'annot_coords': (-0.11, 1.1), 'data_path': '/Users/katie/likhtik/CH_for_katie_less_conservative',
+                       'normalize_waveform': True, 'block_order': ['pretone', 'tone']}
+                                                   

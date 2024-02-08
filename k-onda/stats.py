@@ -157,25 +157,23 @@ class Stats(Base):
         - The `self.get_data` method is then called with the determined level, inclusion criteria, and attributes to
           collect the rows of data.
         """
+        level = self.data_opts['row_type']
+
+        inclusion_criteria = [lambda x: x.is_valid]
+        if self.data_opts.get('selected_animals') is not None:
+            inclusion_criteria += [lambda x: find_ancestor_id(x, 'animal') in self.data_opts['selected_animals']]
 
         other_attributes = ['block_type']
-        inclusion_criteria = []
+
         if 'lfp' in self.data_class:
             if self.data_type in ['mrl']:
                 level = 'mrl_calculator'
                 other_attributes += ['frequency', 'fb', 'neuron_type']  # TODO: figure out what fb should be changed to post refactor
-                inclusion_criteria.append(lambda x: x.is_valid)
             else:
-                level = self.data_opts['row_type']
                 if self.data_opts['time_type'] == 'continuous' and self.data_opts.get('power_deviation'):
                     other_attributes.append('power_deviation')
-        elif self.data_class == 'behavior':
-            level = self.data_opts['row_type']
         else:
             other_attributes += ['category', 'neuron_type']
-            level = self.data_opts['row_type']
-        if self.data_opts.get('selected_animals') is not None:
-            inclusion_criteria += [lambda x: find_ancestor_id(x, 'animal') in self.data_opts['selected_animals']]
 
         return self.get_data(level, inclusion_criteria, other_attributes)
 

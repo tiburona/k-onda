@@ -374,7 +374,7 @@ class PeriStimulusSubplotter(PlottingMixin):
         if opts['data_type'] in ['autocorr', 'spectrum'] and opts['ac_key'] == self.data_source.name + '_by_rates':
             print("It doesn't make sense to add standard error to a graph of autocorr over rates.  Skipping.")
             return
-        sem = self.data_source.get_sem()
+        sem = self.data_source.sem_envelope
         self.ax.fill_between(self.x, self.y - sem, self.y + sem, color='blue', alpha=0.2)
 
 
@@ -391,7 +391,6 @@ class GroupStatsPlotter(PeriStimulusPlotter):
 
     def plot_group_stats_data(self, sig_markers=True):
         self.stats = Stats(self.experiment, self.data_opts)
-        force_recalc = self.graph_opts['force_recalc']  # TODO: this isn't doing anything.
         if sig_markers:
             interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
 
@@ -806,18 +805,29 @@ class LFPPlotter(Plotter):
         for group in self.lfp.groups:
             for animal in group:
                 nrows = sum([len(self.data_opts['blocks'][block_type]) for block_type in self.data_opts['blocks']])
-                self.fig, axes = plt.subplots(nrows=nrows, ncols=1, figsize=(30, 5*nrows), sharex=True)
+                if self.graph_opts.get('extend_blocks'):
+                    extend = True
+                    width, ncols = 30, 1
+                else:
+                    extend = False
+                    width, ncols = 10, 2
+                self.fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(width*ncols, 5*nrows), sharex=True)
                 i = 0
                 for block_type in self.data_opts['blocks']:
                     self.selected_block_type = block_type
+                    blocks=[]
+
                     for block in animal:
-                        im, data = self.generate_image(axes[i], block)
+                        data = block.data if not extend else block.extended_data
+                        im = self.generate_image(axes[i], block)
                         repeat = block.event_duration if block.event_duration else block.target_block.event_duration
                         #self.set_up_stimulus_patches(np.array([axes[i]]), repeat=repeat)
                         self.set_clim_and_make_colorbar(np.array([axes[i]]), [im], data.min(), data.max())
                         axes[i].set_title(f"{animal.identifier} {block_type.capitalize()} {block.identifier+1}")
                         i += 1
                 self.close_plot(f"Spectrogram {animal.identifier} Blocks")
+
+
 
     def create_figure_and_axes(self, parent):
         ncols = len(self.data_opts['blocks'])
@@ -834,7 +844,8 @@ class LFPPlotter(Plotter):
         im_list = []
         for i, block_type in enumerate(self.data_opts['blocks']):
             self.selected_block_type = block_type
-            im, data = self.generate_image(axes[i], data_source)
+            data = data_source.data
+            im = self.generate_image(axes[i], data)
             block_str = block_type.capitalize() if len(self.data_opts['blocks']) > 1 else ''
             data_id = data_source.identifier
             if self.data_opts['level'] == 'group':
@@ -845,13 +856,12 @@ class LFPPlotter(Plotter):
             data_source_max = max(data_source_max, data.max())
         return im_list, data_source_min, data_source_max
 
-    def generate_image(self, ax, data_source):
-        data = data_source.data
+    def generate_image(self, ax, data):
         pre_stim, post_stim = (self.data_opts['events'][self.selected_block_type][opt]
                                for opt in ('pre_stim', 'post_stim'))
-        im = ax.imshow(data_source.data, cmap='jet', interpolation='nearest', aspect='auto',
+        im = ax.imshow(data, cmap='jet', interpolation='nearest', aspect='auto',
                             extent=[-pre_stim, post_stim, *self.current_frequency_band], origin='lower')
-        return im, data
+        return im
 
     def set_clim_and_make_colorbar(self, axes, im_list, minimum, maximum):
         [im.set_clim(minimum, maximum) for im in im_list]

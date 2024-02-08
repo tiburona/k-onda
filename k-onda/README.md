@@ -70,6 +70,8 @@ experiment, color-coded by neuron type.
 - plot_waveforms: make a superimposed graph of mean extracted waveforms from individual neurons, color-coded by neuron 
 type 
 - plot_power: make a line plot of the power spectrum averaged over a given frequency range and the period
+- plot_spectrogram: plot the entire frequencies x time spectrogram of power. Levels are implemented for this plot type, 
+and you can plot a Group, an Animal, or a Period.
 
 There is also a [figures](/figures) directory that contains code for a custom figure (which also contains a 
 demonstration of plots extracted from Phy).
