@@ -45,31 +45,6 @@ class Runner:
         self.proc_name = None
         self.current_data_opts = None
 
-    def read_inputs(self, proc_name, opts):
-        self.proc_name = proc_name
-        self.load_analysis_config(opts)
-        if isinstance(self.data_opts, list):
-            for opts in self.data_opts:
-                self.prepare(opts)
-        else:
-            self.prepare(self.data_opts)
-
-    def prepare(self, opts):
-        self.current_data_opts = opts
-        self.executing_class = PROCEDURE_DICT[self.proc_name]['class']
-        kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() for dc in ['lfp', 'behavior']
-                  if getattr(self, dc)}
-        if self.executing_class.__name__ in self.executing_instances:
-            self.executing_instance = self.executing_instances[self.executing_class.__name__]
-        else:
-            self.executing_instance = self.executing_class(self.experiment, **kwargs)
-        method = PROCEDURE_DICT[self.proc_name].get('method')
-        if method is None:
-            method = self.proc_name
-        self.executing_method = getattr(self.executing_instance, method)
-        self.follow_up_method = PROCEDURE_DICT[self.proc_name].get('follow_up')
-        self.get_loop_lists()
-
     def load_analysis_config(self, opts):
         if isinstance(opts, str):
             try:
@@ -86,6 +61,25 @@ class Runner:
             self.data_opts = opts.get('data_opts', {})
             self.graph_opts = opts.get('graph_opts', None)
 
+    def prepare(self):
+        self.executing_class = PROCEDURE_DICT[self.proc_name]['class']
+        kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() for dc in ['lfp', 'behavior']
+                  if getattr(self, dc)}
+        if self.executing_class.__name__ in self.executing_instances:
+            self.executing_instance = self.executing_instances[self.executing_class.__name__]
+        else:
+            self.executing_instance = self.executing_class(self.experiment, **kwargs)
+        method = PROCEDURE_DICT[self.proc_name].get('method')
+        if method is None:
+            method = self.proc_name
+        self.executing_method = getattr(self.executing_instance, method)
+        self.follow_up_method = PROCEDURE_DICT[self.proc_name].get('follow_up')
+
+    def read_inputs(self, proc_name, opts):
+        self.proc_name = proc_name
+        self.load_analysis_config(opts)
+        self.prepare()
+
     def get_loop_lists(self):
         for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs']:
             opt_list = self.current_data_opts.get(opt_list_key)
@@ -99,46 +93,53 @@ class Runner:
 
         opt_list_key, opt_list = remaining_loop_lists[current_index]
         for opt in opt_list:
-            self.data_opts[opt_list_key[:-1]] = opt
+            self.current_data_opts[opt_list_key[:-1]] = opt
             self.iterate_loop_lists(remaining_loop_lists, current_index + 1)
 
-    def run(self, proc_name, opts, *args, **kwargs):
-        self.read_inputs(proc_name, opts)
-        if self.loop_lists:
-            self.iterate_loop_lists(list(self.loop_lists.items()))
-        else:
-            self.execute()
-        if self.follow_up_method is not None:
-            getattr(self.executing_instance, self.follow_up_method)(*args, **kwargs)
-
     def apply_rules(self):
-        if 'rules' not in self.data_opts:
-            raise ValueError("Expected 'rules' in data_opts")
-
         rules = self.current_data_opts['rules']
         # Assuming rules is a dictionary like: {'data_type': {'mrl': [('time_type', 'block')]}}
         for data_key, conditions in rules.items():
-            if data_key not in self.data_opts:
+            if data_key not in self.current_data_opts:
                 raise ValueError(f"Key '{data_key}' not found in data_opts")
             for trigger_val, vals_to_assign in conditions.items():
                 for target_key, val_to_assign in vals_to_assign:
                     if self.current_data_opts[data_key] == trigger_val:
                         self.current_data_opts[target_key] = val_to_assign
 
-    def execute(self):
-        if self.current_data_opts.get('rules'):
-            self.apply_rules()
-        self.validate()
-        if self.graph_opts is not None:
-            self.executing_method(self.current_data_opts, self.graph_opts)
-        else:
-            self.executing_method(self.current_data_opts)
-
     def validate(self):
         all_animal_ids = [animal.identifier for animal in self.experiment.all_animals]
         selected_animals = self.current_data_opts.get('selected_animals')
         if selected_animals is not None and not all([id in all_animal_ids for id in selected_animals]):
             raise ValueError("Missing animals")
+
+    def execute(self):
+        if self.current_data_opts.get('rules'):
+            self.apply_rules()
+        self.validate()
+        print(f"executing {self.executing_method} with options {self.current_data_opts}")
+        if self.graph_opts is not None:
+            self.executing_method(self.current_data_opts, self.graph_opts)
+        else:
+            self.executing_method(self.current_data_opts)
+
+    def run_all(self):
+        opts_list = self.data_opts if isinstance(self.data_opts, list) else [self.data_opts]
+        for opts in opts_list:
+            self.current_data_opts = opts
+            self.get_loop_lists()
+            if self.loop_lists:
+                self.iterate_loop_lists(list(self.loop_lists.items()))
+            else:
+                self.execute()
+
+    def run(self, proc_name, opts, *args, **kwargs):
+        self.read_inputs(proc_name, opts)
+        self.run_all()
+        if self.follow_up_method is not None:
+            getattr(self.executing_instance, self.follow_up_method)(*args, **kwargs)
+
+
 
 
 

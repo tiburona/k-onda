@@ -1,13 +1,8 @@
-import pandas as pd
 from data import Data
 
 
-DATA_PATH = '/Users/katie/likhtik/data/Freezing for Katie.xlsx'
-
-
 class Behavior:
-    def __init__(self, experiment, data):
-        self.data_path = DATA_PATH
+    def __init__(self, experiment, info, data):
         self.experiment = experiment
         self.all_animals = []
         self.all_periods = []
@@ -27,8 +22,9 @@ class BehaviorAnimal(Data):
     def __init__(self, animal, data):
         self.spike_target = animal
         self.periods = {period_type: [BehaviorPeriod(self, period_type, i, behavior_data)
-                                      for i, behavior_data in enumerate(data[period_type])] for period_type in ['tone', 'pretone']}
-        self.all_periods = self.periods['pretone'] + self.periods['tone']
+                                      for i, behavior_data in enumerate(data[period_type])]
+                        for period_type in self.spike_target.period_info}
+        self.all_periods = [period for period_type in self.periods for period in self.periods[period_type]]
 
     def __getattr__(self, name):
         return getattr(self.spike_target, name)

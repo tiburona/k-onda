@@ -93,7 +93,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.close_plot('groups')
 
     def plot_groups_data(self):
-        subdivision = 'block' if self.data_type in ['cross_correlations', 'correlogram'] else 'neuron'
+        subdivision = 'period' if self.data_type in ['cross_correlations', 'correlogram'] else 'neuron'
         self.iterate_through_group_subdivisions(subdivision)
         self.set_y_scales()
         if self.data_type not in ['spontaneous_firing', 'cross_correlations']:
@@ -590,13 +590,13 @@ class MRLPlotter(Plotter):
             self.selected_neuron_type = neuron_type
             for j, group in enumerate(self.lfp.groups): # TODO: think about how this should work now with multiple periods
                 if self.data_opts.get('adjustment') == 'relative':
-                    self.selected_block_type = 'tone'
+                    self.selected_period_type = 'tone'
                     plot_func(group, self.axs[i][j], title=f"{group.identifier.capitalize()} {neuron_type}")
                 else:
-                    for k, block_type in enumerate(self.experiment.block_types):
-                        self.selected_block_type = block_type
+                    for k, period_type in enumerate(self.experiment.period_types):
+                        self.selected_period_type = period_type
                         plot_func(group, self.axs[i][j * 2 + k],
-                                  title=f"{group.identifier.capitalize()} {neuron_type} {block_type}")
+                                  title=f"{group.identifier.capitalize()} {neuron_type} {period_type}")
         self.selected_neuron_type = None
         self.close_plot(basename)
 
@@ -644,11 +644,11 @@ class MRLPlotter(Plotter):
             for neuron_type in self.neuron_types:
                 self.selected_neuron_type = neuron_type
                 for group in self.lfp.groups:
-                    for block_type in self.experiment.block_types:
-                        self.selected_block_type = block_type
-                        data.append([neuron_type, group.identifier, block_type, group.data, group.sem, group.scatter,
+                    for period_type in self.experiment.period_types:
+                        self.selected_period_type = period_type
+                        data.append([neuron_type, group.identifier, period_type, group.data, group.sem, group.scatter,
                                      group.grandchildren_scatter])
-            df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Block', 'Average MRL', 'sem', 'scatter',
+            df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Period', 'Average MRL', 'sem', 'scatter',
                                              'unit_scatter'])
 
         group_order = df['Group'].unique()
@@ -658,8 +658,8 @@ class MRLPlotter(Plotter):
             g = sns.catplot(data=df, x='Group', y='Average MRL', row='Neuron Type', kind='bar',
                             height=4, aspect=1.5, dodge=False, legend=False, order=group_order)
         else:
-            block_order = self.graph_opts['block_order']
-            g = sns.catplot(data=df, x='Group', y='Average MRL', hue='Block', hue_order=block_order, row='Neuron Type', kind='bar',
+            period_order = self.graph_opts['period_order']
+            g = sns.catplot(data=df, x='Group', y='Average MRL', hue='Period', hue_order=period_order, row='Neuron Type', kind='bar',
                             height=4, aspect=1.5, dodge=True, legend=False, order=group_order)
 
         g.set_axis_labels("", "Average MRL")
@@ -669,8 +669,8 @@ class MRLPlotter(Plotter):
         for ax, neuron_type in zip(g.axes.flat, self.neuron_types):
             bars = ax.patches
             num_groups = len(group_order)
-            num_blocks = len(block_order) if not data_opts.get('spontaneous') else 1
-            total_bars = num_groups * num_blocks
+            num_periods = len(period_order) if not data_opts.get('spontaneous') else 1
+            total_bars = num_groups * num_periods
 
             for i in range(total_bars):
                 group = group_order[i % num_groups]
@@ -678,10 +678,10 @@ class MRLPlotter(Plotter):
                 bar = bars[i]
                 bar.set_facecolor(self.graph_opts['group_colors'][group])
                 if not data_opts.get('spontaneous'):
-                    block = block_order[i // num_blocks]
-                    row_selector['Block'] = block
-                    block_hatches = self.graph_opts.get('block_hatches', {'tone': '/', 'pretone': ''})
-                    bar.set_hatch(block_hatches[block])
+                    period = period_order[i // num_periods]
+                    row_selector['Period'] = period
+                    period_hatches = self.graph_opts.get('period_hatches', {'tone': '/', 'pretone': ''})
+                    bar.set_hatch(period_hatches[period])
                 row = df[(df[list(row_selector)] == pd.Series(row_selector)).all(axis=1)].iloc[0]
 
                 # Plotting the error bars and scatter points
@@ -699,8 +699,8 @@ class MRLPlotter(Plotter):
         # Additional customizations for the non-spontaneous case
         if not data_opts.get('spontaneous'):
             legend_elements = [
-                Patch(facecolor='white', hatch=block_hatches[block_type]*3, edgecolor='black', label=block_type.upper())
-                for block_type in block_order]
+                Patch(facecolor='white', hatch=period_hatches[period_type]*3, edgecolor='black', label=period_type.upper())
+                for period_type in period_order]
             g.fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, .9))
 
         # Saving the plot
@@ -723,28 +723,28 @@ class LFPPlotter(Plotter):
     def plot_power(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
         data = []
-        blocks = deepcopy(self.data_opts['blocks'])
+        periods = deepcopy(self.data_opts['periods'])
         for group in self.lfp.groups:
-            for block_type in blocks:
-                self.selected_block_type = block_type
-                for block in blocks[block_type]:
-                    self.update_data_opts(['blocks', block_type], [block])
-                    data.append([group.identifier, block + 1, block_type, group.mean_data, group.sem, group.scatter])
-        self.update_data_opts(['blocks'], blocks)  # put this key, val pair back the way it was for further graphs
+            for period_type in periods:
+                self.selected_period_type = period_type
+                for period in periods[period_type]:
+                    self.update_data_opts(['periods', period_type], [period])
+                    data.append([group.identifier, period + 1, period_type, group.mean_data, group.sem, group.scatter])
+        self.update_data_opts(['periods'], periods)  # put this key, val pair back the way it was for further graphs
 
-        df = pd.DataFrame(data, columns=['Group', 'Block', 'Block_Type', 'Power', 'SEM', 'Scatter'])
+        df = pd.DataFrame(data, columns=['Group', 'Period', 'Period_Type', 'Power', 'SEM', 'Scatter'])
 
 
         # Plotting
-        fig_x_dim = 2.5 * len(sorted(self.data_opts['blocks'].values(), key=len)[-1])
+        fig_x_dim = 2.5 * len(sorted(self.data_opts['periods'].values(), key=len)[-1])
         fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(fig_x_dim, 5), sharey=True)
 
         # Iterate over each group
         for i, (ax, (group, group_df)) in enumerate(zip(axes, df.groupby('Group'))):
-            # Iterate over each block type within the group
-            for block_type, block_df in group_df.groupby('Block_Type'):
-                ax.errorbar(block_df['Block'], block_df['Power'], yerr=block_df['SEM'], label=block_type.capitalize(),
-                            fmt='-o', color=self.graph_opts['block_colors'][block_type])  # Adjust fmt for desired line/marker style
+            # Iterate over each period type within the group
+            for period_type, period_df in group_df.groupby('Period_Type'):
+                ax.errorbar(period_df['Period'], period_df['Power'], yerr=period_df['SEM'], label=period_type.capitalize(),
+                            fmt='-o', color=self.graph_opts['period_colors'][period_type])  # Adjust fmt for desired line/marker style
 
             ax.set_title(smart_title_case(f'{group} Group'))
             ax.set_xlabel('Trial')
@@ -765,8 +765,8 @@ class LFPPlotter(Plotter):
             self.plot_spectrogram_by_groups()
         elif self.data_opts['level'] == 'animal':
             self.plot_spectrogram_by_animals()
-        elif self.data_opts['level'] == 'block':
-            self.plot_spectrogram_blocks()
+        elif self.data_opts['level'] == 'period':
+            self.plot_spectrogram_periods()
         else:
             raise NotImplementedError
 
@@ -801,11 +801,11 @@ class LFPPlotter(Plotter):
             self.set_up_stimulus_patches(axes)
             self.close_plot(f"Spectrogram {group.identifier.capitalize()} Animals")
 
-    def plot_spectrogram_blocks(self):
+    def plot_spectrogram_periods(self):
         for group in self.lfp.groups:
             for animal in group:
-                nrows = sum([len(self.data_opts['blocks'][block_type]) for block_type in self.data_opts['blocks']])
-                if self.graph_opts.get('extend_blocks'):
+                nrows = sum([len(self.data_opts['periods'][period_type]) for period_type in self.data_opts['periods']])
+                if self.graph_opts.get('extend_periods'):
                     extend = True
                     width, ncols = 30, 1
                 else:
@@ -813,24 +813,24 @@ class LFPPlotter(Plotter):
                     width, ncols = 10, 2
                 self.fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(width*ncols, 5*nrows), sharex=True)
                 i = 0
-                for block_type in self.data_opts['blocks']:
-                    self.selected_block_type = block_type
-                    blocks=[]
+                for period_type in self.data_opts['periods']:
+                    self.selected_period_type = period_type
+                    periods=[]
 
-                    for block in animal:
-                        data = block.data if not extend else block.extended_data
-                        im = self.generate_image(axes[i], block)
-                        repeat = block.event_duration if block.event_duration else block.target_block.event_duration
+                    for period in animal:
+                        data = period.data if not extend else period.extended_data
+                        im = self.generate_image(axes[i], period)
+                        repeat = period.event_duration if period.event_duration else period.target_period.event_duration
                         #self.set_up_stimulus_patches(np.array([axes[i]]), repeat=repeat)
                         self.set_clim_and_make_colorbar(np.array([axes[i]]), [im], data.min(), data.max())
-                        axes[i].set_title(f"{animal.identifier} {block_type.capitalize()} {block.identifier+1}")
+                        axes[i].set_title(f"{animal.identifier} {period_type.capitalize()} {period.identifier+1}")
                         i += 1
-                self.close_plot(f"Spectrogram {animal.identifier} Blocks")
+                self.close_plot(f"Spectrogram {animal.identifier} Periods")
 
 
 
     def create_figure_and_axes(self, parent):
-        ncols = len(self.data_opts['blocks'])
+        ncols = len(self.data_opts['periods'])
         nrows = len(parent.children)
         #multipliers = (8, 3) if self.data_opts['level'] == 'animal' else (3, 5)
         self.fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*ncols, 4*nrows), sharex=True, sharey=True)
@@ -842,22 +842,22 @@ class LFPPlotter(Plotter):
         data_source_min = float('inf')
         data_source_max = float('-inf')
         im_list = []
-        for i, block_type in enumerate(self.data_opts['blocks']):
-            self.selected_block_type = block_type
+        for i, period_type in enumerate(self.data_opts['periods']):
+            self.selected_period_type = period_type
             data = data_source.data
             im = self.generate_image(axes[i], data)
-            block_str = block_type.capitalize() if len(self.data_opts['blocks']) > 1 else ''
+            period_str = period_type.capitalize() if len(self.data_opts['periods']) > 1 else ''
             data_id = data_source.identifier
             if self.data_opts['level'] == 'group':
                 data_id = data_id.capitalize()
-            axes[i].set_title(f"{data_id} {block_str}")
+            axes[i].set_title(f"{data_id} {period_str}")
             im_list.append(im)
             data_source_min = min(data_source_min, data.min())
             data_source_max = max(data_source_max, data.max())
         return im_list, data_source_min, data_source_max
 
     def generate_image(self, ax, data):
-        pre_stim, post_stim = (self.data_opts['events'][self.selected_block_type][opt]
+        pre_stim, post_stim = (self.data_opts['events'][self.selected_period_type][opt]
                                for opt in ('pre_stim', 'post_stim'))
         im = ax.imshow(data, cmap='jet', interpolation='nearest', aspect='auto',
                             extent=[-pre_stim, post_stim, *self.current_frequency_band], origin='lower')
@@ -869,7 +869,7 @@ class LFPPlotter(Plotter):
 
     def set_up_stimulus_patches(self, axes, repeat=None):
         if repeat:
-            for start in np.arange(0, self.data_opts['events'][self.selected_block_type]['post_stim'], repeat):
+            for start in np.arange(0, self.data_opts['events'][self.selected_period_type]['post_stim'], repeat):
                 self.make_stimulus_patch(axes, start)
         else:
             self.make_stimulus_patch(axes, 0)

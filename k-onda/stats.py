@@ -158,13 +158,13 @@ class Stats(Base):
           collect the rows of data.
         """
         level = self.data_opts['row_type']
-
-        inclusion_criteria = [lambda x: x.is_valid]
+        
+        inclusion_criteria = [lambda x: x.is_valid if hasattr(x, 'is_valid') else True]
         if self.data_opts.get('selected_animals') is not None:
             inclusion_criteria += [lambda x: find_ancestor_id(x, 'animal') in self.data_opts['selected_animals']]
 
-        other_attributes = ['block_type']
-
+        other_attributes = ['period_type']
+        
         if 'lfp' in self.data_class:
             if self.data_type in ['mrl']:
                 level = 'mrl_calculator'
@@ -174,7 +174,7 @@ class Stats(Base):
                     other_attributes.append('power_deviation')
         else:
             other_attributes += ['category', 'neuron_type']
-
+            
         return self.get_data(level, inclusion_criteria, other_attributes)
 
     def get_data(self, level, inclusion_criteria, other_attributes):
@@ -404,13 +404,13 @@ class Stats(Base):
             csv_file = paste('{os.path.join(self.data_path, 'lfp', 'mrl')}', csv_name, sep='/')
             df <- read.csv(csv_file, comment.char="#")
 
-            factor_vars <- c('animal', 'group', 'block_type', 'neuron_type', 'unit')
+            factor_vars <- c('animal', 'group', 'period_type', 'neuron_type', 'unit')
             df[factor_vars] <- lapply(df[factor_vars], factor)
 
             mrl_column <- sym(paste0(frequency_band, "_mrl"))
 
             averaged_over_unit_result <- df %>%
-                group_by(animal, period_type, block, neuron_type, group, frequency_bin) %>%
+                group_by(animal, period_type, period, neuron_type, group, frequency_bin) %>%
                 summarize(
                     mean_mrl = mean(!!mrl_column, na.rm = TRUE)
                 ) %>%
@@ -419,10 +419,10 @@ class Stats(Base):
             data_to_return <- averaged_over_unit_result
 
             if (evoked) {{
-                pretone_data <- subset(averaged_over_unit_result, block_type == "pretone")
-                tone_data <- subset(averaged_over_unit_result, block_type == "tone")
+                pretone_data <- subset(averaged_over_unit_result, period_type == "pretone")
+                tone_data <- subset(averaged_over_unit_result, period_type == "tone")
 
-                merged_data <- merge(pretone_data, tone_data, by = setdiff(names(averaged_over_unit_result), c("mean_mrl", "block_type")))
+                merged_data <- merge(pretone_data, tone_data, by = setdiff(names(averaged_over_unit_result), c("mean_mrl", "period_type")))
                 merged_data$mrl_diff <- merged_data$mean_mrl.x - merged_data$mean_mrl.y
                 data_to_return <- merged_data
             }}

@@ -4,9 +4,11 @@ import numpy as np
 from neo.rawio import BlackrockRawIO
 from scipy.signal import resample
 from copy import deepcopy
+import csv
 
 from spike import Experiment, Group, Animal, Unit
 from lfp import LFPExperiment
+from behavior import Behavior
 
 
 class Initializer:
@@ -30,6 +32,8 @@ class Initializer:
         self.animals = None
         self.raw_lfp = None
         self.lfp_experiment = None
+        self.behavior_experiment = None
+        self.behavior_data_source = None
 
     def init_experiment(self):
         self.animals = [self.init_animal(animal_info) for animal_info in self.animals_info]
@@ -93,4 +97,43 @@ class Initializer:
             downsampled_data = resample(data, new_num_samples)
             data_to_return[region] = downsampled_data
         return data_to_return
+
+    def init_behavior_experiment(self):
+        data_source = self.exp_info['behavior_data']
+        behavior_id_column = self.exp_info['behavior_animal_id_column']
+        behavior_data = {}
+        if isinstance(data_source, str):
+            with open(data_source, mode='r') as f:
+                csv_reader = csv.DictReader(f)
+                self.behavior_data_source = {row[behavior_id_column]: row for row in csv_reader}
+        for animal in self.experiment.all_animals:
+            if animal.identifier in self.behavior_data_source:
+                animal_data = self.process_spreadsheet_row(animal)
+                behavior_data[animal.identifier] = animal_data
+        self.behavior_experiment = Behavior(self.experiment, self.exp_info, behavior_data)
+        return self.behavior_experiment
+
+    def process_spreadsheet_row(self, animal):
+        row = self.behavior_data_source[animal.identifier]
+        animal_data = {key: [] for key in animal.period_info.keys()}
+        for period_type in animal_data:
+            animal_data[period_type] = [float(row[key]) for key in row if self.process_column_name(key, period_type)]
+        return animal_data
+
+    @staticmethod
+    def process_column_name(column_name, period_type):
+        tokens = column_name.split(' ')
+        if period_type.lower() != tokens[0].lower():
+            return False
+        try:
+            int(tokens[1])
+        except (ValueError, IndexError) as e:
+            print(f"Skipping column {column_name} due to error {e}.  This is likely not a problem.")
+            return False
+        return True
+
+
+
+
+
 

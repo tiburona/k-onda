@@ -4,14 +4,14 @@ import numpy as np
 
 
 from data import Data, TimeBin
-from block_constructor import BlockConstructor
+from period_constructor import PeriodConstructor
 from context import Subscriber
-from utils import cache_method
+from utils import cache_method, to_hashable
 from plotting_helpers import formatted_now
 from math_functions import calc_rates, spectrum, trim_and_normalize_ac, cross_correlation, correlogram
 
 """
-This module defines SpikeData, Experiment, Group, Animal, Unit, Block, and Event, which comprise a hierarchical data 
+This module defines SpikeData, Experiment, Group, Animal, Unit, Period, and Event, which comprise a hierarchical data 
 model. (It also defines UnitPair, a bit of a special case.) SpikeData inherits from Data, which defines common 
 properties and methods to data representations.  The rest of the classes inherit from SpikeData. Several of SpikeData's 
 methods call `get_average`, a method that recurses down levels of the hierarchy to each object's children, and is 
@@ -122,12 +122,12 @@ class Experiment(SpikeData, Subscriber):
         self.all_animals = [animal for group in self.groups for animal in group]
         self._last_event_vals = None
         self.last_neuron_type = 'uninitialized'
-        self.last_block_type = 'uninitialized'
+        self.last_period_type = 'uninitialized'
         self.selected_animals = None  # None means all animals will be included; it's the default state
         self.children = self.groups
         for group in self.groups:
             group.parent = self
-        self.block_types = set(block_type for animal in self.all_animals for block_type in animal.block_info)
+        self.period_types = set(period_type for animal in self.all_animals for period_type in animal.period_info)
         self._neuron_types = set([unit.neuron_type for unit in self.all_units])
 
     @property
@@ -135,12 +135,12 @@ class Experiment(SpikeData, Subscriber):
         return [unit for animal in self.all_animals for unit in animal.units['good']]
 
     @property
-    def all_blocks(self):
-        return [block for unit in self.all_units for block in unit.all_blocks]
+    def all_periods(self):
+        return [period for unit in self.all_units for period in unit.all_periods]
 
     @property
     def all_events(self):
-        return [event for block in self.all_blocks for event in block]
+        return [event for period in self.all_periods for event in period]
 
     @property
     def all_unit_pairs(self):
@@ -148,7 +148,7 @@ class Experiment(SpikeData, Subscriber):
 
     def update(self, name):
         if name == 'data':
-            event_vals = list(self.data_opts.get('events')) + [self.data_opts.get('bin_size')]
+            event_vals = [to_hashable(self.data_opts.get('events'))] + [self.data_opts.get('bin_size')]
             if event_vals != self.last_event_vals:
                 [unit.update_children() for unit in self.all_units]
                 self._last_event_vals = event_vals
@@ -161,8 +161,8 @@ class Experiment(SpikeData, Subscriber):
                 [entity.update_children() for entity in self.all_groups + self.all_animals]
                 self.last_neuron_type = self.selected_neuron_type  # TODO: think about whether `last_neuron_type` should be shared among all data
 
-        if name == 'block_type':
-            if self.selected_block_type != self.last_block_type:
+        if name == 'period_type':
+            if self.selected_period_type != self.last_period_type:
                 [unit.update_children() for unit in self.all_units]
 
 
@@ -205,7 +205,7 @@ class Animal(SpikeData):
         self.identifier = identifier
         self.condition = condition
         self.animal_info = animal_info
-        self.block_info = animal_info['block_info'] if 'block_info' in animal_info is not None else {}
+        self.period_info = animal_info['period_info'] if 'period_info' in animal_info is not None else {}
         if neuron_types is not None:
             for nt in neuron_types:
                 setattr(self, nt, [])
@@ -225,9 +225,9 @@ class Animal(SpikeData):
             self.children = getattr(self, self.context.vals['neuron_type'])
 
 
-class Unit(SpikeData, BlockConstructor):
-    """A unit that was recorded from in the experiment, the child of an animal, parent of blocks. Inherits from
-    BlockConstructorUpdates to build its children. Updates its children when the `selected_block_type` or the events
+class Unit(SpikeData, PeriodConstructor):
+    """A unit that was recorded from in the experiment, the child of an animal, parent of periods. Inherits from
+    PeriodConstructorUpdates to build its children. Updates its children when the `selected_period_type` or the events
     structure (from data_opts) changes."""
 
     name = 'unit'
@@ -239,13 +239,13 @@ class Unit(SpikeData, BlockConstructor):
         self.animal.units[category].append(self)
         self.identifier = str(self.animal.units[category].index(self) + 1)
         self.neuron_type = neuron_type
-        self.block_class = Block
-        self.blocks = defaultdict(list)
+        self.period_class = Period
+        self.periods = defaultdict(list)
         self.spike_times = np.array(spike_times)
 
     @property
     def children(self):
-        return self.filter_by_selected_blocks(self.blocks)
+        return self.filter_by_selected_periods(self.periods)
 
     @property
     def firing_rate(self):
@@ -265,7 +265,7 @@ class Unit(SpikeData, BlockConstructor):
         return [UnitPair(self, other) for other in [unit for unit in self.animal if unit.identifier != self.identifier]]
 
     def update_children(self):
-        self.prepare_blocks()
+        self.prepare_periods()
 
     @cache_method
     def find_spikes(self, start, stop):
@@ -273,14 +273,14 @@ class Unit(SpikeData, BlockConstructor):
 
     @cache_method
     def get_spikes_by_events(self):
-        return [event.spikes for block in self.children for event in block.children]
+        return [event.spikes for period in self.children for event in period.children]
 
     @cache_method
     def get_spontaneous_firing(self):
         spontaneous_period = self.data_opts.get('spontaneous', 120)
         if not isinstance(spontaneous_period, tuple):
-            start = self.earliest_block.onset - spontaneous_period * self.sampling_rate - 1
-            stop = self.earliest_block.onset - 1
+            start = self.earliest_period.onset - spontaneous_period * self.sampling_rate - 1
+            stop = self.earliest_period.onset - 1
         else:
             start = spontaneous_period[0] * self.sampling_rate
             stop = spontaneous_period[1] * self.sampling_rate
@@ -288,39 +288,39 @@ class Unit(SpikeData, BlockConstructor):
         return calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), self.data_opts['bin_size'])
 
     @cache_method
-    def get_firing_std_dev(self, block_types=None):
-        if block_types is None:  # default: take all block_types
-            block_types = [block_type for block_type in self.blocks]
-        return np.std([rate for block in self.children for rate in block.get_unadjusted_rates()
-                       if block.block_type in block_types])
+    def get_firing_std_dev(self, period_types=None):
+        if period_types is None:  # default: take all period_types
+            period_types = [period_type for period_type in self.periods]
+        return np.std([rate for period in self.children for rate in period.get_unadjusted_rates()
+                       if period.period_type in period_types])
 
     @cache_method
     def get_cross_correlations(self, axis=0):
-        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.data_opts.get('base', 'block'))
+        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.data_opts.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
 
     @cache_method
     def get_correlogram(self, axis=0):
-        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.data_opts.get('base', 'block'))
+        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.data_opts.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
 
 
-class Block(SpikeData):
-    """A block of time in the recording of a unit. The child of a unit, the parent of events."""
+class Period(SpikeData):
+    """A period of time in the recording of a unit. The child of a unit, the parent of events."""
 
-    name = 'block'
+    name = 'period'
 
-    def __init__(self, unit, index, block_type, block_info, onset, events=None, target_block=None, is_relative=False):
+    def __init__(self, unit, index, period_type, period_info, onset, events=None, target_period=None, is_relative=False):
         self.unit = unit
         self.identifier = index
-        self.block_type = block_type
+        self.period_type = period_type
         self.onset = onset
         self.event_starts = events if events is not None else []
         self._events = []
-        self.shift = block_info.get('shift')
-        self.duration = block_info.get('duration')
-        self.reference_block_type = block_info.get('reference_block_type')
-        self.target_block = target_block
+        self.shift = period_info.get('shift')
+        self.duration = period_info.get('duration')
+        self.reference_period_type = period_info.get('reference_period_type')
+        self.target_period = target_period
         self._is_relative = is_relative
         self.animal = self.unit.animal
         self.parent = unit
@@ -336,10 +336,10 @@ class Block(SpikeData):
         return self._events
 
     def update_children(self):
-        events_settings = self.data_opts['events'].get(self.block_type, {'pre_stim': 0, 'post_stim': 1})
+        events_settings = self.data_opts['events'].get(self.period_type, {'pre_stim': 0, 'post_stim': 1})
         pre_stim, post_stim = (events_settings[opt] * self.sampling_rate for opt in ['pre_stim', 'post_stim'])
         if self.is_relative:
-            event_starts = self.target_block.event_starts - self.shift * self.sampling_rate
+            event_starts = self.target_period.event_starts - self.shift * self.sampling_rate
         else:
             event_starts = self.event_starts
         for i, start in enumerate(event_starts):
@@ -356,7 +356,7 @@ class Block(SpikeData):
         return np.mean(self.get_unadjusted_rates())
 
     def find_equivalent(self, unit):
-        return [block for block in unit.children][self.identifier]
+        return [period for period in unit.children][self.identifier]
 
 
 class Event(SpikeData):
@@ -366,15 +366,15 @@ class Event(SpikeData):
 
     name = 'event'
 
-    def __init__(self, block, unit, spikes, spikes_original_times, pre_stim, post_stim, index):
+    def __init__(self, period, unit, spikes, spikes_original_times, pre_stim, post_stim, index):
         self.unit = unit
         self.spikes = spikes
         self.spikes_original_times = spikes_original_times
         self.identifier = index
-        self.block = block
-        self.block_type = self.block.block_type
+        self.period = period
+        self.period_type = self.period.period_type
         self.children = None
-        self.parent = block
+        self.parent = period
         self.pre_stim = pre_stim
         self.post_stim = post_stim
         self.duration = self.pre_stim + self.post_stim
@@ -384,10 +384,10 @@ class Event(SpikeData):
         rates = self.get_unadjusted_rates()
         if not self.reference or self.data_opts.get('adjustment') == 'none':
             return rates
-        rates -= self.reference.mean_firing_rate() # TODO: does this make sense? Maybe this should be the block reference
+        rates -= self.reference.mean_firing_rate() # TODO: does this make sense? Maybe this should be the period reference
         if self.data_opts.get('adjustment') == 'relative':
             return rates
-        rates /= self.unit.get_firing_std_dev(block_types=self.block_type,)  # same as dividing unit psth by std dev
+        rates /= self.unit.get_firing_std_dev(period_types=self.period_type,)  # same as dividing unit psth by std dev
         return rates
 
     @cache_method
@@ -397,7 +397,7 @@ class Event(SpikeData):
         return calc_rates(self.spikes, self.num_bins_per_event, spike_range, bin_size)
 
     def get_cross_correlations(self, pair=None):
-        other = pair.blocks[self.block_type][self.block.identifier].events[self.identifier]
+        other = pair.periods[self.period_type][self.period.identifier].events[self.identifier]
         cross_corr = cross_correlation(self.get_unadjusted_rates(), other.get_unadjusted_rates(), mode='full')
         boundary = int(self.data_opts['max_lag'] / self.data_opts['bin_size'])
         midpoint = cross_corr.size // 2
@@ -414,7 +414,7 @@ class Event(SpikeData):
         return self.refer(correlogram(lags, bin_size, self.spikes, self.spikes, 1))
 
     def find_equivalent(self, unit):
-        return self.block.find_equivalent(unit).events[self.identifier]
+        return self.period.find_equivalent(unit).events[self.identifier]
 
 
 class UnitPair(SpikeData):
@@ -431,12 +431,12 @@ class UnitPair(SpikeData):
         self.children = self.unit.children
 
     def get_cross_correlations(self, **kwargs):
-        for kwarg, default in zip(['axis', 'stop_at'], [0, self.data_opts.get('base', 'block')]):
+        for kwarg, default in zip(['axis', 'stop_at'], [0, self.data_opts.get('base', 'period')]):
             kwargs[kwarg] = kwargs[kwarg] if kwarg in kwargs else default
         return self.get_average('get_cross_correlations', pair=self.pair, **kwargs)
 
     def get_correlogram(self, **kwargs):
-        for kwarg, default in zip(['axis', 'stop_at'], [0, self.data_opts.get('base', 'block')]):
+        for kwarg, default in zip(['axis', 'stop_at'], [0, self.data_opts.get('base', 'period')]):
             kwargs[kwarg] = kwargs[kwarg] if kwarg in kwargs else default
         return self.get_average('get_correlogram', pair=self.pair, num_pairs=len(self.unit.unit_pairs), **kwargs)
 

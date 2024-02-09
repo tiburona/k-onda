@@ -9,7 +9,7 @@ from copy import copy
 
 from data import Data
 from context import experiment_context
-from block_constructor import BlockConstructor
+from period_constructor import PeriodConstructor
 from context import Subscriber
 from matlab_interface import MatlabInterface
 from math_functions import *
@@ -115,29 +115,29 @@ class LFPExperiment(LFPData, Subscriber):
         self.all_groups = self.groups
         self.last_brain_region = None
         self.last_neuron_type = 'uninitialized'
-        self.last_block_type = 'uninitialized'
+        self.last_period_type = 'uninitialized'
         self.last_frequency_band = None
         self.selected_animals = None
 
     @property
-    def all_blocks(self):
-        blocks = []
+    def all_periods(self):
+        periods = []
         for animal in [animal for animal in self.all_animals if self.in_selected_animals(animal)]:
-            [blocks.extend(animal_blocks) for animal_blocks in animal.blocks.values()]
-        return blocks
+            [periods.extend(animal_periods) for animal_periods in animal.periods.values()]
+        return periods
 
     @property
     def all_mrl_calculators(self):
         mrl_calculators = []
         for animal in [animal for animal in self.all_animals if self.in_selected_animals(animal)]:
-            [mrl_calculators.extend(animal_blocks) for animal_blocks in animal.mrl_calculators.values()]
+            [mrl_calculators.extend(animal_periods) for animal_periods in animal.mrl_calculators.values()]
         return mrl_calculators
 
     @property
     def all_events(self):
         if self.data_type == 'mrl':
             raise ValueError("You can't extract events from MRL data")
-        return [event for block in self.all_blocks for event in block.events]
+        return [event for period in self.all_periods for event in period.events]
 
     def in_selected_animals(self, x):
         selected = self.data_opts.get('selected_animals')
@@ -185,17 +185,17 @@ class LFPGroup(LFPData):
             return unit_points
 
     @property
-    def data_by_block(self):
+    def data_by_period(self):
         if self.data_type != 'mrl':
-            raise NotImplementedError("Data by block is currently only implemented for MRL")
-        data_by_block = []
+            raise NotImplementedError("Data by period is currently only implemented for MRL")
+        data_by_period = []
         for i in range(5):
-            data_by_block.append(
+            data_by_period.append(
                 np.mean(
                     [mrl_calc.data for animal in self.children for mrl_calc in animal.children
-                     if mrl_calc.block.identifier == i], axis=0)
+                     if mrl_calc.period.identifier == i], axis=0)
             )
-        return np.array(data_by_block)
+        return np.array(data_by_period)
 
     def update_children(self):
         self.children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
@@ -214,8 +214,8 @@ class LFPGroup(LFPData):
         return self.get_average('get_mrl', stop_at='mrl_calculator', axis=None)
 
 
-class LFPAnimal(LFPData, BlockConstructor):
-    """An animal in the experiment. Processes the raw LFP data and divides it into blocks."""
+class LFPAnimal(LFPData, PeriodConstructor):
+    """An animal in the experiment. Processes the raw LFP data and divides it into periods."""
 
     name = 'animal'
 
@@ -223,20 +223,20 @@ class LFPAnimal(LFPData, BlockConstructor):
         self.spike_target = animal
         self.raw_lfp = raw_lfp
         self._sampling_rate = sampling_rate
-        self.block_class = LFPBlock
-        self.blocks = defaultdict(list)
+        self.period_class = LFPPeriod
+        self.periods = defaultdict(list)
         self.mrl_calculators = defaultdict(list)
         self.parent = None
         self.group = None
         self._processed_lfp = {}
         self.last_brain_region = None
         self.last_neuron_type = 'uninitialized'
-        self.last_block_type = 'uninitialized'
+        self.last_period_type = 'uninitialized'
         self.last_frequency_band = None
         self.is_mirror = is_mirror
         self.mirror = None
         self.frozen_freq_range = None
-        self.frozen_blocks = None
+        self.frozen_periods = None
 
     def __getattr__(self, name):
         prop = getattr(type(self), name, None)
@@ -246,11 +246,11 @@ class LFPAnimal(LFPData, BlockConstructor):
 
     @property
     def children(self):
-        children = self.mrl_calculators if self.data_type == 'mrl' else self.blocks
+        children = self.mrl_calculators if self.data_type == 'mrl' else self.periods
         if self.data_opts.get('spontaneous'):
             children = children['spontaneous']
         else:
-            children = self.filter_by_selected_blocks(children)
+            children = self.filter_by_selected_periods(children)
         if self.data_type == 'mrl':
             children = [calc for calc in children if calc.unit.neuron_type == self.selected_neuron_type]
         return children
@@ -261,13 +261,13 @@ class LFPAnimal(LFPData, BlockConstructor):
         old_and_new = [(self.last_brain_region, self.current_brain_region),
                        (self.last_frequency_band, self.current_frequency_band),
                        (self.last_neuron_type, self.selected_neuron_type),
-                       (self.last_block_type, self.selected_block_type)]
+                       (self.last_period_type, self.selected_period_type)]
         if any([old != new for old, new in old_and_new]):
             self.update_children()
             self.last_brain_region = self.current_brain_region
             self.last_frequency_band = self.current_frequency_band
             self.last_neuron_type = self.selected_neuron_type
-            self.last_block_type = self.selected_block_type
+            self.last_period_type = self.selected_period_type
 
     @property
     def processed_lfp(self):
@@ -276,7 +276,7 @@ class LFPAnimal(LFPData, BlockConstructor):
         return self._processed_lfp
 
     def update_children(self):
-        self.prepare_blocks()
+        self.prepare_periods()
         if 'mrl' in self.data_type:
             self.prepare_mrl_calculators()
 
@@ -303,9 +303,9 @@ class LFPAnimal(LFPData, BlockConstructor):
             mrl_calculators = {'spontaneous': [SpontaneousMRLCalculator(unit, self)
                                                for unit in self.spike_target.units['good']]}
         else:
-            mrl_calculators = {block_type: [BlockMRLCalculator(unit, block=block) for block in blocks
+            mrl_calculators = {period_type: [PeriodMRLCalculator(unit, period=period) for period in periods
                                             for unit in self.spike_target.units['good']]
-                               for block_type, blocks in self.blocks.items()}
+                               for period_type, periods in self.periods.items()}
         self.mrl_calculators = mrl_calculators
 
     def make_mirror(self):
@@ -314,14 +314,14 @@ class LFPAnimal(LFPData, BlockConstructor):
         # calculation.
         self.mirror = LFPAnimal(self.spike_target, self.raw_lfp, self.sampling_rate, is_mirror=True)
         self.mirror.frozen_freq_range = self.data_opts['validate_events'].get('frequency', (0, 8))
-        self.mirror.frozen_blocks = self.data_opts['validate_events'].get('blocks', self.data_opts.get('blocks'))
+        self.mirror.frozen_periods = self.data_opts['validate_events'].get('periods', self.data_opts.get('periods'))
         self.mirror.parent = self.parent
         self.mirror.group = self.group
         self.mirror.update_children()
 
 
 class LFPDataSelector:
-    """A class with methods shared by LFPBlock and LFPEvent that are used to return portions of their data."""
+    """A class with methods shared by LFPPeriod and LFPEvent that are used to return portions of their data."""
 
     @property
     def mean_over_time_bins(self):
@@ -345,38 +345,38 @@ class LFPDataSelector:
 
     @cache_method
     def trimmed_spectrogram(self):
-        return self.sliced_spectrogram[:, 75:-75]  # TODO: 75 should be a function of block length and mtscg args
+        return self.sliced_spectrogram[:, 75:-75]  # TODO: 75 should be a function of period length and mtscg args
 
     @property
     def sliced_spectrogram(self):
         return self.slice_spectrogram()
 
 
-class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
-    """A block in the experiment. Preprocesses data, initiates calls to Matlab to get the cross-spectrogram, and
+class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
+    """A period in the experiment. Preprocesses data, initiates calls to Matlab to get the cross-spectrogram, and
     generates LFPEvents. Inherits from LFPSelector to be able to return portions of its data."""
 
-    name = 'block'
+    name = 'period'
 
-    def __init__(self, lfp_animal, i, block_type, block_info, onset, events=None, target_block=None, is_relative=False):
+    def __init__(self, lfp_animal, i, period_type, period_info, onset, events=None, target_period=None, is_relative=False):
         LFPDataSelector.__init__(self)
         self.animal = lfp_animal
         self.parent = lfp_animal
         self.identifier = i
-        self.block_type = block_type
+        self.period_type = period_type
         self.onset = onset - 1
-        self.target_block = target_block
+        self.target_period = target_period
         self._is_relative = is_relative
         if events is not None:
             self.event_starts = events - 1
         else:
             self.event_starts = np.array([])
-        self.convolution_padding = block_info['lfp_padding']
-        self.duration = block_info.get('duration')
-        self.event_duration = block_info.get('event_duration')
+        self.convolution_padding = period_info['lfp_padding']
+        self.duration = period_info.get('duration')
+        self.event_duration = period_info.get('event_duration')
         if self.event_duration is None:
-            self.event_duration = target_block.event_duration
-        self.reference_block_type = block_info.get('reference_block_type')
+            self.event_duration = target_period.event_duration
+        self.reference_period_type = period_info.get('reference_period_type')
         start_pad_in_samples, end_pad_in_samples = np.array(self.convolution_padding) * self.sampling_rate
         duration_in_samples = self.duration * self.sampling_rate
         start = int(self.onset - start_pad_in_samples)
@@ -418,7 +418,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
 
     def get_events(self):
         true_beginning = self.convolution_padding[0] - self.lost_signal()/2
-        pre_stim, post_stim = (self.data_opts['events'][self.block_type][opt] for opt in ['pre_stim', 'post_stim'])
+        pre_stim, post_stim = (self.data_opts['events'][self.period_type][opt] for opt in ['pre_stim', 'post_stim'])
         time_bins = np.array(self.spectrogram[2])
         events = []
         epsilon = 1e-6  # a small offset to avoid floating-point inting issues
@@ -444,7 +444,7 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
     def calc_cross_spectrogram(self):
         arg_set = self.data_opts['power_arg_set']
         pickle_args = [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] + \
-                      [self.block_type, str(self.identifier)]
+                      [self.period_type, str(self.identifier)]
         saved_calc_exists, result, pickle_path = self.load('spectrogram', pickle_args)
         if not saved_calc_exists:
             ml = MatlabInterface(self.data_opts['matlab_configuration'])
@@ -474,15 +474,15 @@ class LFPBlock(LFPData, BlockConstructor, LFPDataSelector):
 class LFPEvent(LFPData, LFPDataSelector):
     name = 'event'
 
-    def __init__(self, id, event_times, normed_data, mask, block):
+    def __init__(self, id, event_times, normed_data, mask, period):
         LFPDataSelector.__init__(self)
         self.identifier = id
         self.event_times = event_times
         self.mask = mask
         self.normed_data = normed_data
-        self.block = block
-        self.parent = block
-        self.block_type = self.parent.block_type
+        self.period = period
+        self.parent = period
+        self.period_type = self.parent.period_type
         self.spectrogram = self.parent.spectrogram
 
     @cache_method
@@ -498,14 +498,14 @@ class LFPEvent(LFPData, LFPDataSelector):
 
     @property
     def is_valid(self):
-        animal = self.block.animal
+        animal = self.period.animal
         if (not self.data_opts.get('validate_events')) or animal.is_mirror:
             return True
 
         if not animal.mirror:
             animal.make_mirror()
 
-        mirror_event = animal.mirror.blocks[self.block_type][self.block.identifier].events[self.identifier]
+        mirror_event = animal.mirror.periods[self.period_type][self.period.identifier].events[self.identifier]
         return mirror_event.validate()
 
     def validate(self):
@@ -513,14 +513,14 @@ class LFPEvent(LFPData, LFPDataSelector):
         frequency_bins = self.get_frequency_bins(self.get_original_data())
         for frequency in range(*self.data_opts['validate_events'].get('frequency', (0, 8))):
             self.update_data_opts(['evoked'], False)
-            standard = self.block.animal.mirror.get_median(
+            standard = self.period.animal.get_median(
                 stop_at='event', extend_by=('frequency', 'time'),
-                select_by=(('block', 'block_type', self.block_type), ('frequency_bin', 'identifier', frequency)))
+                select_by=(('period', 'period_type', self.period_type), ('frequency_bin', 'identifier', frequency)))
             self.update_data_opts(['evoked'], evoked)
             for time_bin in frequency_bins[frequency].time_bins:
                 if time_bin.data > self.data_opts['validate_events'].get('threshold', 20) * standard:
-                    print(f"{self.current_brain_region} {self.block.animal.identifier} {self.block_type} "
-                          f"{self.block.identifier} {self.identifier} invalid!")
+                    print(f"{self.current_brain_region} {self.period.animal.identifier} {self.period_type} "
+                          f"{self.period.identifier} {self.identifier} invalid!")
                     return False
         return True
 
@@ -534,11 +534,11 @@ class FrequencyBin(LFPData):
     def __init__(self, index, val, parent, unit=None):
         self.parent = parent
         self.val = val
-        if self.parent.name == 'block':
+        if self.parent.name == 'period':
             self.identifier = self.parent.spectrogram[1][index]
-        elif hasattr(self.parent, 'block'):
-            self.identifier = self.parent.block.spectrogram[1][index]
-        self.block_type = self.parent.block_type
+        elif hasattr(self.parent, 'period'):
+            self.identifier = self.parent.period.spectrogram[1][index]
+        self.period_type = self.parent.period_type
         self.unit = unit
         self.is_valid = self.parent.is_valid if hasattr(self.parent, 'is_valid') else True
 
@@ -556,19 +556,19 @@ class TimeBin:
 
     def __init__(self, i, data, parent):
         self.parent = parent
-        self.block_type = self.parent.block_type
+        self.period_type = self.parent.period_type
         self.identifier = i
         self.data = data
         self.mean_data = np.mean(self.data)
         self.ancestors = get_ancestors(self)
-        self.position = self.get_position_in_block_time_series()
-        self.block = [ancestor for ancestor in self.ancestors if ancestor.name == 'block'][0]
+        self.position = self.get_position_in_period_time_series()
+        self.period = [ancestor for ancestor in self.ancestors if ancestor.name == 'period'][0]
 
     @property
     def power_deviation(self):
-        return self.block.power_deviations[self.position]
+        return self.period.power_deviations[self.position]
 
-    def get_position_in_block_time_series(self):
+    def get_position_in_period_time_series(self):
         if self.parent.name == 'event':
             self.parent.num_bins_per_event * self.parent.identifier + self.identifier
         else:
@@ -593,7 +593,7 @@ class MRLCalculator(LFPData):
         return [FrequencyBin(i, data, self, unit=self.unit) for i, data in enumerate(self.data)]
 
     def get_wavelet_phases(self, scale):
-        cwt_matrix = cwt(self.block.unpadded_data, morlet, [scale])
+        cwt_matrix = cwt(self.period.unpadded_data, morlet, [scale])
         # Since we're computing the CWT for only one scale, the result is at index 0.
         return np.angle(cwt_matrix[0, :])
 
@@ -612,7 +612,7 @@ class MRLCalculator(LFPData):
                 return compute_phase(bandpass_filter(self.mrl_data, low, high, self.sampling_rate))
             else:
                 frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
-                return np.array([compute_phase(bandpass_filter(self.block.unpadded_data, low, high, self.sampling_rate))
+                return np.array([compute_phase(bandpass_filter(self.period.unpadded_data, low, high, self.sampling_rate))
                                  for low, high in frequency_bands])
 
     @cache_method
@@ -648,7 +648,7 @@ class MRLCalculator(LFPData):
         counts, _ = np.histogram(angles, bins=bin_edges)
         if self.data_opts.get('evoked'):
             counts = counts/len(angles)  # counts must be transformed to proportions for the subtraction to make sense
-            if self.block_type == 'tone':  # TODO: generalize this
+            if self.period_type == 'tone':  # TODO: generalize this
                 counts -= self.equivalent_calculator.get_angle_counts()
         return counts
 
@@ -673,28 +673,28 @@ class MRLCalculator(LFPData):
             return self.refer(compute_mrl(alpha, w, dim=dim))
 
 
-class BlockMRLCalculator(MRLCalculator):
+class PeriodMRLCalculator(MRLCalculator):
 
-    def __init__(self, unit, block):
+    def __init__(self, unit, period):
         super().__init__(unit)
-        self.block = block
-        self.block_type = block.block_type
-        self.mrl_data = block.unpadded_data
-        self.duration = block.duration
-        self.identifier = f"{self.block.identifier}_{self.unit.identifier}"
-        self.parent = self.block.parent
-        self.spike_block = self.unit.blocks[self.block_type][self.block.identifier]
-        self.spikes = [int((spike + i) * self.sampling_rate) for i, event in enumerate(self.spike_block.events)
+        self.period = period
+        self.period_type = period.period_type
+        self.mrl_data = period.unpadded_data
+        self.duration = period.duration
+        self.identifier = f"{self.period.identifier}_{self.unit.identifier}"
+        self.parent = self.period.parent
+        self.spike_period = self.unit.periods[self.period_type][self.period.identifier]
+        self.spikes = [int((spike + i) * self.sampling_rate) for i, event in enumerate(self.spike_period.events)
                        for spike in event.spikes]
         self.num_events = len(self.spikes)
 
     @property
     def ancestors(self):
-        return [self] + [self.unit] + [self.block] + self.parent.ancestors
+        return [self] + [self.unit] + [self.period] + self.parent.ancestors
 
     @property
     def equivalent_calculator(self):
-        other_stage = self.spike_block.reference_block_type
+        other_stage = self.spike_period.reference_period_type
         return [calc for calc in self.parent.mrl_calculators[other_stage] if calc.identifier == self.identifier][0]
 
     @property
@@ -714,14 +714,14 @@ class SpontaneousMRLCalculator(MRLCalculator):
         super().__init__(unit)
         self.animal = animal
         self.parent = self.animal
-        self.block_type = self.identifier = 'spontaneous'
+        self.period_type = self.identifier = 'spontaneous'
         self.spikes = self.unit.get_spontaneous_firing()
         self.num_events = len(self.spikes)
         self.raw = self.animal.raw_lfp[self.brain_region]
         if isinstance(self.data_opts['spontaneous'], tuple):
             self.start, self.end = np.array(self.data_opts['spontaneous']) * self.sampling_rate
         else:
-            self.end = self.animal.earliest_block.onset
+            self.end = self.animal.earliest_period.onset
             self.start = self.end - self.data_opts['spontaneous'] * self.sampling_rate
         self.mrl_data = self.raw[self.start:self.end]
 

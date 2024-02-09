@@ -77,7 +77,9 @@ exp_info = {
     'neuron_classification_rule': neuron_classification_rule,
     'stimulus_duration': .05,
     'frequency_bands': dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
-                            hgamma=(70, 120))
+                            hgamma=(70, 120)),
+    'behavior_data': os.path.join(root, 'percent_freezing.csv'),
+    'behavior_animal_id_column': 'ID'
 }
 
 mice_with_alt_code = ['IG171', 'IG172', 'IG173', 'IG174', 'IG175', 'IG176', 'IG177', 'IG178', 'IG179', 'IG180']
@@ -89,6 +91,7 @@ for animal in animal_info:
     animal_file = os.path.join(root, animal, animal + '.json')
     tone_on_code = 65502 if animal not in mice_with_alt_code else 65436
     with open(animal_file, 'r', encoding='utf-8') as file:
+        print(animal_file)
         data = file.read()
         json_data = json.loads(data)
         time_stamps = json_data['NEV']['Data']['SerialDigitalIO']['TimeStamp']
@@ -97,8 +100,8 @@ for animal in animal_info:
         events = [[onset + i * 30000 for i in range(30)] for onset in tone_onsets]
         pretone = {'relative': True, 'target': 'tone', 'shift': 30, 'duration': 30, 'lfp_padding': [1, 1]}
         tone = {'onsets': tone_onsets, 'events': events, 'duration': 30, 'lfp_padding': [1, 1],
-                'event_duration': 1, 'reference_block_type': 'pretone'}
-        animals.append({'identifier': animal, 'block_info': {'tone': tone, 'pretone': pretone}, **animal_info[animal]})
+                'event_duration': 1, 'reference_period_type': 'pretone'}
+        animals.append({'identifier': animal, 'period_info': {'tone': tone, 'pretone': pretone}, **animal_info[animal]})
 
 with open(os.path.join(root, 'single_cell_data', 'single_cell_data.json'), 'r', encoding='utf-8') as file:
     data = file.read()
