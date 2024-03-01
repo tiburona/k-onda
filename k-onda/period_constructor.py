@@ -26,10 +26,11 @@ class PeriodConstructor:
         num_events = len([event for events_list in period_info['events'] for event in
                           events_list])  # all the events for this period type
 
+        # Assuming self.data_opts is a dictionary and num_events is defined
         if self.data_opts and self.data_opts.get('events', {}).get(period_type, {}).get('selection') is not None:
             events = slice(*self.data_opts['events'][period_type]['selection'])
         else:
-            events = slice(0, num_events)  # default is to take all events
+            events = slice(0, num_events)# default is to take all events
         selected_event_indices = list(range(num_events))[events]  # indices of the events used in this data analysis
         period_onsets = period_info['onsets']  # the time stamp of the beginning of a period
         period_events = period_info['events']  # the time stamps of things that happen within the period
@@ -51,9 +52,9 @@ class PeriodConstructor:
 
         for i, paired_period in enumerate(paired_periods):
             if self.name == 'animal':  # if self is animal this is an lfp period
-                shift += sum(paired_period.convolution_padding)
-            onset = paired_period.onset - shift * self.sampling_rate
-            event_starts = paired_period.event_starts - shift * self.sampling_rate
+                shift -= sum(paired_period.convolution_padding)
+            onset = paired_period.onset + shift * self.sampling_rate
+            event_starts = paired_period.event_starts + shift * self.sampling_rate
             duration = duration if duration else paired_period.duration
             reference_period = self.period_class(self, i, period_type, period_info, onset, events=event_starts,
                                                target_period=paired_period, is_relative=True)
@@ -70,7 +71,7 @@ class PeriodConstructor:
             children = periods[self.selected_period_type]
         else:
             children = [period for period_type in periods for period in periods[period_type]]
-        if self.frozen_periods is not None:
+        if hasattr(self, 'frozen_periods') and self.frozen_periods is not None:
             selected_periods = self.frozen_periods
         else:
             selected_periods = self.data_opts.get('periods')

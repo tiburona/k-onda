@@ -162,7 +162,8 @@ class Data(Base):
 
     @property
     def num_bins_per_event(self):
-        pre_stim, post_stim, bin_size = (self.data_opts.get(opt) for opt in ['pre_stim', 'post_stim', 'bin_size'])
+        bin_size = self.data_opts.get('bin_size')
+        pre_stim, post_stim= (self.data_opts['events'][self.period_type].get(opt) for opt in ['pre_stim', 'post_stim'])
         return int((pre_stim + post_stim) / bin_size)
 
     @property

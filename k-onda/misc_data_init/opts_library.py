@@ -123,8 +123,8 @@ HPC_THETA_POWER_ANIMALS = ['IG162', 'IG171', 'IG173', 'IG176', 'IG155', 'IG174',
 
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
               'sem': False, 'footer': True, 'equal_y_scales': True, 'equal_color_scales': 'within_group',
-              'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'}, 'block_colors':
-                  {'pretone': 'gray', 'tone': 'black'}, 'block_order': ['pretone', 'tone']
+              'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'}, 'period_colors':
+                  {'pretone': 'gray', 'tone': 'black'}, 'period_order': ['pretone', 'tone']
               }
 
 MATLAB_CONFIG = {
@@ -173,14 +173,14 @@ POWER_SPREADSHEET_OPTS = {
     'matlab_configuration': MATLAB_CONFIG
 }
 
-TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'frequency_bands': ['theta_1'], 'data_type': 'power',
-                         'brain_regions': ['hpc', 'bla', 'pl'], 'store': 'pkl', 'evoked': False,
-                         'periods': {'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
+TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'frequency_bands': [(4, 8)], 'data_type': 'power',
+                         'brain_regions': ['hpc', 'bla', 'pl'], 'store': 'pkl',
+                         'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
                          'power_deviation': False, 'filter': 'spectrum_estimation',
-                         'levels': ['group'], 'validate_events': {'frequency': (0, 8), 'threshold': 20,
+                         'levels': ['group', 'animal'], 'validate_events': {'frequency': (0, 8), 'threshold': 20,
                                                                   'periods': {'pretone': range(5), 'tone': range(5)}},
-                         'events': {'pretone': {'pre_stim': 0, 'post_stim': .3},
-                                    'tone': {'pre_stim': 0, 'post_stim': .3}},
+                         'events': {'pretone': {'pre_stim': .15, 'post_stim': 0},
+                                    'tone': {'pre_stim': .15, 'post_stim': 0}},
                          'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
                                                     'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
                                                     'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
@@ -189,9 +189,9 @@ TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'frequency_bands': ['theta_1'], 'd
                     }
 
 
-TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
+# TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
 
-TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS}
+# TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS}
 
 TEST_RUNNER_OPTS = [{'data_class': 'behavior', 'data_type': 'percent_freezing',
                      'periods': {'pretone': range(5), 'tone': range(5)}, 'row_type': 'period'}, TEST_SPECTROGRAM_OPTS]

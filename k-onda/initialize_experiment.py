@@ -56,12 +56,8 @@ class Initializer:
             for unit_info in units_info[category]:
                 unit = Unit(animal, category, unit_info['spike_times'])
                 if category == 'good':
-                    classification_val = unit_info[self.neuron_classification_rule['column_name']]
-                    classifications = self.neuron_classification_rule['classifications']
-                    for neuron_type, values in classifications.items():
-                        if classification_val in values:
-                            unit.neuron_type = neuron_type
-                    unit.fwhm_microseconds = unit_info['FWHM_microseconds']
+                    unit.neuron_type = unit_info.get('neuron_type')
+                    unit.fwhm_microseconds = unit_info.get('FWHM_microseconds')
                     getattr(animal, unit.neuron_type).append(unit)
 
     def init_lfp_experiment(self):

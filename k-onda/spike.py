@@ -115,7 +115,7 @@ class Experiment(SpikeData, Subscriber):
         self.identifier = info['identifier'] + formatted_now()
         self.conditions = info['conditions']
         self._sampling_rate = info['sampling_rate']
-        self.stimulus_duration = info['stimulus_duration']
+        self.stimulus_duration = info.get('stimulus_duration')
         self.subscribe(self.context)
         self.groups = groups
         self.all_groups = self.groups

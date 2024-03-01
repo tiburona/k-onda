@@ -62,7 +62,6 @@ defeat_ig_no_st_dict = {animal: {'condition': 'defeat', 'lfp_electrodes': no_st_
 animal_info = {**control_ined_dict, **defeat_ined_dict, **control_ig_dict, **defeat_ig_dict, **control_ig_no_st_dict,
                **defeat_ig_no_st_dict}
 
-neuron_classification_rule = dict(column_name='cluster_assignment', classifications={'IN': [2], 'PN': [1]})
 
 
 exp_info = {
@@ -74,7 +73,6 @@ exp_info = {
     'lfp_root': root,
     'lfp_path_constructor': ['identifier'],
     'lost_signal': .5,
-    'neuron_classification_rule': neuron_classification_rule,
     'stimulus_duration': .05,
     'frequency_bands': dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
                             hgamma=(70, 120)),
@@ -98,7 +96,7 @@ for animal in animal_info:
         unparsed_data = json_data['NEV']['Data']['SerialDigitalIO']['UnparsedData']
         tone_onsets = [ts for i, ts in enumerate(time_stamps) if unparsed_data[i] == tone_on_code]
         events = [[onset + i * 30000 for i in range(30)] for onset in tone_onsets]
-        pretone = {'relative': True, 'target': 'tone', 'shift': 30, 'duration': 30, 'lfp_padding': [1, 1]}
+        pretone = {'relative': True, 'target': 'tone', 'shift': -30, 'duration': 30, 'lfp_padding': [1, 1]}
         tone = {'onsets': tone_onsets, 'events': events, 'duration': 30, 'lfp_padding': [1, 1],
                 'event_duration': 1, 'reference_period_type': 'pretone'}
         animals.append({'identifier': animal, 'period_info': {'tone': tone, 'pretone': pretone}, **animal_info[animal]})
@@ -111,6 +109,8 @@ with open(os.path.join(root, 'single_cell_data', 'single_cell_data.json'), 'r', 
 for i, animal in enumerate(animals):
     if animal['identifier'] in single_cell_data_dict:
         animals[i]['units'] = single_cell_data_dict[animal['identifier']]['units']
+        for unit in animals[i]['units']['good']:
+             unit['neuron_type'] = 'IN' if unit['cluster_assignment'] == 2 else 'PN'
 
 exp_info['animals'] = animals
 

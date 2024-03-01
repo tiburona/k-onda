@@ -18,9 +18,9 @@ def main():
 ```
 It assumes that the experiment is configured in a JSON file accessible at the given path, and that the analysis 
 configuration is a Python dictionary defined in the same module or imported from another. 
-You can find [instructions](misc_data_init/experiment_config_howto.md) for experiment 
+You can find [instructions](documentation/experiment_config_howto.md) for experiment 
 configuration and examples in the [misc_data_init](misc_data_init) directory, as well as 
-[instructions](misc_data_init/analysis_config_howto.md) for and examples of analysis configuration.
+[instructions](documentation/analysis_config_howto.md) for and examples of analysis configuration.
 
 If you want to run local field potential or behavioral analyses in addition to or instead of spike analyses you must 
 pass the Runner arguments to tell it to initialize that data, like so:
@@ -30,7 +30,7 @@ def main():
     runner = Runner(config_file='<path_to_config>/init_config.json', lfp=True)
     runner.run('plot_mrl', MRL_OPTS)
 ```
-(and mutatis mutandi for behavior).
+(and mutatis mutandi for `behavior`).
 
 The `run` method can also take variable arguments that are passed to the `make_spreadsheet` procedure.  For example:
 
@@ -40,13 +40,14 @@ def main():
     runner.run('make_spreadsheet', LIST_OF_OPTS_DICTS, path='</path/where/csv/is/written>')
 ```
 
-### Procedures you can run
+## Procedures you can run
 
 ### Plots
 
 The plotting functions that have the form plot_<data_type> can generate plots at multiple levels of the data hierarchy -- 
-Group, Animal, and Unit (or UnitPair for cross-correlation/cross-correlogram). The higher levels are averaged over the 
-lower ones. Starting with "plot_group_stats" in the following list, plots are currently enabled only at the group level.
+Group, Animal, and Unit (or UnitPair for cross-correlation/cross-correlogram). For definitions of the data hierarchy 
+levels, see [here](documentation/data_hierarchy.md) The higher levels are averaged over the lower ones. Starting with 
+"plot_group_stats" in the following list, plots are currently enabled only at the group level, with exceptions as noted.
 
 - plot_psth: plots the peri-stimulus time histogram of firing rates
 ![a sample psth plot by groups](sample_images/psth_group.png)
@@ -76,24 +77,23 @@ and you can plot a Group, an Animal, or a Period.
 There is also a [figures](/figures) directory that contains code for a custom figure (which also contains a 
 demonstration of plots extracted from Phy).
 
+* note that I've adopted Phy's usage of "correlogram" and it's not typical of the wider world.
+
 ### Spreadsheet
 
 - make_spreadsheet: outputs a CSV file with any combination of calculations from data from the same experiment. When 
 multiple kinds of calculations are done, they are merged into a single spreadsheet by the values they have in common.
 
-In addition to the data types discussed in the context of plots, your spreadsheet can also include power, which is 
-extracted from the LFP raw data via the multitaper time-frequency cross spectrogram program, implemented in Matlab, and 
-behavior, which is at this writing still specific to a specific format of percent freezing data and has not yet been
-abstracted.
-
-* note that I've adopted Phy's usage of "correlogram" and it's not typical of the wider world.
+In addition to the data types discussed in the context of plots, your spreadsheet can also include behavior, which is at 
+this writing moment any form of data you provide to the program via csv file input with one value per period.
 
 ### Requirements
 
 In addition to the Python packages specified in venv/lib, some functionality depends on other applications installed on 
 your computer.  Calculations of power and coherence from raw LFP data depend on having a working version of Matlab 
-installed, along with two scripts from Professor Kenneth Harris's lab (`mtcsg.m` and `mtchg.m`) and their dependencies.
-These scripts are not distributed with this repo; if you need them, please email the author in the very remote chance 
+installed, along with two scripts from Professor Kenneth Harris's lab (`mtcsg.m` and `mtchg.m`) and their dependencies. 
+You can also choose to filter your LFP data using the Matlab script `removeLineNoise_SpectrumEstimation.m`. These 
+scripts are not distributed with this repo; if you need them, please email the author in the very remote chance 
 you are someone reading this who is not in the Likhtik lab, or if you are, Whatsapp her.
 
 The `plot_group_stats` function depends on having a working R installation, along with the following R packages: `lme4`,  

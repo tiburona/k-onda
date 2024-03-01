@@ -1,7 +1,7 @@
-# Configuration for all analyses #
+# Analysis Configuration Reference
 
-Note: this howto uses the world "iterable" as an umbrella term for what could be a json array defined in square brackets, 
-or if you are defining your configuration in Python code, could be any kind of Python iterable, including but not 
+Note: this reference uses the world "iterable" as an umbrella term for what could be a json array defined in square 
+brackets, or if you are defining your configuration in Python code, could be any kind of Python iterable, including but not 
 limited to a list or a tuple.  
 
 ## Plots
@@ -14,14 +14,14 @@ must also include the key "data_class" ("spike", "lfp", or "behavior").
 ## Spreadsheets
 
 The config can be either a dictionary of the form `{"data_opts": {"data_type": "<data_type>", ...}}` or a list of 
-data_opts dictionaries (`[{"data_type": "<data_type>", ...}, {"data_type": "<data_type>", ...}...]`). If you are 
-including multiple kinds of calculations the simplest way to handle them is to make the config a list of dictionaries 
-that each have the config for an individual analysis, but there are other options.  As described above, these 
+data_opts dictionaries (`[{"data_type": "<data_type>", ...}, {"data_type": "<data_type>", ...}...]`). A list of 
+dictionaries will include multiple types of data one spreadsheet. As described above, these 
 "data_opts" dictionaries must have the data_class and data_type specified.
 
 ## Multiple analyses
 
-To learn more about configuration for analyses that need to iterate over multiple versions of `data_opts`, click here.
+To learn more about configuration for analyses that need to iterate over multiple versions of `data_opts`, click 
+[here](#configuring-more-than-one-type-of-calculation).
 
 # Spike Analyses #
 
@@ -93,7 +93,9 @@ than "levels". '"levels":["group"]' and '"level":"group"' are equivalent.
 whose values are arrays/Python iterables with the integer indices of the periods to include. Ignored for making CSVs. 
 Although not strictly obligatory for plotting, if not provided, values from all periods will be included, which would be 
 particularly nonsensical if any value for "adjustment" other than "none" is chosen. **Watch out for this. If you don't 
-include it, the program will run without error, and you will get results that make sense, but they will be wrong.**
+include 'periods', the program will raise a ValueError, but as of this writing if you provide the relative periods along 
+with non-relative periods when adjustment is not 'none' the program will run without error but produce a nonsensical 
+result.**
 
 
 ### Opts for `make_spreadsheet` ###
@@ -123,10 +125,11 @@ Note: it would make sense to make the definition of up- or down-regulated config
 an opt here.  Right now upregulated means greater than 0. Also, be sure to note that the meaning of > 0 changes 
 depending on "adjustment".
 
-"evoked" (optional): a boolean which indicates whether to subtract the values from the reference period. **It does not make sense 
-to use this if you have chosen something other than 'none' for adjustment**. Keep in mind: "adjustment" applies to the 
-*underlying rates*, while the "evoked" subtraction will be applied to the further calculation you do using those rates 
-(this is also relevant for the various kind of correlation calculations described below). The default is False.
+"evoked" (optional): a boolean which indicates whether to subtract the values from the reference period.  The default is 
+False. **It does not make sense to use this if you have chosen something other than 'none' for adjustment**, and the 
+program will raise an error if you do. Keep in mind: "adjustment" applies to the*underlying rates*, while the "evoked" 
+subtraction will be applied to the further calculation you do using those rates (this is also relevant for the various 
+kind of correlation calculations described below).
 
 Here's an example proportion config:
 
@@ -248,11 +251,17 @@ The following are keys that are not used in spike analyses.
 so long as every subdirectory can be added to the Matlab path without interfering with your program
 - "temp_file_path": a path to a directory where a temp subdirectory will be written that will allow the creation of 
 files for the program execution
+- "paths_to_add" (optional) an iterable of directory names to add to the Matlab path before execution
+- "recursive_paths_to_add" (optional): an iterable of directory names to walk recursively and add, along with their 
+descendants, to the Matlab path (for example of you have a high level software directory you want to add).
 
 "store" (optional): a string that tells the program how you will write out your filter and mtscg output.  If "pkl", the 
 program writes and reads pickle files (the default), if "json", json.  Most of the time you will want pickle files, but 
 there are occasions when you might want these files to be more easily inspectable outside of Python, in which case you 
 can choose json.
+
+"force_recalc" (optional): a boolean that indicates whether to force recalculation of values in the store (as of this
+writing you can't choose between filter values and mtcsg, it's all or none).
 
 "frequency_band": Either the name of the frequency band, which you've already 
 entered as a key in the `frequency_bands` dictionary in the experiment configuration, or an iterable of two integers 
@@ -282,18 +291,20 @@ to see the implementation details.
 Configuration options that are the same as in spike analyses are "data_class", "data_type", "periods", "evoked", and 
 "spontaneous".
 
-"phase" (optional): a string that determines whether to get the phases for the MRL calculation using the "wavelet" or 
+"phase" (optional): a string that determines whether  to get the phases for the MRL calculation using the "wavelet" or 
 the "hilbert" method.  Default is "hilbert".
 
 "mrl_func" (optional): a string that determines whether to perform the classic mean resultant length calculation, where 
 values vary between 0 and 1, and the circ_2_unbiased calculation.  `circ_2_unbiased` is the name of a Matlab function 
 but here it's reimplemented in Python.
 
+# Configuring more than one type of calculation
 
 If you would like to iterate through different values for a key (for instance iterating through brain regions, or levels
 ("group", "animal", etc.)), you include the plural version of the key -- "brain_regions" or "levels" with a list you 
 want to iterate through as a value, e.g. "brain_regions": ["il", "bla"].  You can include as many such plural keys as 
-you wish and every combination of the list members will be iterated through.
+you wish and every combination of the list members will be iterated through.  There are currently four types of plural 
+keys enabled: "brain_regions", "levels", "frequency_bands", and "unit_pairs".
 
 If you need to change certain values dependent on others (for example, if you are making a csv file with results from 
 multiple kinds of analyses that support different levels of time granularity), you must define a rule.  Rules are 
@@ -306,8 +317,9 @@ rules: {some_variable: {some_other_variable: []}}
 
 means if some_variable equals some_other_variable make a change that will be defined in the square bracket.
 
-What goes in the square bracket is an iterable of iterables with config keys that you will change when 
-`some_variable == some_other_variable` and the value you will change it to.
+What goes in the square bracket is an iterable that contains a group of changes to make. Each individual change itself 
+is an iterable of length to, that contains the config key you will change when `some_variable == some_other_variable` 
+and the value you will change it to.
 
 so 
 

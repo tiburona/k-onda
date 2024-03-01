@@ -4,6 +4,7 @@ import numpy as np
 import seaborn as sns
 import pandas as pd
 from copy import deepcopy
+import json
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
@@ -16,6 +17,7 @@ import matplotlib.ticker as ticker
 
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts
 from plotting_helpers import smart_title_case, formatted_now, PlottingMixin
+from utils import to_serializable
 from data import Base
 from stats import Stats
 from phy_interface import PhyInterface
@@ -25,7 +27,7 @@ class Plotter(Base):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple plots of multiple
     kinds of data, see the figure module."""
 
-    def __init__(self, experiment, graph_opts=None, lfp=None, plot_type='standalone'):
+    def __init__(self, experiment, graph_opts=None, lfp=None, behavior=None, plot_type='standalone'):
         self.experiment = experiment
         self.lfp = lfp
         self.graph_opts = graph_opts
@@ -61,6 +63,11 @@ class Plotter(Base):
         path = os.path.join(*dirs)
         os.makedirs(path, exist_ok=True)
         self.fig.savefig(os.path.join(path, self.fname))
+        opts_filename = self.fname.replace('png', 'txt')
+        # Writing the dictionary to a file in JSON format
+        with open(os.path.join(path, opts_filename), 'w') as file:
+            json.dump(to_serializable(self.data_opts), file)
+
         plt.close(self.fig)
 
 
@@ -717,8 +724,8 @@ class MRLPlotter(Plotter):
 
 
 class LFPPlotter(Plotter):
-    def __init__(self, experiment, lfp=None, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, lfp=lfp, graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, lfp=None, behavior=None, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, lfp=lfp, behavior=behavior, graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_power(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
@@ -883,6 +890,7 @@ class LFPPlotter(Plotter):
         self.title = smart_title_case(title_string.replace('_', ' '))
         self.fig.suptitle(self.title, weight='bold', y=.98, fontsize=14)
         self.fname = f"{title_string}.png"
+        self.dir_tags = [self.data_type]
 
     def make_footer(self):
         pass

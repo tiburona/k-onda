@@ -112,6 +112,14 @@ class Runner:
         selected_animals = self.current_data_opts.get('selected_animals')
         if selected_animals is not None and not all([id in all_animal_ids for id in selected_animals]):
             raise ValueError("Missing animals")
+        if self.current_data_opts.get('adjustment') != 'none':
+            if self.current_data_opts.get('evoked'):
+                raise ValueError("It does not make sense to set 'evoked' to True and 'adjustment' to anything other "
+                                 "than 'none'.  See Analysis Configuration Reference.")
+            if not self.current_data_opts.get('periods'):
+                raise ValueError("You picked a value for adjustment other than 'none' and haven't specified which "
+                                 "periods to include.  This will result in a nonsensical result.  See the Analysis "
+                                 "Configuration Reference.")
 
     def execute(self):
         if self.current_data_opts.get('rules'):
