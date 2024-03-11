@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 from scipy.signal import medfilt
 from collections import defaultdict
+import csv
 
 
 class PhyInterface:
@@ -12,11 +13,19 @@ class PhyInterface:
 
     def __init__(self, path, animal):
         self.animal = animal
-        path = Path(path)
-        self.path = path / animal
+        self.root = Path(path)
+        self.path = self.root / animal
         self.model = load_model(self.path / 'params.py')
         self.spike_times = self.model.spike_times
         self.spike_clusters = np.load(self.path / 'spike_clusters.npy')
+        self.spike_groups = self.read_cluster_groups()
+        self.peak_electrodes = None
+
+    def read_cluster_groups(self):
+        with open(self.path / 'cluster_group.tsv') as file:
+            tsv_file = csv.reader(file, delimiter='\t')
+            tsv_lines = list(tsv_file)[1:]
+        return {int(clust): group for clust, group in tsv_lines}
 
     def get_spike_ids_for_cluster(self, cluster_id):
         spike_ids = np.where(self.spike_clusters == cluster_id)[0]
@@ -73,5 +82,19 @@ class PhyInterface:
         filtered_waveforms = medfilt(waveforms, kernel_size=[1, 5, 1])
         averaged_waveforms = np.mean(filtered_waveforms[:, :, indices], axis=(0, 2))
         return averaged_waveforms
+
+    def read_peak_electrodes_file(self):
+        with open(self.root / 'peak_electrodes.tsv') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            self.peak_electrodes = [row for row in reader if row['Animal'] == self.animal]
+
+    def get_peak_electrodes(self, cluster_id):
+        if self.peak_electrodes is None:
+            self.read_peak_electrodes_file()
+        cluster_info = [row for row in self.peak_electrodes if int(row['Cluster']) == cluster_id][0]
+        peak_electrodes = [int(electrode) for electrode in cluster_info['Electrodes'].split(',')]
+        return peak_electrodes
+
+
 
 

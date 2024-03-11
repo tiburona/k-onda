@@ -234,6 +234,7 @@ def remove_line_noise_spectrum_estimation(wave, fs=1, opts=''):
 
     return wave
 
+
 def _fourier_pad(segment, m, fs, reverse=False):
     # Fit a Fourier series to the segment
     def fourier_series(x, a0, a1, b1, w):
@@ -246,6 +247,19 @@ def _fourier_pad(segment, m, fs, reverse=False):
         return fitted - fitted[0] + segment[-1]
     else:
         return fitted - fitted[-1] + segment[0]
+
+
+def full_width_half_minimum(mean_waveform, sampling_rate, range_of_max_around_midpoint=(0, 35),
+                            range_of_min_around_midpoint=(-25, 25)):
+    midpoint = len(mean_waveform) // 2
+    range_of_max = (ind + midpoint for ind in range_of_max_around_midpoint)
+    range_of_min = (ind + midpoint for ind in range_of_min_around_midpoint)
+    max_point = np.max(mean_waveform[slice(*range_of_max)])
+    half_amplitude = abs(max_point) - np.min(mean_waveform[slice(*range_of_min)]) / 2
+    below_half_min = mean_waveform <= (max_point - half_amplitude)
+    fwhm_samples = np.sum(below_half_min)
+    fwhm_time = fwhm_samples / sampling_rate
+    return fwhm_time
 
 
 
