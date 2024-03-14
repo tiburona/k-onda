@@ -85,7 +85,7 @@ def filter_60_hz(signal_with_noise, fs):
 
 def divide_by_rms(arr):
     rms = np.sqrt(np.mean(arr ** 2))
-    return arr/rms
+    return arr / rms
 
 
 def bandpass_filter(data, lowcut, highcut, fs, order=2):
@@ -109,7 +109,6 @@ def get_wavelet_scale(frequency, sampling_rate, fc=1.0):
 
 
 def circ_r2_unbiased(alpha, w=None, dim=0):
-
     r = np.nansum(w * np.exp(1j * alpha), axis=dim)
     n = np.nansum(w, axis=dim)
 
@@ -212,8 +211,8 @@ def remove_line_noise_spectrum_estimation(wave, fs=1, opts=''):
     # Remove line noise
     for cc in range(wave.shape[0]):
         # Padding
-        pad_start = _fourier_pad(wave[cc, :m//2], m, fs)
-        pad_end = _fourier_pad(wave[cc, -m//2:], m, fs, reverse=True)
+        pad_start = _fourier_pad(wave[cc, :m // 2], m, fs)
+        pad_end = _fourier_pad(wave[cc, -m // 2:], m, fs, reverse=True)
         pad_wave = np.concatenate([pad_start, wave[cc, :], pad_end])
 
         # Filter wave
@@ -230,7 +229,7 @@ def remove_line_noise_spectrum_estimation(wave, fs=1, opts=''):
             filt_wave[tt // (m // 2) % 2, tt:tt + m] = ifft(spect)
 
         filt_wave = np.sum(filt_wave, axis=0) / np.mean(window + np.roll(window, m // 2))
-        wave[cc, :] = filt_wave[m//2:-m//2]
+        wave[cc, :] = filt_wave[m // 2:-m // 2]
 
     return wave
 
@@ -241,7 +240,8 @@ def _fourier_pad(segment, m, fs, reverse=False):
         return a0 + a1 * np.cos(w * x) + b1 * np.sin(w * x)
 
     x = np.arange(m // 2) + 1 if not reverse else -np.arange(m // 2) - 1
-    popt, _ = curve_fit(fourier_series, x, segment, bounds=([-np.inf, -np.inf, -np.inf, 40/fs*2*np.pi], [np.inf, np.inf, np.inf, 70/fs*2*np.pi]))
+    popt, _ = curve_fit(fourier_series, x, segment, bounds=(
+    [-np.inf, -np.inf, -np.inf, 40 / fs * 2 * np.pi], [np.inf, np.inf, np.inf, 70 / fs * 2 * np.pi]))
     fitted = fourier_series(np.arange(m // 2) if not reverse else np.arange(-m, 0), *popt)
     if reverse:
         return fitted - fitted[0] + segment[-1]
@@ -249,23 +249,20 @@ def _fourier_pad(segment, m, fs, reverse=False):
         return fitted - fitted[-1] + segment[0]
 
 
-def full_width_half_minimum(mean_waveform, sampling_rate, range_of_max_around_midpoint=(0, 35),
-                            range_of_min_around_midpoint=(-25, 25)):
+def get_fwhm(mean_waveform, sampling_rate, deflection='min', range_of_max=(0, 35), range_of_min=(-25, 25)):
+    # range_of_max and range_of_min are relative to the midpoint
     midpoint = len(mean_waveform) // 2
-    range_of_max = (ind + midpoint for ind in range_of_max_around_midpoint)
-    range_of_min = (ind + midpoint for ind in range_of_min_around_midpoint)
-    max_point = np.max(mean_waveform[slice(*range_of_max)])
-    half_amplitude = abs(max_point) - np.min(mean_waveform[slice(*range_of_min)]) / 2
-    below_half_min = mean_waveform <= (max_point - half_amplitude)
-    fwhm_samples = np.sum(below_half_min)
-    fwhm_time = fwhm_samples / sampling_rate
+    max_point = extreme_point(midpoint, mean_waveform, range_of_max, np.max)
+    min_point = extreme_point(midpoint, mean_waveform, range_of_min, np.min)
+    half_amplitude = abs(max_point - min_point) / 2
+    if deflection == 'min':
+        full_width = np.sum(mean_waveform <= (max_point - half_amplitude))
+    else:
+        full_width = np.sum(mean_waveform >= (min_point + half_amplitude))
+    fwhm_time = full_width / sampling_rate
     return fwhm_time
 
 
-
-
-
-
-
-
-
+def extreme_point(midpoint, mean_waveform, range_wrt_midpoint, func):
+    full_range = (ind + midpoint for ind in range_wrt_midpoint)
+    return func(mean_waveform[slice(*full_range)])
