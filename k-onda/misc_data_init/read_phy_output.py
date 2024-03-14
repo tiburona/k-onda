@@ -1,14 +1,14 @@
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import json
 import os
 
 from phy_interface import PhyInterface
 from math_functions import get_fwhm
 
-ROOT_DIR = r"D:\back_up_lenovo\data\Single_Cell_Data_No_Uv"
+ROOT_DIR = r"D:\back_up_lenovo\data\Single_Cell_Data_No_Uv_Diff_Scale"
 STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156', 'IG158', 'IG177', 'IG179']
 SAMPLING_RATE = 30000
 
@@ -22,7 +22,7 @@ for animal in STANDARD_ANIMALS:
         cluster_type = phy_interface.cluster_dict[cluster]['group']
         if cluster_type in ['good', 'MUA']:
             spike_times = phy_interface.get_spike_times_for_cluster(cluster)
-            mean_waveform = phy_interface.get_mean_waveforms(cluster, phy_interface.get_peak_electrodes(cluster))
+            mean_waveform = phy_interface.get_mean_waveforms(cluster, phy_interface.cluster_dict[cluster]['electrodes'])
             deflection = phy_interface.cluster_dict[cluster]['deflection']
             if deflection == 'max':
                 range_of_max = (-25, 25)
@@ -31,9 +31,10 @@ for animal in STANDARD_ANIMALS:
                 range_of_max = (0, 35)
                 range_of_min = (-25, 25)
             fwhm = get_fwhm(mean_waveform, SAMPLING_RATE, deflection=deflection)
-            firing_rate = len(spike_times)/((spike_times[-1] - spike_times[0])/SAMPLING_RATE)
+            usable_spike_times = spike_times[spike_times > 100]
+            firing_rate = len(usable_spike_times)/(usable_spike_times[-1] - usable_spike_times[0])
             unit_info = {**phy_interface.cluster_dict[cluster],
-                         **{'mean_waveform': mean_waveform, 'firing_rate': firing_rate, 'fwhm': fwhm}}
+                         **{'mean_waveform': list(mean_waveform), 'firing_rate': firing_rate, 'fwhm': fwhm}}
             units_info[cluster_type].append(unit_info)
             if cluster_type == 'good':
                 all_good_units.append(unit_info)
@@ -56,14 +57,14 @@ def categorize_neurons(units):
     # The label of this cluster is the same as the index
     IN_label = highest_center_index
     for unit, label in zip(units, labels):
-        unit['neuron_type'] == 'IN' if label == IN_label else 'PN'
+        unit['neuron_type'] = 'IN' if label == IN_label else 'PN'
 
 
 def show_scatterplot(units):
-    fwhm_IN = [unit['fwhm'] for unit in units if unit['neuron_type'] == 'IN']
+    fwhm_IN = [unit['fwhm'] * 1000000 for unit in units if unit['neuron_type'] == 'IN']
     firing_rate_IN = [unit['firing_rate'] for unit in units if unit['neuron_type'] == 'IN']
 
-    fwhm_PN = [unit['fwhm'] for unit in units if unit['neuron_type'] == 'PN']
+    fwhm_PN = [unit['fwhm'] * 1000000 for unit in units if unit['neuron_type'] == 'PN']
     firing_rate_PN = [unit['firing_rate'] for unit in units if unit['neuron_type'] == 'PN']
 
     plt.figure(figsize=(10, 6))
@@ -72,21 +73,31 @@ def show_scatterplot(units):
     plt.scatter(fwhm_PN, firing_rate_PN, color='red', label='PN')
 
     plt.title('FWHM vs Firing Rate by Neuron Type')
-    plt.xlabel('FWHM')
+    plt.xlabel('FWHM (microseconds)')
     plt.ylabel('Firing Rate')
 
     plt.legend()
+    plt.show()
 
 
-def save_units_info(animal_dict):
+def save_units_info(animal_dict, check_with_user=False):
+    if check_with_user:
+        user_input = input("Proceed with saving units info? (y/n): ")
+        if user_input.lower() != 'y':
+            print("Operation aborted.")
+            return
+
     for animal_name in animal_dict:
         path = os.path.join(ROOT_DIR, animal_name)
-        with open(os.path.join(path, 'units_info.json', 'w')) as json_file:
-            json.dump(animals[animal_name], json_file)
+        with open(os.path.join(path, 'units_info.json'), 'w') as json_file:
+            json.dump(animal_dict[animal_name], json_file)
 
 
 categorize_neurons(all_good_units)
 show_scatterplot(all_good_units)
+save_units_info(animals, check_with_user=True)
+
+
 
 
 

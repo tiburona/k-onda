@@ -21,25 +21,27 @@ class PhyInterface:
         self.spike_times = self.model.spike_times
         self.spike_clusters = np.load(self.path / 'spike_clusters.npy')
         if os.path.exists(self.path / f'{self.animal}.tsv'):
-            self.peak_electrodes_file == self.path / f'{self.animal}.tsv'
+            self.peak_electrodes_file = self.path / f'{self.animal}.tsv'
         else:
             self.peak_electrodes_file = None
+        self.assemble_cluster_dictionary()
 
     def read_cluster_groups(self):
         with open(self.path / 'cluster_group.tsv') as file:
             tsv_file = csv.reader(file, delimiter='\t')
             tsv_lines = list(tsv_file)[1:]
-        return {int(clust): {'group': group} for clust, group in tsv_lines if group != 'noise'}
+        return {int(clust): {'animal': self.animal, 'group': group, 'cluster': int(clust)} for clust, group in tsv_lines
+                if group != 'noise'}
 
     def assemble_cluster_dictionary(self):
-        for cluster in self.spike_groups:
-            self.cluster_dicts[cluster]['spike_times'] = self.get_spike_times_for_cluster(cluster)
+        for cluster in self.cluster_dict:
+            self.cluster_dict[cluster]['spike_times'] = self.get_spike_times_for_cluster(cluster)
         if self.peak_electrodes_file:
             for row in self.read_peak_electrodes_file():
                 cluster = int(row['Cluster'])
-                self.spike_groups[cluster]['electrodes'] = [int(electrode) for electrode in row['Electrodes'].split(',')]
-                self.spike_groups[cluster]['deflection'] = row['Deflection'] if row['Deflection'] else 'min'
-                self.spike_groups[cluster]['quality'] = row['Quality']
+                self.cluster_dict[cluster]['electrodes'] = [int(electrode) for electrode in row['Electrodes'].split(',')]
+                self.cluster_dict[cluster]['deflection'] = 'max' if row['Deflection'] in ['max', 'up'] else 'min'
+                self.cluster_dict[cluster]['quality'] = row['Quality']
 
     def get_spike_ids_for_cluster(self, cluster_id):
         spike_ids = np.where(self.spike_clusters == cluster_id)[0]
@@ -95,6 +97,8 @@ class PhyInterface:
         waveforms = self.model.get_cluster_spike_waveforms(cluster_id)
         filtered_waveforms = medfilt(waveforms, kernel_size=[1, 5, 1])
         averaged_waveforms = np.mean(filtered_waveforms[:, :, indices], axis=(0, 2))
+        if self.animal == 'IG160' and cluster_id == 42:
+            a = 'foo'
         return averaged_waveforms
 
     def read_peak_electrodes_file(self):
@@ -102,7 +106,7 @@ class PhyInterface:
             return
         with open(self.path / f'{self.animal}.tsv') as f:
             reader = csv.DictReader(f, delimiter='\t')
-            return [row for row in reader if row['Animal'] == self.animal]
+            return [row for row in reader]
 
 
 class Cluster:
