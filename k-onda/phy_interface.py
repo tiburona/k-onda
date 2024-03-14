@@ -5,6 +5,7 @@ import numpy as np
 from scipy.signal import medfilt
 from collections import defaultdict
 import csv
+import os
 
 
 class PhyInterface:
@@ -16,16 +17,29 @@ class PhyInterface:
         self.root = Path(path)
         self.path = self.root / animal
         self.model = load_model(self.path / 'params.py')
+        self.cluster_dict = self.read_cluster_groups()
         self.spike_times = self.model.spike_times
         self.spike_clusters = np.load(self.path / 'spike_clusters.npy')
-        self.spike_groups = self.read_cluster_groups()
-        self.peak_electrodes = None
+        if os.path.exists(self.path / f'{self.animal}.tsv'):
+            self.peak_electrodes_file == self.path / f'{self.animal}.tsv'
+        else:
+            self.peak_electrodes_file = None
 
     def read_cluster_groups(self):
         with open(self.path / 'cluster_group.tsv') as file:
             tsv_file = csv.reader(file, delimiter='\t')
             tsv_lines = list(tsv_file)[1:]
-        return {int(clust): group for clust, group in tsv_lines}
+        return {int(clust): {'group': group} for clust, group in tsv_lines if group != 'noise'}
+
+    def assemble_cluster_dictionary(self):
+        for cluster in self.spike_groups:
+            self.cluster_dicts[cluster]['spike_times'] = self.get_spike_times_for_cluster(cluster)
+        if self.peak_electrodes_file:
+            for row in self.read_peak_electrodes_file():
+                cluster = int(row['Cluster'])
+                self.spike_groups[cluster]['electrodes'] = [int(electrode) for electrode in row['Electrodes'].split(',')]
+                self.spike_groups[cluster]['deflection'] = row['Deflection'] if row['Deflection'] else 'min'
+                self.spike_groups[cluster]['quality'] = row['Quality']
 
     def get_spike_ids_for_cluster(self, cluster_id):
         spike_ids = np.where(self.spike_clusters == cluster_id)[0]
@@ -84,17 +98,16 @@ class PhyInterface:
         return averaged_waveforms
 
     def read_peak_electrodes_file(self):
-        with open(self.root / 'peak_electrodes.tsv') as f:
+        if not self.peak_electrodes_file:
+            return
+        with open(self.path / f'{self.animal}.tsv') as f:
             reader = csv.DictReader(f, delimiter='\t')
-            self.peak_electrodes = [row for row in reader if row['Animal'] == self.animal]
-
-    def get_peak_electrodes(self, cluster_id):
-        if self.peak_electrodes is None:
-            self.read_peak_electrodes_file()
-        cluster_info = [row for row in self.peak_electrodes if int(row['Cluster']) == cluster_id][0]
-        peak_electrodes = [int(electrode) for electrode in cluster_info['Electrodes'].split(',')]
-        return peak_electrodes
+            return [row for row in reader if row['Animal'] == self.animal]
 
 
+class Cluster:
+
+    def __init__(self, spike_times, peak_electrodes, cluster_type, deflection='min'):
+        pass
 
 
