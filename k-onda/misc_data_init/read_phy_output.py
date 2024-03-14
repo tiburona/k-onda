@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import json
 import os
+from neo.rawio import BlackrockRawIO
 
 from phy_interface import PhyInterface
 from math_functions import get_fwhm
@@ -15,6 +16,17 @@ SAMPLING_RATE = 30000
 animals = {}
 all_good_units = []
 
+def calculate_mean_waveform(animal, spike_times, electrodes):
+    reader = BlackrockRawIO(filename=os.path.join(ROOT_DIR, animal), nsx_to_load=6)
+    reader.parse_header()
+    data = reader.nsx_datas[6][0][:, slice(*electrodes)]
+    average_data = np.mean(data, 1)
+    spike_times = [int(spike_time*SAMPLING_RATE) for spike_time in spike_times]
+    waveforms = np.array([data[spike_time-41:spike_time+41] for spike_times in spike_times])
+    mean_waveform = np.mean(waveforms, 1)
+    return mean_waveform
+
+
 for animal in STANDARD_ANIMALS:
     phy_interface = PhyInterface(ROOT_DIR, animal)
     units_info = {'good': [], 'MUA': []}
@@ -22,7 +34,8 @@ for animal in STANDARD_ANIMALS:
         cluster_type = phy_interface.cluster_dict[cluster]['group']
         if cluster_type in ['good', 'MUA']:
             spike_times = phy_interface.get_spike_times_for_cluster(cluster)
-            mean_waveform = phy_interface.get_mean_waveforms(cluster, phy_interface.cluster_dict[cluster]['electrodes'])
+            electrodes = phy_interface.cluster_dict[cluster]['electrodes']
+            mean_waveform = calculate_mean_waveform(animal, spike_times, electrodes)
             deflection = phy_interface.cluster_dict[cluster]['deflection']
             if deflection == 'max':
                 range_of_max = (-25, 25)
