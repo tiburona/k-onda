@@ -81,7 +81,7 @@ class Runner:
         self.prepare()
 
     def get_loop_lists(self):
-        for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs']:
+        for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 'neuron_qualities']:
             opt_list = self.current_data_opts.get(opt_list_key)
             if opt_list is not None:
                 self.loop_lists[opt_list_key] = opt_list
@@ -90,10 +90,10 @@ class Runner:
         if current_index >= len(remaining_loop_lists):
             self.execute()
             return
-
         opt_list_key, opt_list = remaining_loop_lists[current_index]
         for opt in opt_list:
-            self.current_data_opts[opt_list_key[:-1]] = opt
+            key = opt_list_key[:-1] if opt_list_key != 'neuron_qualities' else 'neuron_quality'
+            self.current_data_opts[key] = opt
             self.iterate_loop_lists(remaining_loop_lists, current_index + 1)
 
     def apply_rules(self):

@@ -57,6 +57,7 @@ class Initializer:
                 unit = Unit(animal, category, unit_info['spike_times'])
                 if category == 'good':
                     unit.neuron_type = unit_info.get('neuron_type')
+                    unit.quality = unit_info.get('quality')
                     unit.fwhm_microseconds = unit_info.get('FWHM_microseconds')
                     getattr(animal, unit.neuron_type).append(unit)
 

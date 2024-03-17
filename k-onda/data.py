@@ -140,7 +140,7 @@ class Data(Base):
             return None
         else:
             if self.name == 'period':
-                return [blk for blk in self.parent.periods[self.reference_period_type] if self is blk.target_period][0]
+                return [prd for prd in self.parent.periods[self.reference_period_type] if self is prd.target_period][0]
             if self.name == 'mrl_calculator':
                 return [calc for calc in self.parent.mrl_calculators[self.reference_period_type]
                         if self is calc.period.target and self.unit is calc.unit][0]

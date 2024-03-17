@@ -119,9 +119,10 @@ class Experiment(SpikeData, Subscriber):
         self.subscribe(self.context)
         self.groups = groups
         self.all_groups = self.groups
-        self.all_animals = [animal for group in self.groups for animal in group]
+        self.all_animals = [animal for group in self.groups for animal in group.animals]
         self._last_event_vals = None
         self.last_neuron_type = 'uninitialized'
+        self.last_neuron_quality = 'uninitialized'
         self.last_period_type = 'uninitialized'
         self.selected_animals = None  # None means all animals will be included; it's the default state
         self.children = self.groups
@@ -158,8 +159,8 @@ class Experiment(SpikeData, Subscriber):
 
         if name == 'neuron_type':
             if self.selected_neuron_type != self.last_neuron_type:
-                [entity.update_children() for entity in self.all_groups + self.all_animals]
-                self.last_neuron_type = self.selected_neuron_type  # TODO: think about whether `last_neuron_type` should be shared among all data
+                [animal.update_children() for animal in self.all_animals]
+                self.last_neuron_type = self.selected_neuron_type
 
         if name == 'period_type':
             if self.selected_period_type != self.last_period_type:
@@ -175,20 +176,22 @@ class Group(SpikeData):
     def __init__(self, name, animals=None):
         self.identifier = name
         self.animals = animals if animals else []
-        self.children = self.animals
+        self._children = self.animals
         for animal in self.animals:
             animal.parent = self
         self.parent = None
 
+
+    @property
+    def children(self):
+        return [child for child in self._children if child.children]
+
     def update_children(self):
-        if self.context.vals.get('neuron_type', 'all') == 'all':
-            self.children = self.animals
-        else:
-            self.children = [animal for animal in self.animals
-                             if len(getattr(animal, self.context.vals['neuron_type']))]
         if self.data_opts.get('selected_animals') is not None:
-            self.children = [child for child in self.children
-                             if child.identifier in self.data_opts.get('selected_animals')]
+            self._children = [child for child in self.animals
+                              if child.identifier in self.data_opts.get('selected_animals')]
+        else:
+            self._children = self.animals
 
 
 class Animal(SpikeData):
@@ -211,18 +214,25 @@ class Animal(SpikeData):
                 setattr(self, nt, [])
         self.units = defaultdict(list)
         self.raw_lfp = None
-        self.children = None
+        self._children = None
         self.parent = None
+
+    @property
+    def children(self):
+        if not self.data_opts.get('neuron_quality'):
+            return self._children
+        else:
+            return [child for child in self._children if child.quality in self.data_opts['neuron_quality']]
 
     @property
     def unit_pairs(self):  # TODO: is this being used for anything? Can it be deleted?
         return [pair for unit in self.units['good'] for pair in unit.pairs]
 
     def update_children(self):
-        if self.context.vals['neuron_type'] == 'all':
-            self.children = self.units['good']
+        if self.context.vals.get('neuron_type') in ['all', None]:
+            self._children = self.units['good']
         else:
-            self.children = getattr(self, self.context.vals['neuron_type'])
+            self._children = getattr(self, self.context.vals['neuron_type'])
 
 
 class Unit(SpikeData, PeriodConstructor):
@@ -232,13 +242,14 @@ class Unit(SpikeData, PeriodConstructor):
 
     name = 'unit'
 
-    def __init__(self, animal, category, spike_times, neuron_type=None):
+    def __init__(self, animal, category, spike_times, neuron_type=None, quality=None):
         self.animal = animal
         self.parent = animal
         self.category = category
         self.animal.units[category].append(self)
         self.identifier = str(self.animal.units[category].index(self) + 1)
         self.neuron_type = neuron_type
+        self.quality = quality
         self.period_class = Period
         self.periods = defaultdict(list)
         self.spike_times = np.array(spike_times)
@@ -250,6 +261,7 @@ class Unit(SpikeData, PeriodConstructor):
     @property
     def firing_rate(self):
         return self.animal.sampling_rate * len(self.spike_times) / float(self.spike_times[-1] - self.spike_times[0])
+
 
     @property
     def unit_pairs(self):
@@ -345,7 +357,7 @@ class Period(SpikeData):
         for i, start in enumerate(event_starts):
             spikes = self.unit.find_spikes(start - pre_stim, start + post_stim)
             self._events.append(Event(self, self.unit, [((spike - start) / self.sampling_rate) for spike in spikes],
-                                      [(spike / self.sampling_rate) for spike in spikes], pre_stim, post_stim, i))
+                                      [(spike / self.sampling_rate) for spike in spikes], i))
 
     @cache_method
     def get_unadjusted_rates(self):
@@ -366,7 +378,7 @@ class Event(SpikeData):
 
     name = 'event'
 
-    def __init__(self, period, unit, spikes, spikes_original_times, pre_stim, post_stim, index):
+    def __init__(self, period, unit, spikes, spikes_original_times, index):
         self.unit = unit
         self.spikes = spikes
         self.spikes_original_times = spikes_original_times
@@ -375,8 +387,8 @@ class Event(SpikeData):
         self.period_type = self.period.period_type
         self.children = None
         self.parent = period
-        self.pre_stim = pre_stim
-        self.post_stim = post_stim
+        events_settings = self.data_opts['events'].get(self.period_type, {'pre_stim': 0, 'post_stim': 1})
+        self.pre_stim, self.post_stim = (events_settings[opt] for opt in ['pre_stim', 'post_stim'])
         self.duration = self.pre_stim + self.post_stim
 
     @cache_method
@@ -384,7 +396,7 @@ class Event(SpikeData):
         rates = self.get_unadjusted_rates()
         if not self.reference or self.data_opts.get('adjustment') == 'none':
             return rates
-        rates -= self.reference.mean_firing_rate() # TODO: does this make sense? Maybe this should be the period reference
+        rates -= self.reference.mean_firing_rate()
         if self.data_opts.get('adjustment') == 'relative':
             return rates
         rates /= self.unit.get_firing_std_dev(period_types=self.period_type,)  # same as dividing unit psth by std dev

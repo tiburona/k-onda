@@ -9,7 +9,6 @@ from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
-from matplotlib.cm import ScalarMappable
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
 import matplotlib.ticker as ticker
@@ -100,8 +99,7 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.close_plot('groups')
 
     def plot_groups_data(self):
-        subdivision = 'period' if self.data_type in ['cross_correlations', 'correlogram'] else 'neuron'
-        self.iterate_through_group_subdivisions(subdivision)
+        self.iterate_through_group_subdivisions()
         self.set_y_scales()
         if self.data_type not in ['spontaneous_firing', 'cross_correlations']:
             self.set_pip_patches()
@@ -111,8 +109,15 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         else:
             self.set_labels()
 
-    def iterate_through_group_subdivisions(self, subdivision):  # TODO: why do autocorr and spectrum graph these in different orders
+    def get_subdivisions(self):
+        subdivision = 'period' if self.data_type in ['cross_correlations', 'correlogram'] else 'neuron'
         types_attribute = getattr(self.experiment, f"{subdivision}_types")
+        if subdivision != 'period':
+            self.selected_period_type = list(self.data_opts['periods'].keys())[0]  # TODO: this is really kludgy
+        return subdivision, types_attribute
+
+    def iterate_through_group_subdivisions(self):  # TODO: why do autocorr and spectrum graph these in different orders
+        subdivision, types_attribute = self.get_subdivisions()
         for row, typ in enumerate(types_attribute):
             # Set the selected type based on the subdivision
             setattr(self, f"selected_{subdivision}_type", typ)
@@ -122,29 +127,32 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         setattr(self, f"selected_{subdivision}_type", None)
 
     def plot_animals(self, group):
-        num_animals = len(group.children)
-        nrows = math.ceil(num_animals / 3)
-        self.fig, self.axs = plt.subplots(nrows, 3, figsize=(15, nrows * 6))
-        self.fig.subplots_adjust(top=0.85, hspace=0.3, wspace=0.4)
+        subdivision, types_attribute = self.get_subdivisions()
+        for typ in types_attribute:
+            setattr(self, f"selected_{subdivision}_type", typ)
+            num_animals = len(group.children)
+            nrows = math.ceil(num_animals / 3)
+            self.fig, self.axs = plt.subplots(nrows, 3, figsize=(15, nrows * 6))
+            self.fig.subplots_adjust(top=0.85, hspace=0.3, wspace=0.4)
 
-        for i in range(nrows * 3):  # iterate over all subplots
-            if i < num_animals:
-                row = i // 3  # index based on 3 columns
-                col = i % 3  # index based on 3 columns
-                ax = self.axs[row, col] if nrows > 1 else self.axs[i // 3]
-                animal = group.children[i]
-                self.make_subplot(animal, ax, f"{animal.identifier} {animal.selected_neuron_type}")
-            else:
-                # Get the axes for the extra subplot and make it invisible
-                ax_ind = (i // 3, i % 3) if nrows > 1 else (i // 3,)
-                self.axs[ax_ind].set_visible(False)
+            for i in range(nrows * 3):  # iterate over all subplots
+                if i < num_animals:
+                    row = i // 3  # index based on 3 columns
+                    col = i % 3  # index based on 3 columns
+                    ax = self.axs[row, col] if nrows > 1 else self.axs[i // 3]
+                    animal = group.children[i]
+                    self.make_subplot(animal, ax, f"{animal.identifier} {animal.selected_neuron_type}")
+                else:
+                    # Get the axes for the extra subplot and make it invisible
+                    ax_ind = (i // 3, i % 3) if nrows > 1 else (i // 3,)
+                    self.axs[ax_ind].set_visible(False)
 
-        self.set_y_scales()
-        self.set_pip_patches()
-        self.close_plot(group.identifier)
+            self.set_y_scales()
+            self.set_pip_patches()
+            self.close_plot(group.identifier)
 
     def make_subplot(self, data_source, ax, title=''):
-        subplotter = PeriStimulusSubplotter(self, data_source, self.data_opts, self.graph_opts, ax, self.plot_type,
+        subplotter = PeriStimulusSubplotter(self, data_source, self.graph_opts, ax, self.plot_type,
                                             multiplier=self.multiplier)
         subplotter.plot_data()
         if self.graph_opts.get('sem'):
@@ -185,14 +193,14 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
     def plot_unit_level_data(self, data_source, axes):
         if self.data_type == 'psth':
             self.add_raster(data_source, axes)
-        subplotter = PeriStimulusSubplotter(self, data_source, self.data_opts, self.graph_opts, axes[-1])
+        subplotter = PeriStimulusSubplotter(self, data_source, self.graph_opts, axes[-1])
         plotting_func = getattr(subplotter, f"plot_{self.data_type}")
         plotting_func()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
 
     def add_raster(self, unit, axes):
-        subplotter = PeriStimulusSubplotter(self, unit, self.data_opts, self.graph_opts, axes[0])
+        subplotter = PeriStimulusSubplotter(self, unit, self.graph_opts, axes[0])
         subplotter.y = unit.get_spikes_by_events()  # overwrites subplotter.y defined by data_type, which is psth
         subplotter.plot_raster()
 
@@ -271,14 +279,12 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.invisible_ax = invisible_ax
 
 
-class PeriStimulusSubplotter(PlottingMixin):
+class PeriStimulusSubplotter(Plotter, PlottingMixin):
     """Constructs a subplot of a PeriStimulusPlot."""
 
-    def __init__(self, plotter, data_source, data_opts, graph_opts, ax, parent_type='standalone', multiplier=1):
+    def __init__(self, plotter, data_source, graph_opts, ax, parent_type='standalone', multiplier=1):
         self.plotter = plotter
         self.data_source = data_source
-        self.data_opts = data_opts
-        self.data_type = data_opts['data_type']
         self.g_opts = graph_opts
         self.ax = ax
         self.x = None
@@ -300,14 +306,15 @@ class PeriStimulusSubplotter(PlottingMixin):
             self.ax.set_ylim(y_min, y_max)
 
     def plot_raster(self):
-        opts = self.data_opts
+        pre, post = [self.data_opts['events'][self.selected_period_type][opt] for opt in ['pre_stim', 'post_stim']]
         for i, spiketrain in enumerate(self.y):
             for spike in spiketrain:
                 self.ax.vlines(spike, i + .5, i + 1.5)
         self.set_labels(x_and_y_labels=['', 'Event'])
-        self.set_limits_and_ticks(-opts['pre_stim'], opts['post_stim'], self.g_opts['tick_step'], .5, len(self.y) + .5)
-        self.ax.add_patch(plt.Rectangle((0, self.ax.get_ylim()[0]), 0.05, self.ax.get_ylim()[1] - self.ax.get_ylim()[0],
-                                        facecolor='gray', alpha=0.3))
+        self.set_limits_and_ticks(pre, post, self.g_opts['tick_step'], .5, len(self.y) + .5)
+        self.ax.add_patch(plt.Rectangle(
+            (0, self.ax.get_ylim()[0]), 0.05, self.ax.get_ylim()[1] - self.ax.get_ylim()[0], facecolor='gray',
+            alpha=0.3))
 
     def plot_bar(self, width, x_min, x_max, num, x_tick_min, x_step, y_min=None, y_max=None, x_label='', y_label='',
                  facecolor='white', zero_line=False):
@@ -329,10 +336,10 @@ class PeriStimulusSubplotter(PlottingMixin):
             self.set_labels(x_and_y_labels=(x_label, y_label))
 
     def plot_psth(self):
-        opts = self.data_opts
+        pre, post = [self.data_opts['events'][self.selected_period_type][opt] for opt in ['pre_stim', 'post_stim']]
         xlabel, ylabel = self.get_labels()[self.data_opts['data_type']]
-        self.plot_bar(width=opts['bin_size'], x_min=-opts['pre_stim'], x_max=opts['post_stim'], num=len(self.y),
-                      x_tick_min=0, x_step=self.g_opts['tick_step'], y_label=ylabel)
+        self.plot_bar(width=self.data_opts['bin_size'], x_min=-pre, x_max=post, num=len(self.y), x_tick_min=0,
+                      x_step=self.g_opts['tick_step'], y_label=ylabel)
 
     def plot_proportion(self):
         self.plot_psth()

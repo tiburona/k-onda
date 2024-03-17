@@ -32,12 +32,6 @@ defeat_ined = ['INED01', 'INED06', 'INED07', 'INED09', 'INED11', 'INED12']
 control_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'condition': 'control'} for animal in control_ined}
 defeat_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'condition': 'defeat'} for animal in defeat_ined}
 
-# pl_electrodes = {
-#     'IG154': (4, 6), 'IG155': (12, 14), 'IG156': (12, 14), 'IG158': (7, 14), 'IG160': (1, 8), 'IG161': (9, 11),
-#     'IG162': (13, 3), 'IG163': (14, 8), 'IG175': (15, 4), 'IG176': (11, 12), 'IG177': (15, 4), 'IG178': (6, 14),
-#     'IG179': (13, 15), 'IG180': (15, 4)
-# }
-
 
 pl_electrodes = {
     'IG154': (4, 6), 'IG155': (12, 14), 'IG156': (12, 14), 'IG158': (7, 14), 'IG160': (1, 8), 'IG161': (9, 11),
@@ -101,16 +95,15 @@ for animal in animal_info:
                 'event_duration': 1, 'reference_period_type': 'pretone'}
         animals.append({'identifier': animal, 'period_info': {'tone': tone, 'pretone': pretone}, **animal_info[animal]})
 
-with open(os.path.join(root, 'single_cell_data', 'single_cell_data.json'), 'r', encoding='utf-8') as file:
-    data = file.read()
-    single_cell_data_info = json.loads(data)
-    single_cell_data_dict = {animal['animal']: animal for animal in single_cell_data_info['single_cell_data']}
 
 for i, animal in enumerate(animals):
-    if animal['identifier'] in single_cell_data_dict:
-        animals[i]['units'] = single_cell_data_dict[animal['identifier']]['units']
-        for unit in animals[i]['units']['good']:
-             unit['neuron_type'] = 'IN' if unit['cluster_assignment'] == 2 else 'PN'
+    if animal['identifier'] in STANDARD_ANIMALS:
+        with open(os.path.join(root, animal['identifier'], f"{animal['identifier']}_units_info.json"), 'r') as f:
+            units_info = json.load(f)
+        for unit in units_info['good']:
+            spike_times = [int(st * 30000) for st in unit['spike_times']]
+            unit['spike_times'] = spike_times
+        animal['units'] = units_info
 
 exp_info['animals'] = animals
 

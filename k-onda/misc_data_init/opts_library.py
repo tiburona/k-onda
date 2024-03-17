@@ -1,9 +1,6 @@
 STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156', 'IG158', 'IG177', 'IG179']
 
 
-PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'pre_stim': 0.05, 'post_stim': 0.65, 'bin_size': 0.01,
-             'adjustment': 'normalized', 'average_method': 'mean', 'base': '', 'time_type': 'continuous',
-             'data_path': '/Users/katie/likhtik/data', 'row_type': 'event', 'levels': ['group'], "block_types": ["tone"]}
 
 PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'pre_stim': 0.05, 'post_stim': 0.65,
                    'bin_size': 0.01, 'trials': (0, 150), 'adjustment': 'normalized', 'base': 'trial',
@@ -188,6 +185,12 @@ TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'frequency_bands': [(4, 8)], 'data
                          'row_type': 'event', 'time_type': 'block', 'frequency_type': 'block'
                     }
 
+PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
+             'average_method': 'mean', 'base': '', 'time_type': 'continuous', 'row_type': 'event', 'levels': ['group', 'animal'],
+             'periods': {'tone': range(5)}, 'neuron_quality': ['1', '2'],
+             'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
+             'selected_animals': STANDARD_ANIMALS}
+
 
 # TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
 
@@ -195,6 +198,8 @@ TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'frequency_bands': [(4, 8)], 'data
 
 TEST_RUNNER_OPTS = [{'data_class': 'behavior', 'data_type': 'percent_freezing',
                      'periods': {'pretone': range(5), 'tone': range(5)}, 'row_type': 'period'}, TEST_SPECTROGRAM_OPTS]
+
+TEST_RUNNER_OPTS = {'data_opts': PSTH_OPTS, 'graph_opts': GRAPH_OPTS}
 
 
 
