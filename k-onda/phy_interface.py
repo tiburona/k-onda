@@ -97,8 +97,6 @@ class PhyInterface:
         waveforms = self.model.get_cluster_spike_waveforms(cluster_id)
         filtered_waveforms = medfilt(waveforms, kernel_size=[1, 5, 1])
         averaged_waveforms = np.mean(filtered_waveforms[:, :, indices], axis=(0, 2))
-        if self.animal == 'IG160' and cluster_id == 42:
-            a = 'foo'
         return averaged_waveforms
 
     def read_peak_electrodes_file(self):
