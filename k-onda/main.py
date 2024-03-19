@@ -11,7 +11,7 @@ def main():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json')
     # runner.run('make_spreadsheet', TEST_RUNNER_OPTS, path='/Users/katie/likhtik/IG_INED_Safety_Recall',
     #             filename='power_pre_pip_and_behavior')
-    runner.run('plot_psth', TEST_RUNNER_OPTS)
+    runner.run('plot_proportion', TEST_RUNNER_OPTS)
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

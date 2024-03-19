@@ -170,6 +170,9 @@ class Data(Base):
     def current_reference_period_type(self):
         exp = self.find_experiment()
         return [blk for blk in exp.all_periods if blk.period_type == self.selected_period_type][0].reference_period_type
+    
+    def get_child_by_identifier(self, identifier):
+        return [child for child in self.children if child.identifier == identifier][0]
 
     def refer(self, data, stop_at='', is_spectrum=False):
         if (  # all the conditions in which reference data should not be subtracted

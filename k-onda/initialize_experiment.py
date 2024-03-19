@@ -54,11 +54,11 @@ class Initializer:
     def init_units(self, units_info, animal):
         for category in [cat for cat in ['good', 'MUA'] if cat in units_info]:
             for unit_info in units_info[category]:
-                unit = Unit(animal, category, unit_info['spike_times'])
+                unit = Unit(animal, category, unit_info['spike_times'], unit_info['cluster'], unit_info['mean_waveform'])
                 if category == 'good':
                     unit.neuron_type = unit_info.get('neuron_type')
                     unit.quality = unit_info.get('quality')
-                    unit.fwhm_microseconds = unit_info.get('FWHM_microseconds')
+                    unit.fwhm_microseconds = unit_info.get('fwhm') * 1000000
                     getattr(animal, unit.neuron_type).append(unit)
 
     def init_lfp_experiment(self):

@@ -259,7 +259,7 @@ class Stats(Base):
         if len(self.dfs):
             df_name = self.merge_dfs_animal_by_animal()
         else:
-            self.make_df()
+            self.make_df(self.data_opts)
             df_name = self.data_type
         if path is None:
             path = self.data_opts['data_path']
@@ -314,7 +314,7 @@ class Stats(Base):
                                         f'(1|animal{error_suffix}), ' \
                                         f'family = beta_family(link = "logit"), data = sub_df)'
             p_val_index = 'coefficients$cond[2, 4]'
-            interaction_p_val_index = 'coefficients$cond["groupstressed:neuron_typePN", 4]'
+            interaction_p_val_index = 'coefficients$cond["groupdefeat:neuron_typePN", 4]'
             zero_adjustment_line = f'df$"{self.data_col}"[df$"{self.data_col}" == 0] ' \
                                    f'<- df$"{self.data_col}"[df$"{self.data_col}" == 0] + 1e-6'
         elif self.data_opts['post_hoc_type'] == 'lmer':
@@ -380,11 +380,18 @@ class Stats(Base):
 
     def get_post_hoc_results(self, force_recalc=True):
         post_hoc_path = os.path.join(self.data_opts['data_path'], self.data_type, 'post_hoc')
+        if not os.path.exists(post_hoc_path):
+            os.mkdir(post_hoc_path)
         self.make_spreadsheet(path=post_hoc_path)
         self.results_path = os.path.join(post_hoc_path, 'r_post_hoc_results.csv')
         if not os.path.exists(self.results_path) or force_recalc:
             getattr(self, f"write_post_hoc_r_script")()
-            subprocess.run(['Rscript', self.script_path], check=True)
+            env = os.environ.copy()
+            env['FLIBS'] = '-L/usr/local/lib/gcc/13 -lgfortran -lquadmath -lm'
+            result = subprocess.run(['/Library/Frameworks/R.framework/Resources/bin/Rscript', 
+                                     self.script_path], capture_output=True, text=True)
+            print("STDOUT:", result.stdout)
+            print("STDERR:", result.stderr)
         results = pd.read_csv(self.results_path)
         return getattr(self, f"construct_{self.data_class}_post_hoc_results")(results)
 
@@ -467,12 +474,12 @@ class Stats(Base):
         perform_tests <- function(df, evoked=FALSE) {{
             results <- data.frame()
 
-            groups <- c('control', 'stressed')
+            groups <- c('control', 'defeat')
             neuron_types <- c('IN', 'PN')
 
             if (!evoked) {{
 
-                # mrl ~ period_type + period + (1|animal) within each combination of control/stressed and IN/PN
+                # mrl ~ period_type + period + (1|animal) within each combination of control/defeat and IN/PN
                 for (group in groups) {{
                     for (neuron in neuron_types) {{
                         sub_df <- df[df$group == group & df$neuron_type == neuron,]
@@ -514,7 +521,7 @@ class Stats(Base):
                     results <- rbind(results, data.frame(test='evoked-within-neuron', neuron_type=neuron, p_values=paste(non_intercept_pvals, collapse=',')))
                 }}
 
-                # evoked_mrl ~ neuron_type + period + (1/animal) within control/stressed
+                # evoked_mrl ~ neuron_type + period + (1/animal) within control/defeat
                 for (group in groups) {{
                     sub_df <- df[df$group == group,]
                     model <- lmer(mrl_diff ~ neuron_type + period + (1|animal), data=sub_df)

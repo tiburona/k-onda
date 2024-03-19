@@ -69,32 +69,19 @@ take all events. A sample key, value pair could look like
 - raw rates ("adjustment" : "none"), 
 - rates of experimental periods with the rates of the reference period subtracted, for example, tone periods with pretone periods subtracted ("adjustment":"relative"), 
 or 
-- normalized rates, which are further divided by the standard deviation of the firing rate over all experimental time 
-from periods of the same type (in this example, the standard deviation of firing in all of the tone period experimental 
-time.) The default is "normalized".
+- normalized rates, which are further divided by the standard deviation of the firing rate over all experimental time from periods of the same type (in this example, the standard deviation of firing in all of the tone period experimental time.) The default is "normalized".
 
-"spontaneous" (optional): an integer or an array/Python iterable that indicates that rather than analyzing time after 
-the beginning of the presentation of stimuli, you are analyzing spontaneous activity. If it is an integer, it will take 
-that many seconds before the first period in the experiment (that is not a reference period). If it is an iterable of 
-length two, it will define the beginning and end, in seconds, of the period you want to analyze.  
+"spontaneous" (optional): an integer or an array/Python iterable that indicates that rather than analyzing time after the beginning of the presentation of stimuli, you are analyzing spontaneous activity. If it is an integer, it will take  that many seconds before the first period in the experiment (that is not a reference period). If it is an iterable of length two, it will define the beginning and end, in seconds, of the period you want to analyze.  
 
-"selected_animals" (optional): An iterable with the identifiers of animals to use in this analysis, default is to use
-all animals that are defined in the experiment.
+"selected_animals" (optional): An iterable with the identifiers of animals to use in this analysis, default is to use all animals that are defined in the experiment.
+
+"neuron_quality" (optional): An iterable with the values for `quality` of a unit that are allowed in the analysis. (This is distinct from `category` which is one of the three main classifications a unit can receive in phy -- good, mua, or noise.  `quality` is a user-provided distinction allowing analyses that have more granular control over which neurons are or are not maintained.) Defaults to `None`, in which case all good units will be used.
 
 ### Opts for the plotting function, `plot_psth` ###
 
-"levels" (obligatory for plotting): the levels of the data hierarchy at which you want to generate plots -- a JSON array
-or, if passing opts in Python, any kind of iterable.  These can take the values "group," "animal," and "unit."  
-There is thus far no option to plot periods or events separately, but unit plots include a spike raster that show every 
-event over the selected period type.  Alternatively, if you only want to plot one level, you may specify "level" rather 
-than "levels". '"levels":["group"]' and '"level":"group"' are equivalent.
+"levels" (obligatory for plotting): the levels of the data hierarchy at which you want to generate plots -- a JSON array or, if passing opts in Python, any kind of iterable.  These can take the values "group," "animal," and "unit."   There is thus far no option to plot periods or events separately, but unit plots include a spike raster that show every event over the selected period type.  Alternatively, if you only want to plot one level, you may specify "level" rather  than "levels". '"levels":["group"]' and '"level":"group"' are equivalent.
 
-"periods" (optional): a dictionary whose keys are the period types which will be included in the analysis for plots, and
-whose values are arrays/Python iterables with the integer indices of the periods to include. Ignored for making CSVs. 
-Although not strictly obligatory for plotting, if not provided, values from all periods will be included, which would be 
-particularly nonsensical if any value for "adjustment" other than "none" is chosen. **Watch out for this. If you don't 
-include 'periods', the program will raise a ValueError, but as of this writing if you provide the relative periods along 
-with non-relative periods when adjustment is not 'none' the program will run without error but produce a nonsensical 
+"periods" (optional): a dictionary whose keys are the period types which will be included in the analysis for plots, and whose values are arrays/Python iterables with the integer indices of the periods to include. Ignored for making CSVs.  Although not strictly obligatory for plotting, if not provided, values from all periods will be included, which would be  particularly nonsensical if any value for "adjustment" other than "none" is chosen. **Watch out for this. If you don't include 'periods', the program will raise a ValueError, but as of this writing if you provide the relative periods along with non-relative periods when adjustment is not 'none' the program will run without error but produce a nonsensical 
 result.**
 
 
@@ -127,7 +114,7 @@ depending on "adjustment".
 
 "evoked" (optional): a boolean which indicates whether to subtract the values from the reference period.  The default is 
 False. **It does not make sense to use this if you have chosen something other than 'none' for adjustment**, and the 
-program will raise an error if you do. Keep in mind: "adjustment" applies to the*underlying rates*, while the "evoked" 
+program will raise an error if you do. Keep in mind: "adjustment" applies to the *underlying rates*, while the "evoked" 
 subtraction will be applied to the further calculation you do using those rates (this is also relevant for the various 
 kind of correlation calculations described below).
 

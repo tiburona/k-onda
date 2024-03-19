@@ -8,7 +8,7 @@ from initialize_experiment import Initializer
 peristimulus_plots = {
     f"plot_{data_type}": {'class': PeriStimulusPlotter, 'method': 'plot'}
     for data_type in [
-        'psth', 'proportion_score', 'autocorrelation', 'spectrum', 'cross_correlation,' 'autocorrelogram'
+        'psth', 'proportion', 'autocorrelation', 'spectrum', 'cross_correlation,' 'autocorrelogram'
     ]}
 
 mrl_procs = {meth: {'class': MRLPlotter, 'method': meth} for meth in ['mrl_bar_plot', 'mrl_rose_plot', 'mrl_heat_map']}

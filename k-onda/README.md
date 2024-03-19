@@ -51,6 +51,7 @@ levels, see [here](documentation/data_hierarchy.md) The higher levels are averag
 
 - plot_psth: plots the peri-stimulus time histogram of firing rates
 ![a sample psth plot by groups](sample_images/psth_group.png)
+- plot_proportion: plots the proportion of upregulated members of a group (most commonly events) for a given time bin.  (It's a manner of visualizing the PSTH data with less influence from extreme values.)
 - plot_autocorrelation: plots the autocorrelation of a firing rate series
 - plot_autocorrelogram*: plots the Phy-style histogram of firing in the vicinity of other spikes
 - plot_spectrum: plot a frequency-domain spectrum of the time series from any other data type in the experiment

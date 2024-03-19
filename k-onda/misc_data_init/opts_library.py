@@ -15,19 +15,10 @@ SPECTRUM_OPTS = {'data_class': 'spike', 'data_type': 'spectrum', 'pre_stim': 0.0
 
 SPREADSHEET_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data', 'data_type': 'psth', 'base': 'trial',
                     'pre_stim': 0.0, 'post_stim': .05, 'adjustment': 'none', 'bin_size': 0.01, 'trials': (0, 150),
-                    'row_type': 'trial', 'periods': list(range(5)), 'period_types': ['pretone', 'tone'],
+                    'row_type': 'event', 'periods': list(range(5)), 'period_types': ['pretone', 'tone'],
                     'selected_animals': STANDARD_ANIMALS, 'time_type': 'continuous'}
 
-GROUP_STAT_PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'base': 'trial', 'adjustment': 'normalized',
-                              'time_type': 'continuous', 'pre_stim': 0.0, 'post_stim': 0.70, 'bin_size': 0.01,
-                              'trials': (0, 150), 'row_type': 'unit', 'post_hoc_bin_size': 1,
-                              'data_path': '/Users/katie/likhtik/data', 'post_hoc_type': 'beta',
-                              'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}}
 
-GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment': 'normalized', 'time_type': 'continuous', 'pre_stim': 0.0,
-                        'post_stim': 0.70, 'bin_size': 0.01, 'trials': (0, 150), 'row_type': 'trial',
-                        'post_hoc_bin_size': 1, 'data_path': '/Users/katie/likhtik/data', 'post_hoc_type': 'lmer',
-                        'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}}
 
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'tick_step': 0.1, 'sem': False,
               'footer': True, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'},
@@ -38,11 +29,11 @@ ROSE_PLOT_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig
               'force_recalc': False, 'superimpose': False}
 
 
-FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/data/single_cell_data', 'animal_id': 'IG156',
-                 'cluster_ids': [21, 27], 'electrodes_for_waveform': [[9, 11], [8]], 'electrodes_for_feature': [1, 8],
-                 'el_inds': [1, 1], 'pc_inds': [1, 0], 'sem': False, 'equal_y_scales': True, 'tick_step': 0.2,
+FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall', 'animal_id': 'IG180',
+                 'unit_ids': [10, 2], 'electrodes_for_waveform': [[11], [3]], 'electrodes_for_feature': [3, 5],
+                 'el_inds': [0, 1], 'pc_inds': [0, 0], 'sem': False, 'equal_y_scales': True, 'tick_step': 0.2,
                  'neuron_type_colors': {'IN': '#5679C7', 'PN': '#C75B56'}, 'annot_coords': (-0.11, 1.1),
-                 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 'hist_color': '#9678D3', 'force_recalc':
+                 'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'}, 'hist_color': '#9678D3', 'force_recalc':
                  False}
 
 
@@ -170,26 +161,54 @@ POWER_SPREADSHEET_OPTS = {
     'matlab_configuration': MATLAB_CONFIG
 }
 
-TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'frequency_bands': [(4, 8)], 'data_type': 'power',
-                         'brain_regions': ['hpc', 'bla', 'pl'], 'store': 'pkl',
-                         'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
-                         'power_deviation': False, 'filter': 'spectrum_estimation',
-                         'levels': ['group', 'animal'], 'validate_events': {'frequency': (0, 8), 'threshold': 20,
-                                                                  'periods': {'pretone': range(5), 'tone': range(5)}},
-                         'events': {'pretone': {'pre_stim': .15, 'post_stim': 0},
-                                    'tone': {'pre_stim': .15, 'post_stim': 0}},
-                         'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
-                                                    'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
-                                                    'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
-                         'matlab_configuration': MATLAB_CONFIG,
-                         'row_type': 'event', 'time_type': 'block', 'frequency_type': 'block'
-                    }
+TEST_SPECTROGRAM_OPTS = {
+    'data_class': 'lfp', 'frequency_bands': [(4, 8)], 'data_type': 'power', 'row_type': 'event',
+    'brain_regions': ['hpc', 'bla', 'pl'], 'power_deviation': False, 'time_type': 'block', 
+    'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
+    'filter': 'spectrum_estimation', 'levels': ['group', 'animal'], 'store': 'pkl',
+    'validate_events': {
+        'frequency': (0, 8), 'threshold': 20, 'periods': {'pretone': range(5), 'tone': range(5)}
+        },
+    'events': {
+        'pretone': {'pre_stim': .15, 'post_stim': 0}, 'tone': {'pre_stim': .15, 'post_stim': 0}
+        },
+    'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)], 
+                               'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
+                               'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}
+                               },
+    'matlab_configuration': MATLAB_CONFIG, 'frequency_type': 'block'
+    }
 
-PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
-             'average_method': 'mean', 'base': '', 'time_type': 'continuous', 'row_type': 'event', 'levels': ['group', 'animal'],
-             'periods': {'tone': range(5)}, 'neuron_quality': ['1', '2'],
+
+NEURON_QUALITY = ['1', '2a', '2b', '2ab']
+
+PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'bin_size': 0.01, 'adjustment': 'normalized',
+             'average_method': 'mean', 'base': 'event', 'time_type': 'continuous', 'row_type': 'event', 'levels': ['group', 'animal'],
+             'periods': {'tone': range(5)}, 'neuron_quality': NEURON_QUALITY,
              'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
              'selected_animals': STANDARD_ANIMALS}
+
+PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
+             'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 'levels': ['group', 'animal'],
+             'periods': {'tone': range(5)}, 'neuron_quality': NEURON_QUALITY,
+             'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
+             'selected_animals': STANDARD_ANIMALS}
+
+GROUP_STAT_PROPORTION_OPTS = {
+    'data_class': 'spike', 'data_type': 'proportion', 'base': 'event', 'adjustment': 'normalized', 
+    'time_type': 'continuous', 'bin_size': 0.01, 'row_type': 'unit', 'post_hoc_bin_size': 1, 
+    'events': {
+        'pretone': {'pre_stim': 0.0, 'post_stim': .7}, 'tone': {'pre_stim': .0, 'post_stim': .7}
+        }, 'post_hoc_type': 'beta', 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 
+    'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall', 'neuron_quality': NEURON_QUALITY
+    }
+
+GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment': 'normalized', 'time_type': 'continuous', 'pre_stim': 0.0,
+                        'post_stim': 0.70, 'bin_size': 0.01, 'row_type': 'event', 
+                        'events': {'pretone': {'pre_stim': 0.0, 'post_stim': .7}, 'tone': {'pre_stim': .0, 'post_stim': .7}}, 
+                        'row_type': 'unit', 'post_hoc_bin_size': 1, 'post_hoc_type': 'beta',
+                        'post_hoc_bin_size': 1, 'post_hoc_type': 'lmer', 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 
+                        'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall', 'neuron_quality': NEURON_QUALITY}
 
 
 # TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}

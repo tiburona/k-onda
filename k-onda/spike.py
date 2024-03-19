@@ -242,7 +242,7 @@ class Unit(SpikeData, PeriodConstructor):
 
     name = 'unit'
 
-    def __init__(self, animal, category, spike_times, neuron_type=None, quality=None):
+    def __init__(self, animal, category, spike_times, cluster_id, waveform, neuron_type=None, quality=None):
         self.animal = animal
         self.parent = animal
         self.category = category
@@ -253,6 +253,8 @@ class Unit(SpikeData, PeriodConstructor):
         self.period_class = Period
         self.periods = defaultdict(list)
         self.spike_times = np.array(spike_times)
+        self.cluster_id = cluster_id
+        self.waveform = waveform
 
     @property
     def children(self):

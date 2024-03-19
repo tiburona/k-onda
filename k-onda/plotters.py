@@ -398,6 +398,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_group_stats(self, data_opts, graph_opts=None, sig_markers=True):
+        self.initialize(data_opts, graph_opts, neuron_type='all')
         self.fig, self.axs = plt.subplots(2, 1, figsize=(15, 15))
         self.current_ax = None
         self.plot_group_stats_data(sig_markers=sig_markers)
@@ -407,7 +408,10 @@ class GroupStatsPlotter(PeriStimulusPlotter):
         self.stats = Stats(self.experiment, self.data_opts)
         if sig_markers:
             interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
-
+        
+        period_to_plot = self.graph_opts.get('period', 'tone')
+        pre_stim, post_stim = (self.data_opts['events'][period_to_plot][opt] 
+                               for opt in ['pre_stim', 'post_stim'])
         bin_size = self.data_opts.get('bin_size')
         for row, neuron_type in enumerate(self.neuron_types):
             self.selected_neuron_type = neuron_type
@@ -424,7 +428,8 @@ class GroupStatsPlotter(PeriStimulusPlotter):
                 self.axs[row].fill_between(x, y - sem, y + sem, color=color, alpha=0.2)
 
             self.axs[row].set_title(f"{neuron_type}", fontsize=17 * self.multiplier, loc='left')
-            self.axs[row].set_xticks(np.arange(self.data_opts['pre_stim'], self.data_opts['post_stim'],
+            
+            self.axs[row].set_xticks(np.arange(pre_stim, post_stim, 
                                                step=self.graph_opts['tick_step']))
             self.axs[row].tick_params(axis='both', which='major', labelsize=10 * self.multiplier,
                                       length=5 * self.multiplier, width=2 * self.multiplier)
@@ -437,7 +442,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
                                               y=self.y_max * 1.05)
         for row in range(len(self.neuron_types)):
             self.axs[row].set_ylim(self.y_min * 1.1, self.y_max * 1.1)
-            self.axs[row].set_xlim(self.data_opts['pre_stim'], self.data_opts['post_stim'])
+            self.axs[row].set_xlim(pre_stim, post_stim)
             [self.axs[row].spines[side].set_visible(False) for side in ['top', 'right']]
 
         self.selected_neuron_type = None
