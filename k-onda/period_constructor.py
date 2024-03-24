@@ -81,5 +81,5 @@ class PeriodConstructor:
             return [child for child in children if self.is_selected(child, selected_periods)]
 
     def is_selected(self, x, selected_periods):
-        child_id = lambda x: x.period.identifier if self.data_type == 'mrl' else x.identifier
+        child_id = lambda x: x.identifier if self.name == 'unit' else x.period.identifier
         return x.period_type not in selected_periods or child_id(x) in selected_periods[x.period_type]

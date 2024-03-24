@@ -2,7 +2,7 @@ from context import experiment_context
 from utils import get_ancestors, get_descendants
 import numpy as np
 from math_functions import sem
-from utils import cache_method
+from utils import cache_method, find_ancestor_attribute
 
 
 class Base:
@@ -83,6 +83,7 @@ class Base:
 
         self.data_opts = self.data_opts  # Reassign to trigger the setter
 
+   
 
 class Data(Base):
 
@@ -91,12 +92,24 @@ class Data(Base):
             yield child
 
     @property
+    def children(self):
+        if self._children is None:
+            return self._children
+        return self.filter_children(self._children)
+
+    @property
     def data(self):
         """
         Returns:
         float or np.array: The mean of the data values from the object's descendants.
         """
         return getattr(self, f"get_{self.data_type}")()
+    
+    @property
+    def is_valid(self):
+        inclusion_criteria = [lambda x: x.validator if hasattr(x, 'validator') else True]
+        inclusion_criteria += self.get_inclusion_criteria()
+        return all([criterion(self) for criterion in inclusion_criteria])
 
     @property
     def mean_data(self):
@@ -173,7 +186,63 @@ class Data(Base):
     
     def get_child_by_identifier(self, identifier):
         return [child for child in self.children if child.identifier == identifier][0]
+    
+    @cache_method
+    def get_inclusion_criteria(self):
+        criteria = []
 
+        operations = {
+            '==': lambda a, b: a == b,
+            '<': lambda a, b: a < b,
+            '>': lambda a, b: a > b,
+            '<=': lambda a, b: a <= b,
+            '>=': lambda a, b: a >= b,
+            'in': lambda a, b: a in b,
+            '!=': lambda a, b: a != b,
+            'not in': lambda a, b: a not in b
+        }
+
+        def make_criteria_func(name, attribute, value, operation, modifier=None, mattr=None, 
+                               mop=None, mval=None):
+            def criteria_func(x):
+                # Ensure ancestors are not excluded based on descendants
+                if name != x.name and (name not in x.hierarchy or 
+                                       x.hierarchy[x.name] <= x.hierarchy[name]):
+                    return True
+                # Apply modifier if present
+                elif modifier and not mop(find_ancestor_attribute(x, name, mattr), mval):
+                    return True
+                else:
+                    return operation(find_ancestor_attribute(x, name, attribute), value)
+            return criteria_func
+
+        if self.data_opts.get('inclusion_rule'):
+            for name, rules in self.data_opts['inclusion_rule'].items():
+                for rule in rules:
+                    if len(rule) == 3:
+                        attribute, relationship, value = rule
+                        modifier = mattr = mrel = mval = None
+                    elif len(rule) == 7:
+                        attribute, relationship, value, modifier, mattr, mrel, mval = rule
+                    else:
+                        raise ValueError('Unknown rule format')
+
+                    if relationship not in operations:
+                        raise ValueError('Unknown operation')
+
+                    operation = operations[relationship]
+                    mop = operations[mrel] if modifier else None
+                    criteria_func = make_criteria_func(name, attribute, value, operation, modifier, 
+                                                       mattr, mop, mval)
+                    criteria.append(criteria_func)
+
+        return criteria
+    
+    def filter_children(self, children):
+        ic = self.get_inclusion_criteria() + [lambda x: x.children or getattr(x, 'base_node', None)]
+        return [child for child in children if all([criterion(child) for criterion in ic])]
+    
+    
     def refer(self, data, stop_at='', is_spectrum=False):
         if (  # all the conditions in which reference data should not be subtracted
                 not self.data_opts.get('evoked') or
@@ -303,6 +372,7 @@ class TimeBin:
         self.data = val
         self.mean_data = val
         self.ancestors = get_ancestors(self)
+        self.hierarchy = parent.hierarchy
 
     def position_in_period_time_series(self):
         return self.parent.num_bins * self.parent.identifier + self.identifier

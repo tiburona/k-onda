@@ -623,9 +623,6 @@ class MRLPlotter(Plotter):
         frequency_band = str(self.lfp.current_frequency_band)
         tags = [frequency_band, self.current_brain_region]
         self.dir_tags = [self.data_type]
-        for opt in ['phase', 'adjustment']:
-            if self.data_opts.get(opt):
-                tags += [self.data_opts.get(opt)]
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
         self.fname = f"{basename}_{'_'.join(tags)}.png"
@@ -650,6 +647,7 @@ class MRLPlotter(Plotter):
 
     def mrl_bar_plot(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type='all')
+        print("here")
 
         data = []
         if data_opts.get('spontaneous'):

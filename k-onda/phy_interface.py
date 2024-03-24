@@ -89,7 +89,6 @@ class PhyInterface:
         return vals_to_return
 
     def one_feature_view(self, id, electrodes, el_inds, pc_inds):
-
         return (self.get_features(id, electrodes)[:, el, pc] for el, pc in zip(el_inds, pc_inds))
 
     def get_mean_waveforms(self, cluster_id, electrodes):
@@ -108,6 +107,6 @@ class PhyInterface:
             return [row for row in reader]
 
 
-phy_interface = PhyInterface('/Users/katie/likhtik/IG_INED_Safety_Recall', 'IG180')
-phy_interface.plot_features([56, 3], [3, 5])
+#phy_interface = PhyInterface('/Users/katie/likhtik/IG_INED_Safety_Recall', 'IG156')
+#phy_interface.plot_features([54, 57], [8, 7])
 

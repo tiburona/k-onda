@@ -59,7 +59,6 @@ for animal in STANDARD_ANIMALS:
 
 
 
-
 def categorize_neurons(units, fwhm_max=.0015, firing_rate_max=10):
 
     # Separate units with quality 1 for initial categorization

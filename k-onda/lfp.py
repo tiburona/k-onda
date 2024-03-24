@@ -28,7 +28,7 @@ class LFPData(Data):
 
     @property
     def freq_range(self):
-        if find_ancestor_attribute(self, 'frozen_freq_range') is not None:
+        if find_ancestor_attribute(self, 'any', 'frozen_freq_range') is not None:
             return find_ancestor_attribute(self, 'frozen_freq_range')
         exp = self.find_experiment()
         if isinstance(self.current_frequency_band, type('str')):
@@ -44,6 +44,11 @@ class LFPData(Data):
             return self.parent.lfp_root
         else:
             return None
+
+    @property
+    def hierarchy(self):
+        return {'experiment': 0, 'group': 1, 'animal': 2, 'period': 3, 'mrl_calculator': 3, 'event': 4, 
+                'frequency_bin': 5, 'time_bin': 6}
 
     @cache_method
     def get_mrl(self):
@@ -111,7 +116,7 @@ class LFPExperiment(LFPData, Subscriber):
         self.all_animals = [LFPAnimal(animal, raw_lfp[animal.identifier], self._sampling_rate)
                             for animal in self.experiment.all_animals]
         self.groups = [LFPGroup(group, self) for group in self.experiment.groups]
-        self.children = self.groups
+        self._children = self.groups
         self.all_groups = self.groups
         self.last_brain_region = None
         self.last_neuron_type = 'uninitialized'
@@ -147,10 +152,6 @@ class LFPExperiment(LFPData, Subscriber):
             return [ancestor for ancestor in get_ancestors(x) if ancestor.name == 'animal'][0].identifier in selected
 
     def update(self, _):
-
-        if self.data_opts.get('selected_animals') != self.selected_animals:
-            [group.update_children() for group in self.groups]
-            self.selected_animals = self.data_opts.get('selected_animals')
         if self.data_class == 'lfp':
             [animal.update_if_necessary() for animal in self.all_animals]
 
@@ -163,26 +164,40 @@ class LFPGroup(LFPData):
         self.experiment = lfp_experiment
         self.identifier = self.spike_target.identifier
         self.parent = lfp_experiment
-        self.children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
-        for animal in self.children:
+        self._children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
+        for animal in self._children:
             animal.parent = self
             animal.group = self
 
     @property
     def mrl_calculators(self):
-        return [mrl_calc for animal in self.children for mrl_calc in animal.mrl_calculators if mrl_calc.is_valid]
+        return [mrl_calc for animal in self.children for mrl_calc in animal.mrl_calculators if mrl_calc.validator]
 
     @property
     def grandchildren_scatter(self):
         if self.data_type != 'mrl':
             raise NotImplementedError("Grandchildren Scatter is currently only implemented for MRL")
-        else:
-            unit_points = []
-            for animal in self.children:
-                for unit in animal.spike_target.children:
-                    unit_points.append(np.nanmean([mrl_calc.data for mrl_calc in animal.children
-                                                   if mrl_calc.unit.identifier == unit.identifier]))
-            return unit_points
+        
+        unit_points = []
+        for animal in self.children:
+            # Initialize a dictionary to hold lists of data points for each unit identifier
+            unit_data_map = {}
+            for mrl_calc in animal.children:
+                identifier = mrl_calc.unit.identifier
+                if identifier not in unit_data_map:
+                    unit_data_map[identifier] = []
+                unit_data_map[identifier].append(mrl_calc.data)
+            
+            # For each unit in animal.spike_target.children, compute the mean of collected data points
+            for unit in animal.spike_target.children:
+                if unit.identifier in unit_data_map:
+                    # Compute the mean of all data points for this unit
+                    data_points = unit_data_map[unit.identifier]
+                    mean_data_point = np.nanmean(data_points)
+                    unit_points.append(mean_data_point)
+        
+        return unit_points
+
 
     @property
     def data_by_period(self):
@@ -198,9 +213,9 @@ class LFPGroup(LFPData):
         return np.array(data_by_period)
 
     def update_children(self):
-        self.children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
+        self._children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
         if self.data_opts.get('selected_animals') is not None:
-            self.children = [child for child in self.children if child.identifier in
+            self._children = [child for child in self.children if child.identifier in
                              self.data_opts.get('selected_animals')]
 
     def get_angle_counts(self):
@@ -245,19 +260,21 @@ class LFPAnimal(LFPData, PeriodConstructor):
         return getattr(self.spike_target, name)
 
     @property
-    def children(self):
+    def _children(self):
         children = self.mrl_calculators if self.data_type == 'mrl' else self.periods
         if self.data_opts.get('spontaneous'):
             children = children['spontaneous']
         else:
             children = self.filter_by_selected_periods(children)
         if self.data_type == 'mrl':
-            children = [calc for calc in children if calc.unit.neuron_type == self.selected_neuron_type]
+            children = [calc for calc in children if calc.unit in self.spike_target.children]
         return children
 
     def update_if_necessary(self):
         if self.data_opts.get('brain_region') not in self.raw_lfp:
             return
+        if self.identifier == 'IG154':
+            a = 'foo'
         old_and_new = [(self.last_brain_region, self.current_brain_region),
                        (self.last_frequency_band, self.current_frequency_band),
                        (self.last_neuron_type, self.selected_neuron_type),
@@ -389,9 +406,9 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
         self.experiment = self.animal.group.experiment
 
     @property
-    def children(self):
+    def _children(self):
         if self.data_opts.get('validate_events'):
-            return [event for event in self.events if event.is_valid]
+            return [event for event in self.events if event.validator]
         else:
             return self.events
 
@@ -484,6 +501,8 @@ class LFPEvent(LFPData, LFPDataSelector):
         self.parent = period
         self.period_type = self.parent.period_type
         self.spectrogram = self.parent.spectrogram
+        self._children = None
+        self.base_node = True
 
     @cache_method
     def _get_power(self):
@@ -497,7 +516,7 @@ class LFPEvent(LFPData, LFPDataSelector):
         return self._get_power()
 
     @property
-    def is_valid(self):
+    def validator(self):
         animal = self.period.animal
         if (not self.data_opts.get('validate_events')) or animal.is_mirror:
             return True
@@ -540,7 +559,7 @@ class FrequencyBin(LFPData):
             self.identifier = self.parent.period.spectrogram[1][index]
         self.period_type = self.parent.period_type
         self.unit = unit
-        self.is_valid = self.parent.is_valid if hasattr(self.parent, 'is_valid') else True
+        self.validator = self.parent.validator if hasattr(self.parent, 'validator') else True
 
     @property
     def data(self):
@@ -583,6 +602,8 @@ class MRLCalculator(LFPData):
 
     def __init__(self, unit):
         self.unit = unit
+        self._children = None
+        self.base_node = True
 
     @property
     def mean_over_frequency(self):
@@ -698,7 +719,7 @@ class PeriodMRLCalculator(MRLCalculator):
         return [calc for calc in self.parent.mrl_calculators[other_stage] if calc.identifier == self.identifier][0]
 
     @property
-    def is_valid(self):
+    def validator(self):
         if self.data_opts.get('evoked'):
             return self.num_events > 4 and self.equivalent_calculator.num_events > 4
         else:
@@ -729,5 +750,5 @@ class SpontaneousMRLCalculator(MRLCalculator):
         return np.array([1 if weight in self.spikes else float('nan') for weight in range(self.start, self.end)])
 
     @property
-    def is_valid(self):
+    def validator(self):
         return self.num_events > 4

@@ -73,9 +73,7 @@ or
 
 "spontaneous" (optional): an integer or an array/Python iterable that indicates that rather than analyzing time after the beginning of the presentation of stimuli, you are analyzing spontaneous activity. If it is an integer, it will take  that many seconds before the first period in the experiment (that is not a reference period). If it is an iterable of length two, it will define the beginning and end, in seconds, of the period you want to analyze.  
 
-"selected_animals" (optional): An iterable with the identifiers of animals to use in this analysis, default is to use all animals that are defined in the experiment.
-
-"neuron_quality" (optional): An iterable with the values for `quality` of a unit that are allowed in the analysis. (This is distinct from `category` which is one of the three main classifications a unit can receive in phy -- good, mua, or noise.  `quality` is a user-provided distinction allowing analyses that have more granular control over which neurons are or are not maintained.) Defaults to `None`, in which case all good units will be used.
+"inclusion_rule" (optional): a dictionary that dictates what subsets of data will be allowed in the experiment.  This is its current format.  Keys are data types, for example, 'animal' or 'unit'.  Values are iterables of inclusion criteria.  Inclusion criteria themselves are iterables, and they can have length 3 or 7.  The first element is always a string,  the attribute that has to take some value, for example, 'identifier' or 'firing_rate.'  The second element is a string that represents an operation.  Currently allowed operations are '==', '<', '>', '<=', '>=', '!=', 'in', and 'not in'.  The third element is the value to which the attribute will be compared via the operation.  An example value for inclusion_rule is thus `{'unit':[['quality' 'in' ['1', '2']]]}`.  This would only include units whose attribute quality was found in the list `['1', '2']`. If you only want to apply the inclusion rule to some of your objects, you can restrict it further by providing an iterable of length 7, where the fourth element is the string 'if', the fifth is the attribute by which you're restricting the application of the criterion, the sixth is an operation again, and the seventh is the value to which this restriction attribute will be compared. An example vaue for inclusion_rule if you wanted to both restrict units by quality and only include interneurons ('IN's) whose firing rate was greater than 8 spikes per second would be the following: `{'unit':[['quality' 'in' ['1', '2']], ['firing_rate', '>', 8, 'if', 'neuron_type', '==', 'IN']]}`
 
 ### Opts for the plotting function, `plot_psth` ###
 
@@ -118,13 +116,6 @@ program will raise an error if you do. Keep in mind: "adjustment" applies to the
 subtraction will be applied to the further calculation you do using those rates (this is also relevant for the various 
 kind of correlation calculations described below).
 
-Here's an example proportion config:
-
-```{
-  "data_opts":  {"data_class": "spike", "data_type": "proportion", "bin_size": 0.01, "adjustment": "normalized",
-   "events": {"pretone": {"pre_stim": 0, "post_stim": 1}, "tone": {"pre_stim": .05, "post_stim": .65}},
-    "time_type": "continuous", "row_type": "event", "levels": ["group"], "block_types": ["tone"]}
-```
 
 ## AUTOCORRELATION ##
 
@@ -318,11 +309,6 @@ if some_variable == some_other_variable:
     key1 = val1
     key2 = val2
 
-Here's a real example rule:
-    ```
-     "rules": {"brain_region": {"pl": [("selected_animals", PFC_THETA_POWER_ANIMALS)],
-                                "bla": [("selected_animals", BLA_THETA_POWER_ANIMALS)]}}
-    ```
 
 This is saying when `brain_region` is "pl", assign `PFC_THETA_POWER_ANIMALS` to the key "selected_animals" in the 
 configuration dictionary, and when `brain_region` is 'bla', assign `BLA_THETA_POWER_ANIMALS`.

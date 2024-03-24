@@ -30,8 +30,8 @@ ROSE_PLOT_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig
 
 
 FIGURE_1_OPTS = {'data_class': 'spike', 'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall', 'animal_id': 'IG180',
-                 'unit_ids': [10, 2], 'electrodes_for_waveform': [[11], [3]], 'electrodes_for_feature': [3, 5],
-                 'el_inds': [0, 1], 'pc_inds': [0, 0], 'sem': False, 'equal_y_scales': True, 'tick_step': 0.2,
+                 'unit_ids': [10, 2], 'electrodes_for_waveform': [[11], [3]], 'electrodes_for_feature': [1, 3],
+                 'el_inds': [0, 0], 'pc_inds': [0, 1], 'sem': False, 'equal_y_scales': True, 'tick_step': 0.2,
                  'neuron_type_colors': {'IN': '#5679C7', 'PN': '#C75B56'}, 'annot_coords': (-0.11, 1.1),
                  'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'}, 'hist_color': '#9678D3', 'force_recalc':
                  False}
@@ -180,35 +180,51 @@ TEST_SPECTROGRAM_OPTS = {
     }
 
 
-NEURON_QUALITY = ['1', '2a', '2b', '2ab']
+NEURON_QUALITY = ['1', '2a', '2b', '2c', '3']
 
-PROPORTION_OPTS = {'data_class': 'spike', 'data_type': 'proportion', 'bin_size': 0.01, 'adjustment': 'normalized',
-             'average_method': 'mean', 'base': 'event', 'time_type': 'continuous', 'row_type': 'event', 'levels': ['group', 'animal'],
-             'periods': {'tone': range(5)}, 'neuron_quality': NEURON_QUALITY,
-             'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
-             'selected_animals': STANDARD_ANIMALS}
+PROPORTION_OPTS = {
+    'data_class': 'spike', 'data_type': 'proportion', 'bin_size': 0.01, 'adjustment': 'normalized',
+    'average_method': 'mean', 'base': 'event', 'time_type': 'continuous', 'row_type': 'event', 
+    'levels': ['group', 'animal'], 'periods': {'tone': range(5)},
+    'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
+                       'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
+    'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
+    }
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
              'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 'levels': ['group', 'animal'],
-             'periods': {'tone': range(5)}, 'neuron_quality': NEURON_QUALITY,
-             'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
-             'selected_animals': STANDARD_ANIMALS}
+             'periods': {'tone': range(5)}, 
+             'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY], ['firing_rate', '>=', 10, 'if', 'neuron_type', '==', 'IN']], 
+                                'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
+             'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}}}
+
+MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'mrl',
+            'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block', 'adjustment': 'none',
+            'periods': {'tone': range(5), 'pretone': range(5)},
+             'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
+            'events': {'pretone': {'pre_stim': 0, 'post_stim': 3}, 'tone': {'pre_stim': 0, 'post_stim': .3}},
+            'validate_events': {
+                'frequency': (0, 8), 'threshold': 20, 'periods': {'pretone': range(5), 'tone': range(5)}
+        },
+            }
 
 GROUP_STAT_PROPORTION_OPTS = {
     'data_class': 'spike', 'data_type': 'proportion', 'base': 'event', 'adjustment': 'normalized', 
-    'time_type': 'continuous', 'bin_size': 0.01, 'row_type': 'unit', 'post_hoc_bin_size': 1, 
+    'time_type': 'continuous', 'bin_size': 0.01, 'row_type': 'period', 'post_hoc_bin_size': 1, 'periods': {'tone': range(5)},
     'events': {
         'pretone': {'pre_stim': 0.0, 'post_stim': .7}, 'tone': {'pre_stim': .0, 'post_stim': .7}
-        }, 'post_hoc_type': 'beta', 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 
-    'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall', 'neuron_quality': NEURON_QUALITY
-    }
+        }, 'post_hoc_type': 'beta', 'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'},
+        'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 'animal': [['identifier', 'in', STANDARD_ANIMALS]]}, 
+    'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall', 'periods': {'tone': range(5)},
+    'period_type_regressor': True}
 
-GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment': 'normalized', 'time_type': 'continuous', 'pre_stim': 0.0,
-                        'post_stim': 0.70, 'bin_size': 0.01, 'row_type': 'event', 
+GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment': 'normalized', 'time_type': 'continuous', 
+                        'bin_size': 0.01, 'row_type': 'period', 'post_hoc_bin_size': 1, 'period_type_regressor': True,
                         'events': {'pretone': {'pre_stim': 0.0, 'post_stim': .7}, 'tone': {'pre_stim': .0, 'post_stim': .7}}, 
-                        'row_type': 'unit', 'post_hoc_bin_size': 1, 'post_hoc_type': 'beta',
-                        'post_hoc_bin_size': 1, 'post_hoc_type': 'lmer', 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'}, 
-                        'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall', 'neuron_quality': NEURON_QUALITY}
+                        'post_hoc_type': 'beta', 'periods': {'tone': range(5)},
+                        'post_hoc_type': 'lmer', 'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'}, 
+                        'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall', 
+                        'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 'animal': [['identifier', 'in', STANDARD_ANIMALS]]}}
 
 
 # TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
@@ -218,7 +234,7 @@ GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment'
 TEST_RUNNER_OPTS = [{'data_class': 'behavior', 'data_type': 'percent_freezing',
                      'periods': {'pretone': range(5), 'tone': range(5)}, 'row_type': 'period'}, TEST_SPECTROGRAM_OPTS]
 
-TEST_RUNNER_OPTS = {'data_opts': PSTH_OPTS, 'graph_opts': GRAPH_OPTS}
+TEST_RUNNER_OPTS = {'data_opts': MRL_OPTS, 'graph_opts': GRAPH_OPTS}
 
 
 

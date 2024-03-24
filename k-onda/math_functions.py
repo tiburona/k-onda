@@ -1,7 +1,8 @@
 import numpy as np
 import math
 from scipy import signal
-from scipy.signal import hilbert, butter, filtfilt, hann, hamming
+from scipy.signal import hilbert, butter, filtfilt, hann, hamming, firwin, lfilter
+
 from scipy.fft import fft, ifft
 from scipy.optimize import curve_fit
 
@@ -266,3 +267,22 @@ def get_fwhm(mean_waveform, sampling_rate, deflection='min', range_of_max=(0, 35
 def extreme_point(midpoint, mean_waveform, range_wrt_midpoint, func):
     full_range = (ind + midpoint for ind in range_wrt_midpoint)
     return func(mean_waveform[slice(*full_range)])
+
+
+def downsample(data, orig_freq, dest_freq):
+    # Design a low-pass FIR filter
+    nyquist_rate = dest_freq/ 2
+    cutoff_frequency = nyquist_rate - 100  # For example, 900 Hz to have some margin
+    numtaps = 101  # Number of taps in the FIR filter, adjust based on your needs
+    fir_coeff = firwin(numtaps, cutoff_frequency, nyq=nyquist_rate)
+
+    # Apply the filter
+    filtered_data = lfilter(fir_coeff, 1.0, data)
+
+    ratio = int(orig_freq/dest_freq)
+
+    return filtered_data[::ratio]
+
+
+    
+

@@ -4,6 +4,7 @@ from scipy.signal import medfilt
 import numpy as np
 import sys
 import os
+import pickle
 
 # Add the main folder to sys.path
 main_folder_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -44,6 +45,33 @@ class Figure(Plotter):
         self.get_subplot_ax(self.rows[0][2], invisible=True)
         self.pn_in_scatterplot()
 
+    def draw_fwhm_calculations(self, waveform):
+        peak_index = np.argmin(waveform)
+        peak_value = waveform[peak_index]
+
+        # Calculate half-maximum (or half-minimum for troughs)
+        half_max_value = (np.min(waveform) + peak_value) / 2
+
+        # Find indices where waveform crosses half_max_value
+        # This involves finding the first crossing before the peak and the first crossing after the peak
+        crossings = np.where(np.diff(np.sign(waveform - half_max_value)))[0]
+
+        # Find the crossing point before the peak
+        crossing_before = crossings[crossings < peak_index]
+        if crossing_before.size > 0:
+            fwhm_start = crossing_before[-1]
+        else:
+            fwhm_start = 0  # or some other handling if no crossing is found
+
+        # Find the crossing point after the peak
+        crossing_after = crossings[crossings > peak_index]
+        if crossing_after.size > 0:
+            fwhm_end = crossing_after[0]
+        else:
+            fwhm_end = len(waveform) - 1  
+
+        return fwhm_start, fwhm_end
+
     def phy_graphs(self):
         ax1, ax2 = (self.get_subplot_ax(self.rows[0][i]) for i in range(2))
         keys = ['data_path', 'animal_id', 'unit_ids', 'electrodes_for_feature', 
@@ -51,13 +79,18 @@ class Figure(Plotter):
         (data_path, animal_id, unit_ids, electrodes_for_feature, el_inds, pc_inds, colors, 
          annot_coords) = (self.graph_opts[key] for key in keys)
         phy_interface = PhyInterface(data_path, animal_id)
+
+        with open(os.path.join(self.graph_opts['data_path'], 'bunches.pkl'), 'rb') as file:
+            bunches = pickle.load(file)
+            
         for i, unit_id in enumerate(unit_ids):
             animal = [anml for anml in self.experiment.all_animals if anml.identifier == animal_id][0]
             unit = animal.get_child_by_identifier(str(unit_id))
             cluster_id = unit.cluster_id
-            waveform = medfilt(unit.waveform, kernel_size=5)
+            waveform = medfilt(unit.waveform, kernel_size=5)/4  # origial waveform units were uv;4
             x, y = phy_interface.one_feature_view(cluster_id, electrodes_for_feature, el_inds, pc_inds)
             ax1.scatter(x, y, alpha=0.3, color=colors[unit.neuron_type], s=5)
+            
             ax2.plot(np.arange(len(waveform)), waveform, color=colors[unit.neuron_type])
             if i == 1:  # We're only putting the FWHM markers on the second line
                 min_y, max_y = np.min(waveform), np.max(waveform)
@@ -67,16 +100,13 @@ class Figure(Plotter):
                 ax2.hlines([min_y, max_y], xmin=[max_x - 2, max_x - 2], xmax=[max_x + 2, max_x + 2], color='.2', lw=.7)
                 ax2.vlines(max_x, ymin=min_y, ymax=max_y, color='.2', lw=.7)
                 # Find indices where waveform is equal to half_min
-                half_min_indices = np.where(np.isclose(waveform, half_min, rtol=3e-2))
-                # Draw line connecting points at FWHM
-                if half_min_indices[0].size > 0:
-                    fwhm_start = half_min_indices[0][0]
-                    fwhm_end = half_min_indices[0][-1]
-                    ax2.hlines(half_min, xmin=fwhm_start, xmax=fwhm_end, color='.2', lw=.7)
-                    ax2.text(fwhm_start - 5, half_min, 'FWHM', fontsize=7, ha='right')
+                fwhm_start, fwhm_end = self.draw_fwhm_calculations(waveform)
+                ax2.hlines(half_min, xmin=fwhm_start, xmax=fwhm_end + 3.18, color='.2', lw=.7)
+                ax2.text(fwhm_start - 10, half_min, 'FWHM', fontsize=7, ha='right')
+                
         # TODO fix this label
-        self.label_phy_graph(ax1, 'Electrode 10, PC 1', 'Electrode 10, PC 2', '(a)', annot_coords)
-        self.label_phy_graph(ax2, 'Samples (30k Hz)', '\u03BCV', '(b)', annot_coords)
+        self.label_phy_graph(ax1, f'Electrode 3, PC 1', f'Electrode 3, PC 2', '(a)', (-0.247, 1.1))
+        self.label_phy_graph(ax2, r'Samples (30 kHz)', '\u03BCV', '(b)', annot_coords)
 
     def label_phy_graph(self, ax, xlabel, ylabel, letter, annot_coords):
         ax.set_xlabel(xlabel, fontsize=7)
@@ -100,7 +130,7 @@ class Figure(Plotter):
         colors = [self.graph_opts['neuron_type_colors'][unit.neuron_type] for unit in units]
         ax1.scatter(x, y, color=colors, alpha=0.5)
         ax1.set_xlabel('FWHM (\u03BCs)', fontsize=7)
-        ax1.set_ylabel('Firing Rate (Hz)', fontsize=7)
+        ax1.set_ylabel(r'Firing Rate (s$^{-1}$)', fontsize=7)
 
         ax2 = self.make_neuron_hist(x, position=np.s_[:2, 0], rotate=True, lim_to_flip='xlim', ticks_axes=('y', 'x'),
                                     invisible_spines=('left', 'top'), count_axis='x')

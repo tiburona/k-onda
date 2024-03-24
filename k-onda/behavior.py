@@ -1,5 +1,6 @@
 from data import Data
 
+# TODO: give behavior data the hierarchy it needs
 
 class Behavior:
     def __init__(self, experiment, info, data):

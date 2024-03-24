@@ -6,7 +6,6 @@ from copy import deepcopy
 import random
 import string
 from data import Base
-from utils import find_ancestor_attribute, find_ancestor_id
 
 
 class Stats(Base):
@@ -149,20 +148,9 @@ class Stats(Base):
         list of dict: A list of dictionaries, where each dictionary represents a row of data. The keys in the dictionary
         include the data column, source identifiers, ancestor identifiers, and any other specified attributes.
 
-        Notes:
-        - The function sets default attributes to include like 'period_type' and then adds to them based on the
-          object's `data_class` and `data_type` attributes.
-        - Inclusion criteria are set based on the data class, data type, and other options set in the object's
-          `data_opts` attribute.
-        - The `self.get_data` method is then called with the determined level, inclusion criteria, and attributes to
-          collect the rows of data.
         """
         level = self.data_opts['row_type']
         
-        inclusion_criteria = [lambda x: x.is_valid if hasattr(x, 'is_valid') else True]
-        if self.data_opts.get('selected_animals') is not None:
-            inclusion_criteria += [lambda x: find_ancestor_id(x, 'animal') in self.data_opts['selected_animals']]
-
         other_attributes = ['period_type']
         
         if 'lfp' in self.data_class:
@@ -175,9 +163,9 @@ class Stats(Base):
         else:
             other_attributes += ['category', 'neuron_type']
             
-        return self.get_data(level, inclusion_criteria, other_attributes)
+        return self.get_data(level, other_attributes)
 
-    def get_data(self, level, inclusion_criteria, other_attributes):
+    def get_data(self, level, other_attributes):
         """
         Collects data from specified data sources based on the provided level and criteria. The function returns a list
         of dictionaries, where each dictionary represents a row of data. Each row dictionary contains data values,
@@ -217,12 +205,11 @@ class Stats(Base):
         else:
             experiment = self.experiment
 
-        sources = getattr(experiment, f'all_{level}s')
+        sources = [source for source in getattr(experiment, f'all_{level}s') if source.is_valid]
         if self.data_opts.get('frequency_type') == 'continuous':
             sources = [frequency_bin for source in sources for frequency_bin in source.frequency_bins]
         if self.data_opts.get('time_type') == 'continuous':
             sources = [time_bin for source in sources for time_bin in source.time_bins]
-        sources = [source for source in sources if all([criterion(source) for criterion in inclusion_criteria])]
 
         for source in sources:
             row_dict = {self.data_col: source.mean_data}
@@ -304,26 +291,47 @@ class Stats(Base):
             f.write(r_script)
 
     def write_spike_post_hoc_r_script(self):
-        error_suffix = '/unit' if self.data_opts['row_type'] == 'event' else ''
+        if self.data_opts['row_type'] == 'event':
+            error_suffix = '/unit/period'
+        elif self.data_opts['row_type'] == 'period':
+            error_suffix = '/unit'
+        else:
+            error_suffix = ''
+        
         error_suffix = error_suffix + '/time_bin' if self.data_opts.get('post_hoc_bin_size', 1) > 1 else error_suffix
 
+        post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size', 1)
+        
+        if self.data_opts.get('period_type_regressor'):
+            pt_regressor_str = '* period_type'
+            within_nt_p_row = 4
+            interaction_p_row = 8
+        else:
+            pt_regressor_str = ''
+            within_nt_p_row = 2
+            interaction_p_row = 4
+
+
         if self.data_opts['post_hoc_type'] == 'beta':
-            model_formula = f'glmmTMB(formula = {self.data_col} ~ group + (1|animal{error_suffix}), ' \
+            model_formula = f'glmmTMB(formula = {self.data_col} ~ group {pt_regressor_str} + (1|animal{error_suffix}), ' \
                             f'family = beta_family(link = "logit"), data = data)'
-            interaction_model_formula = f'glmmTMB(formula = {self.data_col} ~ group * neuron_type + ' \
+            interaction_model_formula = f'glmmTMB(formula = {self.data_col} ~ group * neuron_type {pt_regressor_str} + ' \
                                         f'(1|animal{error_suffix}), ' \
                                         f'family = beta_family(link = "logit"), data = sub_df)'
-            p_val_index = 'coefficients$cond[2, 4]'
-            interaction_p_val_index = 'coefficients$cond["groupdefeat:neuron_typePN", 4]'
+            p_val_index = f'coefficients$cond[{within_nt_p_row}, 4]'
+            interaction_p_val_index = f'coefficients$cond[{interaction_p_row}, 4]'
             zero_adjustment_line = f'df$"{self.data_col}"[df$"{self.data_col}" == 0] ' \
                                    f'<- df$"{self.data_col}"[df$"{self.data_col}" == 0] + 1e-6'
         elif self.data_opts['post_hoc_type'] == 'lmer':
-            model_formula = f'lmer({self.data_col} ~ group +  (1|animal{error_suffix}), data = data)'
-            interaction_model_formula = f'lmer({self.data_col} ~ group * neuron_type + (1|animal{error_suffix}), ' \
-                                        f'data = sub_df)'
-            p_val_index = 'coefficients[2, 5]'
-            interaction_p_val_index = 'coefficients[4, 5]'
+            model_formula = f'lmer({self.data_col} ~ group {pt_regressor_str} + (1|animal{error_suffix}), data = data)'
+            interaction_model_formula = f'lmer({self.data_col} ~ group * neuron_type {pt_regressor_str} + (1|animal{error_suffix}), data = sub_df)'
+            p_val_index = f'coefficients[{within_nt_p_row}, 5]'
+            interaction_p_val_index = f'coefficients[{interaction_p_row}, 5]'
             zero_adjustment_line = ''
+
+        select_period_type_line = ''
+        if self.experiment.hierarchy[self.data_opts['row_type']] >  3 and not self.data_opts.get('period_type_regressor'):
+            select_period_type_line = "df <- df[df$period_type == 'tone', ]"  # TODO make this not specific to tone
 
         return fr'''
                 library(glmmTMB)
@@ -336,6 +344,8 @@ class Stats(Base):
                 # Convert variables to factors
                 factor_vars <- c('unit', 'animal', 'neuron_type', 'group')
                 df[factor_vars] <- lapply(df[factor_vars], factor)
+
+                {select_period_type_line}
 
                 # Add small constant to 0s in the data column, if necessary
                 {zero_adjustment_line}
@@ -352,10 +362,21 @@ class Stats(Base):
                     return(p_val)
                 }}
 
+                 unique_time_bins <- sort(unique(df$time_bin))
+                
+                # Calculate the total number of groups needed
+                total_groups <- ceiling(length(unique_time_bins) / {post_hoc_bin_size})
+
                 # Iterate over the time bins
-                for (time_bin in unique(df$time_bin)) {{
+                for (group_index in 1:total_groups) {{
+                    start_index <- (group_index - 1) * {post_hoc_bin_size} + 1
+                    end_index <- min(length(unique_time_bins), group_index * {post_hoc_bin_size})
+                    # Get the time_bin values for the current group
+                    current_group_bins <- unique_time_bins[start_index:end_index]
                     # Subset the data for the current time bin
-                    sub_df <- df[df$time_bin == time_bin,]
+                    sub_df <- df[df$time_bin %in% current_group_bins, ]
+
+                    if (nrow(sub_df) > 0) {{
 
                     # Perform the interaction analysis
                     interaction_model <- {interaction_model_formula}
@@ -367,11 +388,12 @@ class Stats(Base):
 
                     # Store the results
                     results <- rbind(results, data.frame(
-                        time_bin = time_bin,
+                        time_bin = group_index,
                         interaction_p_val = p_val_interact,
                         PN_p_val = p_val_PN,
                         IN_p_val = p_val_IN
                     ))
+                    }}
                 }}
 
                 # Write the results to a CSV file
@@ -382,6 +404,9 @@ class Stats(Base):
         post_hoc_path = os.path.join(self.data_opts['data_path'], self.data_type, 'post_hoc')
         if not os.path.exists(post_hoc_path):
             os.mkdir(post_hoc_path)
+        adjustment = self.data_opts.get('adjustment')
+        if self.data_opts.get('period_type_regressor'):
+            self.update_data_opts(['adjustment'], 'none')
         self.make_spreadsheet(path=post_hoc_path)
         self.results_path = os.path.join(post_hoc_path, 'r_post_hoc_results.csv')
         if not os.path.exists(self.results_path) or force_recalc:
@@ -393,6 +418,8 @@ class Stats(Base):
             print("STDOUT:", result.stdout)
             print("STDERR:", result.stderr)
         results = pd.read_csv(self.results_path)
+        if self.data_opts.get('period_type_regressor'):
+            self.update_data_opts(['adjustment'], adjustment)
         return getattr(self, f"construct_{self.data_class}_post_hoc_results")(results)
 
     def construct_spike_post_hoc_results(self, results):

@@ -39,6 +39,11 @@ class SpikeData(Data):
     @property
     def unit_pairs(self):
         return [pair for pair in self.children.unit_pairs]
+    
+    @property
+    def hierarchy(self):
+        return {'experiment': 0, 'group': 1, 'animal': 2, 'unit': 3, 'unit_pair': 3, 'period': 4, 
+                'event': 5, 'time_bin': 6}
 
     @cache_method
     def get_demeaned_rates(self):
@@ -125,7 +130,7 @@ class Experiment(SpikeData, Subscriber):
         self.last_neuron_quality = 'uninitialized'
         self.last_period_type = 'uninitialized'
         self.selected_animals = None  # None means all animals will be included; it's the default state
-        self.children = self.groups
+        self._children = self.groups
         for group in self.groups:
             group.parent = self
         self.period_types = set(period_type for animal in self.all_animals for period_type in animal.period_info)
@@ -153,9 +158,6 @@ class Experiment(SpikeData, Subscriber):
             if event_vals != self.last_event_vals:
                 [unit.update_children() for unit in self.all_units]
                 self._last_event_vals = event_vals
-            if self.data_opts.get('selected_animals') != self.selected_animals:
-                [group.update_children() for group in self.groups]
-                self.selected_animals = self.data_opts.get('selected_animals')
 
         if name == 'neuron_type':
             if self.selected_neuron_type != self.last_neuron_type:
@@ -181,17 +183,8 @@ class Group(SpikeData):
             animal.parent = self
         self.parent = None
 
-
-    @property
-    def children(self):
-        return [child for child in self._children if child.children]
-
     def update_children(self):
-        if self.data_opts.get('selected_animals') is not None:
-            self._children = [child for child in self.animals
-                              if child.identifier in self.data_opts.get('selected_animals')]
-        else:
-            self._children = self.animals
+        self._children = [animal for animal in self.animals if animal.children]
 
 
 class Animal(SpikeData):
@@ -216,13 +209,7 @@ class Animal(SpikeData):
         self.raw_lfp = None
         self._children = None
         self.parent = None
-
-    @property
-    def children(self):
-        if not self.data_opts.get('neuron_quality'):
-            return self._children
-        else:
-            return [child for child in self._children if child.quality in self.data_opts['neuron_quality']]
+        self.must_have_children = True       
 
     @property
     def unit_pairs(self):  # TODO: is this being used for anything? Can it be deleted?
@@ -257,13 +244,12 @@ class Unit(SpikeData, PeriodConstructor):
         self.waveform = waveform
 
     @property
-    def children(self):
+    def _children(self):
         return self.filter_by_selected_periods(self.periods)
 
     @property
     def firing_rate(self):
         return self.animal.sampling_rate * len(self.spike_times) / float(self.spike_times[-1] - self.spike_times[0])
-
 
     @property
     def unit_pairs(self):
@@ -340,7 +326,7 @@ class Period(SpikeData):
         self.parent = unit
 
     @property
-    def children(self):
+    def _children(self):
         return self.events
 
     @property
@@ -387,11 +373,12 @@ class Event(SpikeData):
         self.identifier = index
         self.period = period
         self.period_type = self.period.period_type
-        self.children = None
+        self._children = None
         self.parent = period
         events_settings = self.data_opts['events'].get(self.period_type, {'pre_stim': 0, 'post_stim': 1})
         self.pre_stim, self.post_stim = (events_settings[opt] for opt in ['pre_stim', 'post_stim'])
         self.duration = self.pre_stim + self.post_stim
+        self.base_node = True
 
     @cache_method
     def get_psth(self):  # default is to normalize
@@ -442,7 +429,7 @@ class UnitPair(SpikeData):
         self.pair = pair
         self.identifier = str((unit.identifier, pair.identifier))
         self.pair_category = ','.join([unit.neuron_type, pair.neuron_type])
-        self.children = self.unit.children
+        self._children = self.unit._children
 
     def get_cross_correlations(self, **kwargs):
         for kwarg, default in zip(['axis', 'stop_at'], [0, self.data_opts.get('base', 'period')]):

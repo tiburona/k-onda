@@ -2,13 +2,16 @@ import os
 import json
 import numpy as np
 from neo.rawio import BlackrockRawIO
-from scipy.signal import resample
 from copy import deepcopy
 import csv
+from scipy.signal import firwin, lfilter
+
 
 from spike import Experiment, Group, Animal, Unit
 from lfp import LFPExperiment
 from behavior import Behavior
+
+
 
 
 class Initializer:
@@ -89,9 +92,7 @@ class Initializer:
         for region, region_data in lfp_from_stereotrodes_info['electrodes'].items():
             electrodes = region_data if isinstance(region_data, list) else region_data[animal.identifier]
             data = np.mean([reader.nsx_datas[nsx_num][0][:, electrode] for electrode in electrodes], axis=0)
-            num_samples = len(data)
-            new_num_samples = int(num_samples * self.exp_info['lfp_sampling_rate'] / self.exp_info['sampling_rate'])
-            downsampled_data = resample(data, new_num_samples)
+            downsampled_data = downsample(data, self.exp_info['sampling_rate'], self.exp_info['lfp_sampling_rate'])
             data_to_return[region] = downsampled_data
         return data_to_return
 
@@ -130,7 +131,19 @@ class Initializer:
         return True
 
 
+def downsample(data, orig_freq, dest_freq):
+    # Design a low-pass FIR filter
+    nyquist_rate = dest_freq/ 2
+    cutoff_frequency = nyquist_rate - 100  # For example, 900 Hz to have some margin
+    numtaps = 101  # Number of taps in the FIR filter, adjust based on your needs
+    fir_coeff = firwin(numtaps, cutoff_frequency, nyq=nyquist_rate)
 
+    # Apply the filter
+    filtered_data = lfilter(fir_coeff, 1.0, data)
+
+    ratio = int(orig_freq/dest_freq)
+
+    return filtered_data[::ratio]
 
 
 

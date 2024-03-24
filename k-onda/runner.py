@@ -30,10 +30,10 @@ class Runner:
 
     def __init__(self, config_file=None, lfp=False, behavior=False):
         self.config = config_file if config_file else os.getenv('INIT_CONFIG')
-        self.lfp = lfp
-        self.behavior = behavior
         self.initializer = Initializer(self.config)
         self.experiment = self.initializer.init_experiment()
+        self.lfp = lfp
+        self.behavior = behavior
         self.executing_class = None
         self.executing_instance = None
         self.executing_instances = {}
@@ -81,7 +81,8 @@ class Runner:
         self.prepare()
 
     def get_loop_lists(self):
-        for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 'neuron_qualities']:
+        for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
+                             'neuron_qualities', 'inclusion_rules']:
             opt_list = self.current_data_opts.get(opt_list_key)
             if opt_list is not None:
                 self.loop_lists[opt_list_key] = opt_list

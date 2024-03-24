@@ -51,7 +51,7 @@ def cache_method(method):
 
         cache_key = (id(self), context_key, method.__name__, tuple(to_hashable(arg) for arg in args),
                      tuple(sorted(kwargs.items())))
-
+        
         if cache_key not in cache:
             cache[cache_key] = method(self, *args, **kwargs)
             setattr(self, cache_name, cache)
@@ -91,21 +91,23 @@ def range_args(lst):
     return start, lst[-1] + step, step
 
 
-def find_ancestor_attribute(obj, attr_name):
+# def find_ancestor_attribute(obj, attr_name):
+#     current_obj = obj
+
+#     while hasattr(current_obj, 'parent'):
+#         if hasattr(current_obj, attr_name):
+#             return getattr(current_obj, attr_name)
+#         current_obj = current_obj.parent
+#     return None
+
+
+def find_ancestor_attribute(obj, ancestor_type, attribute):
     current_obj = obj
-
     while hasattr(current_obj, 'parent'):
-        if hasattr(current_obj, attr_name):
-            return getattr(current_obj, attr_name)
-        current_obj = current_obj.parent
-    return None
-
-
-def find_ancestor_id(obj, ancestor_type):
-    current_obj = obj
-    while hasattr(current_obj, 'parent'):
-        if current_obj.name == ancestor_type:
-            return current_obj.identifier
+        if current_obj.name == ancestor_type or (
+            ancestor_type == 'any' and hasattr(current_obj, attribute)
+            ):
+            return getattr(current_obj, attribute)
         current_obj = current_obj.parent
     return None
 
@@ -182,3 +184,43 @@ def to_serializable(val):
     else:
         # Return the value as is if it's already serializable
         return val
+    
+
+def safe_get(d, keys, default=None):
+    """
+    Safely get a value from a nested dictionary using a list of keys.
+    
+    :param d: The dictionary to search.
+    :param keys: A list of keys representing the path to the desired value.
+    :param default: The default value to return if any key is missing.
+    :return: The value found at the specified path or the default value.
+    """
+    assert isinstance(keys, list), "keys must be provided as a list"
+    
+    for key in keys:
+        try:
+            if isinstance(d, dict):
+                d = d.get(key, default)
+            else:
+                return default
+        except Exception:
+            return default
+    return d
+
+def is_iterable(obj, exclude_strings=True):
+    """
+    Check if the object is an iterable but not a string (unless exclude_strings is False).
+    
+    :param obj: The object to check.
+    :param exclude_strings: If True, strings are not considered iterables for this purpose.
+    :return: True if obj is an iterable, False otherwise.
+    """
+    if exclude_strings and isinstance(obj, str):
+        return False
+    try:
+        iter(obj)
+        return True
+    except TypeError:
+        return False
+
+
