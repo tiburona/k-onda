@@ -1,10 +1,11 @@
 import os
 import json
 import pickle
+import numpy as np
 
 from scipy.signal import cwt, morlet
 from collections import defaultdict
-from copy import copy
+from copy import deepcopy
 
 
 from data import Data
@@ -28,8 +29,9 @@ class LFPData(Data):
 
     @property
     def freq_range(self):
-        if find_ancestor_attribute(self, 'any', 'frozen_freq_range') is not None:
-            return find_ancestor_attribute(self, 'frozen_freq_range')
+        frozen_freq_range = find_ancestor_attribute(self, 'any', 'frozen_freq_range')
+        if frozen_freq_range is not None:
+            return frozen_freq_range
         exp = self.find_experiment()
         if isinstance(self.current_frequency_band, type('str')):
             return exp.frequency_bands[self.current_frequency_band]
@@ -111,6 +113,7 @@ class LFPExperiment(LFPData, Subscriber):
         self.subscribe(experiment_context)
         self._lfp_root = info['lfp_root']
         self._sampling_rate = info['lfp_sampling_rate']
+        self.set_global_sampling_rate(self._sampling_rate)
         self.frequency_bands = info['frequency_bands']
         self.lost_signal = info['lost_signal']  # TODO: this is going to need to get more granular at some point but I haven't yet seen an analysis with multiple mtcsg args
         self.all_animals = [LFPAnimal(animal, raw_lfp[animal.identifier], self._sampling_rate)
@@ -261,6 +264,8 @@ class LFPAnimal(LFPData, PeriodConstructor):
 
     @property
     def _children(self):
+        if self.identifier == 'IG154':
+            a = 'foo'
         children = self.mrl_calculators if self.data_type == 'mrl' else self.periods
         if self.data_opts.get('spontaneous'):
             children = children['spontaneous']
@@ -293,6 +298,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         return self._processed_lfp
 
     def update_children(self):
+        
         self.prepare_periods()
         if 'mrl' in self.data_type:
             self.prepare_mrl_calculators()
@@ -320,8 +326,9 @@ class LFPAnimal(LFPData, PeriodConstructor):
             mrl_calculators = {'spontaneous': [SpontaneousMRLCalculator(unit, self)
                                                for unit in self.spike_target.units['good']]}
         else:
-            mrl_calculators = {period_type: [PeriodMRLCalculator(unit, period=period) for period in periods
-                                            for unit in self.spike_target.units['good']]
+            mrl_calculators = {period_type: [PeriodMRLCalculator(unit, period=period) 
+                                             for unit in self.spike_target.units['good'] 
+                                             for period in periods]
                                for period_type, periods in self.periods.items()}
         self.mrl_calculators = mrl_calculators
 
@@ -358,7 +365,11 @@ class LFPDataSelector:
         indices = np.where(self.spectrogram[1] - tolerance <= self.freq_range[0])
         ind1 = indices[0][-1] if indices[0].size > 0 else None  # last index that's <= start of the freq range
         ind2 = np.argmax(self.spectrogram[1] > self.freq_range[1] + tolerance)  # first index > end of freq range
-        return self.spectrogram[0][ind1:ind2, :]
+        val_to_return = self.spectrogram[0][ind1:ind2, :]
+        np.array(val_to_return)
+        return val_to_return
+        
+
 
     @cache_method
     def trimmed_spectrogram(self):
@@ -375,12 +386,14 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
 
     name = 'period'
 
-    def __init__(self, lfp_animal, i, period_type, period_info, onset, events=None, target_period=None, is_relative=False):
+    def __init__(self, lfp_animal, i, period_type, period_info, onset, events=None, 
+                 target_period=None, is_relative=False):
         LFPDataSelector.__init__(self)
         self.animal = lfp_animal
         self.parent = lfp_animal
         self.identifier = i
         self.period_type = period_type
+        self.period_info = period_info
         self.onset = onset - 1
         self.target_period = target_period
         self._is_relative = is_relative
@@ -404,6 +417,7 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
         self._spectrogram = None
         self.last_brain_region = None
         self.experiment = self.animal.group.experiment
+        self._event_validity = None
 
     @property
     def _children(self):
@@ -422,6 +436,12 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
             self._spectrogram = self.calc_cross_spectrogram()
             self.last_brain_region = self.current_brain_region
         return self._spectrogram
+    
+    @property
+    def event_validity(self):
+        if self._event_validity is None:
+            self._event_validity = {i: event.validator for i, event in enumerate(self.events)}
+        return self._event_validity
 
     @property
     def extended_data(self):
@@ -454,7 +474,6 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
             event_times = event_times[event_times < spect_end]
             # a binary mask that is True when a time bin in the spectrogram belongs to this event
             mask = (np.abs(time_bins[:, None] - event_times) <= epsilon).any(axis=1)
-
             events.append(LFPEvent(i, event_times, normed_data, mask, self))
         return events
 
@@ -496,6 +515,8 @@ class LFPEvent(LFPData, LFPDataSelector):
         self.identifier = id
         self.event_times = event_times
         self.mask = mask
+        if sum(mask) == 300:
+            raise ValueError
         self.normed_data = normed_data
         self.period = period
         self.parent = period
@@ -506,6 +527,8 @@ class LFPEvent(LFPData, LFPDataSelector):
 
     @cache_method
     def _get_power(self):
+        if sum(self.mask) == 300:
+            raise ValueError
         return np.array(self.sliced_spectrogram)[:, self.mask]
 
     @cache_method
@@ -525,21 +548,24 @@ class LFPEvent(LFPData, LFPDataSelector):
             animal.make_mirror()
 
         mirror_event = animal.mirror.periods[self.period_type][self.period.identifier].events[self.identifier]
+
         return mirror_event.validate()
 
+    @cache_method
     def validate(self):
         evoked = self.data_opts.get('evoked')
         frequency_bins = self.get_frequency_bins(self.get_original_data())
-        for frequency in range(*self.data_opts['validate_events'].get('frequency', (0, 8))):
-            self.update_data_opts(['evoked'], False)
+        validate_config = deepcopy(self.data_opts['validate_events'])
+        for frequency in range(*validate_config.get('frequency', (0, 8))):
+            self.update_data_opts([(['evoked'], False), (['validate_events'], None)])
             standard = self.period.animal.get_median(
                 stop_at='event', extend_by=('frequency', 'time'),
                 select_by=(('period', 'period_type', self.period_type), ('frequency_bin', 'identifier', frequency)))
-            self.update_data_opts(['evoked'], evoked)
+            self.update_data_opts([(['evoked'], evoked), (['validate_events'], validate_config)])
             for time_bin in frequency_bins[frequency].time_bins:
                 if time_bin.data > self.data_opts['validate_events'].get('threshold', 20) * standard:
                     print(f"{self.current_brain_region} {self.period.animal.identifier} {self.period_type} "
-                          f"{self.period.identifier} {self.identifier} invalid!")
+                          f"{self.period.identifier} {self.identifier} invalid!")                
                     return False
         return True
 
@@ -707,7 +733,9 @@ class PeriodMRLCalculator(MRLCalculator):
         self.spike_period = self.unit.periods[self.period_type][self.period.identifier]
         self.spikes = [int((spike + i) * self.sampling_rate) for i, event in enumerate(self.spike_period.events)
                        for spike in event.spikes]
+        #self.
         self.num_events = len(self.spikes)
+        self.event_validity = {}
 
     @property
     def ancestors(self):
@@ -725,10 +753,31 @@ class PeriodMRLCalculator(MRLCalculator):
         else:
             return self.num_events > 4
 
+    def translate_spikes_to_lfp_events(self, spikes):
+        events = np.array(self.period.event_starts) - self.period.event_starts[0]
+        indices = {}
+        for spike in spikes:
+            # Find the index of the first event greater than the spike
+            index = np.argmax(events > spike)
+            if events[index] > spike:
+                indices[spike] = index - 1
+            else:
+                indices[spike] = len(events) - 1
+        return indices
+    
     def get_weights(self):
-        return np.array(
-            [1 if weight in self.spikes else float('nan') for weight in range(self.duration * self.sampling_rate)])
-
+        weight_range = range(self.duration * self.sampling_rate)
+        if not self.data_opts.get('validate_events'):
+            weights = [1 if weight in self.spikes else float('nan') for weight in weight_range]
+        else:
+            indices = self.translate_spikes_to_lfp_events(self.spikes)
+            self.update_data_opts([(['data_type'], 'power')])
+            weight_validity = {spike: self.period.event_validity[event] 
+                               for spike, event in indices.items()}
+            self.update_data_opts([(['data_type'], 'mrl')])
+            weights = np.array([1 if weight_validity.get(w) else float('nan') for w in weight_range])
+        return np.array(weights)
+            
 
 class SpontaneousMRLCalculator(MRLCalculator):
     def __init__(self, unit, animal):

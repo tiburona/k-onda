@@ -605,7 +605,7 @@ class MRLPlotter(Plotter):
             for row in range(2)
         ]
 
-        for i, neuron_type in enumerate(self.neuron_types):
+        for i, neuron_type in enumerate(self.experiment.neuron_types):
             self.selected_neuron_type = neuron_type
             for j, group in enumerate(self.lfp.groups): # TODO: think about how this should work now with multiple periods
                 if self.data_opts.get('adjustment') == 'relative':
@@ -647,7 +647,6 @@ class MRLPlotter(Plotter):
 
     def mrl_bar_plot(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts, neuron_type='all')
-        print("here")
 
         data = []
         if data_opts.get('spontaneous'):
@@ -657,8 +656,8 @@ class MRLPlotter(Plotter):
                     data.append([neuron_type, group.identifier, group.data, group.sem, group.scatter,
                                  group.grandchildren_scatter])
             df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Average MRL', 'sem', 'scatter', 'unit_scatter'])
-        else:
-            for neuron_type in self.neuron_types:
+        else: 
+            for neuron_type in self.experiment.neuron_types:
                 self.selected_neuron_type = neuron_type
                 for group in self.lfp.groups:
                     for period_type in self.experiment.period_types:
@@ -683,7 +682,7 @@ class MRLPlotter(Plotter):
         g.fig.subplots_adjust(top=0.85, hspace=0.4, right=0.85)
         g.despine()
 
-        for ax, neuron_type in zip(g.axes.flat, self.neuron_types):
+        for ax, neuron_type in zip(g.axes.flat, self.experiment.neuron_types):
             bars = ax.patches
             num_groups = len(group_order)
             num_periods = len(period_order) if not data_opts.get('spontaneous') else 1
@@ -745,9 +744,9 @@ class LFPPlotter(Plotter):
             for period_type in periods:
                 self.selected_period_type = period_type
                 for period in periods[period_type]:
-                    self.update_data_opts(['periods', period_type], [period])
+                    self.update_data_opts([(['periods', period_type], [period])])
                     data.append([group.identifier, period + 1, period_type, group.mean_data, group.sem, group.scatter])
-        self.update_data_opts(['periods'], periods)  # put this key, val pair back the way it was for further graphs
+        self.update_data_opts([(['periods'], periods)])  # put this key, val pair back the way it was for further graphs
 
         df = pd.DataFrame(data, columns=['Group', 'Period', 'Period_Type', 'Power', 'SEM', 'Scatter'])
 

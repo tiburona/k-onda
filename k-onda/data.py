@@ -3,11 +3,22 @@ from utils import get_ancestors, get_descendants
 import numpy as np
 from math_functions import sem
 from utils import cache_method, find_ancestor_attribute
+from collections import defaultdict
 
 
 class Base:
+    
+    _global_neuron_types = None  
 
     context = experiment_context
+
+    @classmethod
+    def set_global_neuron_types(cls, types):
+        cls._global_neuron_types = types
+
+    @property
+    def neuron_types(self):
+        return self.__class__._global_neuron_types
 
     @property
     def data_opts(self):
@@ -23,22 +34,11 @@ class Base:
 
     @data_type.setter
     def data_type(self, data_type):
-        self.update_data_opts(['data_type'], data_type)
+        self.update_data_opts([(['data_type'], data_type)])
 
     @property
     def data_class(self):
         return self.data_opts.get('data_class')
-
-    @property
-    def neuron_types(self):
-        if hasattr(self, '_neuron_types'):
-            return self._neuron_types
-        elif hasattr(self, 'experiment'):
-            return self.experiment.neuron_types
-        elif hasattr(self, 'parent'):
-            return self.parent.neuron_types
-        else:
-            return None
 
     @property
     def selected_neuron_type(self):
@@ -63,7 +63,7 @@ class Base:
     @current_frequency_band.setter
     def current_frequency_band(self, frequency_band):
 
-        self.update_data_opts(['frequency_band'], frequency_band)
+        self.update_data_opts([(['frequency_band'], frequency_band)])
 
     @property
     def current_brain_region(self):
@@ -71,21 +71,34 @@ class Base:
 
     @current_brain_region.setter
     def current_brain_region(self, brain_region):
-        self.update_data_opts(['brain_region'], brain_region)
+        self.update_data_opts([(['brain_region'], brain_region)])
 
-    def update_data_opts(self, path, value):
-        current_level = self.data_opts
-        for key in path[:-1]:
-            if key not in current_level or not isinstance(current_level[key], dict):
-                current_level[key] = {}
-            current_level = current_level[key]
-        current_level[path[-1]] = value
+    def update_data_opts(self, reassignments):
+        for path, value in reassignments:
+            current_level = self.data_opts
+            for key in path[:-1]:
+                if key not in current_level or not isinstance(current_level[key], dict):
+                    current_level[key] = {}
+                current_level = current_level[key]
+            current_level[path[-1]] = value
 
         self.data_opts = self.data_opts  # Reassign to trigger the setter
 
-   
 
 class Data(Base):
+
+    _global_sampling_rate = None  # Class variable to hold the sampling rate
+
+    @classmethod
+    def set_global_sampling_rate(cls, rate):
+        cls._global_sampling_rate = rate
+
+    @property
+    def sampling_rate(self):
+        if hasattr(self, '_sampling_rate'):
+            return self._sampling_rate
+        else:
+            return self.__class__._global_sampling_rate
 
     def __iter__(self):
         for child in self.children:
@@ -104,11 +117,13 @@ class Data(Base):
         float or np.array: The mean of the data values from the object's descendants.
         """
         return getattr(self, f"get_{self.data_type}")()
+
     
     @property
     def is_valid(self):
-        inclusion_criteria = [lambda x: x.validator if hasattr(x, 'validator') else True]
-        inclusion_criteria += self.get_inclusion_criteria()
+        inclusion_criteria = self.get_inclusion_criteria()[self.name]
+        if hasattr(self, 'validator'):
+            inclusion_criteria += [lambda x: x.validator]
         return all([criterion(self) for criterion in inclusion_criteria])
 
     @property
@@ -153,7 +168,8 @@ class Data(Base):
             return None
         else:
             if self.name == 'period':
-                return [prd for prd in self.parent.periods[self.reference_period_type] if self is prd.target_period][0]
+                return [prd for prd in self.parent.periods[self.reference_period_type] 
+                        if self is prd.target_period][0]
             if self.name == 'mrl_calculator':
                 return [calc for calc in self.parent.mrl_calculators[self.reference_period_type]
                         if self is calc.period.target and self.unit is calc.unit][0]
@@ -176,7 +192,7 @@ class Data(Base):
     @property
     def num_bins_per_event(self):
         bin_size = self.data_opts.get('bin_size')
-        pre_stim, post_stim= (self.data_opts['events'][self.period_type].get(opt) for opt in ['pre_stim', 'post_stim'])
+        pre_stim, post_stim = (self.data_opts['events'][self.period_type].get(opt) for opt in ['pre_stim', 'post_stim'])
         return int((pre_stim + post_stim) / bin_size)
 
     @property
@@ -189,7 +205,7 @@ class Data(Base):
     
     @cache_method
     def get_inclusion_criteria(self):
-        criteria = []
+        criteria = defaultdict(list)
 
         operations = {
             '==': lambda a, b: a == b,
@@ -234,12 +250,15 @@ class Data(Base):
                     mop = operations[mrel] if modifier else None
                     criteria_func = make_criteria_func(name, attribute, value, operation, modifier, 
                                                        mattr, mop, mval)
-                    criteria.append(criteria_func)
+                    criteria[name].append(criteria_func)
 
         return criteria
     
     def filter_children(self, children):
-        ic = self.get_inclusion_criteria() + [lambda x: x.children or getattr(x, 'base_node', None)]
+        if not len(children):
+            return children
+        name = children[0].name
+        ic = self.get_inclusion_criteria()[name] + [lambda x: x.children or getattr(x, 'base_node', None)]
         return [child for child in children if all([criterion(child) for criterion in ic])]
     
     

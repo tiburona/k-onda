@@ -120,6 +120,7 @@ class Experiment(SpikeData, Subscriber):
         self.identifier = info['identifier'] + formatted_now()
         self.conditions = info['conditions']
         self._sampling_rate = info['sampling_rate']
+        self.set_global_sampling_rate(self._sampling_rate)
         self.stimulus_duration = info.get('stimulus_duration')
         self.subscribe(self.context)
         self.groups = groups
@@ -129,12 +130,12 @@ class Experiment(SpikeData, Subscriber):
         self.last_neuron_type = 'uninitialized'
         self.last_neuron_quality = 'uninitialized'
         self.last_period_type = 'uninitialized'
-        self.selected_animals = None  # None means all animals will be included; it's the default state
         self._children = self.groups
         for group in self.groups:
             group.parent = self
         self.period_types = set(period_type for animal in self.all_animals for period_type in animal.period_info)
         self._neuron_types = set([unit.neuron_type for unit in self.all_units])
+        self.set_global_neuron_types(self._neuron_types)
 
     @property
     def all_units(self):

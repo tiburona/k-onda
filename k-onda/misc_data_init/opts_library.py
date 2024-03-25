@@ -180,7 +180,7 @@ TEST_SPECTROGRAM_OPTS = {
     }
 
 
-NEURON_QUALITY = ['1', '2a', '2b', '2c', '3']
+NEURON_QUALITY = ['1', '2a', '2b', '2c']
 
 PROPORTION_OPTS = {
     'data_class': 'spike', 'data_type': 'proportion', 'bin_size': 0.01, 'adjustment': 'normalized',
@@ -202,10 +202,10 @@ MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
             'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block', 'adjustment': 'none',
             'periods': {'tone': range(5), 'pretone': range(5)},
              'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
-            'events': {'pretone': {'pre_stim': 0, 'post_stim': 3}, 'tone': {'pre_stim': 0, 'post_stim': .3}},
+            'events': {'pretone': {'pre_stim': 0, 'post_stim': .3}, 'tone': {'pre_stim': 0, 'post_stim': .3}},
             'validate_events': {
                 'frequency': (0, 8), 'threshold': 20, 'periods': {'pretone': range(5), 'tone': range(5)}
-        },
+        }, 'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG
             }
 
 GROUP_STAT_PROPORTION_OPTS = {

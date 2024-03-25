@@ -406,7 +406,7 @@ class Stats(Base):
             os.mkdir(post_hoc_path)
         adjustment = self.data_opts.get('adjustment')
         if self.data_opts.get('period_type_regressor'):
-            self.update_data_opts(['adjustment'], 'none')
+            self.update_data_opts([(['adjustment'], 'none')])
         self.make_spreadsheet(path=post_hoc_path)
         self.results_path = os.path.join(post_hoc_path, 'r_post_hoc_results.csv')
         if not os.path.exists(self.results_path) or force_recalc:
@@ -419,7 +419,7 @@ class Stats(Base):
             print("STDERR:", result.stderr)
         results = pd.read_csv(self.results_path)
         if self.data_opts.get('period_type_regressor'):
-            self.update_data_opts(['adjustment'], adjustment)
+            self.update_data_opts([(['adjustment'], adjustment)])
         return getattr(self, f"construct_{self.data_class}_post_hoc_results")(results)
 
     def construct_spike_post_hoc_results(self, results):
