@@ -757,7 +757,7 @@ class PeriodMRLCalculator(MRLCalculator):
         events = np.array(self.period.event_starts) - self.period.event_starts[0]
         indices = {}
         for spike in spikes:
-            # Find the index of the first event greater than the spike
+            # Find the index of the event the spike belongs to
             index = np.argmax(events > spike)
             if events[index] > spike:
                 indices[spike] = index - 1

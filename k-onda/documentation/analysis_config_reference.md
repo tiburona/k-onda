@@ -213,13 +213,10 @@ Opts are as for `plot_psth` with some additions:
 ## Power ##
 
 Configuration options that are the same as in spike analyses are "data_class", "data_type", "periods", "events", 
-"time_type", "evoked", and "level". As of this writing "level" is only implemented for plot_spectrogram, the frequency x time power plot (
-the available levels are Group, Animal, and Period). 
+"time_type", "evoked", and "level". As of this writing "level" is only implemented for plot_spectrogram, the frequency x time power plot (the available levels are Group, Animal, and Period). 
 
 A note on implementation here. Power calculations rely on the Matlab program `mtcsg`, and all LFP calculations 
-potentially rely on the Matlab program  `removeLineNoise_SpectrumEstimation`. Matlab Engine for Python is something that 
-exists, but I wasn't able to get it to work and for current purposes have an acceptable alternative using the subprocess 
-module to call Matlab from the command line. It may be worth solving this problem at some point.
+potentially rely on the Matlab program  `removeLineNoise_SpectrumEstimation`. Matlab Engine for Python is something that exists, but I wasn't able to get it to work and for current purposes have an acceptable alternative using the subprocess module to call Matlab from the command line. It may be worth solving this problem at some point.
 
 The following are keys that are not used in spike analyses.
 
@@ -233,10 +230,7 @@ files for the program execution
 - "recursive_paths_to_add" (optional): an iterable of directory names to walk recursively and add, along with their 
 descendants, to the Matlab path (for example of you have a high level software directory you want to add).
 
-"store" (optional): a string that tells the program how you will write out your filter and mtscg output.  If "pkl", the 
-program writes and reads pickle files (the default), if "json", json.  Most of the time you will want pickle files, but 
-there are occasions when you might want these files to be more easily inspectable outside of Python, in which case you 
-can choose json.
+"store" (optional): a string that tells the program how you will write out your filter and mtscg output.  If "pkl", the program writes and reads pickle files (the default), if "json", json.  Most of the time you will want pickle files, but there are occasions when you might want these files to be more easily inspectable outside of Python, in which case you can choose json.
 
 "force_recalc" (optional): a boolean that indicates whether to force recalculation of values in the store (as of this
 writing you can't choose between filter values and mtcsg, it's all or none).
@@ -255,49 +249,34 @@ multiple frequency bands, you can define a rule such that "power_arg_set" change
 "validate_events" (optional): a dictionary with values that determine event validation values. Event validation finds 
 the median power value for the animal over all time bins and a defined range of frequencies, then per event in the 
 analysis, and per time bin and frequency bin in the event, checks whether the value is more than a certain multiple 
-greater than the animal median for that frequency. The default is not to validate.  If you define the event_validation 
-dictionary, the keys in the dictionary are "frequency", an iterable that defines the endpoints (in integers) of the 
-frequencies over which to take the animal median (default (0, 8)), and the threshold multiplier past which an event gets
-marked as noise (default 20).
+greater than the animal median for that frequency. The default is not to validate.  If you define the event_validation dictionary, the keys in the dictionary are "frequency", an iterable that defines the endpoints (in integers) of the frequencies over which to take the animal median (default (0, 8)), and the threshold multiplier past which an event gets marked as noise (default 20).
 
-"power_deviation" (optional): a boolean that indicates whether to include in the CSV an idiosyncratic calculation that 
-records how far above or below the local moving average a time bin is. Check the `lfp` module for `get_power_deviation` 
-to see the implementation details. 
+"power_deviation" (optional): a boolean that indicates whether to include in the CSV an idiosyncratic calculation that records how far above or below the local moving average a time bin is. Check the `lfp` module for `get_power_deviation` to see the implementation details. 
 
 ## MRL ##
 
 Configuration options that are the same as in spike analyses are "data_class", "data_type", "periods", "evoked", and 
 "spontaneous".
 
-"phase" (optional): a string that determines whether  to get the phases for the MRL calculation using the "wavelet" or 
-the "hilbert" method.  Default is "hilbert".
+"phase" (optional): a string that determines whether  to get the phases for the MRL calculation using the "wavelet" or the "hilbert" method.  Default is "hilbert".
 
-"mrl_func" (optional): a string that determines whether to perform the classic mean resultant length calculation, where 
-values vary between 0 and 1, and the circ_2_unbiased calculation.  `circ_2_unbiased` is the name of a Matlab function 
-but here it's reimplemented in Python.
+"mrl_func" (optional): a string that determines whether to perform the classic mean resultant length calculation, where values vary between 0 and 1, and the circ_2_unbiased calculation.  `circ_2_unbiased` is the name of a Matlab function but here it's reimplemented in Python.
 
 # Configuring more than one type of calculation
 
-If you would like to iterate through different values for a key (for instance iterating through brain regions, or levels
-("group", "animal", etc.)), you include the plural version of the key -- "brain_regions" or "levels" with a list you 
-want to iterate through as a value, e.g. "brain_regions": ["il", "bla"].  You can include as many such plural keys as 
-you wish and every combination of the list members will be iterated through.  There are currently four types of plural 
-keys enabled: "brain_regions", "levels", "frequency_bands", and "unit_pairs".
+If you would like to iterate through different values for a key (for instance iterating through brain regions, or levels("group", "animal", etc.)), you include the plural version of the key -- "brain_regions" or "levels" with a list you want to iterate through as a value, e.g. "brain_regions": ["il", "bla"].  You can include as many such plural keys as you wish and every combination of the list members will be iterated through.  There are currently four types of plural keys enabled: "brain_regions", "levels", "frequency_bands", and "unit_pairs".
 
 If you need to change certain values dependent on others (for example, if you are making a csv file with results from 
 multiple kinds of analyses that support different levels of time granularity), you must define a rule.  Rules are 
 entered into the configuration with the key "rules".
 
-The value of rules itself is a dictionary.  Its keys define the configuration variables you are going to check, and its 
-values are dictionaries whose keys are the values of those variables that trigger a change.  In other words, this:
+The value of rules itself is a dictionary.  Its keys define the configuration variables you are going to check, and its values are dictionaries whose keys are the values of those variables that trigger a change.  In other words, this:
 
 rules: {some_variable: {some_other_variable: []}}
 
 means if some_variable equals some_other_variable make a change that will be defined in the square bracket.
 
-What goes in the square bracket is an iterable that contains a group of changes to make. Each individual change itself 
-is an iterable of length to, that contains the config key you will change when `some_variable == some_other_variable` 
-and the value you will change it to.
+What goes in the square bracket is an iterable that contains a group of changes to make. Each individual change itself is an iterable of length to, that contains the config key you will change when `some_variable == some_other_variable` and the value you will change it to.
 
 so 
 
@@ -342,12 +321,10 @@ and "within_group".  To set every subplot in the group on an equal scale, choose
 same group of animals equal, choose "within_group". If it is not set, or set to anything else, the color scales will not
 be set equal.
 
-"group_colors": a dictionary with group names as keys and strings with color names or hex codes as values that determine 
-the colors of the group bars.  Operates for plots of PSTH, proportion, spectrum, group stats, and the various 
+"group_colors": a dictionary with group names as keys and strings with color names or hex codes as values that determine the colors of the group bars.  Operates for plots of PSTH, proportion, spectrum, group stats, and the various 
 correlations and correlograms, as well as the MRL plots.
 
-"units_in_fig":  (optional if not graphing units): a number, relevant to graphs of units, that specifies how many units 
-to put in a single figure before writing out a new one
+"units_in_fig":  (optional if not graphing units): a number, relevant to graphs of units, that specifies how many units to put in a single figure before writing out a new one
 
 ### Some graph opts keys specifically used by neuron type categorization plots
 

@@ -140,14 +140,14 @@ SPECTROGRAM_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands'
                     'matlab_configuration': MATLAB_CONFIG
                     }
 
-MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'mrl',
-            'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block',
-            'blocks': {'tone': range(5), 'pretone': range(5)},
-            'events': {'pretone': {'pre_stim': 0, 'post_stim': 1}, 'tone': {'pre_stim': 0, 'post_stim': .3}},
-            'rules': {'brain_region': {'pl': [('selected_animals', STANDARD_ANIMALS)],
-                                       'bla': [('selected_animals', STANDARD_ANIMALS)],
-                                       'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
-            }
+# MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'mrl',
+#             'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block',
+#             'blocks': {'tone': range(5), 'pretone': range(5)},
+#             'events': {'pretone': {'pre_stim': 0, 'post_stim': 1}, 'tone': {'pre_stim': 0, 'post_stim': .3}},
+#             'rules': {'brain_region': {'pl': [('selected_animals', STANDARD_ANIMALS)],
+#                                        'bla': [('selected_animals', STANDARD_ANIMALS)],
+#                                        'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
+#             }
 
 POWER_SPREADSHEET_OPTS = {
     'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
@@ -180,7 +180,7 @@ TEST_SPECTROGRAM_OPTS = {
     }
 
 
-NEURON_QUALITY = ['1', '2a', '2b', '2c']
+NEURON_QUALITY = ['1']
 
 PROPORTION_OPTS = {
     'data_class': 'spike', 'data_type': 'proportion', 'bin_size': 0.01, 'adjustment': 'normalized',
@@ -199,14 +199,14 @@ PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adju
              'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}}}
 
 MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'mrl',
-            'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block', 'adjustment': 'none',
+            'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block',
             'periods': {'tone': range(5), 'pretone': range(5)},
              'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
-            'events': {'pretone': {'pre_stim': 0, 'post_stim': .3}, 'tone': {'pre_stim': 0, 'post_stim': .3}},
-            'validate_events': {
-                'frequency': (0, 8), 'threshold': 20, 'periods': {'pretone': range(5), 'tone': range(5)}
-        }, 'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG
-            }
+            'events': {'pretone': {'pre_stim': .3, 'post_stim': .05}, 'tone': {'pre_stim': .3, 'post_stim': .05}}
+        #     'validate_events': {
+        #          'frequency': (0, 8), 'threshold': 20, 'periods': {'pretone': range(5), 'tone': range(5)}
+        # }, 'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG
+           } # 
 
 GROUP_STAT_PROPORTION_OPTS = {
     'data_class': 'spike', 'data_type': 'proportion', 'base': 'event', 'adjustment': 'normalized', 
