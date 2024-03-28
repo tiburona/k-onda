@@ -630,6 +630,7 @@ class MRLCalculator(LFPData):
         self.unit = unit
         self._children = None
         self.base_node = True
+        self.neuron_quality = unit.quality
 
     @property
     def mean_over_frequency(self):
@@ -754,7 +755,9 @@ class PeriodMRLCalculator(MRLCalculator):
             return self.num_events > 4
 
     def translate_spikes_to_lfp_events(self, spikes):
-        events = np.array(self.period.event_starts) - self.period.event_starts[0]
+        pre_stim = self.data_opts['events'][self.period.period_type]['pre_stim'] * self.sampling_rate
+        events = np.array(self.period.event_starts) - self.period.event_starts[0] - pre_stim
+        # todo I need to fix this so a spike is assigned to an event if it's within the period
         indices = {}
         for spike in spikes:
             # Find the index of the event the spike belongs to

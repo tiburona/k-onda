@@ -156,12 +156,12 @@ class Stats(Base):
         if 'lfp' in self.data_class:
             if self.data_type in ['mrl']:
                 level = 'mrl_calculator'
-                other_attributes += ['frequency', 'fb', 'neuron_type']  # TODO: figure out what fb should be changed to post refactor
+                other_attributes += ['frequency', 'fb', 'neuron_type', 'neuron_quality']  # TODO: figure out what fb should be changed to post refactor
             else:
                 if self.data_opts['time_type'] == 'continuous' and self.data_opts.get('power_deviation'):
                     other_attributes.append('power_deviation')
         else:
-            other_attributes += ['category', 'neuron_type']
+            other_attributes += ['category', 'neuron_type', 'neuron_quality']
             
         return self.get_data(level, other_attributes)
 

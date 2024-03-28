@@ -16,9 +16,9 @@ def main():
 
 def run():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json', lfp=True)
-    # runner.run('make_spreadsheet', TEST_RUNNER_OPTS, path='/Users/katie/likhtik/IG_INED_Safety_Recall',
-    #             filename='power_pre_pip_and_behavior')
-    runner.run('mrl_bar_plot', TEST_RUNNER_OPTS)
+    runner.run('make_spreadsheet', TEST_RUNNER_OPTS, path='/Users/katie/likhtik/IG_INED_Safety_Recall',
+                filename='thousand_ms_mrl_thetas_1_and_2')
+    # runner.run('mrl_bar_plot', TEST_RUNNER_OPTS)
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 
