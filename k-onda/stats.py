@@ -161,7 +161,7 @@ class Stats(Base):
                 if self.data_opts['time_type'] == 'continuous' and self.data_opts.get('power_deviation'):
                     other_attributes.append('power_deviation')
         else:
-            other_attributes += ['category', 'neuron_type', 'neuron_quality']
+            other_attributes += ['category', 'neuron_type', 'quality']
             
         return self.get_data(level, other_attributes)
 

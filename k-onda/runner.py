@@ -20,6 +20,7 @@ other_procedures = {
     'neuron_type_scatterplot': {'class': NeuronTypePlotter, 'method': 'scatterplot'},
     'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'},
     'plot_power': {'class': LFPPlotter, 'method': 'plot_power'},
+    'plot_coherence': {'class': LFPPlotter, 'method': 'plot_coherence'},
     'plot_spectrogram': {'class': LFPPlotter, 'method': 'plot_spectrogram'}
 }
 
@@ -82,7 +83,7 @@ class Runner:
 
     def get_loop_lists(self):
         for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
-                             'neuron_qualities', 'inclusion_rules']:
+                             'neuron_qualities', 'inclusion_rules', 'coherence_region_sets']:
             opt_list = self.current_data_opts.get(opt_list_key)
             if opt_list is not None:
                 self.loop_lists[opt_list_key] = opt_list

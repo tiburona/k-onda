@@ -230,6 +230,35 @@ MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
                     }
            } # 
 
+
+
+BLA_PL_INCLUSION = {'animal': [['identifier', 'in', list(set(BLA_THETA_POWER_ANIMALS) 
+                                                         & set(PFC_THETA_POWER_ANIMALS))]]}
+PL_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(HPC_THETA_POWER_ANIMALS) 
+                                                         & set(PFC_THETA_POWER_ANIMALS))]]}
+BLA_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(BLA_THETA_POWER_ANIMALS) 
+                                                         & set(HPC_THETA_POWER_ANIMALS))]]}
+
+
+
+COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
+            'data_type': 'coherence',  'frequency_type': 'block',
+            'coherence_region_sets': ['bla_pl', 'bla_hpc', 'hpc_pl'], 
+            'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'period',
+            'events': {
+                'pretone': {'pre_stim': 0, 'post_stim': 1}, 
+                'tone': {'pre_stim': 0, 'post_stim': 1}},
+            'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
+            'rules': {
+                'coherence_region_set': 
+                {
+                    'bla_pl': [('inclusion_rule', BLA_PL_INCLUSION)],
+                    'bla_hpc': [('inclusion_rule', BLA_HPC_INCLUSION)],
+                    'hpc_pl': [('inclusion_rule', PL_HPC_INCLUSION)]
+                }                   
+                    }
+           } # 
+
 GROUP_STAT_PROPORTION_OPTS = {
     'data_class': 'spike', 'data_type': 'proportion', 'base': 'event', 'adjustment': 'normalized', 
     'time_type': 'continuous', 'bin_size': 0.01, 'row_type': 'period', 'post_hoc_bin_size': 1, 'periods': {'tone': range(5)},
@@ -256,9 +285,9 @@ GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment'
 TEST_RUNNER_OPTS = [{'data_class': 'behavior', 'data_type': 'percent_freezing',
                      'periods': {'pretone': range(5), 'tone': range(5)}, 'row_type': 'period'}, TEST_SPECTROGRAM_OPTS]
 
-TEST_RUNNER_OPTS = {'data_opts': MRL_OPTS, 'graph_opts': GRAPH_OPTS}
+TEST_RUNNER_OPTS = {'data_opts': COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
 
-TEST_RUNNER_OPTS = [MRL_OPTS]
+#TEST_RUNNER_OPTS = [MRL_OPTS]
 
 
 

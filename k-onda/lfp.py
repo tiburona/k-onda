@@ -3,7 +3,7 @@ import json
 import pickle
 import numpy as np
 
-from scipy.signal import cwt, morlet
+from scipy.signal import cwt, morlet, coherence
 from collections import defaultdict
 from copy import deepcopy
 
@@ -37,6 +37,10 @@ class LFPData(Data):
             return exp.frequency_bands[self.current_frequency_band]
         else:
             return self.current_frequency_band
+        
+    @property
+    def current_coherence_region_set(self):
+        self.data_opts.get('coherence_region_set')
 
     @property
     def lfp_root(self):
@@ -61,6 +65,14 @@ class LFPData(Data):
     @cache_method
     def get_power(self):
         return self.get_average('get_power', stop_at='event')
+    
+    @cache_method
+    def get_mrl(self):
+        return self.get_average('get_mrl', stop_at='mrl_calculator', axis=None)
+
+    @cache_method
+    def get_coherence(self):
+        return self.get_average('get_coherence', stop_at='coherence_calculator')
 
     def get_time_bins(self, data):
         tbs = []
@@ -167,7 +179,8 @@ class LFPGroup(LFPData):
         self.experiment = lfp_experiment
         self.identifier = self.spike_target.identifier
         self.parent = lfp_experiment
-        self._children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
+        self.animals = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
+        self._children = self.animals
         for animal in self._children:
             animal.parent = self
             animal.group = self
@@ -228,8 +241,7 @@ class LFPGroup(LFPData):
         counts = np.sum(np.array([calc.get_angle_counts() for calc in self.mrl_calculators]), axis=0)
         return counts
 
-    def get_mrl(self):
-        return self.get_average('get_mrl', stop_at='mrl_calculator', axis=None)
+   
 
 
 class LFPAnimal(LFPData, PeriodConstructor):
@@ -244,6 +256,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.period_class = LFPPeriod
         self.periods = defaultdict(list)
         self.mrl_calculators = defaultdict(list)
+        self.coherence_calculators = defaultdict(list)
         self.parent = None
         self.group = None
         self._processed_lfp = {}
@@ -251,6 +264,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.last_neuron_type = 'uninitialized'
         self.last_period_type = 'uninitialized'
         self.last_frequency_band = None
+        self.last_coherence_region_set = None
         self.is_mirror = is_mirror
         self.mirror = None
         self.frozen_freq_range = None
@@ -264,9 +278,14 @@ class LFPAnimal(LFPData, PeriodConstructor):
 
     @property
     def _children(self):
-        if self.identifier == 'IG154':
-            a = 'foo'
-        children = self.mrl_calculators if self.data_type == 'mrl' else self.periods
+        if self.data_type == 'mrl':
+            children = self.mrl_calculators
+        elif self.data_type == 'power':
+            children = self.periods
+        elif self.data_type == 'coherence':
+            children = self.coherence_calculators
+        else:
+            raise ValueError("Unknown data type")
         if self.data_opts.get('spontaneous'):
             children = children['spontaneous']
         else:
@@ -276,20 +295,24 @@ class LFPAnimal(LFPData, PeriodConstructor):
         return children
 
     def update_if_necessary(self):
-        if self.data_opts.get('brain_region') not in self.raw_lfp:
+        if self.data_type == 'coherence':
+            regions = self.data_opts.get('coherence_region_set').split('_')
+        else:
+            regions = [self.data_opts.get('brain_region')]
+        if any([region not in self.raw_lfp for region in regions]):
             return
-        if self.identifier == 'IG154':
-            a = 'foo'
         old_and_new = [(self.last_brain_region, self.current_brain_region),
                        (self.last_frequency_band, self.current_frequency_band),
                        (self.last_neuron_type, self.selected_neuron_type),
-                       (self.last_period_type, self.selected_period_type)]
+                       (self.last_period_type, self.selected_period_type),
+                       (self.last_coherence_region_set, self.current_coherence_region_set)]
         if any([old != new for old, new in old_and_new]):
             self.update_children()
             self.last_brain_region = self.current_brain_region
             self.last_frequency_band = self.current_frequency_band
             self.last_neuron_type = self.selected_neuron_type
             self.last_period_type = self.selected_period_type
+            self.last_coherence_region_set = self.current_coherence_region_set
 
     @property
     def processed_lfp(self):
@@ -302,24 +325,31 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.prepare_periods()
         if 'mrl' in self.data_type:
             self.prepare_mrl_calculators()
+        if 'coherence' in self.data_type:
+            self.prepare_coherence_calculators()
 
     def process_lfp(self):
-        data = self.raw_lfp[self.current_brain_region]/4
-        filter = self.data_opts.get('filter', 'filtfilt')
-        if filter == 'filtfilt':
-            filtered = filter_60_hz(data, self.sampling_rate)
-        elif filter == 'spectrum_estimation':
-            ids = [self.identifier, self.data_opts['brain_region']]
-            saved_calc_exists, filtered, pickle_path = self.load('filter', ids)
-            if not saved_calc_exists:
-                ml = MatlabInterface(self.data_opts['matlab_configuration'])
-                filtered = ml.filter(data)
-                self.save(filtered, pickle_path)
-            filtered = np.squeeze(np.array(filtered))
-        else:
-            raise ValueError("Unknown filter")
-        normed = divide_by_rms(filtered)
-        self._processed_lfp[self.current_brain_region] = normed
+        if self.current_brain_region:
+            brain_regions = [self.current_brain_region]
+        if self.data_type == 'coherence':
+            brain_regions = self.data_opts['coherence_region_set'].split('_')
+        for brain_region in brain_regions:
+            data = self.raw_lfp[brain_region]/4
+            filter = self.data_opts.get('filter', 'filtfilt')
+            if filter == 'filtfilt':
+                filtered = filter_60_hz(data, self.sampling_rate)
+            elif filter == 'spectrum_estimation':
+                ids = [self.identifier, brain_region]
+                saved_calc_exists, filtered, pickle_path = self.load('filter', ids)
+                if not saved_calc_exists:
+                    ml = MatlabInterface(self.data_opts['matlab_configuration'])
+                    filtered = ml.filter(data)
+                    self.save(filtered, pickle_path)
+                filtered = np.squeeze(np.array(filtered))
+            else:
+                raise ValueError("Unknown filter")
+            normed = divide_by_rms(filtered)
+            self._processed_lfp[brain_region] = normed
 
     def prepare_mrl_calculators(self):
         if self.data_opts.get('spontaneous'):
@@ -332,6 +362,14 @@ class LFPAnimal(LFPData, PeriodConstructor):
                                for period_type, periods in self.periods.items()}
         self.mrl_calculators = mrl_calculators
 
+    def prepare_coherence_calculators(self):
+        brain_region_1, brain_region_2 = self.data_opts.get('coherence_region_set').split('_')
+        self.coherence_calculators = {
+            period_type: [CoherenceCalculator(period, brain_region_1, brain_region_2) 
+                          for period in self.periods[period_type]] 
+                          for period_type in self.periods
+                          }
+        
     def make_mirror(self):
         # This method permits calculating values to determine which data points might be noise with one set
         # frequencies when the actual calculation of interest uses another set. The mirror holds the memory of the first
@@ -408,12 +446,20 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
             self.event_duration = target_period.event_duration
         self.reference_period_type = period_info.get('reference_period_type')
         start_pad_in_samples, end_pad_in_samples = np.array(self.convolution_padding) * self.sampling_rate
-        duration_in_samples = self.duration * self.sampling_rate
-        start = int(self.onset - start_pad_in_samples)
-        stop = int(self.onset + duration_in_samples + end_pad_in_samples)
-        self.raw_data = self.animal.raw_lfp[self.current_brain_region][start:stop]
-        self.processed_data = self.animal.processed_lfp[self.current_brain_region][start:stop]
-        self.unpadded_data = self.processed_data[start_pad_in_samples:-end_pad_in_samples]
+        self.duration_in_samples = int(self.duration * self.sampling_rate)
+        self.start = int(self.onset)
+        self.stop = self.start + self.duration_in_samples
+        self.pad_start = self.start - start_pad_in_samples
+        self.pad_stop = self.stop + end_pad_in_samples
+        if self.current_brain_region:
+            self.raw_data = self.animal.raw_lfp[self.current_brain_region][self.pad_start:self.pad_stop]
+            self.processed_data = self.animal.processed_lfp[self.current_brain_region][self.pad_start:self.pad_stop]
+            self.unpadded_data = self.animal.processed_lfp[self.current_brain_region][self.start:self.stop]
+        else:
+            self.raw_data = None
+            self.processed_data = None
+            self.unpadded_data = None
+        
         self._spectrogram = None
         self.last_brain_region = None
         self.experiment = self.animal.group.experiment
@@ -804,3 +850,35 @@ class SpontaneousMRLCalculator(MRLCalculator):
     @property
     def validator(self):
         return self.num_events > 4
+    
+
+class CoherenceCalculator(LFPData):
+
+    name = 'coherence_calculator'
+
+    def __init__(self, period, brain_region_1, brain_region_2):
+        self.period = period
+        self.period_type = period.period_type
+        self.region_1 = brain_region_1
+        self.region_2 = brain_region_2
+        self.identifier = f"{brain_region_1}_{brain_region_2}_{self.period.identifier}"
+        self.region_1_data = self.period.animal.processed_lfp[self.region_1][
+            self.period.start:self.period.stop]
+        self.region_2_data = self.period.animal.processed_lfp[self.region_2][
+            self.period.start:self.period.stop]
+        self.base_node = True
+        self._children = None
+        self.parent = self.period.parent
+
+    def get_coherence(self):
+
+        nperseg = 2000  
+        noverlap = int(nperseg/2)
+        window = 'hann'  # Window type
+        f, Cxy = coherence(self.region_1_data, self.region_2_data, fs=self.sampling_rate, 
+                           window=window, nperseg=nperseg, noverlap=noverlap)
+        low, high = self.freq_range
+        mask = (f >= low) & (f <= high)
+        Cxy_band = Cxy[mask]
+        return Cxy_band
+        

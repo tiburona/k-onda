@@ -258,7 +258,7 @@ class Data(Base):
         if not len(children):
             return children
         name = children[0].name
-        ic = self.get_inclusion_criteria()[name] + [lambda x: x.children or getattr(x, 'base_node', None)]
+        ic = self.get_inclusion_criteria()[name] + [lambda x: getattr(x, 'base_node', None) or x.children]
         return [child for child in children if all([criterion(child) for criterion in ic])]
     
     

@@ -737,43 +737,10 @@ class LFPPlotter(Plotter):
         super().__init__(experiment, lfp=lfp, behavior=behavior, graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_power(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts)
-        data = []
-        periods = deepcopy(self.data_opts['periods'])
-        for group in self.lfp.groups:
-            for period_type in periods:
-                self.selected_period_type = period_type
-                for period in periods[period_type]:
-                    self.update_data_opts([(['periods', period_type], [period])])
-                    data.append([group.identifier, period + 1, period_type, group.mean_data, group.sem, group.scatter])
-        self.update_data_opts([(['periods'], periods)])  # put this key, val pair back the way it was for further graphs
+        self.line_plot_over_periods(data_opts, graph_opts)
 
-        df = pd.DataFrame(data, columns=['Group', 'Period', 'Period_Type', 'Power', 'SEM', 'Scatter'])
-
-
-        # Plotting
-        fig_x_dim = 2.5 * len(sorted(self.data_opts['periods'].values(), key=len)[-1])
-        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(fig_x_dim, 5), sharey=True)
-
-        # Iterate over each group
-        for i, (ax, (group, group_df)) in enumerate(zip(axes, df.groupby('Group'))):
-            # Iterate over each period type within the group
-            for period_type, period_df in group_df.groupby('Period_Type'):
-                ax.errorbar(period_df['Period'], period_df['Power'], yerr=period_df['SEM'], label=period_type.capitalize(),
-                            fmt='-o', color=self.graph_opts['period_colors'][period_type])  # Adjust fmt for desired line/marker style
-
-            ax.set_title(smart_title_case(f'{group} Group'))
-            ax.set_xlabel('Trial')
-            if i == 0:
-                ax.set_ylabel('Power')
-            ax.legend(title='Trial Type')
-            ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-
-        plt.tight_layout()
-        plt.subplots_adjust(top=0.85)  # Adjust this value as needed
-
-        self.fig = fig
-        self.close_plot("power")
+    def plot_coherence(self, data_opts, graph_opts):
+        self.line_plot_over_periods(data_opts, graph_opts)
 
     def plot_spectrogram(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
@@ -843,7 +810,50 @@ class LFPPlotter(Plotter):
                         i += 1
                 self.close_plot(f"Spectrogram {animal.identifier} Periods")
 
+    def line_plot_over_periods(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts)
+        data = []
+        periods = deepcopy(self.data_opts['periods'])
+        for group in self.lfp.groups:
+            for period_type in periods:
+                self.selected_period_type = period_type
+                for period in periods[period_type]:
+                    self.update_data_opts([(['periods', period_type], [period])])
+                    data.append([group.identifier, period + 1, period_type, group.mean_data, group.sem, group.scatter])
+        self.update_data_opts([(['periods'], periods)])  # put this key, val pair back the way it was for further graphs
 
+        df = pd.DataFrame(data, columns=['Group', 'Period', 'Period_Type', 'Power', 'SEM', 'Scatter'])
+
+
+        # Plotting
+        fig_x_dim = 2.5 * len(sorted(self.data_opts['periods'].values(), key=len)[-1])
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(fig_x_dim, 5), sharey=True)
+
+        # Iterate over each group
+        for i, (ax, (group, group_df)) in enumerate(zip(axes, df.groupby('Group'))):
+            # Iterate over each period type within the group
+            for period_type, period_df in group_df.groupby('Period_Type'):
+                ax.errorbar(period_df['Period'], period_df['Power'], yerr=period_df['SEM'], label=period_type.capitalize(),
+                            fmt='-o', color=self.graph_opts['period_colors'][period_type])  # Adjust fmt for desired line/marker style
+
+            ax.set_title(smart_title_case(f'{group} Group'))
+            ax.set_xlabel('Period')
+            if i == 0:
+                ax.set_ylabel(self.data_type.capitalize())
+            ax.legend(title='Trial Type')
+            ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85)  # Adjust this value as needed
+
+        self.fig = fig
+        if self.data_type == 'power':
+            self.close_plot(self.data_type)
+        elif self.data_type == 'coherence':
+            region_1, region_2 = self.data_opts['coherence_region_set'].split('_')
+            self.close_plot(f"{self.data_type}_{region_1}_{region_2}")
+        else:
+            raise NotImplementedError("This graph doesn't work for that data type.")
 
     def create_figure_and_axes(self, parent):
         ncols = len(self.data_opts['periods'])
@@ -895,7 +905,11 @@ class LFPPlotter(Plotter):
          for ax in axes.ravel()]
 
     def set_dir_and_filename(self, basename):
-        title_string = f"{'_'.join([self.current_brain_region, str(self.current_frequency_band), basename])}"
+        if self.current_brain_region:
+            brain_region = self.current_brain_region
+        else:
+            brain_region = self.data_opts.get('coherence_region_set')
+        title_string = f"{'_'.join([brain_region, str(self.current_frequency_band), basename])}"
         self.title = smart_title_case(title_string.replace('_', ' '))
         self.fig.suptitle(self.title, weight='bold', y=.98, fontsize=14)
         self.fname = f"{title_string}.png"
