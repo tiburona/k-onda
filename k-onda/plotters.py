@@ -47,6 +47,9 @@ class Plotter(Base):
         """Both initializes values on self and sets values for the context."""
         self.graph_opts = graph_opts
         self.data_opts = data_opts  # Sets data_opts for all subscribers to context
+        if self.data_opts.get('validate_events'):
+            self.stats = Stats(self.experiment, lfp=self.lfp)
+            self.stats.write_event_validation()
         self.selected_neuron_type = neuron_type
 
     def close_plot(self, basename):
@@ -810,6 +813,42 @@ class LFPPlotter(Plotter):
                         i += 1
                 self.close_plot(f"Spectrogram {animal.identifier} Periods")
 
+    def plot_coherence_over_frequencies(self, data_opts, graph_opts):
+        self.line_plot_over_frequencies(data_opts, graph_opts)
+
+    def line_plot_over_frequencies(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts)
+        data = {}
+        for group in self.lfp.groups:
+            period_data = defaultdict(list)
+            for period_type in self.data_opts['periods']:
+                self.selected_period_type = period_type
+                period_data[period_type] = group.data
+            data[group.identifier] = period_data
+
+        fig_x_dim = len(list(range(*self.lfp.freq_range)))
+        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(fig_x_dim, 10), sharex=True)
+
+        for i, (ax, group) in enumerate(zip(axes, self.lfp.groups)):
+            for period_type in data[group.identifier]:
+                ax.plot(list(range(self.lfp.freq_range[0], self.lfp.freq_range[1] + 1)), 
+                        data[group.identifier][period_type], '-o', label=period_type.capitalize(),
+                color=self.graph_opts['period_colors'][period_type])
+
+            ax.set_title(smart_title_case(f'{group.identifier} Group'))
+            ax.set_ylabel(self.data_type.capitalize())
+            if i == 1:
+                ax.set_xlabel('Frequency')
+            ax.legend(title='Period Type')
+            ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85)  # Adjust this value as needed
+
+        self.fig = fig
+        self.close_plot(self.data_type)
+
+
     def line_plot_over_periods(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
         data = []
@@ -847,13 +886,7 @@ class LFPPlotter(Plotter):
         plt.subplots_adjust(top=0.85)  # Adjust this value as needed
 
         self.fig = fig
-        if self.data_type == 'power':
-            self.close_plot(self.data_type)
-        elif self.data_type == 'coherence':
-            region_1, region_2 = self.data_opts['coherence_region_set'].split('_')
-            self.close_plot(f"{self.data_type}_{region_1}_{region_2}")
-        else:
-            raise NotImplementedError("This graph doesn't work for that data type.")
+        self.close_plot(self.data_type)
 
     def create_figure_and_axes(self, parent):
         ncols = len(self.data_opts['periods'])
@@ -905,7 +938,7 @@ class LFPPlotter(Plotter):
          for ax in axes.ravel()]
 
     def set_dir_and_filename(self, basename):
-        if self.current_brain_region:
+        if self.data_type != 'coherence':
             brain_region = self.current_brain_region
         else:
             brain_region = self.data_opts.get('coherence_region_set')

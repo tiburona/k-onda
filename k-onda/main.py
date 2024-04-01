@@ -18,7 +18,7 @@ def run():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json', lfp=True)
     # runner.run('make_spreadsheet', TEST_RUNNER_OPTS, path='/Users/katie/likhtik/IG_INED_Safety_Recall',
     #             filename='thousand_ms_mrl_thetas_1_and_2')
-    runner.run('plot_coherence', TEST_RUNNER_OPTS)
+    runner.run('plot_coherence_over_frequencies', TEST_RUNNER_OPTS)
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

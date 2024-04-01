@@ -21,6 +21,7 @@ other_procedures = {
     'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'},
     'plot_power': {'class': LFPPlotter, 'method': 'plot_power'},
     'plot_coherence': {'class': LFPPlotter, 'method': 'plot_coherence'},
+    'plot_coherence_over_frequencies':  {'class': LFPPlotter, 'method': 'plot_coherence_over_frequencies'},
     'plot_spectrogram': {'class': LFPPlotter, 'method': 'plot_spectrogram'}
 }
 

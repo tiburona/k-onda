@@ -17,6 +17,9 @@ from math_functions import *
 from utils import cache_method, get_ancestors, find_ancestor_attribute
 
 
+TRIGGER = 'foo'
+
+
 class LFPData(Data):
 
     @property
@@ -158,7 +161,7 @@ class LFPExperiment(LFPData, Subscriber):
         if self.data_type == 'mrl':
             raise ValueError("You can't extract events from MRL data")
         return [event for period in self.all_periods for event in period.events]
-
+    
     def in_selected_animals(self, x):
         selected = self.data_opts.get('selected_animals')
         if not selected:
@@ -167,7 +170,7 @@ class LFPExperiment(LFPData, Subscriber):
             return [ancestor for ancestor in get_ancestors(x) if ancestor.name == 'animal'][0].identifier in selected
 
     def update(self, _):
-        if self.data_class == 'lfp':
+        if self.data_class == 'lfp': 
             [animal.update_if_necessary() for animal in self.all_animals]
 
 
@@ -230,9 +233,6 @@ class LFPGroup(LFPData):
 
     def update_children(self):
         self._children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
-        if self.data_opts.get('selected_animals') is not None:
-            self._children = [child for child in self.children if child.identifier in
-                             self.data_opts.get('selected_animals')]
 
     def get_angle_counts(self):
         for calc in self.mrl_calculators:
@@ -266,7 +266,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.last_frequency_band = None
         self.last_coherence_region_set = None
         self.is_mirror = is_mirror
-        self.mirror = None
+        self._mirror = None
         self.frozen_freq_range = None
         self.frozen_periods = None
 
@@ -319,9 +319,14 @@ class LFPAnimal(LFPData, PeriodConstructor):
         if self.current_brain_region not in self._processed_lfp:
             self.process_lfp()
         return self._processed_lfp
+    
+    @property
+    def mirror(self):
+        if not self._mirror:
+            self.make_mirror()
+        return self._mirror
 
     def update_children(self):
-        
         self.prepare_periods()
         if 'mrl' in self.data_type:
             self.prepare_mrl_calculators()
@@ -329,11 +334,8 @@ class LFPAnimal(LFPData, PeriodConstructor):
             self.prepare_coherence_calculators()
 
     def process_lfp(self):
-        if self.current_brain_region:
-            brain_regions = [self.current_brain_region]
-        if self.data_type == 'coherence':
-            brain_regions = self.data_opts['coherence_region_set'].split('_')
-        for brain_region in brain_regions:
+        
+        for brain_region in self.raw_lfp:
             data = self.raw_lfp[brain_region]/4
             filter = self.data_opts.get('filter', 'filtfilt')
             if filter == 'filtfilt':
@@ -369,17 +371,18 @@ class LFPAnimal(LFPData, PeriodConstructor):
                           for period in self.periods[period_type]] 
                           for period_type in self.periods
                           }
+    
         
     def make_mirror(self):
         # This method permits calculating values to determine which data points might be noise with one set
         # frequencies when the actual calculation of interest uses another set. The mirror holds the memory of the first
         # calculation.
-        self.mirror = LFPAnimal(self.spike_target, self.raw_lfp, self.sampling_rate, is_mirror=True)
-        self.mirror.frozen_freq_range = self.data_opts['validate_events'].get('frequency', (0, 8))
-        self.mirror.frozen_periods = self.data_opts['validate_events'].get('periods', self.data_opts.get('periods'))
-        self.mirror.parent = self.parent
-        self.mirror.group = self.group
-        self.mirror.update_children()
+        self._mirror = LFPAnimal(self.spike_target, self.raw_lfp, self.sampling_rate, is_mirror=True)
+        self._mirror.frozen_freq_range = self.data_opts['validate_events'].get('frequency', (0, 8))
+        self._mirror.frozen_periods = self.data_opts['validate_events'].get('periods', self.data_opts.get('periods'))
+        self._mirror.parent = self.parent
+        self._mirror.group = self.group
+        self._mirror.update_children()
 
 
 class LFPDataSelector:
@@ -407,8 +410,6 @@ class LFPDataSelector:
         np.array(val_to_return)
         return val_to_return
         
-
-
     @cache_method
     def trimmed_spectrogram(self):
         return self.sliced_spectrogram[:, 75:-75]  # TODO: 75 should be a function of period length and mtscg args
@@ -451,19 +452,30 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
         self.stop = self.start + self.duration_in_samples
         self.pad_start = self.start - start_pad_in_samples
         self.pad_stop = self.stop + end_pad_in_samples
-        if self.current_brain_region:
-            self.raw_data = self.animal.raw_lfp[self.current_brain_region][self.pad_start:self.pad_stop]
-            self.processed_data = self.animal.processed_lfp[self.current_brain_region][self.pad_start:self.pad_stop]
-            self.unpadded_data = self.animal.processed_lfp[self.current_brain_region][self.start:self.stop]
-        else:
-            self.raw_data = None
-            self.processed_data = None
-            self.unpadded_data = None
-        
         self._spectrogram = None
         self.last_brain_region = None
         self.experiment = self.animal.group.experiment
         self._event_validity = None
+
+    @property
+    def raw_data(self):
+        return self.get_data_from_animal_dict(self.raw_lfp, self.pad_start, self.pad_stop)
+
+    @property
+    def processed_data(self):
+        return self.get_data_from_animal_dict(self.animal.processed_lfp, 
+                                              self.pad_start, self.pad_stop)
+        
+    @property
+    def unpadded_data(self):
+        return self.get_data_from_animal_dict(self.animal.processed_lfp, self.start, self.stop)
+        
+    def get_data_from_animal_dict(self, data_source, start, stop):
+        if self.current_brain_region:
+            return data_source[self.current_brain_region][start:stop]
+        else:
+            return {brain_region: data_source[brain_region][start:stop] 
+                    for brain_region in data_source}
 
     @property
     def _children(self):
@@ -485,6 +497,8 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
     
     @property
     def event_validity(self):
+        if TRIGGER == 'bar':
+            a = 'foo'
         if self._event_validity is None:
             self._event_validity = {i: event.validator for i, event in enumerate(self.events)}
         return self._event_validity
@@ -611,8 +625,13 @@ class LFPEvent(LFPData, LFPDataSelector):
             for time_bin in frequency_bins[frequency].time_bins:
                 if time_bin.data > self.data_opts['validate_events'].get('threshold', 20) * standard:
                     print(f"{self.current_brain_region} {self.period.animal.identifier} {self.period_type} "
-                          f"{self.period.identifier} {self.identifier} invalid!")                
+                          f"{self.period.identifier} {self.identifier} invalid!")
+                    print(TRIGGER)
+           
                     return False
+                else:
+                    pass
+                    #print("valid!", TRIGGER)
         return True
 
 
@@ -803,7 +822,6 @@ class PeriodMRLCalculator(MRLCalculator):
     def translate_spikes_to_lfp_events(self, spikes):
         pre_stim = self.data_opts['events'][self.period.period_type]['pre_stim'] * self.sampling_rate
         events = np.array(self.period.event_starts) - self.period.event_starts[0] - pre_stim
-        # todo I need to fix this so a spike is assigned to an event if it's within the period
         indices = {}
         for spike in spikes:
             # Find the index of the event the spike belongs to
@@ -869,16 +887,66 @@ class CoherenceCalculator(LFPData):
         self.base_node = True
         self._children = None
         self.parent = self.period.parent
+        self.event_validity = None
 
     def get_coherence(self):
+        if not self.data_opts.get('validate_events'):
+            return self.calc_coherence(self.region_1_data, self.region_2_data)
+        else:
+            if self.data_opts.get('validate_events'):
+                self.validate_events()
+            valid_sets_1 = self.divide_data_into_valid_sets(self.region_1_data)
+            valid_sets_2 = self.divide_data_into_valid_sets(self.region_2_data)
+            valid_sets = zip(valid_sets_1, valid_sets_2)
+            data_len = sum([len(vs) for vs in valid_sets_1])
+            weighted_coherences = [self.calc_coherence(data_1, data_2)*len(data_1)/data_len 
+                                   for data_1, data_2 in valid_sets]
+            return sum(weighted_coherences)
+        
+    def calc_coherence(self, data_1, data_2):
 
         nperseg = 2000  
         noverlap = int(nperseg/2)
         window = 'hann'  # Window type
-        f, Cxy = coherence(self.region_1_data, self.region_2_data, fs=self.sampling_rate, 
+        f, Cxy = coherence(data_1, data_2, fs=self.sampling_rate, 
                            window=window, nperseg=nperseg, noverlap=noverlap)
         low, high = self.freq_range
         mask = (f >= low) & (f <= high)
         Cxy_band = Cxy[mask]
         return Cxy_band
         
+    def validate_events(self):
+        self.update_data_opts([(['brain_region'], self.region_1), (['data_type'], 'power')])
+        #print("first period", self.period.animal.children[self.period.identifier])
+        TRIGGER = 'foo'
+        ev1 = self.period.animal.children[self.period.identifier].event_validity
+        self.update_data_opts([(['brain_region'], self.region_2)])
+        TRIGGER = 'bar'
+        self.period.animal.mirror.update_children()
+        #print("second period", self.period.animal.children[self.period.identifier])
+        ev2 = self.period.animal.children[self.period.identifier].event_validity # don't need to deepcopy; it's going to be a new object
+        self.update_data_opts([(['data_type'], 'coherence')])
+        #print(" ")
+        self.event_validity = {event: ev1[event] and ev2[event] for event in ev1}
+        
+    def divide_data_into_valid_sets(self, region_data):
+        valid_sets = []
+        current_set = []
+        event_duration = self.sampling_rate * self.period.event_duration
+    
+        for i in range(0, len(region_data), event_duration):
+            if self.event_validity[i // event_duration]:  
+                start = i
+                current_set.extend(region_data[start:start+event_duration])
+            else:
+                if current_set:  
+                    valid_sets.append(current_set)
+                    current_set = []
+    
+        if current_set:  
+            valid_sets.append(current_set)
+    
+        return valid_sets
+
+
+

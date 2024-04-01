@@ -259,7 +259,8 @@ class Data(Base):
             return children
         name = children[0].name
         ic = self.get_inclusion_criteria()[name] + [lambda x: getattr(x, 'base_node', None) or x.children]
-        return [child for child in children if all([criterion(child) for criterion in ic])]
+        children = [child for child in children if all([criterion(child) for criterion in ic])]
+        return children
     
     
     def refer(self, data, stop_at='', is_spectrum=False):

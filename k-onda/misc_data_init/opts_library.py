@@ -241,14 +241,18 @@ BLA_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(BLA_THETA_POWER_AN
 
 
 
-COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
-            'data_type': 'coherence',  'frequency_type': 'block',
+COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': [(0, 20)], 
+            'data_type': 'coherence',  'frequency_type': 'continuous',
             'coherence_region_sets': ['bla_pl', 'bla_hpc', 'hpc_pl'], 
             'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'period',
             'events': {
-                'pretone': {'pre_stim': 0, 'post_stim': 1}, 
-                'tone': {'pre_stim': 0, 'post_stim': 1}},
+                'pretone': {'pre_stim': 0, 'post_stim': .3}, 
+                'tone': {'pre_stim': 0, 'post_stim': .3}},
             'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
+            'validate_events': {
+                 'frequency': (0, 8), 'threshold': 20, 
+                 'periods': {'pretone': range(5), 'tone': range(5)}
+                 }, 
             'rules': {
                 'coherence_region_set': 
                 {

@@ -253,6 +253,8 @@ greater than the animal median for that frequency. The default is not to validat
 
 "power_deviation" (optional): a boolean that indicates whether to include in the CSV an idiosyncratic calculation that records how far above or below the local moving average a time bin is. Check the `lfp` module for `get_power_deviation` to see the implementation details. 
 
+## Coherence ##
+
 ## MRL ##
 
 Configuration options that are the same as in spike analyses are "data_class", "data_type", "periods", "evoked", and 
