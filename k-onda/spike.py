@@ -154,6 +154,8 @@ class Experiment(SpikeData, Subscriber):
         return [unit_pair for unit in self.all_units for unit_pair in unit.get_pairs()]
 
     def update(self, name):
+        if self.data_class == 'lfp' and self.data_type != 'mrl': #TODO think more about this.
+            return
         if name == 'data':
             event_vals = [to_hashable(self.data_opts.get('events'))] + [self.data_opts.get('bin_size')]
             if event_vals != self.last_event_vals:

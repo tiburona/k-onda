@@ -46,6 +46,7 @@ class Runner:
         self.graph_opts = None
         self.proc_name = None
         self.current_data_opts = None
+        self.preparatory_method = None
 
     def load_analysis_config(self, opts):
         if isinstance(opts, str):
@@ -65,12 +66,14 @@ class Runner:
 
     def prepare(self):
         self.executing_class = PROCEDURE_DICT[self.proc_name]['class']
-        kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() for dc in ['lfp', 'behavior']
+        self.data_class_kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() for dc in ['lfp', 'behavior']
                   if getattr(self, dc)}
+
         if self.executing_class.__name__ in self.executing_instances:
             self.executing_instance = self.executing_instances[self.executing_class.__name__]
         else:
-            self.executing_instance = self.executing_class(self.experiment, **kwargs)
+            self.executing_instance = self.executing_class(self.experiment, 
+                                                           **self.data_class_kwargs)
         method = PROCEDURE_DICT[self.proc_name].get('method')
         if method is None:
             method = self.proc_name
@@ -80,7 +83,7 @@ class Runner:
     def read_inputs(self, proc_name, opts):
         self.proc_name = proc_name
         self.load_analysis_config(opts)
-        self.prepare()
+        
 
     def get_loop_lists(self):
         for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
@@ -111,6 +114,7 @@ class Runner:
                         self.current_data_opts[target_key] = val_to_assign
 
     def validate(self):
+        # TODO: update animal selection validation
         all_animal_ids = [animal.identifier for animal in self.experiment.all_animals]
         selected_animals = self.current_data_opts.get('selected_animals')
         if selected_animals is not None and not all([id in all_animal_ids for id in selected_animals]):
@@ -134,8 +138,22 @@ class Runner:
         else:
             self.executing_method(self.current_data_opts)
 
-    def run_all(self):
+    def run_prep(self, prep):
+        prep_fun, prep_opts = prep
+        if prep_opts['data_class'] == 'spike':
+            prep_executor = self.experiment
+        else:
+            prep_executor = self.data_class_kwargs[prep_opts['data_class']]
+
+        getattr(prep_executor, prep_fun)(prep_opts)
+
+    def run_all(self, prep=None):
+
+        if prep is not None:
+            self.run_prep(prep)
+
         opts_list = self.data_opts if isinstance(self.data_opts, list) else [self.data_opts]
+            
         for opts in opts_list:
             self.current_data_opts = opts
             self.get_loop_lists()
@@ -144,9 +162,10 @@ class Runner:
             else:
                 self.execute()
 
-    def run(self, proc_name, opts, *args, **kwargs):
+    def run(self, proc_name, opts, *args, prep=None, **kwargs):
         self.read_inputs(proc_name, opts)
-        self.run_all()
+        self.prepare()
+        self.run_all(prep=prep)
         if self.follow_up_method is not None:
             getattr(self.executing_instance, self.follow_up_method)(*args, **kwargs)
 

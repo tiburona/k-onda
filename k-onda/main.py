@@ -1,6 +1,6 @@
 from utils import log_directory_contents
 from runner import Runner
-from misc_data_init.opts_library import TEST_RUNNER_OPTS
+from misc_data_init.opts_library import TEST_RUNNER_OPTS, VALIDATION_DATA_OPTS
 import cProfile
 import pstats
 import signal
@@ -18,7 +18,7 @@ def run():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json', lfp=True)
     # runner.run('make_spreadsheet', TEST_RUNNER_OPTS, path='/Users/katie/likhtik/IG_INED_Safety_Recall',
     #             filename='thousand_ms_mrl_thetas_1_and_2')
-    runner.run('plot_coherence_over_frequencies', TEST_RUNNER_OPTS)
+    runner.run('plot_coherence_over_frequencies', TEST_RUNNER_OPTS, prep=('validate_events', VALIDATION_DATA_OPTS))
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

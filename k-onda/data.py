@@ -337,13 +337,13 @@ class Data(Base):
             if vals is None:
                 vals = []
             if obj.name == stop_at or not hasattr(obj, 'children'):
-                vals.append(obj.data)
+                vals.append(obj)
             else:
                 if hasattr(obj, 'children'):
                     for child in obj.children:
                         if extend_by is not None:
                             sources = expand_sources(child, extend_by)
-                        [collect_vals(source, vals) for source in sources if select_sources(source, select_by)]
+                        [collect_vals(source, vals) for source in sources if select_sources(source, select_by)] # a time bins name is not frequency bin.  the frequency bins will never be selcted
             return vals
 
         def expand_sources(obj, extension):
@@ -358,12 +358,14 @@ class Data(Base):
         def select_sources(obj, selection):
             if selection is None: return True
             for name, key, val in selection:
-                if name == obj.name and hasattr(obj, key) and getattr(obj, key) != val:
-                    return False
+                for ancestor in obj.ancestors: 
+                    if name == ancestor.name and hasattr(ancestor, key) and getattr(ancestor, key) != val:
+                        return False
             return True
 
         vals_to_summarize = collect_vals(self)
-        return np.median(vals_to_summarize)
+
+        return np.median([obj.data for obj in vals_to_summarize])
 
     @cache_method
     def get_scatter_points(self):

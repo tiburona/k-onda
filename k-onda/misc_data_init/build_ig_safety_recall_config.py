@@ -54,9 +54,9 @@ control_ig_no_st_dict = {animal: {'condition': 'control', 'lfp_electrodes': no_s
 defeat_ig_no_st_dict = {animal: {'condition': 'defeat', 'lfp_electrodes': no_st_electrodes} for animal in defeat_ig_no_st}
 
 animal_info = {**control_ined_dict, **defeat_ined_dict, **control_ig_dict, **defeat_ig_dict, **control_ig_no_st_dict,
-               **defeat_ig_no_st_dict}
+              **defeat_ig_no_st_dict}
 
-
+#animal_info= {**control_ig_dict, **defeat_ig_dict}
 
 exp_info = {
     'conditions': ['defeat', 'control'],

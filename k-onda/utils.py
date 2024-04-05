@@ -11,7 +11,7 @@ DEBUG_MODE = 0
 """Cache Utils"""
 
 
-def to_hashable(item, max_depth=10):
+def to_hashable(item, max_depth=20):
     """Converts a non hashable input into a hashable type for the purpose of using it as a part of the key in an
     instance's cache of calculated values."""
     if max_depth < 0:

@@ -47,10 +47,9 @@ class Plotter(Base):
         """Both initializes values on self and sets values for the context."""
         self.graph_opts = graph_opts
         self.data_opts = data_opts  # Sets data_opts for all subscribers to context
-        if self.data_opts.get('validate_events'):
-            self.stats = Stats(self.experiment, lfp=self.lfp)
-            self.stats.write_event_validation()
+        print("did I get here?")
         self.selected_neuron_type = neuron_type
+        print("plotter initialize has run")
 
     def close_plot(self, basename):
         self.set_dir_and_filename(basename)
@@ -818,7 +817,9 @@ class LFPPlotter(Plotter):
 
     def line_plot_over_frequencies(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
+        print("exited out of initialize, back in plot function")
         data = {}
+        print("initialized data, moving on in line plot")
         for group in self.lfp.groups:
             period_data = defaultdict(list)
             for period_type in self.data_opts['periods']:

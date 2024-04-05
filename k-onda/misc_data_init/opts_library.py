@@ -239,20 +239,29 @@ PL_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(HPC_THETA_POWER_ANI
 BLA_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(BLA_THETA_POWER_ANIMALS) 
                                                          & set(HPC_THETA_POWER_ANIMALS))]]}
 
+test = ['IG156', 'IG158', 'IG163',  'IG180']
 
+VALIDATION_DATA_OPTS = {
+    'data_class': 'lfp',
+    'data_type': 'power',
+    'brain_regions': ['pl', 'bla', 'hpc'],
+    'power_arg_set': (2048, 2000, 1000, 980, 2), 
+    'matlab_configuration': MATLAB_CONFIG,
+    'frequency_band': (0, 8),
+    'threshold': 20,
+    'events': {
+                'pretone': {'pre_stim': 0, 'post_stim': 1}, 
+                'tone': {'pre_stim': 0, 'post_stim': 1}}
+}
 
 COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': [(0, 20)], 
-            'data_type': 'coherence',  'frequency_type': 'continuous',
-            'coherence_region_sets': ['bla_pl', 'bla_hpc', 'hpc_pl'], 
+            'data_type': 'coherence',  'frequency_type': 'continuous', 'validate_events': True,
+            'coherence_region_sets': ['bla_pl', 'bla_hpc', 'pl_hpc'], 
             'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'period',
             'events': {
                 'pretone': {'pre_stim': 0, 'post_stim': .3}, 
                 'tone': {'pre_stim': 0, 'post_stim': .3}},
             'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
-            'validate_events': {
-                 'frequency': (0, 8), 'threshold': 20, 
-                 'periods': {'pretone': range(5), 'tone': range(5)}
-                 }, 
             'rules': {
                 'coherence_region_set': 
                 {
@@ -262,6 +271,8 @@ COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': 
                 }                   
                     }
            } # 
+
+
 
 GROUP_STAT_PROPORTION_OPTS = {
     'data_class': 'spike', 'data_type': 'proportion', 'base': 'event', 'adjustment': 'normalized', 

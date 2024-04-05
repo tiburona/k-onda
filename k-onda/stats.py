@@ -33,11 +33,11 @@ class Stats(Base):
         else:
             self.data_col = 'rate' if self.data_type == 'psth' else self.data_type
 
-    def make_df(self, data_opts, event_validation=False):
+    def make_df(self, data_opts):
         self.set_attributes(data_opts)
         self.opts_dicts.append(deepcopy(self.data_opts))
         name = self.set_df_name()
-        df = pd.DataFrame(self.get_rows(event_validation=event_validation))
+        df = pd.DataFrame(self.get_rows())
         vs = ['unit_num', 'animal', 'category', 'group', 'frequency']
         for var in vs:
             if var in df:
@@ -129,7 +129,7 @@ class Stats(Base):
         self.dfs[new_df_name] = final_merged_df
         return new_df_name
 
-    def get_rows(self, event_validation=False):
+    def get_rows(self):
         """
         Prepares the necessary parameters and then calls `self.get_data` to collect rows of data based on the specified
         level, attributes, and inclusion criteria.
@@ -159,12 +159,10 @@ class Stats(Base):
         else:
             other_attributes += ['category', 'neuron_type', 'quality']
 
-        if event_validation:
-            other_attributes += ['validator']
             
-        return self.get_data(level, other_attributes, event_validation=event_validation)
+        return self.get_data(level, other_attributes)
 
-    def get_data(self, level, other_attributes, event_validation=False):
+    def get_data(self, level, other_attributes):
         """
         Collects data from specified data sources based on the provided level and criteria. The function returns a list
         of dictionaries, where each dictionary represents a row of data. Each row dictionary contains data values,
@@ -204,10 +202,7 @@ class Stats(Base):
         else:
             experiment = self.experiment
 
-        if event_validation:
-            sources = [source for source in getattr(experiment, f'all_{level}s')]
-        else:
-            sources = [source for source in getattr(experiment, f'all_{level}s') if source.is_valid]
+        sources = [source for source in getattr(experiment, f'all_{level}s') if source.is_valid]
 
         if self.data_opts.get('frequency_type') == 'continuous':
             sources = [frequency_bin for source in sources for frequency_bin in source.frequency_bins]
@@ -228,7 +223,7 @@ class Stats(Base):
 
         return rows
 
-    def make_spreadsheet(self, path=None, filename=None, force_recalc=True, event_validation=False):
+    def make_spreadsheet(self, path=None, filename=None, force_recalc=True):
         """
         Creates a spreadsheet (CSV file) from a specified DataFrame stored within the object.
 
@@ -249,7 +244,7 @@ class Stats(Base):
         if len(self.dfs):
             df_name = self.merge_dfs_animal_by_animal()
         else:
-            self.make_df(self.data_opts, event_validation=event_validation)
+            self.make_df(self.data_opts)
             df_name = self.data_type
         if path is None:
             path = self.data_opts['data_path']
@@ -271,30 +266,6 @@ class Stats(Base):
             with open(self.spreadsheet_fname, 'w', newline='') as f:
                 self.write_csv(f, df_name)
 
-    def write_event_validation(self):
-        old_data_opts = deepcopy(self.data_opts)
-
-        if self.data_type == 'coherence':
-            brain_regions = self.data_opts.get('coherence_region_set').split('_')
-        else:
-            brain_regions = [self.data_opts['brain_region']]
-
-        for brain_region in brain_regions:
-
-            self.update_data_opts([
-                (['brain_region'], brain_region),
-                (['frequency_band'],  self.data_opts['validate_events'].get('frequency', (0, 8))), 
-                (['periods'], self.data_opts['validate_events'].get('periods', self.data_opts.get('periods'))),
-                (['row_type'], 'event'),
-                (['data_type'], 'power')])
-            
-            self.make_df(self.data_opts, event_validation=True)
-        
-        # write file
-
-        self.make_spreadsheet(filename='event_validation', event_validation=True)
-
-        self.data_opts = old_data_opts
 
     def write_csv(self, f, df_name):
         for opts_dict in self.opts_dicts:

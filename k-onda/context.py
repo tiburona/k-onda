@@ -22,6 +22,20 @@ class Context:
 
     def set_val(self, name, new_val):
         # Compare with old value if it exists
+        self.update_dicts(name, new_val)
+        self.cache_id = to_hashable(self.vals)
+        self.notify(name)
+
+    def set_vals(self, name_val_pairs):
+        for name, new_val in name_val_pairs:
+            old_val = self.old_vals.get(name)
+            if old_val is not None and self._compare(old_val, new_val):
+                return
+            self.update_dicts(name, new_val)
+        self.cache_id = to_hashable(self.vals)
+        self.notify('_'.join([name for name, _ in name_val_pairs]))
+
+    def update_dicts(self, name, new_val):
         old_val = self.old_vals.get(name)
         if old_val is not None and self._compare(old_val, new_val):
             return
@@ -29,8 +43,6 @@ class Context:
         # Update the value and notify observers
         self.vals[name] = new_val
         self.old_vals[name] = copy.deepcopy(new_val)  # Store a deep copy
-        self.cache_id = to_hashable(self.vals)
-        self.notify(name)
 
     def _compare(self, old_val, new_val):
         if isinstance(old_val, dict):

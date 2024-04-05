@@ -17,8 +17,6 @@ from math_functions import *
 from utils import cache_method, get_ancestors, find_ancestor_attribute
 
 
-TRIGGER = 'foo'
-
 
 class LFPData(Data):
 
@@ -141,6 +139,7 @@ class LFPExperiment(LFPData, Subscriber):
         self.last_period_type = 'uninitialized'
         self.last_frequency_band = None
         self.selected_animals = None
+        self.event_validation = {}
 
     @property
     def all_periods(self):
@@ -161,17 +160,42 @@ class LFPExperiment(LFPData, Subscriber):
         if self.data_type == 'mrl':
             raise ValueError("You can't extract events from MRL data")
         return [event for period in self.all_periods for event in period.events]
-    
-    def in_selected_animals(self, x):
-        selected = self.data_opts.get('selected_animals')
-        if not selected:
-            return True
-        else:
-            return [ancestor for ancestor in get_ancestors(x) if ancestor.name == 'animal'][0].identifier in selected
 
     def update(self, _):
         if self.data_class == 'lfp': 
             [animal.update_if_necessary() for animal in self.all_animals]
+
+    def validate_events(self, data_opts):  
+
+        regions = data_opts['brain_regions']
+        
+        for region in regions:
+            self.event_validation[region] = {}
+            data_opts['brain_region'] = region
+            self.data_opts = data_opts
+            animals = [animal for animal in self.all_animals if animal.is_valid 
+                       and region in animal.raw_lfp]
+            for animal in animals:
+                standards = {period_type: animal.get_median(
+                    stop_at='event', extend_by=('frequency', 'time'), 
+                    select_by=(('period', 'period_type', period_type),)) 
+                    for period_type in animal.period_info}
+               
+                def validate_event(event):
+                    frequency_bins = event.get_frequency_bins(event.get_original_data())
+                    for frequency in frequency_bins: 
+                        standard = standards[event.period_type]
+                        for time_bin in frequency.time_bins:
+                            if time_bin.data > data_opts.get('threshold', 20) * standard:
+                                print(f"{region} {animal.identifier} {event.period_type} "
+                                f"{event.period.identifier} {event.identifier} invalid!")
+                                return False
+                    return True
+                   
+                for event in animal.all_events:
+                    event.validator = validate_event(event)
+                
+                self.event_validation[region][animal.identifier] = animal.event_validity()
 
 
 class LFPGroup(LFPData):
@@ -240,8 +264,6 @@ class LFPGroup(LFPData):
                 print(f"{calc.parent.identifier} {calc.identifier}")
         counts = np.sum(np.array([calc.get_angle_counts() for calc in self.mrl_calculators]), axis=0)
         return counts
-
-   
 
 
 class LFPAnimal(LFPData, PeriodConstructor):
@@ -321,17 +343,37 @@ class LFPAnimal(LFPData, PeriodConstructor):
         return self._processed_lfp
     
     @property
-    def mirror(self):
-        if not self._mirror:
-            self.make_mirror()
-        return self._mirror
+    def all_periods(self):
+        return [p for period_list in self.periods.values() for p in period_list]
+
+    @property
+    def all_events(self):
+        if self.data_type == 'mrl':
+            raise ValueError("You can't extract events from MRL data")
+        return [event for period in self.all_periods for event in period.events]
 
     def update_children(self):
+        print(self.identifier, "started updating children")
         self.prepare_periods()
         if 'mrl' in self.data_type:
             self.prepare_mrl_calculators()
         if 'coherence' in self.data_type:
             self.prepare_coherence_calculators()
+        print(self.identifier, "finished updating children")
+       
+    # def make_mirror(self):
+    #     # This method permits calculating values to determine which data points might be noise with one set
+    #     # frequencies when the actual calculation of interest uses another set. The mirror holds the memory of the first
+    #     # calculation.
+    #     mirror =  LFPAnimal(self.spike_target, self.raw_lfp, self.sampling_rate, is_mirror=True)
+    #     mirror.parent = self.parent
+    #     mirror.group = self.group
+    #     mirror.update_children()
+    #     return mirror
+    
+    def event_validity(self):
+        return {period_type: [period.event_validity() for period in self.periods[period_type]] 
+                for period_type in self.periods}
 
     def process_lfp(self):
         
@@ -371,19 +413,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
                           for period in self.periods[period_type]] 
                           for period_type in self.periods
                           }
-    
-        
-    def make_mirror(self):
-        # This method permits calculating values to determine which data points might be noise with one set
-        # frequencies when the actual calculation of interest uses another set. The mirror holds the memory of the first
-        # calculation.
-        self._mirror = LFPAnimal(self.spike_target, self.raw_lfp, self.sampling_rate, is_mirror=True)
-        self._mirror.frozen_freq_range = self.data_opts['validate_events'].get('frequency', (0, 8))
-        self._mirror.frozen_periods = self.data_opts['validate_events'].get('periods', self.data_opts.get('periods'))
-        self._mirror.parent = self.parent
-        self._mirror.group = self.group
-        self._mirror.update_children()
-
+        print("prepared coherence calculators")
 
 class LFPDataSelector:
     """A class with methods shared by LFPPeriod and LFPEvent that are used to return portions of their data."""
@@ -455,7 +485,7 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
         self._spectrogram = None
         self.last_brain_region = None
         self.experiment = self.animal.group.experiment
-        self._event_validity = None
+        self._events = None
 
     @property
     def raw_data(self):
@@ -494,14 +524,6 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
             self._spectrogram = self.calc_cross_spectrogram()
             self.last_brain_region = self.current_brain_region
         return self._spectrogram
-    
-    @property
-    def event_validity(self):
-        if TRIGGER == 'bar':
-            a = 'foo'
-        if self._event_validity is None:
-            self._event_validity = {i: event.validator for i, event in enumerate(self.events)}
-        return self._event_validity
 
     @property
     def extended_data(self):
@@ -514,6 +536,8 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
         return self.animal.parent.experiment.lost_signal
 
     def get_events(self):
+        if self._events:
+            return self._events
         true_beginning = self.convolution_padding[0] - self.lost_signal()/2
         pre_stim, post_stim = (self.data_opts['events'][self.period_type][opt] for opt in ['pre_stim', 'post_stim'])
         time_bins = np.array(self.spectrogram[2])
@@ -535,6 +559,8 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
             # a binary mask that is True when a time bin in the spectrogram belongs to this event
             mask = (np.abs(time_bins[:, None] - event_times) <= epsilon).any(axis=1)
             events.append(LFPEvent(i, event_times, normed_data, mask, self))
+        
+        self._events = events
         return events
 
     def calc_cross_spectrogram(self):
@@ -565,6 +591,13 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
                 if abs(normalized_data) > np.abs(moving_avgs[i + j]):
                     moving_avgs[i + j] = normalized_data
         return moving_avgs
+    
+        
+    def equivalent_period(self, animal):
+        return animal.periods[self.period_type][self.identifier]
+    
+    def event_validity(self):
+        return [event.validator for event in self.get_events()]
 
 
 class LFPEvent(LFPData, LFPDataSelector):
@@ -597,42 +630,9 @@ class LFPEvent(LFPData, LFPDataSelector):
 
     def get_original_data(self):
         return self._get_power()
-
-    @property
-    def validator(self):
-        animal = self.period.animal
-        if (not self.data_opts.get('validate_events')) or animal.is_mirror:
-            return True
-
-        if not animal.mirror:
-            animal.make_mirror()
-
-        mirror_event = animal.mirror.periods[self.period_type][self.period.identifier].events[self.identifier]
-
-        return mirror_event.validate()
-
-    @cache_method
-    def validate(self):
-        evoked = self.data_opts.get('evoked')
-        frequency_bins = self.get_frequency_bins(self.get_original_data())
-        validate_config = deepcopy(self.data_opts['validate_events'])
-        for frequency in range(*validate_config.get('frequency', (0, 8))):
-            self.update_data_opts([(['evoked'], False), (['validate_events'], None)])
-            standard = self.period.animal.get_median(
-                stop_at='event', extend_by=('frequency', 'time'),
-                select_by=(('period', 'period_type', self.period_type), ('frequency_bin', 'identifier', frequency)))
-            self.update_data_opts([(['evoked'], evoked), (['validate_events'], validate_config)])
-            for time_bin in frequency_bins[frequency].time_bins:
-                if time_bin.data > self.data_opts['validate_events'].get('threshold', 20) * standard:
-                    print(f"{self.current_brain_region} {self.period.animal.identifier} {self.period_type} "
-                          f"{self.period.identifier} {self.identifier} invalid!")
-                    print(TRIGGER)
-           
-                    return False
-                else:
-                    pass
-                    #print("valid!", TRIGGER)
-        return True
+    
+    def equivalent_event(self, animal):
+        return animal.periods[self.period_type][self.period.identifier][self.identifier]
 
 
 class FrequencyBin(LFPData):
@@ -644,11 +644,11 @@ class FrequencyBin(LFPData):
     def __init__(self, index, val, parent, unit=None):
         self.parent = parent
         self.val = val
+        self.identifier = index
         if self.parent.name == 'period':
-            self.identifier = self.parent.spectrogram[1][index]
+            self.frequency = self.parent.spectrogram[1][index]
         elif hasattr(self.parent, 'period'):
-            self.identifier = self.parent.period.spectrogram[1][index]
-        self.period_type = self.parent.period_type
+            self.frequency = self.parent.period.spectrogram[1][index]
         self.unit = unit
         self.validator = self.parent.validator if hasattr(self.parent, 'validator') else True
 
@@ -666,13 +666,17 @@ class TimeBin:
 
     def __init__(self, i, data, parent):
         self.parent = parent
-        self.period_type = self.parent.period_type
         self.identifier = i
         self.data = data
         self.mean_data = np.mean(self.data)
         self.ancestors = get_ancestors(self)
         self.position = self.get_position_in_period_time_series()
-        self.period = [ancestor for ancestor in self.ancestors if ancestor.name == 'period'][0]
+        period_ancestor = [ancestor for ancestor in self.ancestors if ancestor.name == 'period'] # TODO if there isn't yet a util to deal with this more elegantly write one
+        if len(period_ancestor):
+            self.period = period_ancestor[0]
+        else:
+            self.period = None
+        self.period_type = self.period.period_type
 
     @property
     def power_deviation(self):
@@ -801,7 +805,6 @@ class PeriodMRLCalculator(MRLCalculator):
                        for spike in event.spikes]
         #self.
         self.num_events = len(self.spikes)
-        self.event_validity = {}
 
     @property
     def ancestors(self):
@@ -887,14 +890,21 @@ class CoherenceCalculator(LFPData):
         self.base_node = True
         self._children = None
         self.parent = self.period.parent
-        self.event_validity = None
+
+    def joint_event_validity(self):
+        ev1, ev2 = [self.get_event_validity(region) for region in (self.region_1, self.region_2)]
+        return {i: ev1[i] and ev2[i] for i in ev1}
+
+    def get_event_validity(self, region):
+        validation = self.period.animal.group.experiment.event_validation
+        animal_validation_dict = validation[region][self.period.animal.identifier]
+        return {i: is_valid for i, is_valid in 
+                enumerate(animal_validation_dict[self.period_type][self.period.identifier])}
 
     def get_coherence(self):
         if not self.data_opts.get('validate_events'):
             return self.calc_coherence(self.region_1_data, self.region_2_data)
         else:
-            if self.data_opts.get('validate_events'):
-                self.validate_events()
             valid_sets_1 = self.divide_data_into_valid_sets(self.region_1_data)
             valid_sets_2 = self.divide_data_into_valid_sets(self.region_2_data)
             valid_sets = zip(valid_sets_1, valid_sets_2)
@@ -914,28 +924,14 @@ class CoherenceCalculator(LFPData):
         mask = (f >= low) & (f <= high)
         Cxy_band = Cxy[mask]
         return Cxy_band
-        
-    def validate_events(self):
-        self.update_data_opts([(['brain_region'], self.region_1), (['data_type'], 'power')])
-        #print("first period", self.period.animal.children[self.period.identifier])
-        TRIGGER = 'foo'
-        ev1 = self.period.animal.children[self.period.identifier].event_validity
-        self.update_data_opts([(['brain_region'], self.region_2)])
-        TRIGGER = 'bar'
-        self.period.animal.mirror.update_children()
-        #print("second period", self.period.animal.children[self.period.identifier])
-        ev2 = self.period.animal.children[self.period.identifier].event_validity # don't need to deepcopy; it's going to be a new object
-        self.update_data_opts([(['data_type'], 'coherence')])
-        #print(" ")
-        self.event_validity = {event: ev1[event] and ev2[event] for event in ev1}
-        
+    
     def divide_data_into_valid_sets(self, region_data):
         valid_sets = []
         current_set = []
         event_duration = self.sampling_rate * self.period.event_duration
     
         for i in range(0, len(region_data), event_duration):
-            if self.event_validity[i // event_duration]:  
+            if self.joint_event_validity()[i // event_duration]:  
                 start = i
                 current_set.extend(region_data[start:start+event_duration])
             else:
@@ -947,6 +943,8 @@ class CoherenceCalculator(LFPData):
             valid_sets.append(current_set)
     
         return valid_sets
+        
+   
 
 
 
