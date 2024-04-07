@@ -120,7 +120,13 @@ class Data(Base):
 
     
     @property
-    def is_valid(self):
+    def is_valid(self):  # TODO, check if this is working to exclude low quality neurons
+        for ancestor in self.ancestors:
+            if ancestor is self:
+                pass
+            else:
+                if not ancestor.is_valid:
+                    return False
         inclusion_criteria = self.get_inclusion_criteria()[self.name]
         if hasattr(self, 'validator'):
             inclusion_criteria += [lambda x: x.validator]

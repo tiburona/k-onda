@@ -138,22 +138,26 @@ class LFPExperiment(LFPData, Subscriber):
         self.last_neuron_type = 'uninitialized'
         self.last_period_type = 'uninitialized'
         self.last_frequency_band = None
-        self.selected_animals = None
         self.event_validation = {}
 
     @property
     def all_periods(self):
-        periods = []
-        for animal in [animal for animal in self.all_animals if self.in_selected_animals(animal)]:
-            [periods.extend(animal_periods) for animal_periods in animal.periods.values()]
-        return periods
+        return self.get_data_calculated_by_period('periods')
 
     @property
     def all_mrl_calculators(self):
-        mrl_calculators = []
-        for animal in [animal for animal in self.all_animals if self.in_selected_animals(animal)]:
-            [mrl_calculators.extend(animal_periods) for animal_periods in animal.mrl_calculators.values()]
-        return mrl_calculators
+        return self.get_data_calculated_by_period('mrl_calculators')
+    
+    @property
+    def all_coherence_calculators(self):
+        return self.get_data_calculated_by_period('coherence_calculators')
+
+    def get_data_calculated_by_period(self, data_type):
+        data_objects = []
+        for animal in self.all_animals:
+            [data_objects.extend(animal_periods) 
+             for animal_periods in getattr(animal, data_type).values()]
+        return data_objects
 
     @property
     def all_events(self):
@@ -193,7 +197,7 @@ class LFPExperiment(LFPData, Subscriber):
                     return True
                    
                 for event in animal.all_events:
-                    event.validator = validate_event(event)
+                    event.valid = validate_event(event)
                 
                 self.event_validation[region][animal.identifier] = animal.event_validity()
 
@@ -353,23 +357,11 @@ class LFPAnimal(LFPData, PeriodConstructor):
         return [event for period in self.all_periods for event in period.events]
 
     def update_children(self):
-        print(self.identifier, "started updating children")
         self.prepare_periods()
         if 'mrl' in self.data_type:
             self.prepare_mrl_calculators()
         if 'coherence' in self.data_type:
             self.prepare_coherence_calculators()
-        print(self.identifier, "finished updating children")
-       
-    # def make_mirror(self):
-    #     # This method permits calculating values to determine which data points might be noise with one set
-    #     # frequencies when the actual calculation of interest uses another set. The mirror holds the memory of the first
-    #     # calculation.
-    #     mirror =  LFPAnimal(self.spike_target, self.raw_lfp, self.sampling_rate, is_mirror=True)
-    #     mirror.parent = self.parent
-    #     mirror.group = self.group
-    #     mirror.update_children()
-    #     return mirror
     
     def event_validity(self):
         return {period_type: [period.event_validity() for period in self.periods[period_type]] 
@@ -413,7 +405,6 @@ class LFPAnimal(LFPData, PeriodConstructor):
                           for period in self.periods[period_type]] 
                           for period_type in self.periods
                           }
-        print("prepared coherence calculators")
 
 class LFPDataSelector:
     """A class with methods shared by LFPPeriod and LFPEvent that are used to return portions of their data."""
@@ -447,9 +438,17 @@ class LFPDataSelector:
     @property
     def sliced_spectrogram(self):
         return self.slice_spectrogram()
+    
+    
+class EventValidator:
+    
+     def get_event_validity(self, region):
+        period = self if self.name == 'period' else self.period
+        validity = period.animal.group.experiment.event_validation[region][period.animal.identifier]
+        return {i: valid for i, valid in enumerate(validity[self.period_type][period.identifier])}
 
 
-class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
+class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector, EventValidator):
     """A period in the experiment. Preprocesses data, initiates calls to Matlab to get the cross-spectrogram, and
     generates LFPEvents. Inherits from LFPSelector to be able to return portions of its data."""
 
@@ -592,12 +591,11 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector):
                     moving_avgs[i + j] = normalized_data
         return moving_avgs
     
-        
     def equivalent_period(self, animal):
         return animal.periods[self.period_type][self.identifier]
     
     def event_validity(self):
-        return [event.validator for event in self.get_events()]
+        return [event.valid for event in self.get_events()]
 
 
 class LFPEvent(LFPData, LFPDataSelector):
@@ -617,6 +615,7 @@ class LFPEvent(LFPData, LFPDataSelector):
         self.spectrogram = self.parent.spectrogram
         self._children = None
         self.base_node = True
+        self.valid = True
 
     @cache_method
     def _get_power(self):
@@ -633,6 +632,12 @@ class LFPEvent(LFPData, LFPDataSelector):
     
     def equivalent_event(self, animal):
         return animal.periods[self.period_type][self.period.identifier][self.identifier]
+    
+    def validator(self):
+        if not self.data_opts.get('validate_events'):
+            return True
+        else:
+            return self.period.get_event_validity()[self.identifier]
 
 
 class FrequencyBin(LFPData):
@@ -773,7 +778,8 @@ class MRLCalculator(LFPData):
     def get_mrl(self):
         w = self.get_weights()
         alpha = self.get_phases()
-        dim = int(self.data_opts.get('phase') == 'wavelet' or not isinstance(self.current_frequency_band, type('str')))
+        dim = int(self.data_opts.get('phase') == 'wavelet' 
+                  or not isinstance(self.current_frequency_band, type('str')))
 
         if w.ndim == 1 and alpha.ndim == 2:
             w = w[np.newaxis, :]
@@ -790,7 +796,7 @@ class MRLCalculator(LFPData):
             return self.refer(compute_mrl(alpha, w, dim=dim))
 
 
-class PeriodMRLCalculator(MRLCalculator):
+class PeriodMRLCalculator(MRLCalculator, EventValidator):
 
     def __init__(self, unit, period):
         super().__init__(unit)
@@ -801,7 +807,8 @@ class PeriodMRLCalculator(MRLCalculator):
         self.identifier = f"{self.period.identifier}_{self.unit.identifier}"
         self.parent = self.period.parent
         self.spike_period = self.unit.periods[self.period_type][self.period.identifier]
-        self.spikes = [int((spike + i) * self.sampling_rate) for i, event in enumerate(self.spike_period.events)
+        self.spikes = [int((spike + i) * self.sampling_rate) 
+                       for i, event in enumerate(self.spike_period.events)
                        for spike in event.spikes]
         #self.
         self.num_events = len(self.spikes)
@@ -813,7 +820,8 @@ class PeriodMRLCalculator(MRLCalculator):
     @property
     def equivalent_calculator(self):
         other_stage = self.spike_period.reference_period_type
-        return [calc for calc in self.parent.mrl_calculators[other_stage] if calc.identifier == self.identifier][0]
+        return [calc for calc in self.parent.mrl_calculators[other_stage] 
+                if calc.identifier == self.identifier][0]
 
     @property
     def validator(self):
@@ -836,16 +844,14 @@ class PeriodMRLCalculator(MRLCalculator):
         return indices
     
     def get_weights(self):
-        weight_range = range(self.duration * self.sampling_rate)
+        wt_range = range(self.duration * self.sampling_rate)
         if not self.data_opts.get('validate_events'):
-            weights = [1 if weight in self.spikes else float('nan') for weight in weight_range]
+            weights = [1 if weight in self.spikes else float('nan') for weight in wt_range]
         else:
-            indices = self.translate_spikes_to_lfp_events(self.spikes)
-            self.update_data_opts([(['data_type'], 'power')])
-            weight_validity = {spike: self.period.event_validity[event] 
+            indices = self.translate_spikes_to_lfp_events(self.spikes) 
+            weight_validity = {spike: self.get_event_validity(self.current_brain_region)[event] 
                                for spike, event in indices.items()}
-            self.update_data_opts([(['data_type'], 'mrl')])
-            weights = np.array([1 if weight_validity.get(w) else float('nan') for w in weight_range])
+            weights = np.array([1 if weight_validity.get(w) else float('nan') for w in wt_range])
         return np.array(weights)
             
 
@@ -873,7 +879,7 @@ class SpontaneousMRLCalculator(MRLCalculator):
         return self.num_events > 4
     
 
-class CoherenceCalculator(LFPData):
+class CoherenceCalculator(LFPData, EventValidator):
 
     name = 'coherence_calculator'
 
@@ -894,12 +900,6 @@ class CoherenceCalculator(LFPData):
     def joint_event_validity(self):
         ev1, ev2 = [self.get_event_validity(region) for region in (self.region_1, self.region_2)]
         return {i: ev1[i] and ev2[i] for i in ev1}
-
-    def get_event_validity(self, region):
-        validation = self.period.animal.group.experiment.event_validation
-        animal_validation_dict = validation[region][self.period.animal.identifier]
-        return {i: is_valid for i, is_valid in 
-                enumerate(animal_validation_dict[self.period_type][self.period.identifier])}
 
     def get_coherence(self):
         if not self.data_opts.get('validate_events'):

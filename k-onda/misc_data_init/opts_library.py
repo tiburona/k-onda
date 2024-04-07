@@ -164,25 +164,26 @@ POWER_SPREADSHEET_OPTS = {
 }
 
 TEST_SPECTROGRAM_OPTS = {
-    'data_class': 'lfp', 'frequency_bands': [(4, 8)], 'data_type': 'power', 'row_type': 'event',
+    'data_class': 'lfp', 'frequency_bands': ['theta_1', 'theta_2'], 'data_type': 'power', 
+    'row_type': 'event', 'frequency_type': 'block',
     'brain_regions': ['hpc', 'bla', 'pl'], 'power_deviation': False, 'time_type': 'block', 
     'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
     'filter': 'spectrum_estimation', 'levels': ['group', 'animal'], 'store': 'pkl',
-    'validate_events': {
-        'frequency': (0, 8), 'threshold': 20, 'periods': {'pretone': range(5), 'tone': range(5)}
-        },
+    'validate_events': True,
     'events': {
-        'pretone': {'pre_stim': .15, 'post_stim': 0}, 'tone': {'pre_stim': .15, 'post_stim': 0}
+        'pretone': {'pre_stim': .15, 'post_stim': .3}, 'tone': {'pre_stim': .15, 'post_stim': 3}
         },
-    'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)], 
-                               'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
-                               'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}
-                               },
+    'rules': {
+        'brain_region': 
+        {'pl': [('inclusion_rule', {'animal': [['identifier', 'in', PFC_THETA_POWER_ANIMALS]]})],
+         'bla': [('inclusion_rule', {'animal': [['identifier', 'in', BLA_THETA_POWER_ANIMALS]]})], 
+         'hpc': [('inclusion_rule', {'animal': [['identifier', 'in', HPC_THETA_POWER_ANIMALS]]})]
+                               }},
     'matlab_configuration': MATLAB_CONFIG, 'frequency_type': 'block'
     }
 
 
-NEURON_QUALITY = ['1', '2a', '2b', '2c']
+NEURON_QUALITY = ['1', '2a', '2b', '2ab']
 
 PROPORTION_OPTS = {
     'data_class': 'spike', 'data_type': 'proportion', 'bin_size': 0.01, 'adjustment': 'normalized',
@@ -190,30 +191,22 @@ PROPORTION_OPTS = {
     'levels': ['group', 'animal'], 'periods': {'tone': range(5)},
     'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
                        'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
-    'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
+    'events': {'pretone': {'pre_stim': 0.0, 'post_stim': .7}, 'tone': {'pre_stim': .0, 'post_stim': .7}},
     }
 
-PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
-             'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 'levels': ['group', 'animal'],
-             'periods': {'tone': range(5)}, 
-             'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY], ['firing_rate', '>=', 10, 'if', 'neuron_type', '==', 'IN']], 
+PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'none',
+             'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
+             'periods': {'pretone': range(5), 'tone': range(5)}, 
+             'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
                                 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
-             'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}}}
+             'events': {'pretone': {'pre_stim': 0.0, 'post_stim': .7}, 'tone': {'pre_stim': .0, 'post_stim': .7}}}
 
 MRL_INCLUSION = {'unit': [['quality', 'in', NEURON_QUALITY]], 'animal': [['identifier', 'in', STANDARD_ANIMALS]]}
 
-BLA_EVENTS = {'pretone': {'pre_stim': .15, 'post_stim': .1}, 'tone': {'pre_stim': .15, 'post_stim': .1}}
-PL_EVENTS = {'pretone': {'pre_stim': .1, 'post_stim': .3}, 'tone': {'pre_stim': .1, 'post_stim': .3}}
-HPC_EVENTS = {'pretone': {'pre_stim': .1, 'post_stim': .3}, 'tone': {'pre_stim': .1, 'post_stim': .3}}
-FULL_EVENTS = {'pretone': {'pre_stim': 0, 'post_stim': 1}, 'tone': {'pre_stim': 0, 'post_stim': 1}}
-
 MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
             'data_type': 'mrl', 'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block',
-            'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'period',
-            'validate_events': {
-                 'frequency': (0, 8), 'threshold': 20, 
-                 'periods': {'pretone': range(5), 'tone': range(5)}
-                 }, 
+            'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'mrl_calculator',
+            'validate_events': True,
             'events': {
                 'pretone': {'pre_stim': 0, 'post_stim': 1}, 
                 'tone': {'pre_stim': 0, 'post_stim': 1}},
@@ -231,7 +224,6 @@ MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
            } # 
 
 
-
 BLA_PL_INCLUSION = {'animal': [['identifier', 'in', list(set(BLA_THETA_POWER_ANIMALS) 
                                                          & set(PFC_THETA_POWER_ANIMALS))]]}
 PL_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(HPC_THETA_POWER_ANIMALS) 
@@ -239,7 +231,6 @@ PL_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(HPC_THETA_POWER_ANI
 BLA_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(BLA_THETA_POWER_ANIMALS) 
                                                          & set(HPC_THETA_POWER_ANIMALS))]]}
 
-test = ['IG156', 'IG158', 'IG163',  'IG180']
 
 VALIDATION_DATA_OPTS = {
     'data_class': 'lfp',
@@ -254,13 +245,10 @@ VALIDATION_DATA_OPTS = {
                 'tone': {'pre_stim': 0, 'post_stim': 1}}
 }
 
-COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': [(0, 20)], 
-            'data_type': 'coherence',  'frequency_type': 'continuous', 'validate_events': True,
+COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
+            'data_type': 'coherence',  'frequency_type': 'block', 'validate_events': True,
             'coherence_region_sets': ['bla_pl', 'bla_hpc', 'pl_hpc'], 
-            'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'period',
-            'events': {
-                'pretone': {'pre_stim': 0, 'post_stim': .3}, 
-                'tone': {'pre_stim': 0, 'post_stim': .3}},
+            'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'coherence_calculator',
             'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
             'rules': {
                 'coherence_region_set': 
@@ -298,9 +286,19 @@ GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment'
 # TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS}
 
 TEST_RUNNER_OPTS = [{'data_class': 'behavior', 'data_type': 'percent_freezing',
-                     'periods': {'pretone': range(5), 'tone': range(5)}, 'row_type': 'period'}, TEST_SPECTROGRAM_OPTS]
+                     'periods': {'pretone': range(5), 'tone': range(5)}, 'row_type': 'period'}, 
+                     TEST_SPECTROGRAM_OPTS, PSTH_OPTS, COHERENCE_OPTS, MRL_OPTS]
 
-TEST_RUNNER_OPTS = {'data_opts': COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
+PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
+             'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
+             'periods': {'tone': range(5)}, 
+             'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
+                                'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
+             'events': {'pretone': {'pre_stim': 0.0, 'post_stim': .65}, 'tone': {'pre_stim': .0, 'post_stim': .65}}}
+
+TEST_RUNNER_OPTS = [PSTH_OPTS]
+
+#TEST_RUNNER_OPTS = {'data_opts': COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
 
 #TEST_RUNNER_OPTS = [MRL_OPTS]
 
