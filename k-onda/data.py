@@ -120,7 +120,7 @@ class Data(Base):
 
     
     @property
-    def is_valid(self):  # TODO, check if this is working to exclude low quality neurons
+    def is_valid(self):  
         for ancestor in self.ancestors:
             if ancestor is self:
                 pass
@@ -198,13 +198,15 @@ class Data(Base):
     @property
     def num_bins_per_event(self):
         bin_size = self.data_opts.get('bin_size')
-        pre_stim, post_stim = (self.data_opts['events'][self.period_type].get(opt) for opt in ['pre_stim', 'post_stim'])
+        pre_stim, post_stim = (self.data_opts['events'][self.period_type].get(opt) 
+                               for opt in ['pre_stim', 'post_stim'])
         return int((pre_stim + post_stim) / bin_size)
 
     @property
     def current_reference_period_type(self):
         exp = self.find_experiment()
-        return [blk for blk in exp.all_periods if blk.period_type == self.selected_period_type][0].reference_period_type
+        return [period for period in exp.all_periods 
+                if period.period_type == self.selected_period_type][0].reference_period_type
     
     def get_child_by_identifier(self, identifier):
         return [child for child in self.children if child.identifier == identifier][0]

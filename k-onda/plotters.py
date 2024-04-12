@@ -64,6 +64,7 @@ class Plotter(Base):
         path = os.path.join(*dirs)
         os.makedirs(path, exist_ok=True)
         self.fig.savefig(os.path.join(path, self.fname))
+        
         opts_filename = self.fname.replace('png', 'txt')
         # Writing the dictionary to a file in JSON format
         with open(os.path.join(path, opts_filename), 'w') as file:

@@ -66,8 +66,8 @@ class Runner:
 
     def prepare(self):
         self.executing_class = PROCEDURE_DICT[self.proc_name]['class']
-        self.data_class_kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() for dc in ['lfp', 'behavior']
-                  if getattr(self, dc)}
+        self.data_class_kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() 
+                                  for dc in ['lfp', 'behavior'] if getattr(self, dc)}
 
         if self.executing_class.__name__ in self.executing_instances:
             self.executing_instance = self.executing_instances[self.executing_class.__name__]

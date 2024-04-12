@@ -165,13 +165,13 @@ POWER_SPREADSHEET_OPTS = {
 
 TEST_SPECTROGRAM_OPTS = {
     'data_class': 'lfp', 'frequency_bands': ['theta_1', 'theta_2'], 'data_type': 'power', 
-    'row_type': 'event', 'frequency_type': 'block',
-    'brain_regions': ['hpc', 'bla', 'pl'], 'power_deviation': False, 'time_type': 'block', 
+    'row_type': 'event', 'frequency_type': 'block', 'bin_size': .01,
+    'brain_regions': ['hpc', 'bla', 'pl'], 'power_deviation': False, 'time_type': 'continuous', 
     'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
     'filter': 'spectrum_estimation', 'levels': ['group', 'animal'], 'store': 'pkl',
     'validate_events': True,
     'events': {
-        'pretone': {'pre_stim': .15, 'post_stim': .3}, 'tone': {'pre_stim': .15, 'post_stim': 3}
+        'pretone': {'pre_stim': 0, 'post_stim': .3}, 'tone': {'pre_stim': 0, 'post_stim': .3}
         },
     'rules': {
         'brain_region': 
@@ -241,8 +241,8 @@ VALIDATION_DATA_OPTS = {
     'frequency_band': (0, 8),
     'threshold': 20,
     'events': {
-                'pretone': {'pre_stim': 0, 'post_stim': 1}, 
-                'tone': {'pre_stim': 0, 'post_stim': 1}}
+                'pretone': {'pre_stim': 0, 'post_stim': .3}, 
+                'tone': {'pre_stim': 0, 'post_stim': .3}}
 }
 
 COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
@@ -289,16 +289,16 @@ TEST_RUNNER_OPTS = [{'data_class': 'behavior', 'data_type': 'percent_freezing',
                      'periods': {'pretone': range(5), 'tone': range(5)}, 'row_type': 'period'}, 
                      TEST_SPECTROGRAM_OPTS, PSTH_OPTS, COHERENCE_OPTS, MRL_OPTS]
 
-PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
+PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'none',
              'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
              'periods': {'tone': range(5)}, 
              'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
                                 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
-             'events': {'pretone': {'pre_stim': 0.0, 'post_stim': .65}, 'tone': {'pre_stim': .0, 'post_stim': .65}}}
+             'events': {'pretone': {'pre_stim': 0.15, 'post_stim': .3}, 'tone': {'pre_stim': .15, 'post_stim': .3}}}
 
-TEST_RUNNER_OPTS = [PSTH_OPTS]
+TEST_RUNNER_OPTS = [PSTH_OPTS, TEST_SPECTROGRAM_OPTS]
 
-#TEST_RUNNER_OPTS = {'data_opts': COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
+TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
 
 #TEST_RUNNER_OPTS = [MRL_OPTS]
 
