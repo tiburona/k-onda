@@ -4,7 +4,6 @@ import numpy as np
 from neo.rawio import BlackrockRawIO
 from scipy.signal import resample
 from copy import deepcopy
-
 from spike import Experiment, Group, Animal, Unit
 from lfp import LFPExperiment
 

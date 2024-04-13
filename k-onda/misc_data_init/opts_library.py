@@ -173,14 +173,14 @@ POWER_SPREADSHEET_OPTS = {
     'matlab_configuration': MATLAB_CONFIG
 }
 
-TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_types': ['power'],
+TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
                          'brain_regions': ['hpc', 'bla', 'pl'], 'store': 'pkl', 'evoked': False,
-                         'blocks': {'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
+                         'blocks': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
                          'power_deviation': False, 'filter': 'spectrum_estimation',
                          'levels': ['group'], 'validate_events': {'frequency': (0, 8), 'threshold': 20,
                                                                   'blocks': {'pretone': range(5), 'tone': range(5)}},
-                         'events': {'pretone': {'pre_stim': 0, 'post_stim': .3},
-                                    'tone': {'pre_stim': 0, 'post_stim': .3}},
+                         'events': {'pretone': {'pre_stim': 0, 'post_stim': .4},
+                                    'tone': {'pre_stim': 0, 'post_stim': .4}},
                          'rules': {'brain_region': {'pl': [('selected_animals', PFC_THETA_POWER_ANIMALS)],
                                                     'bla': [('selected_animals', BLA_THETA_POWER_ANIMALS)],
                                                     'hpc': [('selected_animals', HPC_THETA_POWER_ANIMALS)]}},
@@ -191,9 +191,9 @@ TEST_SPECTROGRAM_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_b
 
 TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
 
-TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS}
+#TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS}
 
-TEST_RUNNER_OPTS = [TEST_SPECTROGRAM_OPTS, {'data_class': 'behavior', 'data_type': 'percent_freezing'}]
+##TEST_RUNNER_OPTS = [TEST_SPECTROGRAM_OPTS, {'data_class': 'behavior', 'data_type': 'percent_freezing'}]
 
 
 

@@ -513,6 +513,8 @@ class LFPEvent(LFPData, LFPDataSelector):
         frequency_bins = self.get_frequency_bins(self.get_original_data())
         for frequency in range(*self.data_opts['validate_events'].get('frequency', (0, 8))):
             self.update_data_opts(['evoked'], False)
+            if not self.block.animal.mirror:
+                self.block.animal.make_mirror()
             standard = self.block.animal.mirror.get_median(
                 stop_at='event', extend_by=('frequency', 'time'),
                 select_by=(('block', 'block_type', self.block_type), ('frequency_bin', 'identifier', frequency)))
