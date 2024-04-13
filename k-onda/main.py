@@ -21,7 +21,8 @@ def run():
     #            path='/Users/katie/likhtik/IG_INED_Safety_Recall',
     #            filename='psth_power',
     #           prep=('validate_events', VALIDATION_DATA_OPTS))
-    runner.run('plot_power', TEST_RUNNER_OPTS, prep=('validate_events', VALIDATION_DATA_OPTS))
+    runner.run('plot_power', TEST_RUNNER_OPTS, prep={'method': 'validate_events', 
+                                                     'data_opts': VALIDATION_DATA_OPTS})
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

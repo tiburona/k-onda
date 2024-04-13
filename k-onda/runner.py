@@ -47,6 +47,8 @@ class Runner:
         self.proc_name = None
         self.current_data_opts = None
         self.preparatory_method = None
+        self.data_class_kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() 
+                                  for dc in ['lfp', 'behavior'] if getattr(self, dc)}
 
     def load_analysis_config(self, opts):
         if isinstance(opts, str):
@@ -63,12 +65,10 @@ class Runner:
         else:
             self.data_opts = opts.get('data_opts', {})
             self.graph_opts = opts.get('graph_opts', None)
+            self.proc_name = opts.get('method')
 
     def prepare(self):
         self.executing_class = PROCEDURE_DICT[self.proc_name]['class']
-        self.data_class_kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() 
-                                  for dc in ['lfp', 'behavior'] if getattr(self, dc)}
-
         if self.executing_class.__name__ in self.executing_instances:
             self.executing_instance = self.executing_instances[self.executing_class.__name__]
         else:
@@ -80,10 +80,12 @@ class Runner:
         self.executing_method = getattr(self.executing_instance, method)
         self.follow_up_method = PROCEDURE_DICT[self.proc_name].get('follow_up')
 
-    def read_inputs(self, proc_name, opts):
-        self.proc_name = proc_name
-        self.load_analysis_config(opts)
-        
+    def prepare_prep(self):
+        if self.data_opts['data_class'] == 'spike':
+            self.executing_instance = self.experiment
+        else:
+            self.executing_instance = self.data_class_kwargs[self.data_opts['data_class']]
+        self.executing_method = getattr(self.executing_instance, self.proc_name)
 
     def get_loop_lists(self):
         for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
@@ -119,7 +121,7 @@ class Runner:
         selected_animals = self.current_data_opts.get('selected_animals')
         if selected_animals is not None and not all([id in all_animal_ids for id in selected_animals]):
             raise ValueError("Missing animals")
-        if self.current_data_opts.get('adjustment') != 'none':
+        if self.current_data_opts['data_class'] == 'spike' and self.current_data_opts.get('adjustment') != 'none':
             if self.current_data_opts.get('evoked'):
                 raise ValueError("It does not make sense to set 'evoked' to True and 'adjustment' to anything other "
                                  "than 'none'.  See Analysis Configuration Reference.")
@@ -138,19 +140,7 @@ class Runner:
         else:
             self.executing_method(self.current_data_opts)
 
-    def run_prep(self, prep):
-        prep_fun, prep_opts = prep
-        if prep_opts['data_class'] == 'spike':
-            prep_executor = self.experiment
-        else:
-            prep_executor = self.data_class_kwargs[prep_opts['data_class']]
-
-        getattr(prep_executor, prep_fun)(prep_opts)
-
-    def run_all(self, prep=None):
-
-        if prep is not None:
-            self.run_prep(prep)
+    def run_all(self):
 
         opts_list = self.data_opts if isinstance(self.data_opts, list) else [self.data_opts]
             
@@ -163,9 +153,15 @@ class Runner:
                 self.execute()
 
     def run(self, proc_name, opts, *args, prep=None, **kwargs):
-        self.read_inputs(proc_name, opts)
+        
+        if prep:
+            self.load_analysis_config(prep)
+            self.prepare_prep()
+            self.run_all()
+        self.load_analysis_config(opts)
+        self.proc_name = proc_name
         self.prepare()
-        self.run_all(prep=prep)
+        self.run_all()
         if self.follow_up_method is not None:
             getattr(self.executing_instance, self.follow_up_method)(*args, **kwargs)
 

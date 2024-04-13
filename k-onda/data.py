@@ -267,8 +267,21 @@ class Data(Base):
             return children
         name = children[0].name
         ic = self.get_inclusion_criteria()[name] + [lambda x: getattr(x, 'base_node', None) or x.children]
-        children = [child for child in children if all([criterion(child) for criterion in ic])]
-        return children
+        filtered_children = []
+        # You might look back at this and wonder why it can't be a one-line comprehension.
+        # Because x.children can cause an error if evaluated on an animal that should be excluded.
+        
+        for child in children: 
+            if child.name == 'animal' and self.current_brain_region == 'hpc' and self.current_frequency_band == 'theta_1':
+                a = 'foo'
+            append_child = True
+            for criterion in ic:
+                if not criterion(child):
+                    append_child = False
+                    break
+            if append_child:
+                filtered_children.append(child)
+        return filtered_children
     
     
     def refer(self, data, stop_at='', is_spectrum=False):
@@ -345,13 +358,17 @@ class Data(Base):
             if vals is None:
                 vals = []
             if obj.name == stop_at or not hasattr(obj, 'children'):
-                vals.append(obj)
+                if extend_by is not None:
+                    sources = expand_sources(obj, extend_by)
+                    sources = [src for src in sources if select_sources(src, select_by)]
+                    if not len(sources):
+                        a = 'foo'
+                    vals.extend(sources)
+                else:
+                    vals.append(obj)
             else:
-                if hasattr(obj, 'children'):
-                    for child in obj.children:
-                        if extend_by is not None:
-                            sources = expand_sources(child, extend_by)
-                        [collect_vals(source, vals) for source in sources if select_sources(source, select_by)] # a time bins name is not frequency bin.  the frequency bins will never be selcted
+                if hasattr(obj, 'children') and obj.children:
+                    [collect_vals(child, vals) for child in obj.children if select_sources(child, select_by)]
             return vals
 
         def expand_sources(obj, extension):

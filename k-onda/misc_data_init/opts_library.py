@@ -166,7 +166,7 @@ POWER_SPREADSHEET_OPTS = {
 TEST_SPECTROGRAM_OPTS = {
     'data_class': 'lfp', 'frequency_bands': ['theta_1', 'theta_2'], 'data_type': 'power', 
     'row_type': 'event', 'frequency_type': 'block', 'bin_size': .01,
-    'brain_regions': ['hpc', 'bla', 'pl'], 'power_deviation': False, 'time_type': 'continuous', 
+    'brain_regions': ['hpc', 'pl', 'bla'], 'power_deviation': False, 'time_type': 'continuous', 
     'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
     'filter': 'spectrum_estimation', 'levels': ['group', 'animal'], 'store': 'pkl',
     'validate_events': True,
@@ -242,7 +242,13 @@ VALIDATION_DATA_OPTS = {
     'threshold': 20,
     'events': {
                 'pretone': {'pre_stim': 0, 'post_stim': .3}, 
-                'tone': {'pre_stim': 0, 'post_stim': .3}}
+                'tone': {'pre_stim': 0, 'post_stim': .3}},
+    'rules': {
+        'brain_region': 
+        {'pl': [('inclusion_rule', {'animal': [['identifier', 'in', PFC_THETA_POWER_ANIMALS]]})],
+         'bla': [('inclusion_rule', {'animal': [['identifier', 'in', BLA_THETA_POWER_ANIMALS]]})], 
+         'hpc': [('inclusion_rule', {'animal': [['identifier', 'in', HPC_THETA_POWER_ANIMALS]]})]
+                               }}
 }
 
 COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 

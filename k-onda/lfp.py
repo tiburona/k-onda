@@ -170,36 +170,32 @@ class LFPExperiment(LFPData, Subscriber):
             [animal.update_if_necessary() for animal in self.all_animals]
 
     def validate_events(self, data_opts):  
-
-        regions = data_opts['brain_regions']
-        
-        for region in regions:
-            self.event_validation[region] = {}
-            data_opts['brain_region'] = region
-            self.data_opts = data_opts
-            animals = [animal for animal in self.all_animals if animal.is_valid 
-                       and region in animal.raw_lfp]
-            for animal in animals:
-                standards = {period_type: animal.get_median(
-                    stop_at='event', extend_by=('frequency', 'time'), 
-                    select_by=(('period', 'period_type', period_type),)) 
-                    for period_type in animal.period_info}
-               
-                def validate_event(event):
-                    frequency_bins = event.get_frequency_bins(event.get_original_data())
-                    for frequency in frequency_bins: 
-                        standard = standards[event.period_type]
-                        for time_bin in frequency.time_bins:
-                            if time_bin.data > data_opts.get('threshold', 20) * standard:
-                                print(f"{region} {animal.identifier} {event.period_type} "
-                                f"{event.period.identifier} {event.identifier} invalid!")
-                                return False
-                    return True
-                   
-                for event in animal.all_events:
-                    event.valid = validate_event(event)
+        self.data_opts = data_opts
+        region = self.current_brain_region
+        self.event_validation[region] = {}
+        animals = [animal for animal in self.all_animals if animal.is_valid 
+                    and region in animal.raw_lfp]
+        for animal in animals:
+            standards = {period_type: animal.get_median(
+                stop_at='event', extend_by=('frequency', 'time'),
+                select_by=(('period', 'period_type', period_type),)) 
+                for period_type in animal.period_info}
+            
+            def validate_event(event):
+                frequency_bins = event.get_frequency_bins(event.get_original_data())
+                for frequency in frequency_bins: 
+                    standard = standards[event.period_type]
+                    for time_bin in frequency.time_bins:
+                        if time_bin.data > data_opts.get('threshold', 20) * standard:
+                            print(f"{region} {animal.identifier} {event.period_type} "
+                            f"{event.period.identifier} {event.identifier} invalid!")
+                            return False
+                return True
                 
-                self.event_validation[region][animal.identifier] = animal.event_validity()
+            for event in animal.all_events:
+                event.valid = validate_event(event)
+            
+            self.event_validation[region][animal.identifier] = animal.event_validity()
 
 
 class LFPGroup(LFPData):
@@ -550,13 +546,15 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector, EventValidator):
             normed_data = self.unpadded_data[start:stop]
 
             # get time points where the event will fall in the spectrogram in seconds
-            spect_start = start/self.sampling_rate + true_beginning - pre_stim
-            spect_end = spect_start + pre_stim + post_stim
+            spect_start = round(start/self.sampling_rate + true_beginning - pre_stim, 2)
+            spect_end = round(spect_start + pre_stim + post_stim, 2)
             num_points = int(np.ceil((spect_end - spect_start) / .01 - epsilon))  # TODO: the .01s in here depend on the mtcsg args
             event_times = np.linspace(spect_start, spect_start + (num_points * .01), num_points, endpoint=False)
             event_times = event_times[event_times < spect_end]
             # a binary mask that is True when a time bin in the spectrogram belongs to this event
             mask = (np.abs(time_bins[:, None] - event_times) <= epsilon).any(axis=1)
+            if sum(mask) == 0:
+                a = 'foo'
             events.append(LFPEvent(i, event_times, normed_data, mask, self))
         
         self._events = events
@@ -619,8 +617,8 @@ class LFPEvent(LFPData, LFPDataSelector):
 
     @cache_method
     def _get_power(self):
-        if sum(self.mask) == 300:
-            raise ValueError
+        if not len(np.array(self.sliced_spectrogram)[:, self.mask]):
+            a = 'foo'
         return np.array(self.sliced_spectrogram)[:, self.mask]
 
     @cache_method
