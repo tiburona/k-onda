@@ -90,10 +90,6 @@ CAROLINA_MRL_OPTS = {'data_class': 'lfp', 'data_type': 'mrl', 'bin_size': 0.01, 
                      'frequency_bands': ['theta_1'], 'brain_regions': ['bla', 'il', 'bf'],
                      'sem_level': 'mrl_calculator'}
 
-# PFC_THETA_POWER_ANIMALS = [
-#     'IG160', 'IG163', 'IG171', 'IG176', 'IG180', 'INED04', 'INED16', 'INED18', 'IG154', 'IG156', 'IG158', 'IG172',
-#     'IG174', 'IG175', 'IG177', 'IG179', 'INED07', 'INED06', 'INED09', 'INED11', 'INED12'
-# ]
 
 PFC_THETA_POWER_ANIMALS = [
     'IG160', 'IG163', 'IG171', 'IG176', 'IG180', 'INED04', 'INED16', 'INED18', 'IG156', 'IG158', 'IG172',
@@ -166,7 +162,7 @@ POWER_SPREADSHEET_OPTS = {
 TEST_SPECTROGRAM_OPTS = {
     'data_class': 'lfp', 'frequency_bands': ['theta_1', 'theta_2'], 'data_type': 'power', 
     'row_type': 'event', 'frequency_type': 'block', 'bin_size': .01,
-    'brain_regions': ['hpc', 'pl', 'bla'], 'power_deviation': False, 'time_type': 'continuous', 
+    'brain_regions': ['pl', 'hpc', 'bla'], 'power_deviation': False, 'time_type': 'continuous', 
     'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
     'filter': 'spectrum_estimation', 'levels': ['group', 'animal'], 'store': 'pkl',
     'validate_events': True,
@@ -208,8 +204,8 @@ MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
             'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'mrl_calculator',
             'validate_events': True,
             'events': {
-                'pretone': {'pre_stim': 0, 'post_stim': 1}, 
-                'tone': {'pre_stim': 0, 'post_stim': 1}},
+                'pretone': {'pre_stim': 0, 'post_stim': .3}, 
+                'tone': {'pre_stim': 0, 'post_stim': .3}},
             'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
             'rules': {
                 'brain_region': 
@@ -235,13 +231,13 @@ BLA_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(BLA_THETA_POWER_AN
 VALIDATION_DATA_OPTS = {
     'data_class': 'lfp',
     'data_type': 'power',
-    'brain_regions': ['pl', 'bla', 'hpc'],
+    'brain_regions': ['pl', 'hpc', 'bla'],
     'power_arg_set': (2048, 2000, 1000, 980, 2), 
     'matlab_configuration': MATLAB_CONFIG,
     'frequency_band': (0, 8),
     'threshold': 20,
     'events': {
-                'pretone': {'pre_stim': 0, 'post_stim': .3}, 
+                'pretone': {'pre_stim': .0, 'post_stim': .3}, 
                 'tone': {'pre_stim': 0, 'post_stim': .3}},
     'rules': {
         'brain_region': 
@@ -300,13 +296,13 @@ PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adju
              'periods': {'tone': range(5)}, 
              'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
                                 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
-             'events': {'pretone': {'pre_stim': 0.15, 'post_stim': .3}, 'tone': {'pre_stim': .15, 'post_stim': .3}}}
+             'events': {'pretone': {'pre_stim': 0, 'post_stim': .3}, 'tone': {'pre_stim': 0, 'post_stim': .3}}}
 
-TEST_RUNNER_OPTS = [PSTH_OPTS, TEST_SPECTROGRAM_OPTS]
+SPREADSHEET_OPTS = [MRL_OPTS, TEST_SPECTROGRAM_OPTS]
 
 TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
 
-#TEST_RUNNER_OPTS = [MRL_OPTS]
+## TEST_RUNNER_OPTS = [MRL_OPTS]
 
 
 

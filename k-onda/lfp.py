@@ -511,6 +511,8 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector, EventValidator):
 
     @property
     def events(self):
+        if self.current_brain_region not in self.animal.processed_lfp:
+            return []
         return self.get_events()
 
     @property
@@ -553,8 +555,6 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector, EventValidator):
             event_times = event_times[event_times < spect_end]
             # a binary mask that is True when a time bin in the spectrogram belongs to this event
             mask = (np.abs(time_bins[:, None] - event_times) <= epsilon).any(axis=1)
-            if sum(mask) == 0:
-                a = 'foo'
             events.append(LFPEvent(i, event_times, normed_data, mask, self))
         
         self._events = events
@@ -617,8 +617,6 @@ class LFPEvent(LFPData, LFPDataSelector):
 
     @cache_method
     def _get_power(self):
-        if not len(np.array(self.sliced_spectrogram)[:, self.mask]):
-            a = 'foo'
         return np.array(self.sliced_spectrogram)[:, self.mask]
 
     @cache_method
@@ -635,7 +633,9 @@ class LFPEvent(LFPData, LFPDataSelector):
         if not self.data_opts.get('validate_events'):
             return True
         else:
-            return self.period.get_event_validity()[self.identifier]
+            if self.name == 'event':
+                print("invalid event!")
+            return self.period.get_event_validity(self.current_brain_region)[self.identifier]
 
 
 class FrequencyBin(LFPData):

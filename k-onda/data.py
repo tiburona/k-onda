@@ -108,7 +108,7 @@ class Data(Base):
     def children(self):
         if self._children is None:
             return self._children
-        return self.filter_children(self._children)
+        return [child for child in self._children if child.is_valid]
 
     @property
     def data(self):
@@ -129,7 +129,7 @@ class Data(Base):
                     return False
         inclusion_criteria = self.get_inclusion_criteria()[self.name]
         if hasattr(self, 'validator'):
-            inclusion_criteria += [lambda x: x.validator]
+            inclusion_criteria += [lambda x: x.validator()]
         return all([criterion(self) for criterion in inclusion_criteria])
 
     @property
@@ -261,29 +261,7 @@ class Data(Base):
                     criteria[name].append(criteria_func)
 
         return criteria
-    
-    def filter_children(self, children):
-        if not len(children):
-            return children
-        name = children[0].name
-        ic = self.get_inclusion_criteria()[name] + [lambda x: getattr(x, 'base_node', None) or x.children]
-        filtered_children = []
-        # You might look back at this and wonder why it can't be a one-line comprehension.
-        # Because x.children can cause an error if evaluated on an animal that should be excluded.
-        
-        for child in children: 
-            if child.name == 'animal' and self.current_brain_region == 'hpc' and self.current_frequency_band == 'theta_1':
-                a = 'foo'
-            append_child = True
-            for criterion in ic:
-                if not criterion(child):
-                    append_child = False
-                    break
-            if append_child:
-                filtered_children.append(child)
-        return filtered_children
-    
-    
+      
     def refer(self, data, stop_at='', is_spectrum=False):
         if (  # all the conditions in which reference data should not be subtracted
                 not self.data_opts.get('evoked') or
@@ -361,8 +339,6 @@ class Data(Base):
                 if extend_by is not None:
                     sources = expand_sources(obj, extend_by)
                     sources = [src for src in sources if select_sources(src, select_by)]
-                    if not len(sources):
-                        a = 'foo'
                     vals.extend(sources)
                 else:
                     vals.append(obj)

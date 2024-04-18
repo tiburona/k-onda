@@ -1,6 +1,6 @@
 from utils import log_directory_contents
 from runner import Runner
-from misc_data_init.opts_library import TEST_RUNNER_OPTS, VALIDATION_DATA_OPTS
+from misc_data_init.opts_library import TEST_RUNNER_OPTS, VALIDATION_DATA_OPTS, SPREADSHEET_OPTS
 import cProfile
 import pstats
 import signal
@@ -17,12 +17,11 @@ def main():
 def run():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json',
                     lfp=True)
-    # runner.run('make_spreadsheet', TEST_RUNNER_OPTS, 
-    #            path='/Users/katie/likhtik/IG_INED_Safety_Recall',
-    #            filename='psth_power',
-    #           prep=('validate_events', VALIDATION_DATA_OPTS))
-    runner.run('plot_power', TEST_RUNNER_OPTS, prep={'method': 'validate_events', 
-                                                     'data_opts': VALIDATION_DATA_OPTS})
+    runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
+               path='/Users/katie/likhtik/IG_INED_Safety_Recall',
+               filename='psth_power', 
+               prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
+    runner.run('plot_mrl', TEST_RUNNER_OPTS)
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 
