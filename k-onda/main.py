@@ -16,12 +16,12 @@ def main():
 
 def run():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json',
-                    lfp=True)
+                    lfp=True, behavior=True)
     runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
                path='/Users/katie/likhtik/IG_INED_Safety_Recall',
-               filename='psth_power', 
+               filename='psth_mrl_freezing', 
                prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
-    runner.run('plot_mrl', TEST_RUNNER_OPTS)
+    # runner.run('plot_spectrogram', TEST_RUNNER_OPTS,  prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

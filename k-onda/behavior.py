@@ -6,7 +6,6 @@ class Behavior:
     def __init__(self, experiment, info, data):
         self.experiment = experiment
         self.all_animals = []
-        self.all_periods = []
         self.initialize(data)
 
     def initialize(self, data):
@@ -14,7 +13,10 @@ class Behavior:
         for animal in self.experiment.all_animals:
             if animal.identifier in data:
                 self.all_animals.append(BehaviorAnimal(animal, data[animal.identifier]))
-        self.all_periods = [period for animal in self.all_animals for period in animal.all_periods]
+
+    @property
+    def all_periods(self):
+        return [period for animal in self.all_animals for period in animal.all_periods]
 
 
 class BehaviorAnimal(Data):

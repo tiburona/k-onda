@@ -76,8 +76,13 @@ class Initializer:
         if path_constructor[-1] == 'identifier':
             path_constructor[-1] = animal.identifier
         file_path = os.path.join(self.exp_info['lfp_root'], animal.identifier, *path_constructor)
-        reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
+        try:
+            reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
+        except OSError:
+            return {}
         reader.parse_header()
+        if all([k not in animal.animal_info for k in ['lfp_electrodes', 'lfp_from_stereotrodes']]):
+            return {}
         data_to_return = {region: reader.nsx_datas[3][0][:, val]
                           for region, val in animal.animal_info['lfp_electrodes'].items()}
         if animal.animal_info.get('lfp_from_stereotrodes') is not None:

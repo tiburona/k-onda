@@ -821,7 +821,6 @@ class PeriodMRLCalculator(MRLCalculator, EventValidator):
         return [calc for calc in self.parent.mrl_calculators[other_stage] 
                 if calc.identifier == self.identifier][0]
 
-    @property
     def validator(self):
         if self.data_opts.get('evoked'):
             return self.num_events > 4 and self.equivalent_calculator.num_events > 4

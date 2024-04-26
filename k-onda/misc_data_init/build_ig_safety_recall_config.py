@@ -9,6 +9,14 @@ STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156
 defeat_ig_st = ['IG154', 'IG155', 'IG156', 'IG158', 'IG175', 'IG177', 'IG179']
 control_ig_st = ['IG160', 'IG161', 'IG162', 'IG163', 'IG176', 'IG178', 'IG180']
 
+defeat_just_behavior = ['INED02', 'INED03', 'INED15', 'INED19', 'INED20', 'IG159']
+control_just_behavior = ['INED10', 'INED13', 'INED34', 'INED35']
+
+control_no_brain_dict, defeat_no_brain_dict = ({
+    animal: {'condition': condition} for animal in animals} 
+    for condition, animals in [('control', control_just_behavior), ('defeat', defeat_just_behavior)]
+)
+
 animal_dirs = os.listdir(root)
 
 single_cell_dir = '/Users/katie/likhtik/single_cell_data/single_cell_data'
@@ -47,6 +55,7 @@ control_ig_dict, defeat_ig_dict = ({
              'lfp_from_stereotrodes': {'nsx_num': 6, 'electrodes': {'pl': pl_electrodes[animal]}}}
     for animal in animals} for condition, animals in [('control', control_ig_st), ('defeat', defeat_ig_st)])
 
+
 no_st_electrodes = {'hpc': 0, 'bla': 1, 'pl': 3}
 control_ig_no_st = ['IG171', 'IG173']
 defeat_ig_no_st = ['IG172', 'IG174']
@@ -54,7 +63,7 @@ control_ig_no_st_dict = {animal: {'condition': 'control', 'lfp_electrodes': no_s
 defeat_ig_no_st_dict = {animal: {'condition': 'defeat', 'lfp_electrodes': no_st_electrodes} for animal in defeat_ig_no_st}
 
 animal_info = {**control_ined_dict, **defeat_ined_dict, **control_ig_dict, **defeat_ig_dict, **control_ig_no_st_dict,
-              **defeat_ig_no_st_dict}
+              **defeat_ig_no_st_dict, **control_no_brain_dict, **defeat_no_brain_dict}
 
 #animal_info= {**control_ig_dict, **defeat_ig_dict}
 
@@ -81,6 +90,10 @@ animals = []
 
 for animal in animal_info:
     animal_file = os.path.join(root, animal, animal + '.json')
+    if not os.path.exists(animal_file):
+        animals.append({'identifier': animal, 'period_info': {'tone': {}, 'pretone': {}}, 
+                        **animal_info[animal]})
+        continue
     tone_on_code = 65502 if animal not in mice_with_alt_code else 65436
     with open(animal_file, 'r', encoding='utf-8') as file:
         print(animal_file)
