@@ -11,21 +11,22 @@ peristimulus_plots = {
         'psth', 'proportion', 'autocorrelation', 'spectrum', 'cross_correlation,' 'autocorrelogram'
     ]}
 
-mrl_procs = {meth: {'class': MRLPlotter, 'method': meth} for meth in ['mrl_bar_plot', 'mrl_rose_plot', 'mrl_heat_map']}
+mrl_procs = {meth: {'class': MRLPlotter, 'method': meth} for meth in 
+             ['mrl_bar_plot', 'mrl_rose_plot', 'mrl_heat_map']}
+
+lfp_procs = {f'plot_{meth}': {'class': LFPPlotter, 'method': f'plot_{meth}'} for meth in 
+             ['power', 'coherence', 'coherence_over_frequencies', 'spectrogram', 'correlation', 
+              'max_correlations']}
 
 other_procedures = {
     'plot_group_stats': {'class': GroupStatsPlotter, 'method': 'plot_group_stats'},
     'make_spreadsheet': {'class': Stats, 'method': 'make_df', 'follow_up': 'make_spreadsheet'},
     'unit_upregulation_pie_chart': {'class': PiePlotter, 'method': 'unit_upregulation_pie_chart'},
     'neuron_type_scatterplot': {'class': NeuronTypePlotter, 'method': 'scatterplot'},
-    'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'},
-    'plot_power': {'class': LFPPlotter, 'method': 'plot_power'},
-    'plot_coherence': {'class': LFPPlotter, 'method': 'plot_coherence'},
-    'plot_coherence_over_frequencies':  {'class': LFPPlotter, 'method': 'plot_coherence_over_frequencies'},
-    'plot_spectrogram': {'class': LFPPlotter, 'method': 'plot_spectrogram'}
+    'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'}
 }
 
-PROCEDURE_DICT = {**peristimulus_plots, **mrl_procs, **other_procedures}
+PROCEDURE_DICT = {**peristimulus_plots, **mrl_procs, **lfp_procs, **other_procedures}
 
 
 class Runner:
@@ -89,7 +90,7 @@ class Runner:
 
     def get_loop_lists(self):
         for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
-                             'neuron_qualities', 'inclusion_rules', 'coherence_region_sets']:
+                             'neuron_qualities', 'inclusion_rules', 'region_sets']:
             opt_list = self.current_data_opts.get(opt_list_key)
             if opt_list is not None:
                 self.loop_lists[opt_list_key] = opt_list

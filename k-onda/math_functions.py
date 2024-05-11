@@ -1,8 +1,7 @@
 import numpy as np
 import math
 from scipy import signal
-from scipy.signal import hilbert, butter, filtfilt, firwin, lfilter
-
+from scipy.signal import hilbert, butter, filtfilt, firwin, lfilter, correlate, coherence
 from scipy.fft import fft, ifft
 from scipy.optimize import curve_fit
 
@@ -282,6 +281,63 @@ def downsample(data, orig_freq, dest_freq):
     ratio = int(orig_freq/dest_freq)
 
     return filtered_data[::ratio]
+
+
+def calc_coherence(data_1, data_2, sampling_rate, low, high):
+
+    nperseg = 2000  
+    noverlap = int(nperseg/2)
+    window = 'hann'  # Window type
+    f, Cxy = coherence(data_1, data_2, fs=sampling_rate, window=window, nperseg=nperseg, 
+                       noverlap=noverlap)
+    mask = (f >= low) & (f <= high)
+    Cxy_band = Cxy[mask]
+    return Cxy_band
+
+
+def normalized_crosscorr(data1, data2):
+    mean1 = np.mean(data1)
+    mean2 = np.mean(data2)
+    std1 = np.std(data1)
+    std2 = np.std(data2)
+    
+    normalization_factor = std1 * std2 * len(data1)
+    cross_correlation = correlate(data1 - mean1, data2 - mean2, mode='full')
+    normalized_cross_corr = cross_correlation / normalization_factor
+    
+    return normalized_cross_corr
+
+
+def amp_crosscorr(signal1, signal2, samp_freq, low_freq, high_freq):
+    signal1 = np.array(signal1)
+    signal2 = np.array(signal2)
+    if len(signal1) != len(signal2):
+        raise ValueError("eeg1 and eeg2 must be vectors of the same size.")
+
+    if signal1.ndim != 1 or signal2.ndim != 1:
+        raise ValueError("signal1 and signal2 must be one-dimensional vectors.")
+
+   # Filter design parameters
+    nyquist = samp_freq / 2
+    numtaps = round(samp_freq)  # Filter order
+    if numtaps % 2 == 0:
+        numtaps += 1  # Make order odd if necessary
+    nyquist = samp_freq / 2
+    my_filt = firwin(numtaps, [low_freq / nyquist, high_freq / nyquist], pass_zero=False)
+
+    filtered1 = filtfilt(my_filt, 1, signal1)
+    filtered2 = filtfilt(my_filt, 1, signal2)
+
+    amp1 = np.abs(hilbert(filtered1))
+    amp1 -= np.mean(amp1)
+
+    amp2 = np.abs(hilbert(filtered2))
+    amp2 -= np.mean(amp2)
+
+    return normalized_crosscorr(amp1, amp2)
+
+
+
 
 
     

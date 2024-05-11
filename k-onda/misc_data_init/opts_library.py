@@ -107,11 +107,10 @@ HPC_MRL_ANIMALS = list(set(HPC_THETA_POWER_ANIMALS) & set(STANDARD_ANIMALS))
 PL_MRL_ANIMALS = list(set(PFC_THETA_POWER_ANIMALS) & set(STANDARD_ANIMALS))
 BLA_MRL_ANIMALS = list(set(BLA_THETA_POWER_ANIMALS) & set(STANDARD_ANIMALS))
 
-
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
               'sem': False, 'footer': True, 'equal_y_scales': True, 'equal_color_scales': 'within_group',
               'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'}, 'period_colors':
-                  {'pretone': 'gray', 'tone': 'black'}, 'period_order': ['pretone', 'tone']
+                  {'pretone': '#C75B56', 'tone': '#5679C7'}, 'period_order': ['pretone', 'tone']
               }
 
 MATLAB_CONFIG = {
@@ -243,18 +242,33 @@ VALIDATION_DATA_OPTS = {
 
 COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
             'data_type': 'coherence',  'frequency_type': 'block', 'validate_events': True,
-            'coherence_region_sets': ['bla_pl', 'bla_hpc', 'pl_hpc'], 
+            'region_sets': ['bla_pl', 'bla_hpc', 'hpc_pl'], 
             'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'coherence_calculator',
             'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
             'rules': {
-                'coherence_region_set': 
+                'region_set': 
                 {
                     'bla_pl': [('inclusion_rule', BLA_PL_INCLUSION)],
                     'bla_hpc': [('inclusion_rule', BLA_HPC_INCLUSION)],
                     'hpc_pl': [('inclusion_rule', PL_HPC_INCLUSION)]
                 }                   
                     }
-           } # 
+           } 
+
+CORRELATION_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
+            'data_type': 'correlation',  'frequency_type': 'block', 'validate_events': True,
+            'region_sets': ['bla_pl', 'bla_hpc', 'hpc_pl'], 'lags': 200, 'bin_size': .01,
+            'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'correlation_calculator',
+            'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
+            'rules': {
+                'region_set': 
+                {
+                    'bla_pl': [('inclusion_rule', BLA_PL_INCLUSION)],
+                    'bla_hpc': [('inclusion_rule', BLA_HPC_INCLUSION)],
+                    'hpc_pl': [('inclusion_rule', PL_HPC_INCLUSION)]
+                }                   
+                    }
+           } 
 
 
 
@@ -292,11 +306,8 @@ PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adju
                                 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
              'events': {'pretone': {'pre_stim': 0, 'post_stim': .3}, 'tone': {'pre_stim': 0, 'post_stim': .3}}}
 
-SPREADSHEET_OPTS = [BEHAVIOR_OPTS, PSTH_OPTS, MRL_OPTS]
+SPREADSHEET_OPTS = [CORRELATION_OPTS]
 
-# TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
+TEST_RUNNER_OPTS = {'data_opts': CORRELATION_OPTS, 'graph_opts': GRAPH_OPTS}
 
 ## TEST_RUNNER_OPTS = [MRL_OPTS]
-
-
-

@@ -29,8 +29,8 @@ class Stats(Base):
             if not isinstance(self.current_frequency_band, str):
                 translation_table = str.maketrans({k: '_' for k in '[](),'})
                 fb = str(list(fb)).translate(translation_table)
-            if self.data_type == 'coherence':
-                self.data_col = f"{self.data_opts['coherence_region_set']}_{fb}_{self.data_type}"
+            if self.data_type == 'coherence' or 'correlation' in self.data_type:
+                self.data_col = f"{self.data_opts['region_set']}_{fb}_{self.data_type}"
             else:
                 self.data_col = f"{self.current_brain_region}_{fb}_{self.data_type}"
         else:

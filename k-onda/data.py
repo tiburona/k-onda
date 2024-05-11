@@ -309,6 +309,26 @@ class Data(Base):
                 return np.nanmean(np.array(child_vals_filtered))
             else:  # compute mean over provided dimension
                 return np.nanmean(np.array(child_vals_filtered), axis=axis)
+            
+
+    def get_sum(self, base_method, axis=0, stop_at='period'):
+        if self.name == stop_at:  # we are at the base case and will call the base method
+            if hasattr(self, base_method) and callable(getattr(self, base_method)):
+                return getattr(self, base_method)()
+            else:
+                raise ValueError(f"Invalid base method: {base_method}")
+
+        else:  # recursively call
+            child_vals = [child.get_sum(base_method, axis=axis, stop_at=stop_at) for child in
+                          self.children]
+            # Filter out nan values and arrays that are all NaN
+            child_vals_filtered = [x for x in child_vals
+                                   if not (isinstance(x, np.ndarray) and np.isnan(x).all())
+                                   and not (isinstance(x, float) and np.isnan(x))]
+            if axis is None:
+                return np.sum(np.array(child_vals_filtered))
+            else:
+                return np.sum(np.array(child_vals_filtered), axis=axis)
 
     @cache_method
     def get_sem(self, collapse_sem_data=False):

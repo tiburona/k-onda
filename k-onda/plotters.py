@@ -818,9 +818,7 @@ class LFPPlotter(Plotter):
 
     def line_plot_over_frequencies(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
-        print("exited out of initialize, back in plot function")
         data = {}
-        print("initialized data, moving on in line plot")
         for group in self.lfp.groups:
             period_data = defaultdict(list)
             for period_type in self.data_opts['periods']:
@@ -890,6 +888,109 @@ class LFPPlotter(Plotter):
         self.fig = fig
         self.close_plot(self.data_type)
 
+    def plot_correlation(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts)
+        data = {}
+        for group in self.lfp.groups:
+            period_data = defaultdict(list)
+            for period_type in self.data_opts['periods']:
+                self.selected_period_type = period_type
+                period_data[period_type] = group.data
+            data[group.identifier] = period_data
+
+        fig_x_dim = self.data_opts['lags']/20
+        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(fig_x_dim, 10), sharex=True)
+
+        total_samples = self.data_opts.get('lags', 100) * 2 + 1
+        mid_index = total_samples // 2
+        ms_per_sample = 1000 / self.lfp.sampling_rate  
+
+        # Setting custom x-ticks and labels
+        tick_spacing = 40  # Adjust this as needed for granularity
+        ticks = list(range(0, total_samples, tick_spacing))
+        tick_labels = [(t - mid_index) * ms_per_sample for t in ticks]
+
+        for i, (ax, group) in enumerate(zip(axes, self.lfp.groups)):
+            for period_type in data[group.identifier]:
+                ax.plot(data[group.identifier][period_type], '-o', label=period_type.capitalize(),
+                    color=self.graph_opts['period_colors'][period_type])
+
+            ax.set_title(smart_title_case(f'{group.identifier} Group'))
+            ax.set_ylabel(self.data_type.capitalize())
+            ax.legend(title='Period Type')
+            if i == 1:
+                ax.set_xlabel('Lags (ms)')
+
+            # Apply custom ticks
+            ax.set_xticks(ticks)
+            ax.set_xticklabels(tick_labels)
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85)  
+
+        self.fig = fig
+        self.close_plot(self.data_type)
+
+    def plot_max_correlations(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts)
+        data = {}
+        for group in self.lfp.groups:
+            period_data = defaultdict(list)
+            for period_type in self.data_opts['periods']:
+                self.selected_period_type = period_type
+                period_data[period_type] = group.get_sum('get_max_histogram', 
+                                                        stop_at='correlation_calculator')
+            data[group.identifier] = period_data
+
+        fig_x_dim = self.data_opts['lags'] * self.data_opts['bin_size'] * 10
+        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(fig_x_dim, 10), sharex=True)
+
+        num_lags = self.data_opts.get('lags', self.lfp.sampling_rate/10)  
+        bin_size = self.data_opts.get('bin_size', .01) # in seconds
+        lags_per_bin = bin_size * self.lfp.sampling_rate
+        number_of_bins = int(num_lags * 2 / lags_per_bin)
+
+        mid_index = number_of_bins // 2
+
+        ms_per_bin = 1000 * bin_size
+        bar_width = ms_per_bin # width of each bar in milliseconds
+
+        # Adjust tick positions
+        ticks = [t * ms_per_bin for t in range(0, number_of_bins + 1)]  # positions for the bin edges
+        tick_labels = [(t - mid_index * ms_per_bin) for t in ticks]  # label each bin edge
+
+        for i, (ax, group) in enumerate(zip(axes, self.lfp.groups)):
+            for period_type in data[group.identifier]:
+                # Calculate midpoints
+                mid_points = [tick + bar_width / 2 for tick in ticks[:-1]]
+
+                # Plot the line graph with midpoints
+                ax.plot(mid_points, data[group.identifier][period_type], marker='o', linestyle='-', 
+                        label=period_type.capitalize(), color=self.graph_opts['period_colors'][period_type], 
+                        markerfacecolor='none', markeredgecolor=self.graph_opts['period_colors'][period_type])
+
+            ax.set_title(smart_title_case(f'{group.identifier} Group'))
+            ax.set_ylabel('Count of Max Correlations')
+            ax.legend(title='Period Type')
+            if i == 1:
+                ax.set_xlabel('Lags (ms)')
+
+            # Apply custom ticks
+            ax.set_xticks(ticks)
+            ax.set_xticklabels(tick_labels)
+
+            # Add a vertical dotted line at mid_index
+            ax.axvline(mid_index * ms_per_bin, color='grey', linestyle='--', linewidth=2)  
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85)
+
+        self.fig = fig
+        self.close_plot('max_correlation')
+
+
+
+
     def create_figure_and_axes(self, parent):
         ncols = len(self.data_opts['periods'])
         nrows = len(parent.children)
@@ -940,11 +1041,12 @@ class LFPPlotter(Plotter):
          for ax in axes.ravel()]
 
     def set_dir_and_filename(self, basename):
-        if self.data_type != 'coherence':
+        if 'coherence' not in self.data_type and 'correlation' not in self.data_type:
             brain_region = self.current_brain_region
         else:
-            brain_region = self.data_opts.get('coherence_region_set')
+            brain_region = self.data_opts.get('region_set')
         title_string = f"{'_'.join([brain_region, str(self.current_frequency_band), basename])}"
+        
         self.title = smart_title_case(title_string.replace('_', ' '))
         self.fig.suptitle(self.title, weight='bold', y=.98, fontsize=14)
         self.fname = f"{title_string}.png"

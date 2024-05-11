@@ -9,8 +9,8 @@ STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156
 defeat_ig_st = ['IG154', 'IG155', 'IG156', 'IG158', 'IG175', 'IG177', 'IG179']
 control_ig_st = ['IG160', 'IG161', 'IG162', 'IG163', 'IG176', 'IG178', 'IG180']
 
-defeat_just_behavior = ['INED02', 'INED03', 'INED15', 'INED19', 'INED20', 'IG159']
-control_just_behavior = ['INED10', 'INED13', 'INED34', 'INED35']
+control_just_behavior = ['INED02', 'INED03', 'INED15', 'INED19', 'INED20', 'IG159']
+defeat_just_behavior = ['INED08', 'INED10', 'INED13', 'INED34', 'INED35']
 
 control_no_brain_dict, defeat_no_brain_dict = ({
     animal: {'condition': condition} for animal in animals} 
@@ -35,7 +35,7 @@ for animal in defeat_ig_st + control_ig_st:
 ined_lfp_electrodes = {'bla': 1, 'bf': 2, 'pl': 3}
 
 control_ined = ['INED18', 'INED17', 'INED16', 'INED05', 'INED04']
-defeat_ined = ['INED01', 'INED06', 'INED07', 'INED09', 'INED11', 'INED12']
+defeat_ined = ['INED01', 'INED06', 'INED07', 'INED08', 'INED09', 'INED11', 'INED12']
 
 control_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'condition': 'control'} for animal in control_ined}
 defeat_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'condition': 'defeat'} for animal in defeat_ined}

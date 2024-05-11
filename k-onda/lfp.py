@@ -40,8 +40,8 @@ class LFPData(Data):
             return self.current_frequency_band
         
     @property
-    def current_coherence_region_set(self):
-        self.data_opts.get('coherence_region_set')
+    def current_region_set(self):
+        return self.data_opts.get('region_set')
 
     @property
     def lfp_root(self):
@@ -74,6 +74,10 @@ class LFPData(Data):
     @cache_method
     def get_coherence(self):
         return self.get_average('get_coherence', stop_at='coherence_calculator')
+    
+    @cache_method
+    def get_correlation(self):
+        return self.get_average('get_correlation', stop_at='correlation_calculator')
 
     def get_time_bins(self, data):
         tbs = []
@@ -151,6 +155,10 @@ class LFPExperiment(LFPData, Subscriber):
     @property
     def all_coherence_calculators(self):
         return self.get_data_calculated_by_period('coherence_calculators')
+    
+    @property
+    def all_correlation_calculators(self):
+        return self.get_data_calculated_by_period('correlation_calculators')
 
     def get_data_calculated_by_period(self, data_type):
         data_objects = []
@@ -279,6 +287,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.periods = defaultdict(list)
         self.mrl_calculators = defaultdict(list)
         self.coherence_calculators = defaultdict(list)
+        self.correlation_calculators = defaultdict(list)
         self.parent = None
         self.group = None
         self._processed_lfp = {}
@@ -286,7 +295,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.last_neuron_type = 'uninitialized'
         self.last_period_type = 'uninitialized'
         self.last_frequency_band = None
-        self.last_coherence_region_set = None
+        self.last_region_set = None
         self.is_mirror = is_mirror
         self._mirror = None
         self.frozen_freq_range = None
@@ -306,6 +315,8 @@ class LFPAnimal(LFPData, PeriodConstructor):
             children = self.periods
         elif self.data_type == 'coherence':
             children = self.coherence_calculators
+        elif 'correlation' in self.data_type:
+            children = self.correlation_calculators
         else:
             raise ValueError("Unknown data type")
         if self.data_opts.get('spontaneous'):
@@ -317,8 +328,8 @@ class LFPAnimal(LFPData, PeriodConstructor):
         return children
 
     def update_if_necessary(self):
-        if self.data_type == 'coherence':
-            regions = self.data_opts.get('coherence_region_set').split('_')
+        if self.data_type == 'coherence' or 'correlation' in self.data_type:
+            regions = self.data_opts.get('region_set').split('_')
         else:
             regions = [self.data_opts.get('brain_region')]
         if any([region not in self.raw_lfp for region in regions]):
@@ -327,14 +338,14 @@ class LFPAnimal(LFPData, PeriodConstructor):
                        (self.last_frequency_band, self.current_frequency_band),
                        (self.last_neuron_type, self.selected_neuron_type),
                        (self.last_period_type, self.selected_period_type),
-                       (self.last_coherence_region_set, self.current_coherence_region_set)]
+                       (self.last_region_set, self.current_region_set)]
         if any([old != new for old, new in old_and_new]):
             self.update_children()
             self.last_brain_region = self.current_brain_region
             self.last_frequency_band = self.current_frequency_band
             self.last_neuron_type = self.selected_neuron_type
             self.last_period_type = self.selected_period_type
-            self.last_coherence_region_set = self.current_coherence_region_set
+            self.last_region_set = self.current_region_set
 
     @property
     def processed_lfp(self):
@@ -358,6 +369,8 @@ class LFPAnimal(LFPData, PeriodConstructor):
             self.prepare_mrl_calculators()
         if 'coherence' in self.data_type:
             self.prepare_coherence_calculators()
+        if 'correlation' in self.data_type:
+            self.prepare_correlation_calculators()
     
     def event_validity(self):
         return {period_type: [period.event_validity() for period in self.periods[period_type]] 
@@ -395,12 +408,17 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.mrl_calculators = mrl_calculators
 
     def prepare_coherence_calculators(self):
-        brain_region_1, brain_region_2 = self.data_opts.get('coherence_region_set').split('_')
-        self.coherence_calculators = {
-            period_type: [CoherenceCalculator(period, brain_region_1, brain_region_2) 
-                          for period in self.periods[period_type]] 
-                          for period_type in self.periods
-                          }
+        self.coherence_calculators = self.prepare_region_relationship_calculators(CoherenceCalculator)
+
+    def prepare_correlation_calculators(self):
+        self.correlation_calculators = self.prepare_region_relationship_calculators(CorrelationCalculator)
+
+    def prepare_region_relationship_calculators(self, calc_class):
+        brain_region_1, brain_region_2 = self.data_opts.get('region_set').split('_')
+        return ({period_type: [calc_class(period, brain_region_1, brain_region_2) 
+                               for period in self.periods[period_type]] 
+                               for period_type in self.periods})
+
 
 class LFPDataSelector:
     """A class with methods shared by LFPPeriod and LFPEvent that are used to return portions of their data."""
@@ -876,9 +894,7 @@ class SpontaneousMRLCalculator(MRLCalculator):
         return self.num_events > 4
     
 
-class CoherenceCalculator(LFPData, EventValidator):
-
-    name = 'coherence_calculator'
+class RegionRelationshipCalculator(LFPData, EventValidator):
 
     def __init__(self, period, brain_region_1, brain_region_2):
         self.period = period
@@ -898,49 +914,91 @@ class CoherenceCalculator(LFPData, EventValidator):
         ev1, ev2 = [self.get_event_validity(region) for region in (self.region_1, self.region_2)]
         return {i: ev1[i] and ev2[i] for i in ev1}
 
-    def get_coherence(self):
-        if not self.data_opts.get('validate_events'):
-            return self.calc_coherence(self.region_1_data, self.region_2_data)
-        else:
-            valid_sets_1 = self.divide_data_into_valid_sets(self.region_1_data)
-            valid_sets_2 = self.divide_data_into_valid_sets(self.region_2_data)
-            valid_sets = zip(valid_sets_1, valid_sets_2)
-            data_len = sum([len(vs) for vs in valid_sets_1])
-            weighted_coherences = [self.calc_coherence(data_1, data_2)*len(data_1)/data_len 
-                                   for data_1, data_2 in valid_sets]
-            return sum(weighted_coherences)
-        
-    def calc_coherence(self, data_1, data_2):
-
-        nperseg = 2000  
-        noverlap = int(nperseg/2)
-        window = 'hann'  # Window type
-        f, Cxy = coherence(data_1, data_2, fs=self.sampling_rate, 
-                           window=window, nperseg=nperseg, noverlap=noverlap)
-        low, high = self.freq_range
-        mask = (f >= low) & (f <= high)
-        Cxy_band = Cxy[mask]
-        return Cxy_band
-    
     def divide_data_into_valid_sets(self, region_data):
         valid_sets = []
         current_set = []
         event_duration = self.sampling_rate * self.period.event_duration
+        # this is required for padlen in scipy.signal.filtfilt
+        min_len = 0 if self.data_type == 'coherence' else (self.sampling_rate + 1) * 3 + 1
     
         for i in range(0, len(region_data), event_duration):
             if self.joint_event_validity()[i // event_duration]:  
                 start = i
                 current_set.extend(region_data[start:start+event_duration])
             else:
-                if current_set:  
+                if current_set and len(current_set) > min_len:  
                     valid_sets.append(current_set)
                     current_set = []
     
-        if current_set:  
+        if current_set and len(current_set) > min_len:  
             valid_sets.append(current_set)
     
         return valid_sets
+    
+   
+    
+
+class CoherenceCalculator(RegionRelationshipCalculator):
+
+    name = 'coherence_calculator'
+
+    def get_relationship(self):
+        if not self.data_opts.get('validate_events'):
+            return calc_coherence(self.region_1_data, self.region_2_data, self.sampling_rate, 
+                                  *self.freq_range)
+        else:
+            valid_sets_1 = self.divide_data_into_valid_sets(self.region_1_data)
+            valid_sets_2 = self.divide_data_into_valid_sets(self.region_2_data)
+            sets = zip(valid_sets_1, valid_sets_2)
+            data_len = sum([len(vs) for vs in valid_sets_1])
+            return sum([calc_coherence(
+                data_1, data_2, self.sampling_rate, *self.freq_range) * len(data_1)/data_len 
+                for data_1, data_2 in sets
+                ])
         
+    
+class CorrelationCalculator(RegionRelationshipCalculator):
+
+    name = 'correlation_calculator'
+    
+    def get_max_histogram(self):
+        lag_of_max = self.get_lag_of_max_correlation()
+        num_lags = self.data_opts.get('lags', self.sampling_rate/10)  
+        bin_size = self.data_opts.get('bin_size', .01) # in seconds
+        lags_per_bin = bin_size * self.sampling_rate
+        number_of_bins = int(num_lags*2/lags_per_bin)
+        return np.histogram([lag_of_max], bins=number_of_bins, range=(0, 2*num_lags + 2))[0]
+
+    def get_lag_of_max_correlation(self):
+        return np.argmax(self.get_correlation())
+         
+    def get_correlation(self):
+
+        if not self.data_opts.get('validate_events'):
+            result = amp_crosscorr(self.region_1_data, self.region_2_data, self.sampling_rate, 
+                                  *self.freq_range)
+        else:
+            valid_sets_1 = self.divide_data_into_valid_sets(self.region_1_data)
+            valid_sets_2 = self.divide_data_into_valid_sets(self.region_2_data)
+            sets = zip(valid_sets_1, valid_sets_2)
+            lengths = [len(vs) for vs in valid_sets_1]
+            len_longest_corr = max(lengths) * 2 - 1
+            corrs = []
+            for data1, data2 in sets:
+                corr = amp_crosscorr(data1, data2, self.sampling_rate, * self.freq_range) 
+                weighted_corr = corr * (len(corr)/len_longest_corr)
+                padded_corr = np.full(len_longest_corr, np.nan) 
+                start_index = (len_longest_corr - len(corr)) // 2
+                end_index = start_index + len(corr)
+                padded_corr[start_index:end_index] = weighted_corr
+                corrs.append(padded_corr)
+                result = np.nansum(np.vstack(tuple(corrs)), axis=0)
+
+        lags = self.data_opts.get('lags', self.sampling_rate/10)
+        mid = result.size // 2
+        return result[mid-lags:mid+lags+1]
+
+    
    
 
 

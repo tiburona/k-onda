@@ -16,12 +16,11 @@ def main():
 
 def run():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json',
-                    lfp=True, behavior=True)
+                    lfp=True)
     runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
                path='/Users/katie/likhtik/IG_INED_Safety_Recall',
-               filename='psth_mrl_freezing', 
-               prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
-    # runner.run('plot_spectrogram', TEST_RUNNER_OPTS,  prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
+               filename='lag_of_max_correlation', prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
+    # runner.run('plot_max_correlations', TEST_RUNNER_OPTS,  prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 
