@@ -109,8 +109,8 @@ BLA_MRL_ANIMALS = list(set(BLA_THETA_POWER_ANIMALS) & set(STANDARD_ANIMALS))
 
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
               'sem': False, 'footer': True, 'equal_y_scales': True, 'equal_color_scales': 'within_group',
-              'group_colors': {'control': '#76BD4E', 'defeat': '#F2A354'}, 'period_colors':
-                  {'pretone': '#C75B56', 'tone': '#5679C7'}, 'period_order': ['pretone', 'tone']
+              'group_colors': {'control': '#6C4675', 'defeat': '#F2A354'}, 'period_colors':
+                  {'pretone': '#E75480', 'tone': '#76BD4E'}, 'period_order': ['pretone', 'tone']
               }
 
 MATLAB_CONFIG = {
@@ -195,8 +195,8 @@ MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
             'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'mrl_calculator',
             'validate_events': True,
             'events': {
-                'pretone': {'pre_stim': 0, 'post_stim': 1}, 
-                'tone': {'pre_stim': 0, 'post_stim': 1}},
+                'pretone': {'pre_stim': .95, 'post_stim': .05}, 
+                'tone': {'pre_stim': .95, 'post_stim': .05}},
             'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
             'rules': {
                 'brain_region': 
@@ -255,7 +255,7 @@ COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': 
                     }
            } 
 
-CORRELATION_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
+CORRELATION_OPTS = {'data_class': 'lfp', 'time_type': 'continuous', 'frequency_bands': ['theta_1', 'theta_2'], 
             'data_type': 'correlation',  'frequency_type': 'block', 'validate_events': True,
             'region_sets': ['bla_pl', 'bla_hpc', 'hpc_pl'], 'lags': 200, 'bin_size': .01,
             'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'correlation_calculator',
@@ -300,13 +300,22 @@ TEST_RUNNER_OPTS = [{'data_class': 'behavior', 'data_type': 'percent_freezing',
                      TEST_SPECTROGRAM_OPTS, PSTH_OPTS, COHERENCE_OPTS, MRL_OPTS]
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'none',
-             'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
+             'average_method': 'mean', 'time_type': 'block', 'row_type': 'event', 
              'periods': {'tone': range(5)}, 
              'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
                                 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
              'events': {'pretone': {'pre_stim': 0, 'post_stim': .3}, 'tone': {'pre_stim': 0, 'post_stim': .3}}}
 
-SPREADSHEET_OPTS = [CORRELATION_OPTS]
+COUNT_OPTS = {'data_class': 'spike', 'data_type': 'spike_counts', 'bin_size': 0.01, 'adjustment': 'none',
+            'time_type': 'continuous', 'row_type': 'event', 
+             'periods': {'tone': range(5)}, 
+             'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
+                                'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
+             'events': {'pretone': {'pre_stim': 0, 'post_stim': .6}, 'tone': {'pre_stim': 0, 'post_stim': .6}}}
+
+SPREADSHEET_OPTS = [CORRELATION_OPTS, COHERENCE_OPTS]
+
+SPREADSHEET_OPTS = [COUNT_OPTS]
 
 TEST_RUNNER_OPTS = {'data_opts': CORRELATION_OPTS, 'graph_opts': GRAPH_OPTS}
 

@@ -8,7 +8,7 @@ from period_constructor import PeriodConstructor
 from context import Subscriber
 from utils import cache_method, to_hashable
 from plotting_helpers import formatted_now
-from math_functions import calc_rates, spectrum, trim_and_normalize_ac, cross_correlation, correlogram
+from math_functions import calc_rates, calc_hist, spectrum, trim_and_normalize_ac, cross_correlation, correlogram
 
 """
 This module defines SpikeData, Experiment, Group, Animal, Unit, Period, and Event, which comprise a hierarchical data 
@@ -52,6 +52,9 @@ class SpikeData(Data):
 
     def get_psth(self):
         return self.get_average('get_psth')
+    
+    def get_spike_counts(self):
+        return self.get_sum('get_spike_counts')
 
     def get_spontaneous_firing(self):
         return self.get_average('get_spontaneous_firing', stop_at='unit')
@@ -399,6 +402,19 @@ class Event(SpikeData):
         bin_size = self.data_opts['bin_size']
         spike_range = (-self.pre_stim, self.post_stim)
         return calc_rates(self.spikes, self.num_bins_per_event, spike_range, bin_size)
+    
+    @cache_method
+    def get_unadjusted_counts(self):
+        return calc_hist(self.spikes, self.num_bins_per_event, (-self.pre_stim, self.post_stim))
+    
+    @cache_method
+    def get_spike_counts(self):
+        counts = self.get_unadjusted_counts()[0]
+        if not self.reference or self.data_opts.get('adjustment') == 'none':
+            return counts
+        else:
+            counts -= self.reference
+        return counts
 
     def get_cross_correlations(self, pair=None):
         other = pair.periods[self.period_type][self.period.identifier].events[self.identifier]

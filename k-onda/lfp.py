@@ -3,18 +3,16 @@ import json
 import pickle
 import numpy as np
 
-from scipy.signal import cwt, morlet, coherence
+from scipy.signal import cwt, morlet
 from collections import defaultdict
-from copy import deepcopy
 
-
-from data import Data
+from data import Data, TimeBin
 from context import experiment_context
 from period_constructor import PeriodConstructor
 from context import Subscriber
 from matlab_interface import MatlabInterface
 from math_functions import *
-from utils import cache_method, get_ancestors, find_ancestor_attribute
+from utils import cache_method, find_ancestor_attribute
 
 
 
@@ -682,34 +680,6 @@ class FrequencyBin(LFPData):
         return np.mean(self.val)
 
 
-class TimeBin:
-    name = 'time_bin'
-
-    def __init__(self, i, data, parent):
-        self.parent = parent
-        self.identifier = i
-        self.data = data
-        self.mean_data = np.mean(self.data)
-        self.ancestors = get_ancestors(self)
-        self.position = self.get_position_in_period_time_series()
-        period_ancestor = [ancestor for ancestor in self.ancestors if ancestor.name == 'period'] # TODO if there isn't yet a util to deal with this more elegantly write one
-        if len(period_ancestor):
-            self.period = period_ancestor[0]
-        else:
-            self.period = None
-        self.period_type = self.period.period_type
-
-    @property
-    def power_deviation(self):
-        return self.period.power_deviations[self.position]
-
-    def get_position_in_period_time_series(self):
-        if self.parent.name == 'event':
-            self.parent.num_bins_per_event * self.parent.identifier + self.identifier
-        else:
-            return self.identifier
-
-
 class MRLCalculator(LFPData):
     """Calculates the Mean Resultant Length of the vector that represents the phase of a frequency in the LFP data on
     the occasion the firing of a neuron. MRL """
@@ -935,14 +905,12 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
     
         return valid_sets
     
-   
-    
 
 class CoherenceCalculator(RegionRelationshipCalculator):
 
     name = 'coherence_calculator'
 
-    def get_relationship(self):
+    def get_coherence(self):
         if not self.data_opts.get('validate_events'):
             return calc_coherence(self.region_1_data, self.region_2_data, self.sampling_rate, 
                                   *self.freq_range)
@@ -960,6 +928,12 @@ class CoherenceCalculator(RegionRelationshipCalculator):
 class CorrelationCalculator(RegionRelationshipCalculator):
 
     name = 'correlation_calculator'
+
+    @property
+    def lags(self):
+        if self.data_type == 'lag_of_max_correlation':
+            raise ValueError("Data type is max correlation; there are not multiple lags.")
+        return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
     
     def get_max_histogram(self):
         lag_of_max = self.get_lag_of_max_correlation()
@@ -997,6 +971,8 @@ class CorrelationCalculator(RegionRelationshipCalculator):
         lags = self.data_opts.get('lags', self.sampling_rate/10)
         mid = result.size // 2
         return result[mid-lags:mid+lags+1]
+    
+
 
     
    

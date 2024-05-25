@@ -210,6 +210,7 @@ class Stats(Base):
         if self.data_opts.get('frequency_type') == 'continuous':
             sources = [frequency_bin for source in sources for frequency_bin in source.frequency_bins]
         if self.data_opts.get('time_type') == 'continuous':
+            other_attributes.append('time')
             sources = [time_bin for source in sources for time_bin in source.time_bins]
 
         for source in sources:

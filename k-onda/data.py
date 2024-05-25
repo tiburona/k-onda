@@ -406,18 +406,45 @@ class Data(Base):
             return None
 
 
-class TimeBin:
+class TimeBin(Data):
     name = 'time_bin'
 
     def __init__(self, i, val, parent):
         self.parent = parent
         self.identifier = i
-        self.data = val
-        self.mean_data = val
-        self.ancestors = get_ancestors(self)
+        self.val = val
         self.hierarchy = parent.hierarchy
+        self.position = self.get_position_in_period_time_series()
+        self.period = None
+        for ancestor in self.ancestors:
+            if ancestor.name == 'period':
+                self.period = ancestor
+                break
+            elif hasattr(ancestor, 'period'):
+                self.period = ancestor.period
+                break
+        if self.period:
+            self.period_type = self.period.period_type
 
-    def position_in_period_time_series(self):
-        return self.parent.num_bins * self.parent.identifier + self.identifier
+    @property
+    def data(self):
+        return self.val
+
+    @property
+    def time(self):
+        if self.data_type == 'correlation':
+            ts = np.arange(-self.data_opts['lags'], self.data_opts['lags'] + 1)/self.sampling_rate
+        else:
+            pre_stim, post_stim = [self.data_opts['events'][self.parent.period_type][val] 
+                                   for val in ['pre_stim', 'post_stim']]
+            ts = np.arange(-pre_stim, post_stim, self.data_opts['bin_size'])
+        return ts[self.identifier]
+        
+
+    def get_position_in_period_time_series(self):
+        if self.parent.name == 'event':
+            self.parent.num_bins_per_event * self.parent.identifier + self.identifier
+        else:
+            return self.identifier
 
 
