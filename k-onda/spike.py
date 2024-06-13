@@ -54,7 +54,7 @@ class SpikeData(Data):
         return self.get_average('get_psth')
     
     def get_spike_counts(self):
-        return self.get_sum('get_spike_counts')
+        return self.get_sum('get_spike_counts', stop_at='event')
 
     def get_spontaneous_firing(self):
         return self.get_average('get_spontaneous_firing', stop_at='unit')
@@ -356,10 +356,18 @@ class Period(SpikeData):
     @cache_method
     def get_unadjusted_rates(self):
         return [event.get_unadjusted_rates() for event in self.events]
+    
+    @cache_method
+    def get_unadjusted_counts(self):
+        return [event.get_spike_counts() for event in self.events]
 
     @cache_method
     def mean_firing_rate(self):
         return np.mean(self.get_unadjusted_rates())
+    
+    @cache_method
+    def mean_spike_counts(self):
+        return np.mean(self.get_unadjusted_counts())
 
     def find_equivalent(self, unit):
         return [period for period in unit.children][self.identifier]
@@ -413,7 +421,7 @@ class Event(SpikeData):
         if not self.reference or self.data_opts.get('adjustment') == 'none':
             return counts
         else:
-            counts -= self.reference
+            counts = counts.astype(float) - self.reference.mean_spike_counts()
         return counts
 
     def get_cross_correlations(self, pair=None):

@@ -47,9 +47,7 @@ class Plotter(Base):
         """Both initializes values on self and sets values for the context."""
         self.graph_opts = graph_opts
         self.data_opts = data_opts  # Sets data_opts for all subscribers to context
-        print("did I get here?")
         self.selected_neuron_type = neuron_type
-        print("plotter initialize has run")
 
     def close_plot(self, basename):
         self.set_dir_and_filename(basename)
@@ -409,14 +407,13 @@ class GroupStatsPlotter(PeriStimulusPlotter):
 
     def plot_group_stats_data(self, sig_markers=True):
         self.stats = Stats(self.experiment, self.data_opts)
-        if sig_markers:
-            interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
         
         period_to_plot = self.graph_opts.get('period', 'tone')
         pre_stim, post_stim = (self.data_opts['events'][period_to_plot][opt] 
                                for opt in ['pre_stim', 'post_stim'])
         bin_size = self.data_opts.get('bin_size')
-        for row, neuron_type in enumerate(self.neuron_types):
+
+        for row, neuron_type in enumerate(self.experiment.neuron_types):
             self.selected_neuron_type = neuron_type
             for group in self.experiment.groups:
                 color = self.graph_opts['group_colors'][group.identifier]
@@ -439,18 +436,21 @@ class GroupStatsPlotter(PeriStimulusPlotter):
             self.current_ax = self.axs[row]
             self.set_labels()
 
-            if sig_markers:
-                # Annotate significant points within conditions
-                self.add_significance_markers(neuron_type_specific_ps[neuron_type], 'within_condition', row=row,
-                                              y=self.y_max * 1.05)
-        for row in range(len(self.neuron_types)):
+        self.selected_neuron_type = None
+        
+        if sig_markers:
+            interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
+            self.add_significance_markers(interaction_ps, 'interaction')
+                
+        for row, neuron_type in enumerate(self.experiment.neuron_types):
             self.axs[row].set_ylim(self.y_min * 1.1, self.y_max * 1.1)
             self.axs[row].set_xlim(pre_stim, post_stim)
             [self.axs[row].spines[side].set_visible(False) for side in ['top', 'right']]
+            if sig_markers:
+                 self.add_significance_markers(neuron_type_specific_ps[neuron_type], 
+                                              'within_condition', row=row, y=self.y_max * 1.05)
 
-        self.selected_neuron_type = None
-        if sig_markers:
-            self.add_significance_markers(interaction_ps, 'interaction')
+           
         self.place_legend()
 
     def add_significance_markers(self, p_values, p_type, row=None, y=None):
@@ -502,7 +502,7 @@ class PiePlotter(Plotter):
         labels = ['Up', 'Down', 'No Change']
         colors = ['yellow', 'blue', 'green']
 
-        for nt in self.neuron_types + [None]:
+        for nt in self.experiment.neuron_types + [None]:
             self.selected_neuron_type = nt
             for group in self.experiment.groups:
                 if nt:
@@ -653,7 +653,7 @@ class MRLPlotter(Plotter):
 
         data = []
         if data_opts.get('spontaneous'):
-            for neuron_type in self.neuron_types:
+            for neuron_type in self.experiment.neuron_types:
                 self.selected_neuron_type = neuron_type
                 for group in self.lfp.groups:
                     data.append([neuron_type, group.identifier, group.data, group.sem, group.scatter,

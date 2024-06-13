@@ -50,6 +50,8 @@ class Runner:
         self.preparatory_method = None
         self.data_class_kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() 
                                   for dc in ['lfp', 'behavior'] if getattr(self, dc)}
+        self.loop_lists = []
+        self.modified_keys = set()
 
     def load_analysis_config(self, opts):
         if isinstance(opts, str):
@@ -93,28 +95,43 @@ class Runner:
                              'neuron_qualities', 'inclusion_rules', 'region_sets']:
             opt_list = self.current_data_opts.get(opt_list_key)
             if opt_list is not None:
-                self.loop_lists[opt_list_key] = opt_list
+                self.loop_lists.append((opt_list_key, opt_list))
 
-    def iterate_loop_lists(self, remaining_loop_lists, current_index=0):
-        if current_index >= len(remaining_loop_lists):
-            self.execute()
-            return
-        opt_list_key, opt_list = remaining_loop_lists[current_index]
+    def iterate_loop_lists(self, remaining_lists, current_index=0):
+        if current_index >= len(self.loop_lists):
+            self.execute_current_configuration()
+            return  # Exit condition for recursion
+
+        opt_list_key, opt_list = self.loop_lists[current_index]
         for opt in opt_list:
             key = opt_list_key[:-1] if opt_list_key != 'neuron_qualities' else 'neuron_quality'
             self.current_data_opts[key] = opt
-            self.iterate_loop_lists(remaining_loop_lists, current_index + 1)
+            if self.current_data_opts.get('rules') and key in self.current_data_opts['rules']:
+                self.apply_rules_based_on_key(key)
+            
+            if self.modified_keys:
+                for key in self.modified_keys:
+                    opt_list = self.current_data_opts.get(key)
+                    remaining_lists.append((key, opt_list))
+                      # Re-fetch loop lists if modifications have occurred
+                self.modified_keys.clear()  # Reset modification tracker after handling
+                self.iterate_loop_lists(remaining_lists, current_index=current_index+1)  # Restart this level with updated lists
+                break  # Break the current for-loop to avoid redundant executions
+            else:
+                self.iterate_loop_lists(remaining_lists, current_index+1)  # Recurse to the next list
 
     def apply_rules(self):
-        rules = self.current_data_opts['rules']
-        # Assuming rules is a dictionary like: {'data_type': {'mrl': [('time_type', 'block')]}}
-        for data_key, conditions in rules.items():
-            if data_key not in self.current_data_opts:
-                raise ValueError(f"Key '{data_key}' not found in data_opts")
-            for trigger_val, vals_to_assign in conditions.items():
-                for target_key, val_to_assign in vals_to_assign:
-                    if self.current_data_opts[data_key] == trigger_val:
-                        self.current_data_opts[target_key] = val_to_assign
+        for key in self.current_data_opts['rules']:
+            self.apply_rules_based_on_key(key)
+
+    def apply_rules_based_on_key(self, key):
+        for test, update_info in self.current_data_opts['rules'].get(key, {}).items():
+            if self.current_data_opts[key] == test:
+                for update_key, update_value in update_info:
+                    self.current_data_opts[update_key] = update_value
+                    if update_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
+                                      'neuron_qualities', 'inclusion_rules', 'region_sets']:
+                        self.modified_keys.add(update_key)
 
     def validate(self):
         # TODO: update animal selection validation
@@ -131,9 +148,7 @@ class Runner:
                                  "periods to include.  This will result in a nonsensical result.  See the Analysis "
                                  "Configuration Reference.")
 
-    def execute(self):
-        if self.current_data_opts.get('rules'):
-            self.apply_rules()
+    def execute_current_configuration(self):
         self.validate()
         print(f"executing {self.executing_method} with options {self.current_data_opts}")
         if self.graph_opts is not None:
@@ -149,9 +164,11 @@ class Runner:
             self.current_data_opts = opts
             self.get_loop_lists()
             if self.loop_lists:
-                self.iterate_loop_lists(list(self.loop_lists.items()))
+                self.iterate_loop_lists(self.loop_lists)
             else:
-                self.execute()
+                if self.current_data_opts.get('rules'):
+                    self.apply_rules()
+                self.execute_current_configuration()
 
     def run(self, proc_name, opts, *args, prep=None, **kwargs):
         

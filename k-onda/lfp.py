@@ -3,8 +3,10 @@ import json
 import pickle
 import numpy as np
 
+
 from scipy.signal import cwt, morlet
 from collections import defaultdict
+from copy import deepcopy
 
 from data import Data, TimeBin
 from context import experiment_context
@@ -456,7 +458,8 @@ class EventValidator:
     
      def get_event_validity(self, region):
         period = self if self.name == 'period' else self.period
-        validity = period.animal.group.experiment.event_validation[region][period.animal.identifier]
+        ev = period.animal.group.experiment.event_validation
+        validity = ev[region][period.animal.identifier]
         return {i: valid for i, valid in enumerate(validity[self.period_type][period.identifier])}
 
 
@@ -663,7 +666,9 @@ class FrequencyBin(LFPData):
     def __init__(self, index, val, parent, unit=None):
         self.parent = parent
         self.val = val
-        self.identifier = index
+        freq_range = list(range(*self.freq_range))
+        freq_range.append(self.freq_range[-1])
+        self.identifier = freq_range[index]
         if self.parent.name == 'period':
             self.frequency = self.parent.spectrogram[1][index]
         elif hasattr(self.parent, 'period'):

@@ -135,6 +135,10 @@ class Data(Base):
     @property
     def mean_data(self):
         return np.mean(self.data)
+    
+    @property
+    def sum_data(self):
+        return np.sum(self.data)
 
     @property
     def sd_data(self):
@@ -229,6 +233,7 @@ class Data(Base):
         def make_criteria_func(name, attribute, value, operation, modifier=None, mattr=None, 
                                mop=None, mval=None):
             def criteria_func(x):
+                
                 # Ensure ancestors are not excluded based on descendants
                 if name != x.name and (name not in x.hierarchy or 
                                        x.hierarchy[x.name] <= x.hierarchy[name]):
@@ -329,6 +334,7 @@ class Data(Base):
                 return np.sum(np.array(child_vals_filtered))
             else:
                 return np.sum(np.array(child_vals_filtered), axis=axis)
+            
 
     @cache_method
     def get_sem(self, collapse_sem_data=False):
@@ -345,10 +351,16 @@ class Data(Base):
         else:
             sem_children = self.children
 
-        if collapse_sem_data:
-            return sem([child.mean_data for child in sem_children])
-        else:
-            return sem([child.data for child in sem_children])
+        data = []
+        for child in sem_children:
+            cd = child.data
+            if (isinstance(cd, np.ndarray) and (np.isnan(cd).all() or not(len(cd)))
+                ) or (isinstance(cd, float) and np.isnan(cd)):
+                continue
+            else:
+                data_to_append = np.mean(cd) if collapse_sem_data else cd
+                data.append(data_to_append)
+        return sem(data)
 
     @cache_method
     def get_median(self, stop_at='event', extend_by=None, select_by=None):

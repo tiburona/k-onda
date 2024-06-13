@@ -55,48 +55,9 @@ class Stats(Base):
             name += f"_{self.current_brain_region}_{self.current_frequency_band}"
         return name
 
-    def merge_dfs(self):
-        df_items = list(self.dfs.items())
-        df_items.sort(key=lambda item: len(item[1].columns), reverse=True)
-        df_names, dfs = zip(*df_items)
-        result = dfs[0].copy()
-        original_dtypes = result.dtypes
-
-        for df in dfs[1:]:
-            common_columns = list(set(result.columns).intersection(set(df.columns)))
-            print("Common columns before handling non-identical values:", common_columns)
-
-            if 'experiment' in df.columns:
-                df = df.drop(columns=['experiment'])
-            for col in common_columns:
-                if col in df.columns and col in result.columns:
-                    # Ensure data types are the same before merging
-                    if result[col].dtype != df[col].dtype:
-                        df[col] = df[col].astype(result[col].dtype)
-                    if not result[col].equals(df[col]):
-                        df = df.rename(columns={col: f'{col}_non_identical'})
-                        print(f"Renamed {col} to {col}_non_identical due to non-identical values")
-
-            common_columns = list(set(result.columns).intersection(set(df.columns)))
-            print("Common columns after handling non-identical values:", common_columns)
-
-            if common_columns:
-                result = pd.merge(result, df, how='left', suffixes=('', '_right'))
-            else:
-                print("No common columns found for merging. Skipping this DataFrame.")
-
-        # Convert columns back to original data types
-        for col, dtype in original_dtypes.items():
-            if col in result.columns:
-                result[col] = result[col].astype(dtype)
-
-        new_df_name = '_'.join(df_names)
-        self.dfs[new_df_name] = result
-        return new_df_name
-
     def merge_dfs_animal_by_animal(self):
         df_items = list(self.dfs.items())
-        _, dfs = zip(*df_items)
+        names, dfs = zip(*df_items)
 
         # Extract unique animals across all data frames
         unique_animals = pd.concat([df['animal'] for df in dfs]).unique()
@@ -105,18 +66,25 @@ class Stats(Base):
         merged_data_per_animal = []
 
         for animal in unique_animals:
-            # Data frames filtered for the current animal
-            dfs_per_animal = [df[df['animal'] == animal].drop(columns=['animal']) for df in dfs if
-                              animal in df['animal'].values]
+            # Data frames filtered for the current animal, with column renaming
+            dfs_per_animal = []
+            for i, df in enumerate(dfs):
+                if 'bla_theta_2' in names[i]:
+                    a = 'foo'
+
+                if animal in df['animal'].values:
+                    df = df.copy()  # Work on a copy to avoid modifying original DataFrame
+                    # if 'frequency_bin' in df.columns:
+                    #     frequency_band = names[i].split('_')[-1]
+                    #     df = df.rename(columns={'frequency_bin': frequency_band + '_frequency_bin'})
+                    dfs_per_animal.append(df[df['animal'] == animal].drop(columns=['animal']))
 
             if not dfs_per_animal:
                 continue
 
-            # Merge data for this animal
-            merged_animal_df = dfs_per_animal[0]
-            for df in dfs_per_animal[1:]:
-                # Merge on identical columns
-                merged_animal_df = pd.merge(merged_animal_df, df, how='outer')
+            # Merge data for this animal using reduce to handle multiple DataFrames
+            from functools import reduce
+            merged_animal_df = reduce(lambda left, right: pd.merge(left, right, how='outer'), dfs_per_animal)
 
             # Add the animal identifier back to the merged data
             merged_animal_df['animal'] = animal
@@ -214,7 +182,10 @@ class Stats(Base):
             sources = [time_bin for source in sources for time_bin in source.time_bins]
 
         for source in sources:
-            row_dict = {self.data_col: source.mean_data}
+            if self.data_opts.get('aggregator') == 'sum':
+                row_dict = {self.data_col: source.sum_data}
+            else:
+                row_dict = {self.data_col: source.mean_data}
             for src in source.ancestors:
                 row_dict[src.name] = src.identifier
                 for attr in other_attributes:
@@ -294,14 +265,25 @@ class Stats(Base):
             f.write(r_script)
 
     def write_spike_post_hoc_r_script(self):
-        if self.data_opts['row_type'] == 'event':
-            error_suffix = '/unit/period'
-        elif self.data_opts['row_type'] == 'period':
-            error_suffix = '/unit'
-        else:
-            error_suffix = ''
-        
-        error_suffix = error_suffix + '/time_bin' if self.data_opts.get('post_hoc_bin_size', 1) > 1 else error_suffix
+         
+        full_error_suffixes = {'event': '/unit/period',  'period': '/unit'}
+
+        error_suff_dict = {
+            'beta': full_error_suffixes,
+            'lmer': full_error_suffixes,
+            'poisson': {
+                'event': ':unit) + (1|animal:unit:period)',
+                'period': ':unit)'
+            }
+        }
+         
+        error_suffix = error_suff_dict[self.data_opts['post_hoc_type']][self.data_opts['row_type']]
+
+        if self.data_opts.get('post_hoc_bin_size', 1) > 1:
+            if self.data_opts['post_hoc_type'] == 'poisson':
+                error_suffix += '(1|animal:unit:period:time_bin)'
+            else:
+                error_suffix += '/time_bin' 
 
         post_hoc_bin_size = self.data_opts.get('post_hoc_bin_size', 1)
         
@@ -331,6 +313,15 @@ class Stats(Base):
             p_val_index = f'coefficients[{within_nt_p_row}, 5]'
             interaction_p_val_index = f'coefficients[{interaction_p_row}, 5]'
             zero_adjustment_line = ''
+        elif self.data_opts['post_hoc_type'] == 'poisson':
+            model_formula = f'glmmTMB({self.data_col} ~ group {pt_regressor_str} + (1|animal:unit) + (1|animal:unit:period), ' \
+            'ziformula = ~ 1, family = poisson(link = "log"), data = data)'
+            interaction_model_formula = f'glmmTMB({self.data_col} ~ group * neuron_type {pt_regressor_str}  + (1|animal{error_suffix}, data = sub_df)' 
+            p_val_index = f'coefficients$cond[{within_nt_p_row}, 4]'
+            interaction_p_val_index = f'coefficients$cond[{interaction_p_row}, 4]'
+            zero_adjustment_line = ''
+        else:
+            raise ValueError('Unknown post hoc type')
 
         select_period_type_line = ''
         if self.experiment.hierarchy[self.data_opts['row_type']] >  3 and not self.data_opts.get('period_type_regressor'):
@@ -408,8 +399,12 @@ class Stats(Base):
         if not os.path.exists(post_hoc_path):
             os.mkdir(post_hoc_path)
         adjustment = self.data_opts.get('adjustment')
+        changes_to_data_opts = []
         if self.data_opts.get('period_type_regressor'):
-            self.update_data_opts([(['adjustment'], 'none')])
+            changes_to_data_opts.append((['adjustment'], 'none'))
+        if self.data_opts.get('post_hoc_type') == 'poisson':
+            changes_to_data_opts.append((['data_type'], 'spike_counts'))
+        self.update_data_opts(changes_to_data_opts)
         self.make_spreadsheet(path=post_hoc_path)
         self.results_path = os.path.join(post_hoc_path, 'r_post_hoc_results.csv')
         if not os.path.exists(self.results_path) or force_recalc:

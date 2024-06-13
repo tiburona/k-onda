@@ -77,7 +77,7 @@ exp_info = {
     'lfp_path_constructor': ['identifier'],
     'lost_signal': .5,
     'stimulus_duration': .05,
-    'frequency_bands': dict(delta=(0, 4), theta_1=(4, 8), theta_2=(4, 12), delta_theta=(0, 12), gamma=(20, 55),
+    'frequency_bands': dict(delta=(0, 4), theta_1=(4, 8), theta_2=(8, 12), delta_theta=(0, 12), gamma=(20, 55),
                             hgamma=(70, 120)),
     'behavior_data': os.path.join(root, 'percent_freezing.csv'),
     'behavior_animal_id_column': 'ID'
