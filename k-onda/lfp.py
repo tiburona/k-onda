@@ -78,6 +78,10 @@ class LFPData(Data):
     @cache_method
     def get_correlation(self):
         return self.get_average('get_correlation', stop_at='correlation_calculator')
+    
+    @cache_method
+    def get_phase_phase_mrl(self):
+        return self.get_average('get_phase_phase_mrl', stop_at='phase_relationship_calculator')
 
     def get_time_bins(self, data):
         tbs = []
@@ -159,6 +163,10 @@ class LFPExperiment(LFPData, Subscriber):
     @property
     def all_correlation_calculators(self):
         return self.get_data_calculated_by_period('correlation_calculators')
+    
+    @property
+    def all_phase_relationship_calculators(self):
+        return self.get_data_calculated_by_period('phase_relationship_calculators')
 
     def get_data_calculated_by_period(self, data_type):
         data_objects = []
@@ -288,6 +296,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.mrl_calculators = defaultdict(list)
         self.coherence_calculators = defaultdict(list)
         self.correlation_calculators = defaultdict(list)
+        self.phase_relationship_calculators = defaultdict(list)
         self.parent = None
         self.group = None
         self._processed_lfp = {}
@@ -317,6 +326,8 @@ class LFPAnimal(LFPData, PeriodConstructor):
             children = self.coherence_calculators
         elif 'correlation' in self.data_type:
             children = self.correlation_calculators
+        elif 'phase' in self.data_type:
+            children = self.phase_relationship_calculators
         else:
             raise ValueError("Unknown data type")
         if self.data_opts.get('spontaneous'):
@@ -328,7 +339,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         return children
 
     def update_if_necessary(self):
-        if self.data_type == 'coherence' or 'correlation' in self.data_type:
+        if self.data_type == 'coherence' or 'correlation' in self.data_type or 'phase' in self.data_type:
             regions = self.data_opts.get('region_set').split('_')
         else:
             regions = [self.data_opts.get('brain_region')]
@@ -365,12 +376,17 @@ class LFPAnimal(LFPData, PeriodConstructor):
 
     def update_children(self):
         self.prepare_periods()
-        if 'mrl' in self.data_type:
+        if 'phase' in self.data_type:
+            self.prepare_phase_relationship_calculators()
+        elif 'mrl' in self.data_type:
             self.prepare_mrl_calculators()
-        if 'coherence' in self.data_type:
+        elif 'coherence' in self.data_type:
             self.prepare_coherence_calculators()
-        if 'correlation' in self.data_type:
+        elif 'correlation' in self.data_type:
             self.prepare_correlation_calculators()
+        else:
+            pass
+        
     
     def event_validity(self):
         return {period_type: [period.event_validity() for period in self.periods[period_type]] 
@@ -408,10 +424,16 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.mrl_calculators = mrl_calculators
 
     def prepare_coherence_calculators(self):
-        self.coherence_calculators = self.prepare_region_relationship_calculators(CoherenceCalculator)
+        cls = CoherenceCalculator
+        self.coherence_calculators = self.prepare_region_relationship_calculators(cls)
 
     def prepare_correlation_calculators(self):
-        self.correlation_calculators = self.prepare_region_relationship_calculators(CorrelationCalculator)
+        cls = CorrelationCalculator
+        self.correlation_calculators = self.prepare_region_relationship_calculators(cls)
+
+    def prepare_phase_relationship_calculators(self):
+        cls = PhaseRelationshipCalculator
+        self.phase_relationship_calculators = self.prepare_region_relationship_calculators(cls)
 
     def prepare_region_relationship_calculators(self, calc_class):
         brain_region_1, brain_region_2 = self.data_opts.get('region_set').split('_')
@@ -669,10 +691,13 @@ class FrequencyBin(LFPData):
         freq_range = list(range(*self.freq_range))
         freq_range.append(self.freq_range[-1])
         self.identifier = freq_range[index]
-        if self.parent.name == 'period':
-            self.frequency = self.parent.spectrogram[1][index]
-        elif hasattr(self.parent, 'period'):
-            self.frequency = self.parent.period.spectrogram[1][index]
+        if self.data_type == 'power':
+            if self.parent.name == 'period':
+                self.frequency = self.parent.spectrogram[1][index]
+            elif hasattr(self.parent, 'period'):
+                self.frequency = self.parent.period.spectrogram[1][index]
+        elif 'phase' in self.data_type:
+            self.frequency = self.parent.frequency_bands[index][0]
         self.unit = unit
         self.validator = self.parent.validator if hasattr(self.parent, 'validator') else True
 
@@ -683,6 +708,10 @@ class FrequencyBin(LFPData):
     @property
     def mean_data(self):
         return np.mean(self.val)
+    
+
+
+
 
 
 class MRLCalculator(LFPData):
@@ -873,6 +902,7 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
 
     def __init__(self, period, brain_region_1, brain_region_2):
         self.period = period
+        self.period_id = period.identifier
         self.period_type = period.period_type
         self.region_1 = brain_region_1
         self.region_2 = brain_region_2
@@ -884,12 +914,16 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
         self.base_node = True
         self._children = None
         self.parent = self.period.parent
+        self.frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
+
 
     def joint_event_validity(self):
         ev1, ev2 = [self.get_event_validity(region) for region in (self.region_1, self.region_2)]
         return {i: ev1[i] and ev2[i] for i in ev1}
 
     def divide_data_into_valid_sets(self, region_data):
+        if not self.data_opts.get('validate_events'):
+            return [region_data]
         valid_sets = []
         current_set = []
         event_duration = self.sampling_rate * self.period.event_duration
@@ -978,8 +1012,32 @@ class CorrelationCalculator(RegionRelationshipCalculator):
         return result[mid-lags:mid+lags+1]
     
 
+class PhaseRelationshipCalculator(RegionRelationshipCalculator):
 
-    
+    name = 'phase_relationship_calculator'
+    regularize = np.vectorize(lambda diff: np.arctan2(np.sin(diff), np.cos(diff)))
+
+    def get_phase_phase_mrl(self):
+        valid_sets = self.subtract_phase_data()
+        results_per_set = [compute_mrl(data, np.ones(data.shape), dim=1) for data in valid_sets]
+        weights = np.array([data_set.shape[1] for data_set in valid_sets])
+        return self.refer(np.average(results_per_set, axis=0, weights=weights))
+        
+    def subtract_phase_data(self):
+        d1, d2 = (self.region_1_data, self.region_2_data)
+        phase_diffs = self.get_region_phases(d1) - self.get_region_phases(d2) 
+        return self.regularize(phase_diffs)
+
+    def get_region_phases(self, region_data):
+        frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
+        valid_sets = np.array([
+            self.divide_data_into_valid_sets(
+                np.array(compute_phase(bandpass_filter(region_data, low, high, self.sampling_rate)))
+            ) for low, high in frequency_bands])
+        return valid_sets.transpose(1, 0, 2)
+
+        
+        
    
 
 

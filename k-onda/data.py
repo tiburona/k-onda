@@ -181,10 +181,16 @@ class Data(Base):
                 return [prd for prd in self.parent.periods[self.reference_period_type] 
                         if self is prd.target_period][0]
             if self.name == 'mrl_calculator':
-                return [calc for calc in self.parent.mrl_calculators[self.reference_period_type]
-                        if self is calc.period.target and self.unit is calc.unit][0]
+                return [
+                    calc for calc in self.parent.mrl_calculators[self.period.reference_period_type]
+                    if self.period is calc.period.target_period and self.unit is calc.unit][0]  
             if self.name == 'event':
                 return self.parent.reference
+            if any([s in self.name for s in ['coherence', 'correlation', 'phase']]):
+                parent_calcs = getattr(self.parent, self.name + 's')
+                return [
+                    calc for calc in parent_calcs[self.period.reference_period_type]
+                    if self.period is calc.period.target_period][0]
         return None
 
     @property
@@ -209,8 +215,15 @@ class Data(Base):
     @property
     def current_reference_period_type(self):
         exp = self.find_experiment()
-        return [period for period in exp.all_periods 
+        if hasattr(self, 'reference_period_type'):
+            return self.reference_period_type
+        if hasattr(self, 'period'):
+            return self.period.reference_period_type
+        if self.selected_period_type:
+            return [
+                period for period in exp.all_periods 
                 if period.period_type == self.selected_period_type][0].reference_period_type
+        return 
     
     def get_child_by_identifier(self, identifier):
         return [child for child in self.children if child.identifier == identifier][0]
@@ -268,18 +281,24 @@ class Data(Base):
         return criteria
       
     def refer(self, data, stop_at='', is_spectrum=False):
+        if self.period.period_type == 'pretone':
+            a = 'foo'
         if (  # all the conditions in which reference data should not be subtracted
                 not self.data_opts.get('evoked') or
-                self.period_type == self.current_reference_period_type or
+                self.period_type == self.current_reference_period_type or  # TODO: what is current reference period_type actually doing
+                hasattr(self, 'period') and self.period.is_relative or
                 (stop_at and stop_at != self.name) or
                 (self.data_type == 'spectrum' and not is_spectrum)
         ):
             return data
-        if self.reference.name == 'period':
-            ref_data = self.reference.data
+        ref_data = self.reference.data
+        if ref_data.shape[0] == 1:
+            mean_ref_data = np.mean(ref_data)
         else:
-            ref_data = self.reference.period.data
-        mean_ref_data = np.mean(ref_data) if ref_data.shape[0] == 1 else np.mean(ref_data, axis=1)[:, np.newaxis]
+            if len(ref_data.shape) == 1:
+                mean_ref_data = ref_data
+            else:
+                mean_ref_data = np.mean(ref_data, axis=1)[:, np.newaxis]
         data -= mean_ref_data
         return data
 

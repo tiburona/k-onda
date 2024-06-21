@@ -15,12 +15,12 @@ def main():
 
 
 def run():
-    runner = Runner(config_file='/Users/katie/likhtik/IG_INED_Safety_Recall/init_config.json',
+    runner = Runner(config_file='/Users/katie/likhtik/CH_EXT/init_config.json',
                     lfp=True)
     runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
-               path='/Users/katie/likhtik/IG_INED_Safety_Recall', filename='count_power', 
-               prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
-    runner.run('plot_power', RUNNER_OPTS)
+               path='/Users/katie/likhtik/CH_EXT', filename='phase_phase_il_bf')
+               # prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
+    #runner.run('plot_power', RUNNER_OPTS)
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

@@ -29,7 +29,7 @@ class Stats(Base):
             if not isinstance(self.current_frequency_band, str):
                 translation_table = str.maketrans({k: '_' for k in '[](),'})
                 fb = str(list(fb)).translate(translation_table)
-            if self.data_type == 'coherence' or 'correlation' in self.data_type:
+            if any([s in self.data_type for s in ['coherence', 'correlation', 'phase']]):
                 self.data_col = f"{self.data_opts['region_set']}_{fb}_{self.data_type}"
             else:
                 self.data_col = f"{self.current_brain_region}_{fb}_{self.data_type}"
@@ -124,6 +124,8 @@ class Stats(Base):
             if self.data_type in ['mrl']:
                 level = 'mrl_calculator'
                 other_attributes += ['frequency', 'fb', 'neuron_type', 'neuron_quality']  # TODO: figure out what fb should be changed to post refactor
+            if any([w in self.data_type for w in ['coherence', 'correlation', 'phase']]):
+                other_attributes.append('period_id')
             else:
                 if self.data_opts['time_type'] == 'continuous' and self.data_opts.get('power_deviation'):
                     other_attributes.append('power_deviation')

@@ -324,7 +324,17 @@ COUNT_OPTS = {'data_class': 'spike', 'data_type': 'spike_counts', 'bin_size': 0.
                                 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
              'events': {'pretone': {'pre_stim': .01, 'post_stim': .3}, 'tone': {'pre_stim': .01, 'post_stim': .3}}}
 
-SPREADSHEET_OPTS = [SPECTROGRAM_OPTS, COUNT_OPTS]
+
+PHASE_PHASE_OPTS = {
+    'data_class': 'lfp', 'data_type': 'phase_phase_mrl', 'time_type': 'block', 
+    'frequency_bands': ['theta_1', 'theta_2'], 'frequency_type': 'continuous',
+    'region_sets': ['il_bf'],
+    'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'phase_relationship_calculator',
+    'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG, 
+            }
+
+
+SPREADSHEET_OPTS = [PHASE_PHASE_OPTS]
 
 #COHERENCE_SPREADSHEET_OPTS = [COHERENCE_OPTS]
 

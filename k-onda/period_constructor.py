@@ -22,12 +22,13 @@ class PeriodConstructor:
                 self.periods[period_type] = function(period_type, filtered_period_info[period_type])
 
     def construct_periods(self, period_type, period_info):
+        if self.identifier == 'CH130':
+            a = 'foo'
         periods = []
         num_events = len([event for events_list in period_info['events'] for event in
                           events_list])  # all the events for this period type
 
-        # Assuming self.data_opts is a dictionary and num_events is defined
-        if self.data_opts and self.data_opts.get('events', {}).get(period_type, {}).get('selection') is not None:
+        if self.data_opts.get('events', {}).get(period_type, {}).get('selection') is not None:
             events = slice(*self.data_opts['events'][period_type]['selection'])
         else:
             events = slice(0, num_events)# default is to take all events
@@ -46,15 +47,30 @@ class PeriodConstructor:
 
     def construct_relative_periods(self, period_type, period_info):
         periods = []
-        shift = period_info['shift']
-        duration = period_info.get('duration')
+        if self.identifier == 'CH130':
+            a = 'foo'
         paired_periods = self.periods[period_info['target']]
+        exceptions = period_info.get('exceptions')
 
         for i, paired_period in enumerate(paired_periods):
+            i_key = str(i)
+            if exceptions and i_key in exceptions:
+                shift = exceptions[i_key]['shift']
+                duration = exceptions[i_key]['duration']
+            else:
+                shift = period_info['shift']
+                duration = period_info.get('duration')
             if self.name == 'animal':  # if self is animal this is an lfp period
                 shift -= sum(paired_period.convolution_padding)
-            onset = paired_period.onset + shift * self.sampling_rate
-            event_starts = paired_period.event_starts + shift * self.sampling_rate
+            shift_in_samples = shift * self.sampling_rate
+            event_duration = paired_period.period_info['event_duration'] * self.sampling_rate
+            onset = paired_period.onset + shift_in_samples
+            event_starts = []
+            for es in paired_period.event_starts:
+                ref_es = es + shift_in_samples
+                if ref_es + event_duration <= paired_period.onset:
+                    event_starts.append(ref_es)
+            event_starts = np.array(event_starts)
             duration = duration if duration else paired_period.duration
             reference_period = self.period_class(self, i, period_type, period_info, onset, events=event_starts,
                                                target_period=paired_period, is_relative=True)

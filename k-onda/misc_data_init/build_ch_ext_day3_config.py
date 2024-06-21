@@ -4,9 +4,15 @@ import os
 root = '/Users/katie/likhtik/CH_EXT'
 
 ANIMALS = ['CH054', 'CH069', 'CH129', 'CH130', 'CH131', 'CH134', 'CH135', 'CH151', 'CH152', 'CH154']
-lfp_electrodes = {'bla': 8, 'bf': 10, 'il': 12} # TODO check this make sure I'm converting to 0 index correctlly
+# ANIMALS = ['CH054', 'CH069', 'CH129', 'CH131', 'CH134', 'CH135', 'CH151', 'CH152', 'CH154']
+electrodes_a = {'bla': 0, 'bf': 1, 'il': 2} # TODO check this make sure I'm converting to 0 index correctly
+electrodes_b = {'bla': 2, 'il': 3, 'bf': 1}
 
-animal_info = {animal: {'condition': 'all', 'lfp_electrodes': lfp_electrodes} for animal in ANIMALS} # TODO if/when I find out conditions change this
+animal_info = {
+    animal: {
+        'condition': 'all', 
+        'lfp_electrodes': electrodes_b if animal in ['CH069', 'CH067', 'CH054'] else electrodes_a
+        } for animal in ANIMALS} 
 
 exp_info = {
     'conditions': ['all'],
@@ -18,7 +24,7 @@ exp_info = {
     'lfp_path_constructor': ['EXT'],
     'lost_signal': .5,
     'stimulus_duration': .05,
-    'frequency_bands': dict(delta=(0, 4), theta_1=(4, 8), theta_2=(8, 12), delta_theta=(0, 12), gamma=(20, 55),
+    'frequency_bands': dict(delta=(0, 4), theta_1=(3, 7), theta_2=(7, 13), delta_theta=(0, 12), gamma=(20, 55),
                             hgamma=(70, 120)),
     'behavior_data': '',
     'behavior_animal_id_column': ''
@@ -37,10 +43,14 @@ for animal in ANIMALS:
         unparsed_data = json_data['NEV']['Data']['SerialDigitalIO']['UnparsedData']
         tone_onsets = [ts for i, ts in enumerate(time_stamps) if unparsed_data[i] == tone_on_code]
         events = [[onset + i * 30000 for i in range(30)] for onset in tone_onsets]
-        pretone = {'relative': True, 'target': 'tone', 'shift': -30, 'duration': 30, 'lfp_padding': [1, 1]}
-        tone = {'onsets': tone_onsets, 'events': events, 'duration': 30, 'lfp_padding': [1, 1],
+        pretone = {'relative': True, 'target': 'tone', 'shift': -30, 'duration': 30, 
+                   'lfp_padding': [1, 1]}
+        tone = {'onsets': tone_onsets, 'events': events, 'duration': 30, 'lfp_padding': [0, 0],
                 'event_duration': 1, 'reference_period_type': 'pretone'}
-        animals.append({'identifier': animal, 'period_info': {'tone': tone, 'pretone': pretone}, **animal_info[animal]})
+        if animal == 'CH130':
+            pretone['exceptions'] = {0: {'shift': -20, 'duration': -20}}
+        animals.append({'identifier': animal, 'period_info': {'tone': tone, 'pretone': pretone}, 
+                        **animal_info[animal]})
 
 exp_info['animals'] = animals
 
