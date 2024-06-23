@@ -12,7 +12,7 @@ peristimulus_plots = {
     ]}
 
 mrl_procs = {meth: {'class': MRLPlotter, 'method': meth} for meth in 
-             ['mrl_bar_plot', 'mrl_rose_plot', 'mrl_heat_map']}
+             ['mrl_bar_plot', 'mrl_rose_plot', 'mrl_heat_map', 'plot_phase_phase_over_frequencies']}
 
 lfp_procs = {f'plot_{meth}': {'class': LFPPlotter, 'method': f'plot_{meth}'} for meth in 
              ['power', 'coherence', 'coherence_over_frequencies', 'spectrogram', 'correlation', 

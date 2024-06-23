@@ -622,9 +622,61 @@ class MRLPlotter(Plotter):
         self.selected_neuron_type = None
         self.close_plot(basename)
 
+    def plot_phase_phase_over_frequencies(self, data_opts, graph_opts):
+        self.line_plot_over_frequencies(data_opts, graph_opts)
+
+    def line_plot_over_frequencies(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts)
+        data = {}
+        period_groups = self.data_opts.get('period_groups')
+        period_groups = period_groups if period_groups else [None]
+        original_periods = deepcopy(self.data_opts['periods'])
+
+        fig_x_dim = len(list(range(*self.lfp.freq_range)))
+        ncols = 2 if len(self.lfp.groups) > 1 and len(period_groups) > 1 else 1
+        fig, axes = plt.subplots(nrows=2, ncols=ncols, figsize=(fig_x_dim, 10), sharex=True)
+        axes = np.array(axes).reshape(2, -1)  # This makes sure axes is always 2D even if ncols or nrows is 1
+       
+        for i, group in enumerate(self.lfp.groups):
+            for j, pg in enumerate(period_groups):
+                coords = (i, j) if len(self.lfp.groups) > 1 else (j, i)
+                ax = axes[coords[0], coords[1]]
+                if len(period_groups) > 1:
+                    new_periods = {p: original_periods[p][slice(*pg)] for p in original_periods}
+                    self.update_data_opts([(['periods'], new_periods)])
+                for period_type in self.data_opts['periods']:
+                    self.selected_period_type = period_type
+                    data = group.data
+                    ax.plot(list(range(self.lfp.freq_range[0], self.lfp.freq_range[1])), data, 
+                        '-o', label=period_type.capitalize(), 
+                        color=self.graph_opts['period_colors'][period_type][pg])
+                ax_title = ''
+                if len(self.lfp.groups) > 1:
+                    ax_title += smart_title_case(f'{group.identifier} Group')
+                if len(period_groups) > 1:
+                    ax_title += f' Periods {period_groups[j][0]+1}-{period_groups[j][1]}'
+                ax.set_title(ax_title)
+                ax.set_ylabel(self.data_type.capitalize())
+                if i == 1:  # Set xlabel on the last row
+                    ax.set_xlabel('Frequency')
+                ax.legend(title='Period Type')
+                ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+        if len(period_groups) > 1:
+            self.update_data_opts([(['periods'], original_periods)])
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85)  # Adjust this value as needed
+
+        self.fig = fig
+        self.close_plot(self.data_type)
+
     def set_dir_and_filename(self, basename):
-        frequency_band = str(self.lfp.current_frequency_band)
-        tags = [frequency_band, self.current_brain_region]
+        tags = [basename, str(self.lfp.current_frequency_band)]
+        if self.current_region_set:
+            tags.extend(self.current_region_set.split('_'))
+        else:
+            tags.append(self.current_brain_region)
         self.dir_tags = [self.data_type]
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)

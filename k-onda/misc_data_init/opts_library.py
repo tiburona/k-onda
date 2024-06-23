@@ -302,7 +302,7 @@ GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment'
 
 
 
-RUNNER_OPTS = {'data_opts': SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
+
 
 # TEST_RUNNER_OPTS = {'data_opts': TEST_SPECTROGRAM_OPTS}
 
@@ -325,16 +325,28 @@ COUNT_OPTS = {'data_class': 'spike', 'data_type': 'spike_counts', 'bin_size': 0.
              'events': {'pretone': {'pre_stim': .01, 'post_stim': .3}, 'tone': {'pre_stim': .01, 'post_stim': .3}}}
 
 
+CAROLINA_GRAPH_OPTS = {
+    'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1, 
+    'sem': False, 'footer': True, 'equal_y_scales': True, 'equal_color_scales': 'within_group', 
+    'group_colors': {'control': '#6C4675', 'defeat': '#F2A354'}, 
+    'period_colors': 
+    {'pretone': {(0, 2): '#000000', (18, 20): '#808080'}, 'tone': {(0, 2): '#82086F', (18, 20): '#D52C90'}, 
+            }}
+
 PHASE_PHASE_OPTS = {
     'data_class': 'lfp', 'data_type': 'phase_phase_mrl', 'time_type': 'block', 
-    'frequency_bands': ['theta_1', 'theta_2'], 'frequency_type': 'continuous',
-    'region_sets': ['il_bf'],
-    'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'phase_relationship_calculator',
-    'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG, 
+    'frequency_bands': [(0, 20)], 'frequency_type': 'continuous',
+    'region_sets': ['il_bf', 'bla_bf', 'bla_il'], 'period_groups': [(0, 2), (18, 20)],
+    'periods': {'tone': range(20), 'pretone': range(20)}, 'row_type': 'phase_relationship_calculator',
+    'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG
             }
 
 
+
+
 SPREADSHEET_OPTS = [PHASE_PHASE_OPTS]
+
+RUNNER_OPTS = {'data_opts': PHASE_PHASE_OPTS, 'graph_opts': CAROLINA_GRAPH_OPTS}
 
 #COHERENCE_SPREADSHEET_OPTS = [COHERENCE_OPTS]
 

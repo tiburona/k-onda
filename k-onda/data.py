@@ -73,6 +73,14 @@ class Base:
     def current_brain_region(self, brain_region):
         self.update_data_opts([(['brain_region'], brain_region)])
 
+    @property
+    def current_region_set(self):
+        return self.data_opts.get('region_set')
+
+    @current_brain_region.setter
+    def current_brain_region(self, region_set):
+        self.update_data_opts([(['region_set'], brain_region)])
+
     def update_data_opts(self, reassignments):
         for path, value in reassignments:
             current_level = self.data_opts
