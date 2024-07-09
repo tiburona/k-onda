@@ -323,6 +323,7 @@ class Period(SpikeData):
         self.onset = onset
         self.event_starts = events if events is not None else []
         self._events = []
+        self.period_info = period_info
         self.shift = period_info.get('shift')
         self.duration = period_info.get('duration')
         self.reference_period_type = period_info.get('reference_period_type')

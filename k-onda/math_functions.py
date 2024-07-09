@@ -337,6 +337,14 @@ def amp_crosscorr(signal1, signal2, samp_freq, low_freq, high_freq):
     return normalized_crosscorr(amp1, amp2)
 
 
+def regularize_angles(x):
+    regularize = np.vectorize(lambda x: np.arctan2(np.sin(x), np.cos(x)))
+    return regularize(x)
+
+
+
+
+
 
 
 

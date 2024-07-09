@@ -587,7 +587,7 @@ class NeuronTypePlotter(Plotter):
         ax.tick_params(axis='both', which='major', labelsize=5, length=1.25)
 
 
-class MRLPlotter(Plotter):
+class MRLPlotter(Plotter, PlottingMixin):
     def __init__(self, experiment, lfp=None, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, lfp=lfp, graph_opts=graph_opts, plot_type=plot_type)
 
@@ -627,7 +627,6 @@ class MRLPlotter(Plotter):
 
     def line_plot_over_frequencies(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
-        data = {}
         period_groups = self.data_opts.get('period_groups')
         period_groups = period_groups if period_groups else [None]
         original_periods = deepcopy(self.data_opts['periods'])
@@ -671,6 +670,87 @@ class MRLPlotter(Plotter):
         self.fig = fig
         self.close_plot(self.data_type)
 
+    def interate_through_groups_and_periods(self, data_opts, graph_opts, method):
+        self.initialize(data_opts, graph_opts)
+        period_groups = self.data_opts.get('period_groups')
+        period_groups = period_groups if period_groups else [None]
+        original_periods = deepcopy(self.data_opts['periods'])
+        nrows = len(self.lfp.groups) * len(period_groups)
+        ncols = len(self.data_opts['periods'])
+        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*nrows, 5*ncols), sharex=True)
+        axes = np.array(axes).reshape(2, -1)  # This makes sure axes is always 2D even if ncols or nrows is 1
+        period_type = None
+        for i, group in enumerate(self.lfp.groups):
+            for j, pg in enumerate(period_groups):
+                if len(period_groups) > 1:
+                    new_periods = {p: original_periods[p][slice(*pg)] for p in original_periods}
+                    self.update_data_opts([(['periods'], new_periods)])
+                for k, period_type in enumerate(original_periods):
+                    ax = axes[i*len(self.lfp.groups) + j, k]
+                    self.selected_period_type = period_type
+                    method(group, ax, period_type=period_type, pg=j)
+                    ax_title = ''
+                    if len(self.lfp.groups) > 1:
+                        ax_title += smart_title_case(f'{group.identifier} Group')
+                    if len(period_groups) > 1:
+                        ax_title += f' Periods {period_groups[j][0]+1}-{period_groups[j][1]}'
+                    ax.set_title(ax_title)
+                    ax.set_ylabel(self.data_type.capitalize())
+                    if i*len(self.lfp.groups) + j == len(self.lfp.groups) * len(period_groups) -1:  # Set xlabel on the last row
+                        ax.set_xlabel('Time')
+                    ax.legend(title='Period Type')
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85)  # Adjust this value as needed
+
+        self.fig = fig
+        self.close_plot(self.data_type)
+
+    def make_phase_phase_rose_plot(self, data_opts, graph_opts):
+        method = getattr(self, 'make_rose_plot')
+        self.interate_through_groups_and_periods(data_opts, graph_opts, method)
+
+    def make_phase_phase_trace_plot(self, data_opts, graph_opts):
+        method = getattr(self, 'make_trace_plot')
+        self.interate_through_groups_and_periods(data_opts, graph_opts, method)
+
+    def make_trace_plot(self, group, ax, period_type='', pg=None, title=''):
+        data = group.data
+        # Plot the initial data with normal settings
+        ax.plot(range(len(data[0])), data[0], '-o', label=period_type.capitalize(),
+                color=self.get_color(group=group.identifier, period_type=period_type, period_group=pg))
+
+        # Plot the event data with slightly thicker lines for better visibility
+        for event in group.phase_relationship_events:
+            data = event.data
+            ax.plot(range(len(data[0])), data[0], '-', label=period_type.capitalize(),
+                    color=self.get_color(group=group.identifier, period_type=period_type, period_group=pg),
+                    linewidth=0.1,  # Adjusted to a slightly thicker value for better rendering
+                    alpha=0.2)
+        event_info = self.data_opts.get('events')
+        if event_info:
+            pre_stim = event_info[period_type]['pre_stim']
+        else:
+            pre_stim = 0
+
+        total_samples = len(data)
+        tick_spacing = 40  
+        ticks = list(range(0, total_samples, tick_spacing))
+        tick_labels = [t - pre_stim * 1000 for t in ticks]
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(tick_labels)
+
+
+    def make_rose_plot(self, group, ax, period_type='', pg=None, title="", **kwargs):
+        n_bins = 36
+        bin_edges = np.linspace(0, 2 * np.pi, n_bins + 1)
+        width = 2 * np.pi / n_bins
+        ax.bar(bin_edges[:-1], group.data, width=width, align='edge', 
+               color=self.get_color(group=group, period_type=period_type, period_group=pg), alpha=1)
+        current_ticks = ax.get_yticks()
+        ax.set_yticks(current_ticks[::2])  # every second tick
+        ax.set_title(title)
+
     def set_dir_and_filename(self, basename):
         tags = [basename, str(self.lfp.current_frequency_band)]
         if self.current_region_set:
@@ -681,16 +761,6 @@ class MRLPlotter(Plotter):
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
         self.fname = f"{basename}_{'_'.join(tags)}.png"
-
-    def make_rose_plot(self, group, ax, title=""):
-        n_bins = 36
-        bin_edges = np.linspace(0, 2 * np.pi, n_bins + 1)
-        color = self.graph_opts['group_colors'][group.identifier]
-        width = 2 * np.pi / n_bins
-        ax.bar(bin_edges[:-1], group.get_angle_counts(), width=width, align='edge', color=color, alpha=1)
-        current_ticks = ax.get_yticks()
-        ax.set_yticks(current_ticks[::2])  # every second tick
-        ax.set_title(title)
 
     def make_heat_map(self, group, ax, title=""):
         data = group.data_by_period  # Todo put this back/figure out what it should be now

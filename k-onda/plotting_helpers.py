@@ -45,6 +45,34 @@ class PlottingMixin:
 
         [getattr(object_to_label, f"set_{dim}label")(labels[i], fontsize=15 * self.multiplier)
          for i, dim in enumerate(['x', 'y'])]
+        
+
+    def get_color(self, group=None, period_group=None, period_type=None):
+        default_color = self.graph_opts.get('default_color', 'black')
+
+        # Construct a key based on the parameters provided
+        key_parts = []
+        if group not in [None, 'all', '']:
+            key_parts.append(f"group {group}")
+        if period_group not in [None]:
+            key_parts.append(f"period_group {period_group}")
+        if period_type not in [None, 'all', '']:
+            key_parts.append(f"period_type {period_type}")  # Assume period_type is always specified
+
+        current_context = ' '.join(key_parts).strip()
+
+        # Search for the most specific matching pattern in the selections
+        best_match = default_color
+        max_match_length = 0
+        for pattern, color in self.graph_opts.get('colors', {}).items():
+            pattern_parts = pattern.split()
+            if all(part in current_context.split() for part in pattern_parts):
+                # Prefer the longest, most specific match found
+                if len(pattern_parts) > max_match_length:
+                    max_match_length = len(pattern_parts)
+                    best_match = color
+
+        return best_match
 
 
 def formatted_now():
@@ -74,4 +102,7 @@ def smart_title_case(s):
 def ac_str(s):
     for (old, new) in [('pd', 'Pandas'), ('np', 'NumPy'), ('ml', 'Matlab')]:
         s = s.replace(old, new)
+
+
+
 

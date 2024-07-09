@@ -344,6 +344,8 @@ class Data(Base):
             
 
     def get_sum(self, base_method, axis=0, stop_at='period'):
+        if self.identifier == 'CH129' and self.selected_period_type == 'pretone' and self.data_opts['periods']['tone'] == (18, 20):
+            a = 'foo'
         if self.name == stop_at:  # we are at the base case and will call the base method
             if hasattr(self, base_method) and callable(getattr(self, base_method)):
                 return getattr(self, base_method)()

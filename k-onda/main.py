@@ -15,12 +15,13 @@ def main():
 
 
 def run():
-    runner = Runner(config_file='/Users/katie/likhtik/CH_EXT/init_config.json',
+    runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json',
                     lfp=True)
-    # runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
-    #            path='/Users/katie/likhtik/CH_EXT', filename='phase_phase_il_bf')
-               # prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
-    runner.run('plot_phase_phase_over_frequencies', RUNNER_OPTS)
+    runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
+                path='/Users/katie/likhtik/IG_INED_SAFETY_RECALL', filename='lag_of_max_correlations',
+               prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
+    runner.run('plot_max_correlations', RUNNER_OPTS)
+
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

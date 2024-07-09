@@ -82,6 +82,14 @@ class LFPData(Data):
     @cache_method
     def get_phase_phase_mrl(self):
         return self.get_average('get_phase_phase_mrl', stop_at='phase_relationship_calculator')
+    
+    @cache_method
+    def get_phase_angle_counts(self):
+        return self.get_sum('get_phase_angle_counts', stop_at='phase_relationship_calculator')
+    
+    @cache_method
+    def get_phase_trace(self):
+        return self.get_average('get_phase_trace', stop_at='phase_relationship_event', axis=0)
 
     def get_time_bins(self, data):
         tbs = []
@@ -180,6 +188,11 @@ class LFPExperiment(LFPData, Subscriber):
         if self.data_type == 'mrl':
             raise ValueError("You can't extract events from MRL data")
         return [event for period in self.all_periods for event in period.events]
+    
+    @property
+    def all_phase_relationship_events(self):
+        return [event for calc in self.all_phase_relationship_calculators 
+                for event in calc.get_events()]
 
     def update(self, _):
         if self.data_class == 'lfp': 
@@ -231,6 +244,14 @@ class LFPGroup(LFPData):
     @property
     def mrl_calculators(self):
         return [mrl_calc for animal in self.children for mrl_calc in animal.mrl_calculators if mrl_calc.validator]
+    
+    @property
+    def phase_relationship_calculators(self):
+        return [calc for animal in self.children for calc in animal.phase_relationship_calculators]
+    
+    @property
+    def phase_relationship_events(self):
+        return [event for animal in self.children for calc in animal.children for event in calc.children]
 
     @property
     def grandchildren_scatter(self):
@@ -273,13 +294,6 @@ class LFPGroup(LFPData):
 
     def update_children(self):
         self._children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
-
-    def get_angle_counts(self):
-        for calc in self.mrl_calculators:
-            if any(np.isnan(calc.get_angle_counts())):
-                print(f"{calc.parent.identifier} {calc.identifier}")
-        counts = np.sum(np.array([calc.get_angle_counts() for calc in self.mrl_calculators]), axis=0)
-        return counts
 
 
 class LFPAnimal(LFPData, PeriodConstructor):
@@ -464,7 +478,6 @@ class LFPDataSelector:
         ind1 = indices[0][-1] if indices[0].size > 0 else None  # last index that's <= start of the freq range
         ind2 = np.argmax(self.spectrogram[1] > self.freq_range[1] + tolerance)  # first index > end of freq range
         val_to_return = self.spectrogram[0][ind1:ind2, :]
-        np.array(val_to_return)
         return val_to_return
         
     @cache_method
@@ -689,7 +702,8 @@ class FrequencyBin(LFPData):
         self.parent = parent
         self.val = val
         freq_range = list(range(*self.freq_range))
-        freq_range.append(self.freq_range[-1])
+        if parent.data.shape[0] > len(freq_range):
+            freq_range.append(freq_range[-1])
         self.identifier = freq_range[index]
         if self.data_type == 'power':
             if self.parent.name == 'period':
@@ -710,11 +724,20 @@ class FrequencyBin(LFPData):
         return np.mean(self.val)
     
 
+class MRLFunctions:
+
+    @cache_method
+    def get_phase_angle_counts(self): # TODO: give this a data type and make it use data
+        n_bins = 36
+        bin_edges = np.linspace(0, 2 * np.pi, n_bins + 1)
+        angles = self.get_angles()
+        counts, _ = np.histogram(angles, bins=bin_edges)
+        if self.data_opts.get('evoked'):
+            counts = counts/len(angles)  # counts must be transformed to proportions for the subtraction to make sense
+        return self.refer(counts)
 
 
-
-
-class MRLCalculator(LFPData):
+class MRLCalculator(LFPData, MRLFunctions):
     """Calculates the Mean Resultant Length of the vector that represents the phase of a frequency in the LFP data on
     the occasion the firing of a neuron. MRL """
 
@@ -782,17 +805,6 @@ class MRLCalculator(LFPData):
         adjusted_phases = adjusted_phases[~np.isnan(adjusted_phases)]
 
         return adjusted_phases
-
-    def get_angle_counts(self): # TODO: give this a data type and make it use data
-        n_bins = 36
-        bin_edges = np.linspace(0, 2 * np.pi, n_bins + 1)
-        angles = self.get_angles()
-        counts, _ = np.histogram(angles, bins=bin_edges)
-        if self.data_opts.get('evoked'):
-            counts = counts/len(angles)  # counts must be transformed to proportions for the subtraction to make sense
-            if self.period_type == 'tone':  # TODO: generalize this
-                counts -= self.equivalent_calculator.get_angle_counts()
-        return counts
 
     @cache_method
     def get_mrl(self):
@@ -902,6 +914,7 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
 
     def __init__(self, period, brain_region_1, brain_region_2):
         self.period = period
+        self.parent = self.period.parent
         self.period_id = period.identifier
         self.period_type = period.period_type
         self.region_1 = brain_region_1
@@ -911,10 +924,20 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
             self.period.start:self.period.stop]
         self.region_2_data = self.period.animal.processed_lfp[self.region_2][
             self.period.start:self.period.stop]
+        self.region_1_data_padded = self.period.animal.processed_lfp[self.region_1][
+            self.period.start - int(self.period.event_duration*self.sampling_rate):self.period.stop]
+        self.region_2_data_padded = self.period.animal.processed_lfp[self.region_1][
+            self.period.start - int(self.period.event_duration*self.sampling_rate):self.period.stop]
         self.base_node = True
-        self._children = None
-        self.parent = self.period.parent
+        self._children = []
         self.frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
+        self.event_duration = self.sampling_rate * self.period.event_duration
+
+    @property
+    def children(self):
+        if not len(self._children):
+            self.get_events()
+        return self._children
 
 
     def joint_event_validity(self):
@@ -926,14 +949,13 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
             return [region_data]
         valid_sets = []
         current_set = []
-        event_duration = self.sampling_rate * self.period.event_duration
+        
         # this is required for padlen in scipy.signal.filtfilt
         min_len = 0 if self.data_type == 'coherence' else (self.sampling_rate + 1) * 3 + 1
     
-        for i in range(0, len(region_data), event_duration):
-            if self.joint_event_validity()[i // event_duration]:  
-                start = i
-                current_set.extend(region_data[start:start+event_duration])
+        for start in range(0, len(region_data), self.event_duration):
+            if self.joint_event_validity()[start // self.event_duration]:
+                current_set.extend(region_data[start:start+self.event_duration])
             else:
                 if current_set and len(current_set) > min_len:  
                     valid_sets.append(current_set)
@@ -943,7 +965,7 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
             valid_sets.append(current_set)
     
         return valid_sets
-    
+
 
 class CoherenceCalculator(RegionRelationshipCalculator):
 
@@ -1012,32 +1034,127 @@ class CorrelationCalculator(RegionRelationshipCalculator):
         return result[mid-lags:mid+lags+1]
     
 
-class PhaseRelationshipCalculator(RegionRelationshipCalculator):
-
-    name = 'phase_relationship_calculator'
-    regularize = np.vectorize(lambda diff: np.arctan2(np.sin(diff), np.cos(diff)))
-
-    def get_phase_phase_mrl(self):
-        valid_sets = self.subtract_phase_data()
-        results_per_set = [compute_mrl(data, np.ones(data.shape), dim=1) for data in valid_sets]
-        weights = np.array([data_set.shape[1] for data_set in valid_sets])
-        return self.refer(np.average(results_per_set, axis=0, weights=weights))
-        
-    def subtract_phase_data(self):
+class PhaseRelationshipFunctions:
+     
+    def get_angles(self):
         d1, d2 = (self.region_1_data, self.region_2_data)
         phase_diffs = self.get_region_phases(d1) - self.get_region_phases(d2) 
-        return self.regularize(phase_diffs)
+        return regularize_angles(phase_diffs)
+    
+
+class PhaseRelationshipCalculator(MRLFunctions, PhaseRelationshipFunctions, 
+                                  RegionRelationshipCalculator):
+
+    name = 'phase_relationship_calculator'
+
+    @property
+    def time_to_use(self):
+        if self.data_opts.get('events'):
+            time_to_use = self.data_opts.get('events')[self.parent.period_type]['post_stim']  # TODO: Fix this to allow for pre stim time
+            time_to_use *= self.sampling_rate
+        else:
+            time_to_use = self.event_duration
+        return time_to_use
+    
+    def get_event_segment(self):
+        time_to_use = self.time_to_use
+        ones_segment = np.ones(time_to_use)
+        nans_segment = np.full(self.event_duration - time_to_use, np.nan)
+        segment = np.concatenate([ones_segment, nans_segment])
+        return segment
+
+    def get_event_times(self, data):
+        event_duration = int(self.event_duration)
+        
+        event_times = []
+        shape = data.shape[1]  # The length of the second dimension of data
+
+        for _ in range(0, shape, event_duration):
+            event_times.append(self.get_event_segment())
+        
+        event_times = np.concatenate(event_times)
+        
+        # Pad with NaNs if event_times is shorter than shape
+        if len(event_times) < shape:
+            padding = np.full(shape - len(event_times), np.nan)
+            event_times = np.concatenate([event_times, padding])
+        else:
+            event_times = event_times[:shape]  # Ensure it matches the required length
+
+        event_times = np.tile(event_times, (data.shape[0], 1))  # Repeat the event_times across rows
+        
+        return event_times
+    
+    def get_events(self): # I need to add some pre event stuff ehre
+        events = []
+        d1, d2 = (self.region_1_data_padded, self.region_2_data_padded)
+        events_info = self.data_opts.get('events')
+        if events_info is not None:
+            pre_stim = events_info[self.period_type].get('pre_stim', 0)
+            post_stim = events_info[self.period_type].get('post_stim', self.event_duration/self.sampling_rate)
+        for i, start in enumerate(range(0, len(d1), self.event_duration)):
+            slc = slice(*(int(start-pre_stim*self.sampling_rate), int(start+post_stim*self.sampling_rate)))
+            events.append(PhaseRelationshipEvent(self, i, d1[slc], d2[slc]))
+        self._children = events
+
+    def get_phase_phase_mrl(self):
+        valid_sets = self.get_angles()
+        results_per_set = [compute_mrl(data, self.get_event_times(data), dim=1) for data in valid_sets]
+        weights = np.array([data_set.shape[1] for data_set in valid_sets])
+        to_return = np.average(results_per_set, axis=0, weights=weights) # TODO:figure out what's wrong with self.refer here
+        return to_return
+
+    def get_angles(self):
+        d1, d2 = (self.region_1_data, self.region_2_data)
+        phase_diffs = self.get_region_phases(d1) - self.get_region_phases(d2) 
+        return regularize_angles(phase_diffs)
 
     def get_region_phases(self, region_data):
-        frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
         valid_sets = np.array([
             self.divide_data_into_valid_sets(
                 np.array(compute_phase(bandpass_filter(region_data, low, high, self.sampling_rate)))
-            ) for low, high in frequency_bands])
+            ) for low, high in self.frequency_bands])
         return valid_sets.transpose(1, 0, 2)
 
         
-        
+class RelationshipCalculatorEvent(LFPData):
+
+    def __init__(self, parent_calculator, i, region_1_data, region_2_data):
+        self.identifier = i
+        self.parent = parent_calculator
+        self.region_1_data = region_1_data
+        self.region_2_data = region_2_data
+        self.frequency_bands = self.parent.frequency_bands
+
+    @property
+    def validator(self):
+        return (not self.data_opts.get('validate_events') or 
+                self.parent.joint_event_validity()[self.identifier // self.parent.event_duration])
+    
+
+class PhaseRelationshipEvent(RelationshipCalculatorEvent, PhaseRelationshipFunctions):
+
+    name = 'phase_relationship_event'
+
+
+    def __init__(self, parent_calculator, i, region_1_data, region_2_data):
+        super().__init__(parent_calculator, i, region_1_data, region_2_data)
+        self.event_duration = parent_calculator.event_duration
+
+    def get_phase_trace(self):
+        return self.get_angles()
+
+    def get_region_phases(self, region_data):
+        return np.array([compute_phase(bandpass_filter(region_data, low, high, self.sampling_rate))
+                for low, high in self.frequency_bands])
+    
+    def get_phase_phase_mrl(self):
+        data = self.get_angles()
+        return compute_mrl(data, np.ones(data.shape()), dim=1)
+
+    
+   
+
    
 
 

@@ -118,7 +118,7 @@ MATLAB_CONFIG = {
                 'paths_to_add': [], 'recursive_paths_to_add': ['/Users/katie/likhtik/software'],
                 'base_directory': '/Users/katie/likhtik/data/temp'}
 
-LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1'], 'data_type': 'power',
+LFP_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 'data_type': 'power',
             'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block', 'row_type': 'event',
             'blocks': {'tone': range(5), 'pretone': range(5)}, 'power_deviation': False, 'collapse_sem_data': True,
             'events': {'pretone': {'pre_stim': 0, 'post_stim': 1}, 'tone': {'pre_stim': 0, 'post_stim': .3}},
@@ -147,7 +147,7 @@ SPECTROGRAM_OPTS = {
     'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
     'filter': 'spectrum_estimation', 'store': 'pkl',  'validate_events': True,
     'events': {
-        'pretone': {'pre_stim': .01, 'post_stim': .3}, 'tone': {'pre_stim': .01, 'post_stim': .3}
+        'pretone': {'pre_stim': .0, 'post_stim': .3}, 'tone': {'pre_stim': .0, 'post_stim': .3}
         },
     'rules': {
         'brain_region': 
@@ -183,8 +183,8 @@ MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['thet
             'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'mrl_calculator',
             'validate_events': True,
             'events': {
-                'pretone': {'pre_stim': .95, 'post_stim': .05}, 
-                'tone': {'pre_stim': .95, 'post_stim': .05}},
+                'pretone': {'pre_stim': 0, 'post_stim': 1}, 
+                'tone': {'pre_stim': 0, 'post_stim': 1}},
             'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
             'rules': {
                 'brain_region': 
@@ -260,14 +260,8 @@ HPC_PL_COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block',
             'inclusion_rule': PL_HPC_INCLUSION,
             'frequency_bands': HPC_PL_COHERENCE_BANDS}
 
-
-
-
-           
-                    
-
-CORRELATION_OPTS = {'data_class': 'lfp', 'time_type': 'continuous', 'frequency_bands': ['theta_1', 'theta_2'], 
-            'data_type': 'correlation',  'frequency_type': 'block', 'validate_events': True,
+CORRELATION_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
+            'data_type': 'lag_of_max_correlation',  'frequency_type': 'block', 'validate_events': True,
             'region_sets': ['bla_pl', 'bla_hpc', 'hpc_pl'], 'lags': 200, 'bin_size': .01,
             'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'correlation_calculator',
             'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
@@ -326,17 +320,21 @@ COUNT_OPTS = {'data_class': 'spike', 'data_type': 'spike_counts', 'bin_size': 0.
 
 
 CAROLINA_GRAPH_OPTS = {
-    'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1, 
+    'graph_dir': '/Users/katie/likhtik/CH_EXT', 'units_in_fig': 4, 'tick_step': 0.1, 
     'sem': False, 'footer': True, 'equal_y_scales': True, 'equal_color_scales': 'within_group', 
-    'group_colors': {'control': '#6C4675', 'defeat': '#F2A354'}, 
-    'period_colors': 
-    {'pretone': {(0, 2): '#000000', (18, 20): '#808080'}, 'tone': {(0, 2): '#82086F', (18, 20): '#D52C90'}, 
-            }}
+    'colors': {
+        'period_type pretone period_group 0': '#000000',
+        'period_type pretone period_group 1': '#808080',
+        'period_type tone period_group 0': '#82086F',
+        'period_type tone period_group 1': '#D52C90' 
+    }
+    }
 
 PHASE_PHASE_OPTS = {
-    'data_class': 'lfp', 'data_type': 'phase_phase_mrl', 'time_type': 'block', 
-    'frequency_bands': [(0, 20)], 'frequency_type': 'continuous',
-    'region_sets': ['il_bf', 'bla_bf', 'bla_il'], 'period_groups': [(0, 2), (18, 20)],
+    'data_class': 'lfp', 'data_type': 'phase_trace', 'time_type': 'block', 
+    'frequency_bands': [(5,6)], 'frequency_type': 'continuous',
+    'events': {'pretone': {'post_stim': .3}, 'tone': {'post_stim': .3}},
+    'region_sets': [ 'bla_il'], 'period_groups': [(0, 2), (18, 20)],
     'periods': {'tone': range(20), 'pretone': range(20)}, 'row_type': 'phase_relationship_calculator',
     'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG
             }
@@ -344,13 +342,16 @@ PHASE_PHASE_OPTS = {
 
 
 
-SPREADSHEET_OPTS = [PHASE_PHASE_OPTS]
+SPREADSHEET_OPTS = [CORRELATION_OPTS]
 
-RUNNER_OPTS = {'data_opts': PHASE_PHASE_OPTS, 'graph_opts': CAROLINA_GRAPH_OPTS}
+BLA_PL_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_PL_COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
+HPC_PL_COHERENCE_RUNNER_OPTS = {'data_opts': HPC_PL_COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
+BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
+
 
 #COHERENCE_SPREADSHEET_OPTS = [COHERENCE_OPTS]
 
-# SPREADSHEET_OPTS = [COUNT_OPTS]
+SPREADSHEET_OPTS = [CORRELATION_OPTS]
 
-# RUNNER_OPTS = {'data_opts': COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
+RUNNER_OPTS = {'data_opts': CORRELATION_OPTS, 'graph_opts': GRAPH_OPTS}
 

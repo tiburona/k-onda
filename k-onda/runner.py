@@ -8,11 +8,12 @@ from initialize_experiment import Initializer
 peristimulus_plots = {
     f"plot_{data_type}": {'class': PeriStimulusPlotter, 'method': 'plot'}
     for data_type in [
-        'psth', 'proportion', 'autocorrelation', 'spectrum', 'cross_correlation,' 'autocorrelogram'
+        'psth', 'proportion', 'autocorrelation', 'spectrum', 'cross_correlation', 'autocorrelogram'
     ]}
 
 mrl_procs = {meth: {'class': MRLPlotter, 'method': meth} for meth in 
-             ['mrl_bar_plot', 'mrl_rose_plot', 'mrl_heat_map', 'plot_phase_phase_over_frequencies']}
+             ['mrl_bar_plot', 'mrl_rose_plot', 'mrl_heat_map', 'plot_phase_phase_over_frequencies',
+              'make_phase_phase_rose_plot', 'make_phase_phase_trace_plot']}
 
 lfp_procs = {f'plot_{meth}': {'class': LFPPlotter, 'method': f'plot_{meth}'} for meth in 
              ['power', 'coherence', 'coherence_over_frequencies', 'spectrogram', 'correlation', 
