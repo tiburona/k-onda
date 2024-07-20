@@ -77,9 +77,9 @@ class Base:
     def current_region_set(self):
         return self.data_opts.get('region_set')
 
-    @current_brain_region.setter
-    def current_brain_region(self, region_set):
-        self.update_data_opts([(['region_set'], brain_region)])
+    @current_region_set.setter
+    def current_region_set(self, region_set):
+        self.update_data_opts([(['region_set'], region_set)])
 
     def update_data_opts(self, reassignments):
         for path, value in reassignments:
@@ -218,7 +218,7 @@ class Data(Base):
         bin_size = self.data_opts.get('bin_size')
         pre_stim, post_stim = (self.data_opts['events'][self.period_type].get(opt) 
                                for opt in ['pre_stim', 'post_stim'])
-        return int((pre_stim + post_stim) / bin_size)
+        return round((pre_stim + post_stim) / bin_size)
 
     @property
     def current_reference_period_type(self):
@@ -474,11 +474,16 @@ class TimeBin(Data):
     @property
     def time(self):
         if self.data_type == 'correlation':
-            ts = np.arange(-self.data_opts['lags'], self.data_opts['lags'] + 1)/self.sampling_rate
+            ts = np.arange(-self.data_opts['lags'], self.data_opts['lags'] + 1) / self.sampling_rate
         else:
             pre_stim, post_stim = [self.data_opts['events'][self.parent.period_type][val] 
-                                   for val in ['pre_stim', 'post_stim']]
+                                for val in ['pre_stim', 'post_stim']]
             ts = np.arange(-pre_stim, post_stim, self.data_opts['bin_size'])
+        
+        # Round the timestamps to the nearest 10th of a microsecond
+
+        ts = np.round(ts, decimals=7)
+
         return ts[self.identifier]
         
 

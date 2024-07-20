@@ -146,7 +146,7 @@ def downsample(data, orig_freq, dest_freq):
     # Apply the filter
     filtered_data = lfilter(fir_coeff, 1.0, data)
 
-    ratio = int(orig_freq/dest_freq)
+    ratio = round(orig_freq/dest_freq)
 
     return filtered_data[::ratio]
 

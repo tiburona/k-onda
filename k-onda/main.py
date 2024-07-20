@@ -18,9 +18,9 @@ def run():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json',
                     lfp=True)
     runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
-                path='/Users/katie/likhtik/IG_INED_SAFETY_RECALL', filename='lag_of_max_correlations',
-               prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
-    runner.run('plot_max_correlations', RUNNER_OPTS)
+                path='/Users/katie/likhtik/IG_INED_SAFETY_RECALL', filename='spike_counts')
+               #prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
+    #runner.run('plot_max_correlations', RUNNER_OPTS)
 
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 

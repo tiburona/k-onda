@@ -290,7 +290,7 @@ class Unit(SpikeData, PeriodConstructor):
         else:
             start = spontaneous_period[0] * self.sampling_rate
             stop = spontaneous_period[1] * self.sampling_rate
-        num_bins = int((stop-start) / (self.sampling_rate * self.data_opts['bin_size']))
+        num_bins = round((stop-start) / (self.sampling_rate * self.data_opts['bin_size']))
         return calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), self.data_opts['bin_size'])
 
     @cache_method
@@ -428,18 +428,18 @@ class Event(SpikeData):
     def get_cross_correlations(self, pair=None):
         other = pair.periods[self.period_type][self.period.identifier].events[self.identifier]
         cross_corr = cross_correlation(self.get_unadjusted_rates(), other.get_unadjusted_rates(), mode='full')
-        boundary = int(self.data_opts['max_lag'] / self.data_opts['bin_size'])
+        boundary = round(self.data_opts['max_lag'] / self.data_opts['bin_size'])
         midpoint = cross_corr.size // 2
         return cross_corr[midpoint - boundary:midpoint + boundary + 1]
 
     def get_correlogram(self, pair=None, num_pairs=None):
         max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
-        lags = int(max_lag/bin_size)
+        lags = round(max_lag/bin_size)
         return correlogram(lags, bin_size, self.spikes, pair.spikes, num_pairs)
 
     def get_autocorrelogram(self):
         max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
-        lags = int(max_lag / bin_size)
+        lags = round(max_lag / bin_size)
         return self.refer(correlogram(lags, bin_size, self.spikes, self.spikes, 1))
 
     def find_equivalent(self, unit):

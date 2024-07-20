@@ -147,7 +147,7 @@ SPECTROGRAM_OPTS = {
     'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
     'filter': 'spectrum_estimation', 'store': 'pkl',  'validate_events': True,
     'events': {
-        'pretone': {'pre_stim': .0, 'post_stim': .3}, 'tone': {'pre_stim': .0, 'post_stim': .3}
+        'pretone': {'pre_stim': .03, 'post_stim': .3}, 'tone': {'pre_stim': .03, 'post_stim': .3}
         },
     'rules': {
         'brain_region': 
@@ -316,7 +316,7 @@ COUNT_OPTS = {'data_class': 'spike', 'data_type': 'spike_counts', 'bin_size': 0.
              'periods': {'tone': range(5)}, 
              'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
                                 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
-             'events': {'pretone': {'pre_stim': .01, 'post_stim': .3}, 'tone': {'pre_stim': .01, 'post_stim': .3}}}
+             'events': {'pretone': {'pre_stim': .0, 'post_stim': .3}, 'tone': {'pre_stim': .0, 'post_stim': .3}}}
 
 
 CAROLINA_GRAPH_OPTS = {
@@ -342,7 +342,6 @@ PHASE_PHASE_OPTS = {
 
 
 
-SPREADSHEET_OPTS = [CORRELATION_OPTS]
 
 BLA_PL_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_PL_COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
 HPC_PL_COHERENCE_RUNNER_OPTS = {'data_opts': HPC_PL_COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
@@ -351,7 +350,7 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 #COHERENCE_SPREADSHEET_OPTS = [COHERENCE_OPTS]
 
-SPREADSHEET_OPTS = [CORRELATION_OPTS]
+SPREADSHEET_OPTS = [COUNT_OPTS]
 
 RUNNER_OPTS = {'data_opts': CORRELATION_OPTS, 'graph_opts': GRAPH_OPTS}
 

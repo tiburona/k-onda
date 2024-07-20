@@ -526,7 +526,7 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector, EventValidator):
             self.event_duration = target_period.event_duration
         self.reference_period_type = period_info.get('reference_period_type')
         start_pad_in_samples, end_pad_in_samples = np.array(self.convolution_padding) * self.sampling_rate
-        self.duration_in_samples = int(self.duration * self.sampling_rate)
+        self.duration_in_samples = round(self.duration * self.sampling_rate)
         self.start = int(self.onset)
         self.stop = self.start + self.duration_in_samples
         self.pad_start = self.start - start_pad_in_samples
@@ -597,14 +597,14 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector, EventValidator):
 
         for i, event_start in enumerate(self.event_starts):
             # get normed data for the event in samples
-            start = int(event_start - self.onset)
-            stop = int(start + self.event_duration*self.sampling_rate)
+            start = round(event_start - self.onset)
+            stop = round(start + self.event_duration*self.sampling_rate)
             normed_data = self.unpadded_data[start:stop]
 
             # get time points where the event will fall in the spectrogram in seconds
             spect_start = round(start/self.sampling_rate + true_beginning - pre_stim, 2)
             spect_end = round(spect_start + pre_stim + post_stim, 2)
-            num_points = int(np.ceil((spect_end - spect_start) / .01 - epsilon))  # TODO: the .01s in here depend on the mtcsg args
+            num_points = round(np.ceil((spect_end - spect_start) / .01 - epsilon))  # TODO: the .01s in here depend on the mtcsg args
             event_times = np.linspace(spect_start, spect_start + (num_points * .01), num_points, endpoint=False)
             event_times = event_times[event_times < spect_end]
             # a binary mask that is True when a time bin in the spectrogram belongs to this event
@@ -633,8 +633,8 @@ class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector, EventValidator):
     def get_power_deviations(self, moving_window=.15):
         parent_mean = self.parent.mean_data
         parent_sd = self.parent.sd_data
-        moving_avgs = np.zeros(int(self.duration/.01))
-        window_interval = int(moving_window/.01)  # TODO: bin size actually depends on args to mtcsg
+        moving_avgs = np.zeros(round(self.duration/.01))
+        window_interval = round(moving_window/.01)  # TODO: bin size actually depends on args to mtcsg
         for i in range(self.trimmed_spectrogram().shape[1] - window_interval + 1):
             data = np.mean(self.trimmed_spectrogram()[:, i:i+window_interval])
             normalized_data = (data - parent_mean)/parent_sd
@@ -767,9 +767,9 @@ class MRLCalculator(LFPData, MRLFunctions):
         high = self.freq_range[1]
         if self.data_opts.get('phase') == 'wavelet':
             if 'gamma' in self.current_frequency_band: # TODO need to fix this since frequency band can currently be a range of numbers
-                frequencies = np.logspace(np.log10(low), np.log10(high), int((high - low) / 5))
+                frequencies = np.logspace(np.log10(low), np.log10(high), round((high - low) / 5))
             else:
-                frequencies = np.linspace(low, high, int(high - low) + 1)
+                frequencies = np.linspace(low, high, round(high - low) + 1)
             scales = [get_wavelet_scale(f, self.sampling_rate) for f in frequencies]
             return np.array([self.get_wavelet_phases(s) for s in scales])
         else:
@@ -925,9 +925,9 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
         self.region_2_data = self.period.animal.processed_lfp[self.region_2][
             self.period.start:self.period.stop]
         self.region_1_data_padded = self.period.animal.processed_lfp[self.region_1][
-            self.period.start - int(self.period.event_duration*self.sampling_rate):self.period.stop]
+            self.period.start - round(self.period.event_duration*self.sampling_rate):self.period.stop]
         self.region_2_data_padded = self.period.animal.processed_lfp[self.region_1][
-            self.period.start - int(self.period.event_duration*self.sampling_rate):self.period.stop]
+            self.period.start - round(self.period.event_duration*self.sampling_rate):self.period.stop]
         self.base_node = True
         self._children = []
         self.frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
@@ -1001,11 +1001,11 @@ class CorrelationCalculator(RegionRelationshipCalculator):
         num_lags = self.data_opts.get('lags', self.sampling_rate/10)  
         bin_size = self.data_opts.get('bin_size', .01) # in seconds
         lags_per_bin = bin_size * self.sampling_rate
-        number_of_bins = int(num_lags*2/lags_per_bin)
+        number_of_bins = round(num_lags*2/lags_per_bin)
         return np.histogram([lag_of_max], bins=number_of_bins, range=(0, 2*num_lags + 2))[0]
 
     def get_lag_of_max_correlation(self):
-        return np.argmax(self.get_correlation())
+        return np.argmax(self.get_correlation()) # TODO fix this so 0 is in the middle
          
     def get_correlation(self):
 

@@ -364,7 +364,7 @@ class PeriStimulusSubplotter(Plotter, PlottingMixin):
 
     def plot_cross_correlations(self):
         opts = self.data_opts
-        boundary = int(opts['max_lag'] / opts['bin_size'])
+        boundary = round(opts['max_lag'] / opts['bin_size'])
         tick_step = self.plotter.graph_opts['tick_step']
         if self.data_source.name == 'group' and 'group_colors' in self.g_opts:
             color = self.g_opts['group_colors'][self.data_source.identifier]
@@ -1070,7 +1070,7 @@ class LFPPlotter(Plotter):
         num_lags = self.data_opts.get('lags', self.lfp.sampling_rate/10)  
         bin_size = self.data_opts.get('bin_size', .01) # in seconds
         lags_per_bin = bin_size * self.lfp.sampling_rate
-        number_of_bins = int(num_lags * 2 / lags_per_bin)
+        number_of_bins = round(num_lags * 2 / lags_per_bin)
 
         mid_index = number_of_bins // 2
 

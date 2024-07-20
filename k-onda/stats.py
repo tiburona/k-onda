@@ -6,6 +6,7 @@ from copy import deepcopy
 import random
 import string
 from data import Base
+from functools import reduce
 
 
 class Stats(Base):
@@ -56,35 +57,35 @@ class Stats(Base):
         return name
 
     def merge_dfs_animal_by_animal(self):
+
+
         df_items = list(self.dfs.items())
         names, dfs = zip(*df_items)
 
         # Extract unique animals across all data frames
-        unique_animals = pd.concat([df['animal'] for df in dfs]).unique()
+        unique_animals = pd.concat([df['animal'] for df in dfs if 'animal' in df.columns]).unique()
 
         # List to hold merged data for each animal
         merged_data_per_animal = []
 
         for animal in unique_animals:
-            # Data frames filtered for the current animal, with column renaming
-            dfs_per_animal = []
-            for i, df in enumerate(dfs):
-                if 'bla_theta_2' in names[i]:
-                    a = 'foo'
+            # Filter DataFrames for the current animal, remove 'animal' column
+            dfs_per_animal = [df[df['animal'] == animal].copy().drop(columns=['animal']) for df in dfs if animal in df['animal'].values]
 
-                if animal in df['animal'].values:
-                    df = df.copy()  # Work on a copy to avoid modifying original DataFrame
-                    # if 'frequency_bin' in df.columns:
-                    #     frequency_band = names[i].split('_')[-1]
-                    #     df = df.rename(columns={'frequency_bin': frequency_band + '_frequency_bin'})
-                    dfs_per_animal.append(df[df['animal'] == animal].drop(columns=['animal']))
+            # Adjust DataFrames to prioritize 'time' over 'time_bin'
+            for df in dfs_per_animal:
+                if 'time' in df.columns and 'time_bin' in df.columns:
+                    df.drop(columns='time_bin', inplace=True)
 
             if not dfs_per_animal:
                 continue
 
-            # Merge data for this animal using reduce to handle multiple DataFrames
-            from functools import reduce
-            merged_animal_df = reduce(lambda left, right: pd.merge(left, right, how='outer'), dfs_per_animal)
+            # Use reduce to merge data frames progressively, ensuring only common columns are used at each step
+            def merge_dfs(left, right):
+                common_columns = left.columns.intersection(right.columns)
+                return pd.merge(left, right, on=list(common_columns), how='outer')
+
+            merged_animal_df = reduce(merge_dfs, dfs_per_animal)
 
             # Add the animal identifier back to the merged data
             merged_animal_df['animal'] = animal
@@ -99,6 +100,8 @@ class Stats(Base):
         new_df_name = '_'.join([name for name, _ in df_items])
         self.dfs[new_df_name] = final_merged_df
         return new_df_name
+
+
 
     def get_rows(self):
         """
@@ -176,6 +179,9 @@ class Stats(Base):
             experiment = self.experiment
 
         sources = [source for source in getattr(experiment, f'all_{level}s') if source.is_valid]
+
+        if self.data_type == 'power':
+            a = 'foo'
 
         if self.data_opts.get('frequency_type') == 'continuous':
             sources = [frequency_bin for source in sources for frequency_bin in source.frequency_bins]

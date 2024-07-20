@@ -105,7 +105,7 @@ def compute_phase(data):
 def get_wavelet_scale(frequency, sampling_rate, fc=1.0):
     """Compute the wavelet scale for a given frequency using Morlet wavelet relationship."""
     delta = 1 / sampling_rate  # Sampling period
-    return int(fc / (frequency * delta))
+    return round(fc / (frequency * delta))
 
 
 def circ_r2_unbiased(alpha, w=None, dim=0):
@@ -278,7 +278,7 @@ def downsample(data, orig_freq, dest_freq):
     # Apply the filter
     filtered_data = lfilter(fir_coeff, 1.0, data)
 
-    ratio = int(orig_freq/dest_freq)
+    ratio = round(orig_freq/dest_freq)
 
     return filtered_data[::ratio]
 
@@ -286,7 +286,7 @@ def downsample(data, orig_freq, dest_freq):
 def calc_coherence(data_1, data_2, sampling_rate, low, high):
 
     nperseg = 2000  
-    noverlap = int(nperseg/2)
+    noverlap = round(nperseg/2)
     window = 'hann'  # Window type
     f, Cxy = coherence(data_1, data_2, fs=sampling_rate, window=window, nperseg=nperseg, 
                        noverlap=noverlap)
