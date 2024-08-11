@@ -7,6 +7,7 @@ import random
 import string
 from data import Base
 from functools import reduce
+from collections import namedtuple
 
 
 class Stats(Base):
@@ -180,20 +181,25 @@ class Stats(Base):
 
         sources = [source for source in getattr(experiment, f'all_{level}s') if source.is_valid]
 
-        if self.data_type == 'power':
-            a = 'foo'
-
         if self.data_opts.get('frequency_type') == 'continuous':
+            other_attributes.append('frequency')
             sources = [frequency_bin for source in sources for frequency_bin in source.frequency_bins]
         if self.data_opts.get('time_type') == 'continuous':
             other_attributes.append('time')
             sources = [time_bin for source in sources for time_bin in source.time_bins]
 
         for source in sources:
+
             if self.data_opts.get('aggregator') == 'sum':
                 row_dict = {self.data_col: source.sum_data}
+            elif self.data_opts.get('aggregator') == 'none':
+                if source.key:
+                    row_dict = {f"{self.data_col}_{source.key}": source.data}
+                else:
+                    row_dict = {self.data_col: source.data}
             else:
                 row_dict = {self.data_col: source.mean_data}
+            
             for src in source.ancestors:
                 row_dict[src.name] = src.identifier
                 for attr in other_attributes:

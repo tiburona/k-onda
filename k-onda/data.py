@@ -146,7 +146,7 @@ class Data(Base):
     
     @property
     def sum_data(self):
-        return np.sum(self.data)
+        return self.data
 
     @property
     def sd_data(self):

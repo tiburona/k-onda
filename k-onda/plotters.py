@@ -1010,6 +1010,32 @@ class LFPPlotter(Plotter):
         self.fig = fig
         self.close_plot(self.data_type)
 
+    def plot_granger(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts)
+        region_set = self.data_opts['region_set']
+        reverse_order = region_set.split('_')[::-1]
+
+        region_set_data = {}
+        for group in self.lfp.groups:
+            period_data = defaultdict(list)
+            for period_type in self.data_opts['periods']:
+                self.selected_period_type = period_type
+                period_data[period_type] = group.data
+            region_set_data[group.identifier] = period_data
+
+        reverse_order_data = {}
+        self.update_data_opts()  # add in the correct syntax here
+        for group in self.lfp.groups:
+            period_data = defaultdict(list)
+            for period_type in self.data_opts['periods']:
+                self.selected_period_type = period_type
+                period_data[period_type] = group.data
+            reverse_order_data[group.identifier] = period_data
+
+        self.update_data_opts()
+
+
+
     def plot_correlation(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
         data = {}

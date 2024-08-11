@@ -160,6 +160,7 @@ class Runner:
             self.load_analysis_config(prep)
             self.prepare_prep()
             self.run_all()
+            self.loop_lists = {}
         self.load_analysis_config(opts)
         self.proc_name = proc_name
         self.prepare()

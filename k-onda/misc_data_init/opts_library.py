@@ -141,6 +141,26 @@ POWER_SPREADSHEET_OPTS = {
 }
 
 SPECTROGRAM_OPTS = {
+    'data_class': 'lfp', 'frequency_bands': ['theta_1'], 'data_type': 'power', 
+    'row_type': 'event', 'frequency_type': 'block', 'bin_size': .01, 'level': 'group',
+    'brain_regions': ['pl'], 'power_deviation': False, 'time_type': 'continuous', 
+    'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
+    'filter': 'spectrum_estimation', 'store': 'pkl',  'validate_events': True,
+    'events': {
+        'pretone': {'pre_stim': 0, 'post_stim': .3}, 'tone': {'pre_stim': 0, 'post_stim': .3}
+        },
+    'rules': {
+        'brain_region': 
+        {'pl': [('inclusion_rule', {'animal': [['identifier', 'in', PFC_THETA_POWER_ANIMALS]]})],
+         'bla': [('inclusion_rule', {'animal': [['identifier', 'in', BLA_THETA_POWER_ANIMALS]]})], 
+         'hpc': [('inclusion_rule', {'animal': [['identifier', 'in', HPC_THETA_POWER_ANIMALS]]})]
+                               }},
+    'matlab_configuration': MATLAB_CONFIG, 
+    }
+
+
+
+POWER_OPTS = {
     'data_class': 'lfp', 'frequency_bands': ['theta_1', 'theta_2'], 'data_type': 'power', 
     'row_type': 'event', 'frequency_type': 'block', 'bin_size': .01,
     'brain_regions': ['pl', 'hpc', 'bla'], 'power_deviation': False, 'time_type': 'continuous', 
@@ -157,7 +177,6 @@ SPECTROGRAM_OPTS = {
                                }},
     'matlab_configuration': MATLAB_CONFIG, 
     }
-
 
 NEURON_QUALITY = ['1', '2a', '2b', '2ab']
 
@@ -260,8 +279,8 @@ HPC_PL_COHERENCE_OPTS = {'data_class': 'lfp', 'time_type': 'block',
             'inclusion_rule': PL_HPC_INCLUSION,
             'frequency_bands': HPC_PL_COHERENCE_BANDS}
 
-CORRELATION_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
-            'data_type': 'lag_of_max_correlation',  'frequency_type': 'block', 'validate_events': True,
+CORRELATION_OPTS = {'data_class': 'lfp', 'time_type': 'continuous', 'frequency_bands': ['theta_1', 'theta_2'], 
+            'data_type': 'correlation',  'frequency_type': 'block', 'validate_events': True,
             'region_sets': ['bla_pl', 'bla_hpc', 'hpc_pl'], 'lags': 200, 'bin_size': .01,
             'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'correlation_calculator',
             'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
@@ -340,7 +359,17 @@ PHASE_PHASE_OPTS = {
             }
 
 
+#BLA_PL_INCLUSION = {'animal': [['identifier', 'in', ['IG160', 'IG163']]]}
 
+GRANGER_OPTS = {
+    'data_class': 'lfp', 'data_type': 'granger_f_stat', 'time_type': 'block', 
+    'frequency_bands': [(1, 20)], 'frequency_type': 'continuous',  'aggregator': 'none',
+    'events': {'pretone': {'post_stim': 1}, 'tone': {'post_stim': 1}},
+    'region_sets': [ 'bla_pl'], 'validate_events': True,
+    'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'granger_calculator',
+    'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
+    'inclusion_rule': BLA_PL_INCLUSION
+}
 
 
 BLA_PL_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_PL_COHERENCE_OPTS, 'graph_opts': GRAPH_OPTS}
@@ -350,7 +379,7 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 #COHERENCE_SPREADSHEET_OPTS = [COHERENCE_OPTS]
 
-SPREADSHEET_OPTS = [COUNT_OPTS]
+SPREADSHEET_OPTS = [GRANGER_OPTS]
 
 RUNNER_OPTS = {'data_opts': CORRELATION_OPTS, 'graph_opts': GRAPH_OPTS}
 

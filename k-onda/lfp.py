@@ -5,7 +5,7 @@ import numpy as np
 
 
 from scipy.signal import cwt, morlet
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from copy import deepcopy
 
 from data import Data, TimeBin
@@ -22,6 +22,12 @@ class LFPData(Data):
 
     @property
     def frequency_bins(self):
+        if 'granger' in self.data_type:
+            print(f"animal {self.period.animal.identifier}")
+            print(f"self.period_type {self.period.identifier}")
+            print(f"{self.identifier}")
+            print(f"\n")
+    
         return self.get_frequency_bins(self.data)
 
     @property
@@ -103,7 +109,14 @@ class LFPData(Data):
             return [TimeBin(i, data_point, self) for i, data_point in enumerate(data)]
 
     def get_frequency_bins(self, data):
-        return [FrequencyBin(i, data_point, self) for i, data_point in enumerate(data)]
+        if 'granger' in self.data_type:
+            a = 'foo'
+
+        if type(data) == dict:
+            fbs = [FrequencyBin(i, data[k][i], self, data[k], key=k) for k in data 
+                   for i in range(len(list(data.values())[0]))]
+            return fbs 
+        return [FrequencyBin(i, data_point, self, data) for i, data_point in enumerate(data)]
 
     def load(self, calc_name, other_identifiers):
         store = self.data_opts.get('store', 'pkl')
@@ -173,6 +186,10 @@ class LFPExperiment(LFPData, Subscriber):
         return self.get_data_calculated_by_period('correlation_calculators')
     
     @property
+    def all_granger_calculators(self):
+        return self.get_data_calculated_by_period('granger_calculators')
+    
+    @property
     def all_phase_relationship_calculators(self):
         return self.get_data_calculated_by_period('phase_relationship_calculators')
 
@@ -192,7 +209,12 @@ class LFPExperiment(LFPData, Subscriber):
     @property
     def all_phase_relationship_events(self):
         return [event for calc in self.all_phase_relationship_calculators 
-                for event in calc.get_events()]
+                for event in calc.children]
+    
+    @property
+    def all_granger_events(self):
+        return [event for calc in self.all_granger_calculators
+                for event in calc.children]
 
     def update(self, _):
         if self.data_class == 'lfp': 
@@ -310,6 +332,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         self.mrl_calculators = defaultdict(list)
         self.coherence_calculators = defaultdict(list)
         self.correlation_calculators = defaultdict(list)
+        self.granger_calculators = defaultdict(list)
         self.phase_relationship_calculators = defaultdict(list)
         self.parent = None
         self.group = None
@@ -340,6 +363,8 @@ class LFPAnimal(LFPData, PeriodConstructor):
             children = self.coherence_calculators
         elif 'correlation' in self.data_type:
             children = self.correlation_calculators
+        elif 'granger' in self.data_type:
+            children = self.granger_calculators
         elif 'phase' in self.data_type:
             children = self.phase_relationship_calculators
         else:
@@ -353,7 +378,7 @@ class LFPAnimal(LFPData, PeriodConstructor):
         return children
 
     def update_if_necessary(self):
-        if self.data_type == 'coherence' or 'correlation' in self.data_type or 'phase' in self.data_type:
+        if self.data_type == 'coherence' or 'correlation' in self.data_type or 'phase' in self.data_type or 'granger' in self.data_type:
             regions = self.data_opts.get('region_set').split('_')
         else:
             regions = [self.data_opts.get('brain_region')]
@@ -398,6 +423,8 @@ class LFPAnimal(LFPData, PeriodConstructor):
             self.prepare_coherence_calculators()
         elif 'correlation' in self.data_type:
             self.prepare_correlation_calculators()
+        elif 'granger' in self.data_type:
+            self.prepare_granger_calculators()
         else:
             pass
         
@@ -444,6 +471,10 @@ class LFPAnimal(LFPData, PeriodConstructor):
     def prepare_correlation_calculators(self):
         cls = CorrelationCalculator
         self.correlation_calculators = self.prepare_region_relationship_calculators(cls)
+
+    def prepare_granger_calculators(self):
+        cls = GrangerCalculator
+        self.granger_calculators = self.prepare_region_relationship_calculators(cls)
 
     def prepare_phase_relationship_calculators(self):
         cls = PhaseRelationshipCalculator
@@ -698,13 +729,17 @@ class FrequencyBin(LFPData):
 
     name = 'frequency_bin'
 
-    def __init__(self, index, val, parent, unit=None):
+    def __init__(self, index, val, parent, parent_data, unit=None, key=None):
         self.parent = parent
         self.val = val
+        self.key = key
         freq_range = list(range(*self.freq_range))
-        if parent.data.shape[0] > len(freq_range):
-            freq_range.append(freq_range[-1])
-        self.identifier = freq_range[index]
+        if parent_data.shape[0] > len(freq_range):
+            if parent_data.shape[0] == len(freq_range) + 1:
+                freq_range.append(freq_range[-1])
+            else:
+                freq_range = np.linspace(freq_range[0], freq_range[-1], parent_data.shape[0])
+        self.identifier = index
         if self.data_type == 'power':
             if self.parent.name == 'period':
                 self.frequency = self.parent.spectrogram[1][index]
@@ -712,6 +747,8 @@ class FrequencyBin(LFPData):
                 self.frequency = self.parent.period.spectrogram[1][index]
         elif 'phase' in self.data_type:
             self.frequency = self.parent.frequency_bands[index][0]
+        elif 'granger' in self.data_type:
+            self.frequency = freq_range[index]
         self.unit = unit
         self.validator = self.parent.validator if hasattr(self.parent, 'validator') else True
 
@@ -752,10 +789,6 @@ class MRLCalculator(LFPData, MRLFunctions):
     @property
     def mean_over_frequency(self):
         return np.mean(self.data, axis=0)
-
-    @property
-    def frequency_bins(self):
-        return [FrequencyBin(i, data, self, unit=self.unit) for i, data in enumerate(self.data)]
 
     def get_wavelet_phases(self, scale):
         cwt_matrix = cwt(self.period.unpadded_data, morlet, [scale])
@@ -926,7 +959,7 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
             self.period.start:self.period.stop]
         self.region_1_data_padded = self.period.animal.processed_lfp[self.region_1][
             self.period.start - round(self.period.event_duration*self.sampling_rate):self.period.stop]
-        self.region_2_data_padded = self.period.animal.processed_lfp[self.region_1][
+        self.region_2_data_padded = self.period.animal.processed_lfp[self.region_2][
             self.period.start - round(self.period.event_duration*self.sampling_rate):self.period.stop]
         self.base_node = True
         self._children = []
@@ -965,6 +998,12 @@ class RegionRelationshipCalculator(LFPData, EventValidator):
             valid_sets.append(current_set)
     
         return valid_sets
+    
+    def get_valid_sets(self):
+        valid_sets = list(zip(self.divide_data_into_valid_sets(self.region_1_data), 
+                         self.divide_data_into_valid_sets(self.region_2_data)))
+        len_sets = [len(a) for a, _ in valid_sets]
+        return valid_sets, len_sets
 
 
 class CoherenceCalculator(RegionRelationshipCalculator):
@@ -976,13 +1015,10 @@ class CoherenceCalculator(RegionRelationshipCalculator):
             return calc_coherence(self.region_1_data, self.region_2_data, self.sampling_rate, 
                                   *self.freq_range)
         else:
-            valid_sets_1 = self.divide_data_into_valid_sets(self.region_1_data)
-            valid_sets_2 = self.divide_data_into_valid_sets(self.region_2_data)
-            sets = zip(valid_sets_1, valid_sets_2)
-            data_len = sum([len(vs) for vs in valid_sets_1])
+            valid_sets, len_sets = self.get_valid_sets()
             return sum([calc_coherence(
-                data_1, data_2, self.sampling_rate, *self.freq_range) * len(data_1)/data_len 
-                for data_1, data_2 in sets
+                data_1, data_2, self.sampling_rate, *self.freq_range) * len(data_1)/sum(len_sets) 
+                for data_1, data_2 in valid_sets
                 ])
         
     
@@ -1013,13 +1049,10 @@ class CorrelationCalculator(RegionRelationshipCalculator):
             result = amp_crosscorr(self.region_1_data, self.region_2_data, self.sampling_rate, 
                                   *self.freq_range)
         else:
-            valid_sets_1 = self.divide_data_into_valid_sets(self.region_1_data)
-            valid_sets_2 = self.divide_data_into_valid_sets(self.region_2_data)
-            sets = zip(valid_sets_1, valid_sets_2)
-            lengths = [len(vs) for vs in valid_sets_1]
-            len_longest_corr = max(lengths) * 2 - 1
+            valid_sets, len_sets = self.get_valid_sets()
+            len_longest_corr = max(len_sets) * 2 - 1
             corrs = []
-            for data1, data2 in sets:
+            for data1, data2 in valid_sets:
                 corr = amp_crosscorr(data1, data2, self.sampling_rate, * self.freq_range) 
                 weighted_corr = corr * (len(corr)/len_longest_corr)
                 padded_corr = np.full(len_longest_corr, np.nan) 
@@ -1027,13 +1060,114 @@ class CorrelationCalculator(RegionRelationshipCalculator):
                 end_index = start_index + len(corr)
                 padded_corr[start_index:end_index] = weighted_corr
                 corrs.append(padded_corr)
-                result = np.nansum(np.vstack(tuple(corrs)), axis=0)
+            result = np.nansum(np.vstack(tuple(corrs)), axis=0) 
 
         lags = self.data_opts.get('lags', self.sampling_rate/10)
         mid = result.size // 2
         return result[mid-lags:mid+lags+1]
     
+class RelationshipCalculatorEvent(LFPData):
 
+    def __init__(self, parent_calculator, i, region_1_data, region_2_data):
+        self.identifier = i
+        self.parent = parent_calculator
+        self.region_1_data = region_1_data
+        self.region_2_data = region_2_data
+        self.frequency_bands = self.parent.frequency_bands
+
+    def validator(self):
+        return (not self.data_opts.get('validate_events') or 
+                self.parent.joint_event_validity()[self.identifier // self.parent.event_duration])
+    
+    
+class GrangerCalculator(RegionRelationshipCalculator):
+
+    name = 'granger_calculator'
+
+    def get_events(self): # I need to add some pre event stuff ehre
+        events = []
+        d1, d2 = (self.region_1_data_padded, self.region_2_data_padded)
+        events_info = self.data_opts.get('events')
+        if events_info is not None:
+            pre_stim = events_info[self.period_type].get('pre_stim', 0)
+            post_stim = events_info[self.period_type].get('post_stim', self.event_duration/self.sampling_rate)
+        for i, start in enumerate(range(0, len(d1), self.event_duration)):
+            slc = slice(*(int(start-pre_stim*self.sampling_rate), int(start+post_stim*self.sampling_rate)))
+            events.append(GrangerEvent(self, i, d1[slc], d2[slc]))
+        self._children = events
+
+    def get_granger_model_order(self):
+        return self.granger_stat('ts_data_to_info_crit')
+    
+    def get_granger_f_stat(self):
+        fstat = self.granger_stat('granger_f_stat')
+        if self.data_opts.get('frequency_type') == 'continuous':
+            forward = np.sum(np.vstack([forward for forward, _ in fstat]), 0)
+            backward = np.sum(np.vstack([backward for _, backward in fstat]), 0)
+        else:
+            forward = sum([forward for forward, _ in fstat])
+            backward = sum([backward for _, backward in fstat])
+        result = {'forward': forward, 'backward': backward}
+        return result
+    
+    def granger_stat(self, proc_name):
+        if self.freq_range[0] == 0:
+            raise(ValueError("No 0 frequencies for granger stats"))
+        valid_sets, len_sets = self.get_valid_sets()
+        results = []
+        for i, (set1, set2) in enumerate(valid_sets):
+            if len(set1) > self.data_opts.get('min_data_length', 8000):
+                tags = ['animal', str(self.period.animal.identifier), self.period_type, 
+                        self.period.identifier, 'set', str(i)]
+                ml = MatlabInterface(self.data_opts['matlab_configuration'], tags=tags)
+                data = np.vstack((set1, set2))
+                proc = getattr(ml, proc_name)
+                result = proc(data)
+                if proc_name == 'granger_f_stat':
+                    weight = len(set1)/max(len_sets)
+                    matrix = np.array(result[0]['f'])
+                    index_1 = round(self.freq_range[0]*matrix.shape[2]/(self.sampling_rate/2)) 
+                    index_2 = round(self.freq_range[1]*matrix.shape[2]/(self.sampling_rate/2)) + 1
+                    forward = []
+                    backward = []
+                    if self.data_opts.get('frequency_type') == 'continuous':
+                        # check to make sure we have at least 1 Hz res data
+                        nec_freqs = self.freq_range[1] - self.freq_range[0] + 1
+                        if index_2 - index_1 < nec_freqs:
+                            forward = np.full(nec_freqs, np.nan)
+                            backward = np.full(nec_freqs, np.nan)
+                        else:
+                            for freq in range(*self.freq_range):
+                                for_bin = []
+                                back_bin= []
+                                for x in range(index_1, index_2):
+                                    if x >= freq - .5 and x < freq + .5:
+                                        for_bin.append(matrix[0, 1, x-1])
+                                        back_bin.append(matrix[1, 0, x-1])
+                                forward.append(np.mean(for_bin)*weight)
+                                backward.append(np.mean(back_bin)*weight)
+                    else:
+                        forward.append(np.mean([np.real(matrix[0,1,x]) for x in range(index_1, index_2+1)]) * weight)
+                        backward.append(np.mean([np.real(matrix[1,0,x]) for x in range(index_1, index_2+1)]) * weight)
+                    result = (forward, backward)
+                if proc_name == 'ts_data_to_info_crit':
+                    result = (len(set1), result)
+                results.append(result)
+        a = 'foo'
+        return results
+        
+
+class GrangerEvent(RelationshipCalculatorEvent):
+
+    name = 'granger_event'
+
+    def get_granger_model_order(self):
+        ml = MatlabInterface(self.data_opts['matlab_configuration'])
+        data = np.vstack((self.region_1_data, self.region_2_data))
+        result = ml.tsdata_to_info_crit(data)
+        return result
+        
+    
 class PhaseRelationshipFunctions:
      
     def get_angles(self):
@@ -1115,21 +1249,6 @@ class PhaseRelationshipCalculator(MRLFunctions, PhaseRelationshipFunctions,
                 np.array(compute_phase(bandpass_filter(region_data, low, high, self.sampling_rate)))
             ) for low, high in self.frequency_bands])
         return valid_sets.transpose(1, 0, 2)
-
-        
-class RelationshipCalculatorEvent(LFPData):
-
-    def __init__(self, parent_calculator, i, region_1_data, region_2_data):
-        self.identifier = i
-        self.parent = parent_calculator
-        self.region_1_data = region_1_data
-        self.region_2_data = region_2_data
-        self.frequency_bands = self.parent.frequency_bands
-
-    @property
-    def validator(self):
-        return (not self.data_opts.get('validate_events') or 
-                self.parent.joint_event_validity()[self.identifier // self.parent.event_duration])
     
 
 class PhaseRelationshipEvent(RelationshipCalculatorEvent, PhaseRelationshipFunctions):
