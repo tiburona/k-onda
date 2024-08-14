@@ -1012,29 +1012,51 @@ class LFPPlotter(Plotter):
 
     def plot_granger(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
-        region_set = self.data_opts['region_set']
-        reverse_order = region_set.split('_')[::-1]
 
-        region_set_data = {}
+        
+        data = {}
         for group in self.lfp.groups:
             period_data = defaultdict(list)
             for period_type in self.data_opts['periods']:
                 self.selected_period_type = period_type
                 period_data[period_type] = group.data
-            region_set_data[group.identifier] = period_data
+            data[group.identifier] = period_data
 
-        reverse_order_data = {}
-        self.update_data_opts()  # add in the correct syntax here
-        for group in self.lfp.groups:
-            period_data = defaultdict(list)
-            for period_type in self.data_opts['periods']:
-                self.selected_period_type = period_type
-                period_data[period_type] = group.data
-            reverse_order_data[group.identifier] = period_data
+        nrows = len(self.lfp.groups)
+        ncols = len(self.data_opts['periods'])
+        fig_x_dim = len(list(range(*self.lfp.freq_range))) 
+        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(fig_x_dim, 5), sharex=True)
 
-        self.update_data_opts()
+        for i, (group, row) in enumerate(zip(self.lfp.groups, axes)):
+            for j, (period_type, ax) in enumerate(zip(self.data_opts['periods'], row)):
+                for k, (key, val) in enumerate(data[group.identifier][period_type].items()):
+                    # Determine line style based on 'key'
+                    line_style = '-' if key == 'forward' else '--'
 
+                    # Plot using the determined line style
+                    ax.plot(
+                    list(range(self.lfp.freq_range[0], self.lfp.freq_range[1] + 1)),
+                    np.real(val),
+                    line_style + 'o',  # Combine line style with point marker
+                    color=self.graph_opts['period_colors'][period_type],
+                    label=smart_title_case(f"{self.current_region_set.split('_')[k]} Leads")
+                )
 
+                # Set title, labels, and other plot properties
+                ax.set_title(smart_title_case(f'{group.identifier} {period_type}'))
+                if i == 1:
+                    ax.set_xlabel('Frequency')
+                if j == 0:
+                    ax.set_ylabel(smart_title_case(self.data_type))
+
+                ax.legend(title='Direction')
+                ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85)  # Adjust this value as needed
+
+        self.fig = fig
+        self.close_plot(self.data_type)
 
     def plot_correlation(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
@@ -1189,7 +1211,7 @@ class LFPPlotter(Plotter):
          for ax in axes.ravel()]
 
     def set_dir_and_filename(self, basename):
-        if 'coherence' not in self.data_type and 'correlation' not in self.data_type:
+        if all([s not in self.data_type for s in ('coherence', 'correlation', 'granger')]):
             brain_region = self.current_brain_region
         else:
             brain_region = self.data_opts.get('region_set')

@@ -17,7 +17,7 @@ mrl_procs = {meth: {'class': MRLPlotter, 'method': meth} for meth in
 
 lfp_procs = {f'plot_{meth}': {'class': LFPPlotter, 'method': f'plot_{meth}'} for meth in 
              ['power', 'coherence', 'coherence_over_frequencies', 'spectrogram', 'correlation', 
-              'max_correlations']}
+              'max_correlations', 'granger']}
 
 other_procedures = {
     'plot_group_stats': {'class': GroupStatsPlotter, 'method': 'plot_group_stats'},

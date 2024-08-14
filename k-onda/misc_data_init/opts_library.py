@@ -381,5 +381,5 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 SPREADSHEET_OPTS = [GRANGER_OPTS]
 
-RUNNER_OPTS = {'data_opts': CORRELATION_OPTS, 'graph_opts': GRAPH_OPTS}
+RUNNER_OPTS = {'data_opts': GRANGER_OPTS, 'graph_opts': GRAPH_OPTS}
 

@@ -96,6 +96,10 @@ class LFPData(Data):
     @cache_method
     def get_phase_trace(self):
         return self.get_average('get_phase_trace', stop_at='phase_relationship_event', axis=0)
+    
+    @cache_method
+    def get_granger_f_stat(self):
+        return self.get_average('get_granger_f_stat', stop_at='granger_calculator', axis=0)
 
     def get_time_bins(self, data):
         tbs = []
@@ -109,9 +113,6 @@ class LFPData(Data):
             return [TimeBin(i, data_point, self) for i, data_point in enumerate(data)]
 
     def get_frequency_bins(self, data):
-        if 'granger' in self.data_type:
-            a = 'foo'
-
         if type(data) == dict:
             fbs = [FrequencyBin(i, data[k][i], self, data[k], key=k) for k in data 
                    for i in range(len(list(data.values())[0]))]
@@ -943,7 +944,7 @@ class SpontaneousMRLCalculator(MRLCalculator):
         return self.num_events > 4
     
 
-class RegionRelationshipCalculator(LFPData, EventValidator):
+class RegionRelationshipCalculator(LFPData, EventValidator): # TODO: make the data lazy attributes
 
     def __init__(self, period, brain_region_1, brain_region_2):
         self.period = period
@@ -1096,10 +1097,32 @@ class GrangerCalculator(RegionRelationshipCalculator):
             events.append(GrangerEvent(self, i, d1[slc], d2[slc]))
         self._children = events
 
+    def get_segments(self):
+        segments = []
+        valid_sets, len_sets = self.get_valid_sets()
+        min_set_length = self.data_opts.get('min_data_length', 8000)
+        divisor = self.period.duration*self.sampling_rate
+        for i, (set1, set2) in enumerate(self.get_valid_sets()):
+            len_set = len_sets[i]
+            divisor = int(len_set/min_set_length) + 1
+            segment_length = int(len_set/divisor)
+            for s in range(divisor):
+                if s != divisor - 1:
+                    data1 = set1[s*segment_length:(s+1)*segment_length]
+                    data2 = set2[s*segment_length:(s+1)*segment_length]
+                else:
+                    data1 = set1[s*segment_length:]
+                    data2 = set2[s*segment_length:]
+            segments.append(GrangerSegment(self, i, data1, data2, len_set))
+
     def get_granger_model_order(self):
         return self.granger_stat('ts_data_to_info_crit')
     
     def get_granger_f_stat(self):
+        ids = [self.period.animal.identifier, self.period_type, str(self.period.identifier)]
+        saved_calc_exists, saved_granger_calc, pickle_path = self.load('granger', ids)
+        if saved_calc_exists:
+            return saved_granger_calc
         fstat = self.granger_stat('granger_f_stat')
         if self.data_opts.get('frequency_type') == 'continuous':
             forward = np.sum(np.vstack([forward for forward, _ in fstat]), 0)
@@ -1108,6 +1131,7 @@ class GrangerCalculator(RegionRelationshipCalculator):
             forward = sum([forward for forward, _ in fstat])
             backward = sum([backward for _, backward in fstat])
         result = {'forward': forward, 'backward': backward}
+        self.save(result, pickle_path)
         return result
     
     def granger_stat(self, proc_name):
@@ -1118,7 +1142,7 @@ class GrangerCalculator(RegionRelationshipCalculator):
         for i, (set1, set2) in enumerate(valid_sets):
             if len(set1) > self.data_opts.get('min_data_length', 8000):
                 tags = ['animal', str(self.period.animal.identifier), self.period_type, 
-                        self.period.identifier, 'set', str(i)]
+                        self.period.identifier, 'set', str(i), str(self.current_frequency_band)]
                 ml = MatlabInterface(self.data_opts['matlab_configuration'], tags=tags)
                 data = np.vstack((set1, set2))
                 proc = getattr(ml, proc_name)
@@ -1137,13 +1161,13 @@ class GrangerCalculator(RegionRelationshipCalculator):
                             forward = np.full(nec_freqs, np.nan)
                             backward = np.full(nec_freqs, np.nan)
                         else:
-                            for freq in range(*self.freq_range):
+                            for freq in range(self.freq_range[0], self.freq_range[1] + 1):
                                 for_bin = []
                                 back_bin= []
                                 for x in range(index_1, index_2):
                                     if x >= freq - .5 and x < freq + .5:
-                                        for_bin.append(matrix[0, 1, x-1])
-                                        back_bin.append(matrix[1, 0, x-1])
+                                        for_bin.append(np.real(matrix[0, 1, x-1]))
+                                        back_bin.append(np.real(matrix[1, 0, x-1]))
                                 forward.append(np.mean(for_bin)*weight)
                                 backward.append(np.mean(back_bin)*weight)
                     else:
@@ -1153,8 +1177,11 @@ class GrangerCalculator(RegionRelationshipCalculator):
                 if proc_name == 'ts_data_to_info_crit':
                     result = (len(set1), result)
                 results.append(result)
-        a = 'foo'
         return results
+    
+
+class GrangerSegment(LFPData):
+    pass
         
 
 class GrangerEvent(RelationshipCalculatorEvent):

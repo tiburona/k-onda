@@ -330,18 +330,35 @@ class Data(Base):
             else:
                 raise ValueError(f"Invalid base method: {base_method}")
 
-        else:  # recursively call
+        else:  # recursively call  # TODO: need to deal with dictionaries for granger here
             child_vals = [child.get_average(base_method, axis=axis, stop_at=stop_at, **kwargs) for child in
                           self.children]
             # Filter out nan values and arrays that are all NaN
             child_vals_filtered = [x for x in child_vals
                                    if not (isinstance(x, np.ndarray) and np.isnan(x).all())
                                    and not (isinstance(x, float) and np.isnan(x))]
-            if axis is None:  # compute mean over all dimensions
-                return np.nanmean(np.array(child_vals_filtered))
-            else:  # compute mean over provided dimension
-                return np.nanmean(np.array(child_vals_filtered), axis=axis)
-            
+            if isinstance(child_vals[0], dict):
+                # Initialize defaultdict to automatically start lists for new keys
+                result_dict = defaultdict(list)
+    
+                # Aggregate values from each dictionary under their corresponding keys
+                for child_val in child_vals:
+                    for key, value in child_val.items():
+                        result_dict[key].append(value)
+
+                # Calculate average of the list of values for each key
+                return_dict = {key: self.take_average(values, axis) for key, values in result_dict.items()}
+                return return_dict
+                    
+            else:
+                return self.take_average(child_vals_filtered, axis)
+
+    @staticmethod        
+    def take_average(vals, axis):
+        if axis is None:  # compute mean over all dimensions
+            return np.nanmean(np.array(vals))
+        else:  # compute mean over provided dimension
+            return np.nanmean(np.array(vals), axis=axis)
 
     def get_sum(self, base_method, axis=0, stop_at='period'):
         if self.identifier == 'CH129' and self.selected_period_type == 'pretone' and self.data_opts['periods']['tone'] == (18, 20):
