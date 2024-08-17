@@ -128,6 +128,8 @@ class Stats(Base):
             if self.data_type in ['mrl']:
                 level = 'mrl_calculator'
                 other_attributes += ['frequency', 'fb', 'neuron_type', 'neuron_quality']  # TODO: figure out what fb should be changed to post refactor
+            if level == 'granger_segment':
+                other_attributes.append('length')
             if any([w in self.data_type for w in ['coherence', 'correlation', 'phase']]):
                 other_attributes.append('period_id')
             else:

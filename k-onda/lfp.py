@@ -27,7 +27,7 @@ class LFPData(Data):
             print(f"self.period_type {self.period.identifier}")
             print(f"{self.identifier}")
             print(f"\n")
-    
+
         return self.get_frequency_bins(self.data)
 
     @property
@@ -193,6 +193,14 @@ class LFPExperiment(LFPData, Subscriber):
     @property
     def all_phase_relationship_calculators(self):
         return self.get_data_calculated_by_period('phase_relationship_calculators')
+    
+    @property
+    def all_granger_segments(self):
+        segments = (segment 
+            for calc in self.all_granger_calculators 
+            if calc.is_valid
+            for segment in calc.get_segments())
+        return list(segments)
 
     def get_data_calculated_by_period(self, data_type):
         data_objects = []
@@ -734,12 +742,9 @@ class FrequencyBin(LFPData):
         self.parent = parent
         self.val = val
         self.key = key
-        freq_range = list(range(*self.freq_range))
+        freq_range = list(range(self.freq_range[0], self.freq_range[1] + 1)) # TODO: fix this
         if parent_data.shape[0] > len(freq_range):
-            if parent_data.shape[0] == len(freq_range) + 1:
-                freq_range.append(freq_range[-1])
-            else:
-                freq_range = np.linspace(freq_range[0], freq_range[-1], parent_data.shape[0])
+            freq_range = np.linspace(freq_range[0], freq_range[-1], parent_data.shape[0])
         self.identifier = index
         if self.data_type == 'power':
             if self.parent.name == 'period':
@@ -1080,8 +1085,53 @@ class RelationshipCalculatorEvent(LFPData):
         return (not self.data_opts.get('validate_events') or 
                 self.parent.joint_event_validity()[self.identifier // self.parent.event_duration])
     
+class GrangerFunctions:
+
+    def fetch_granger_stat(self, d1, d2, tags, proc_name, do_weight=True, max_len_sets=None):
+        ml = MatlabInterface(self.data_opts['matlab_configuration'], tags=tags)
+        data = np.vstack((d1, d2))
+        proc = getattr(ml, proc_name)
+        result = proc(data)
+        if proc_name == 'granger_f_stat':
+            weight = len(d1)/max_len_sets if do_weight else 1
+            matrix = np.array(result[0]['f'])
+            index_1 = round(self.freq_range[0]*matrix.shape[2]/(self.sampling_rate/2)) 
+            index_2 = round(self.freq_range[1]*matrix.shape[2]/(self.sampling_rate/2)) + 1
+            forward = []
+            backward = []
+            if self.data_opts.get('frequency_type') == 'continuous':
+                # check to make sure we have at least 1 Hz res data
+                nec_freqs = self.freq_range[1] - self.freq_range[0] + 1
+                if index_2 - index_1 < nec_freqs:
+                    forward = np.full(nec_freqs, np.nan)
+                    backward = np.full(nec_freqs, np.nan)
+                else:
+                     # TODO: this is more complicated than it need be given that we decided
+                     # to make the Granger calculation return whole number frequencies 
+                     #  Consider simplifying.
+                    for freq in range(self.freq_range[0], self.freq_range[1] + 1):
+                        for_bin = []
+                        back_bin = []
+                        for x in range(index_1, index_2): 
+                            if x >= freq + .5:
+                                break
+                            if x >= freq - .5 and x < freq + .5:
+                                for_bin.append(np.real(matrix[0, 1, x-1]))
+                                back_bin.append(np.real(matrix[1, 0, x-1]))
+                        forward.append(np.mean(for_bin)*weight)
+                        backward.append(np.mean(back_bin)*weight)
+            else:
+                forward.append(np.mean(
+                    [np.real(matrix[0,1,x]) for x in range(index_1, index_2+1)]) * weight)
+                backward.append(np.mean(
+                            [np.real(matrix[1,0,x]) for x in range(index_1, index_2+1)]) * weight)
+            result = (forward, backward)
+            if proc_name == 'ts_data_to_info_crit':
+                 result = (len(d1), result)
+        return result
     
-class GrangerCalculator(RegionRelationshipCalculator):
+    
+class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO: this is more complicated than it need be given that we went with 
 
     name = 'granger_calculator'
 
@@ -1099,10 +1149,10 @@ class GrangerCalculator(RegionRelationshipCalculator):
 
     def get_segments(self):
         segments = []
-        valid_sets, len_sets = self.get_valid_sets()
+        valid_sets, len_sets = self.get_valid_sets() 
         min_set_length = self.data_opts.get('min_data_length', 8000)
         divisor = self.period.duration*self.sampling_rate
-        for i, (set1, set2) in enumerate(self.get_valid_sets()):
+        for i, (set1, set2) in enumerate(valid_sets):
             len_set = len_sets[i]
             divisor = int(len_set/min_set_length) + 1
             segment_length = int(len_set/divisor)
@@ -1114,6 +1164,7 @@ class GrangerCalculator(RegionRelationshipCalculator):
                     data1 = set1[s*segment_length:]
                     data2 = set2[s*segment_length:]
             segments.append(GrangerSegment(self, i, data1, data2, len_set))
+        return segments
 
     def get_granger_model_order(self):
         return self.granger_stat('ts_data_to_info_crit')
@@ -1123,7 +1174,7 @@ class GrangerCalculator(RegionRelationshipCalculator):
         saved_calc_exists, saved_granger_calc, pickle_path = self.load('granger', ids)
         if saved_calc_exists:
             return saved_granger_calc
-        fstat = self.granger_stat('granger_f_stat')
+        fstat = self.get_granger_stat('granger_f_stat')
         if self.data_opts.get('frequency_type') == 'continuous':
             forward = np.sum(np.vstack([forward for forward, _ in fstat]), 0)
             backward = np.sum(np.vstack([backward for _, backward in fstat]), 0)
@@ -1134,7 +1185,7 @@ class GrangerCalculator(RegionRelationshipCalculator):
         self.save(result, pickle_path)
         return result
     
-    def granger_stat(self, proc_name):
+    def get_granger_stat(self, proc_name):
         if self.freq_range[0] == 0:
             raise(ValueError("No 0 frequencies for granger stats"))
         valid_sets, len_sets = self.get_valid_sets()
@@ -1143,45 +1194,40 @@ class GrangerCalculator(RegionRelationshipCalculator):
             if len(set1) > self.data_opts.get('min_data_length', 8000):
                 tags = ['animal', str(self.period.animal.identifier), self.period_type, 
                         self.period.identifier, 'set', str(i), str(self.current_frequency_band)]
-                ml = MatlabInterface(self.data_opts['matlab_configuration'], tags=tags)
-                data = np.vstack((set1, set2))
-                proc = getattr(ml, proc_name)
-                result = proc(data)
-                if proc_name == 'granger_f_stat':
-                    weight = len(set1)/max(len_sets)
-                    matrix = np.array(result[0]['f'])
-                    index_1 = round(self.freq_range[0]*matrix.shape[2]/(self.sampling_rate/2)) 
-                    index_2 = round(self.freq_range[1]*matrix.shape[2]/(self.sampling_rate/2)) + 1
-                    forward = []
-                    backward = []
-                    if self.data_opts.get('frequency_type') == 'continuous':
-                        # check to make sure we have at least 1 Hz res data
-                        nec_freqs = self.freq_range[1] - self.freq_range[0] + 1
-                        if index_2 - index_1 < nec_freqs:
-                            forward = np.full(nec_freqs, np.nan)
-                            backward = np.full(nec_freqs, np.nan)
-                        else:
-                            for freq in range(self.freq_range[0], self.freq_range[1] + 1):
-                                for_bin = []
-                                back_bin= []
-                                for x in range(index_1, index_2):
-                                    if x >= freq - .5 and x < freq + .5:
-                                        for_bin.append(np.real(matrix[0, 1, x-1]))
-                                        back_bin.append(np.real(matrix[1, 0, x-1]))
-                                forward.append(np.mean(for_bin)*weight)
-                                backward.append(np.mean(back_bin)*weight)
-                    else:
-                        forward.append(np.mean([np.real(matrix[0,1,x]) for x in range(index_1, index_2+1)]) * weight)
-                        backward.append(np.mean([np.real(matrix[1,0,x]) for x in range(index_1, index_2+1)]) * weight)
-                    result = (forward, backward)
-                if proc_name == 'ts_data_to_info_crit':
-                    result = (len(set1), result)
-                results.append(result)
+                results.append(self.fetch_granger_stat(set1, set2, tags, proc_name, do_weight=True, 
+                                                       max_len_sets=max(len_sets)))
         return results
     
 
-class GrangerSegment(LFPData):
-    pass
+class GrangerSegment(LFPData, GrangerFunctions):
+
+    name = 'granger_segment'
+
+    def __init__(self, parent_calculator, i, data1, data2, len_set):
+        self.identifier = i
+        self.parent= parent_calculator
+        self.period = self.parent.period
+        self.period_type = self.parent.period_type
+        self.region_1_data = data1
+        self.region_2_data = data2
+        self.length = len_set
+
+    def get_granger_f_stat(self):
+        granger_stat = self.get_granger_stat('granger_f_stat')
+        return {'forward': np.array(granger_stat[0]), 'backward': np.array(granger_stat[1])}
+
+    def get_granger_stat(self, proc_name):
+        tags = ['animal', str(self.period.animal.identifier), self.period_type, 
+                str(self.period.identifier), 'segment', str(self.identifier), 
+                str(self.current_frequency_band)]
+        saved_calc_exists, saved_granger_calc, pickle_path = self.load('granger', tags)
+        if saved_calc_exists:
+            return saved_granger_calc
+        else:
+            result = self.fetch_granger_stat(self.region_1_data, self.region_2_data, tags, proc_name, 
+                                         do_weight=False)
+            self.save(result, pickle_path)
+        return result
         
 
 class GrangerEvent(RelationshipCalculatorEvent):

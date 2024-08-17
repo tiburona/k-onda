@@ -245,6 +245,27 @@ VALIDATION_DATA_OPTS = {
          'hpc': [('inclusion_rule', {'animal': [['identifier', 'in', HPC_THETA_POWER_ANIMALS]]})]
                                }}
 }
+# BLA_PL_INCLUSION = {'animal': [['identifier', 'in', ['IG160', 'IG163', 'IG179']]]}
+
+
+# VALIDATION_DATA_OPTS = {
+#     'data_class': 'lfp',
+#     'data_type': 'power',
+#     'brain_regions': ['pl', 'bla'],
+#     'power_arg_set': (2048, 2000, 1000, 980, 2), 
+#     'matlab_configuration': MATLAB_CONFIG,
+#     'frequency_band': (0, 8),
+#     'threshold': 20,
+#     'events': {
+#                 'pretone': {'pre_stim': 0, 'post_stim': 1}, 
+#                 'tone': {'pre_stim': 0, 'post_stim': 1}},
+#     'rules': {
+#         'brain_region': 
+#         {'pl': [('inclusion_rule', {'animal': [['identifier', 'in', ['IG160', 'IG163', 'IG179']]]})],
+#          'bla': [('inclusion_rule', {'animal': [['identifier', 'in', ['IG160', 'IG163', 'IG179']]]})], 
+    
+#                                }}
+# }
 
 '3-6/6-12 for bla-pl.  bla-hpc and pl-hpc , 3-5, 5-12. '
 BLA_PL_COHERENCE_BANDS = [(3, 6), (6, 12)]
@@ -359,14 +380,14 @@ PHASE_PHASE_OPTS = {
             }
 
 
-#BLA_PL_INCLUSION = {'animal': [['identifier', 'in', ['IG160', 'IG163']]]}
+#BLA_PL_INCLUSION = {'animal': [['identifier', 'in', ['IG160', 'IG163', 'IG179']]]}
 
 GRANGER_OPTS = {
     'data_class': 'lfp', 'data_type': 'granger_f_stat', 'time_type': 'block', 
     'frequency_bands': [(1, 20)], 'frequency_type': 'continuous',  'aggregator': 'none',
     'events': {'pretone': {'post_stim': 1}, 'tone': {'post_stim': 1}},
-    'region_sets': [ 'bla_pl'], 'validate_events': True,
-    'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'granger_calculator',
+    'region_sets': [ 'bla_pl'], 'validate_events': True, 
+    'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'granger_segment',
     'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
     'inclusion_rule': BLA_PL_INCLUSION
 }

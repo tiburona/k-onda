@@ -17,11 +17,10 @@ def main():
 def run():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json',
                     lfp=True)
-    runner.run('plot_granger', RUNNER_OPTS)
     runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
                 path='/Users/katie/likhtik/IG_INED_SAFETY_RECALL', filename='granger',
                 prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
-
+    runner.run('plot_granger', RUNNER_OPTS)
     
     #runner.run('plot_max_correlations', RUNNER_OPTS)
 
