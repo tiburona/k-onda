@@ -384,10 +384,10 @@ PHASE_PHASE_OPTS = {
 
 GRANGER_OPTS = {
     'data_class': 'lfp', 'data_type': 'granger_f_stat', 'time_type': 'block', 
-    'frequency_bands': [(1, 20)], 'frequency_type': 'continuous',  'aggregator': 'none',
+    'frequency_bands': [(0, 20)], 'frequency_type': 'continuous',  'aggregator': 'none',
     'events': {'pretone': {'post_stim': 1}, 'tone': {'post_stim': 1}},
     'region_sets': [ 'bla_pl'], 'validate_events': True, 
-    'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'granger_segment',
+    'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'granger_calculator',
     'power_arg_set': (2048, 2000, 1000, 980, 2), 'matlab_configuration': MATLAB_CONFIG,
     'inclusion_rule': BLA_PL_INCLUSION
 }
@@ -400,7 +400,7 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 #COHERENCE_SPREADSHEET_OPTS = [COHERENCE_OPTS]
 
-SPREADSHEET_OPTS = [GRANGER_OPTS]
+SPREADSHEET_OPTS = [GRANGER_OPTS, BEHAVIOR_OPTS]
 
 RUNNER_OPTS = {'data_opts': GRANGER_OPTS, 'graph_opts': GRAPH_OPTS}
 

@@ -114,10 +114,16 @@ class LFPData(Data):
 
     def get_frequency_bins(self, data):
         if type(data) == dict:
-            fbs = [FrequencyBin(i, data[k][i], self, data[k], key=k) for k in data 
-                   for i in range(len(list(data.values())[0]))]
-            return fbs 
-        return [FrequencyBin(i, data_point, self, data) for i, data_point in enumerate(data)]
+            # fbs = [FrequencyBin(i, data[k][i], self, data[k], key=k) for k in data 
+            #        for i in range(len(list(data.values())[0]))]
+            # return fbs 
+            fbs = []
+            for i in range(len(list(data.values())[0])):
+                point_dict = {key: data[key][i] for key in data}
+                fbs.append(FrequencyBin(i, point_dict, self, data))
+            return fbs
+        else:
+            return [FrequencyBin(i, data_point, self, data) for i, data_point in enumerate(data)]
 
     def load(self, calc_name, other_identifiers):
         store = self.data_opts.get('store', 'pkl')
@@ -241,6 +247,12 @@ class LFPExperiment(LFPData, Subscriber):
                 select_by=(('period', 'period_type', period_type),)) 
                 for period_type in animal.period_info}
             
+            saved_calc_exists, validity, pickle_path = self.load(
+                'validity', [region, animal.identifier])
+            if saved_calc_exists:
+                self.event_validation[region][animal.identifier] = validity
+                continue
+
             def validate_event(event):
                 frequency_bins = event.get_frequency_bins(event.get_original_data())
                 for frequency in frequency_bins: 
@@ -255,7 +267,9 @@ class LFPExperiment(LFPData, Subscriber):
             for event in animal.all_events:
                 event.valid = validate_event(event)
             
-            self.event_validation[region][animal.identifier] = animal.event_validity()
+            event_validity = animal.event_validity()
+            self.event_validation[region][animal.identifier] = event_validity
+            self.save(event_validity, pickle_path)
 
 
 class LFPGroup(LFPData):
@@ -275,6 +289,10 @@ class LFPGroup(LFPData):
     @property
     def mrl_calculators(self):
         return [mrl_calc for animal in self.children for mrl_calc in animal.mrl_calculators if mrl_calc.validator]
+    
+    @property
+    def granger_calculators(self):
+        return [calc for animal in self.children for calc in animal.granger_calculators]
     
     @property
     def phase_relationship_calculators(self):
@@ -738,13 +756,16 @@ class FrequencyBin(LFPData):
 
     name = 'frequency_bin'
 
-    def __init__(self, index, val, parent, parent_data, unit=None, key=None):
+    def __init__(self, index, val, parent, parent_data, unit=None):
         self.parent = parent
         self.val = val
-        self.key = key
         freq_range = list(range(self.freq_range[0], self.freq_range[1] + 1)) # TODO: fix this
-        if parent_data.shape[0] > len(freq_range):
-            freq_range = np.linspace(freq_range[0], freq_range[-1], parent_data.shape[0])
+        if isinstance(parent_data, dict):
+            shape = list(parent_data.values())[0].shape
+        else:
+            shape = parent_data.shape
+        if shape[0] > len(freq_range):
+            freq_range = np.linspace(freq_range[0], freq_range[-1], shape[0])
         self.identifier = index
         if self.data_type == 'power':
             if self.parent.name == 'period':
@@ -1116,8 +1137,8 @@ class GrangerFunctions:
                             if x >= freq + .5:
                                 break
                             if x >= freq - .5 and x < freq + .5:
-                                for_bin.append(np.real(matrix[0, 1, x-1]))
-                                back_bin.append(np.real(matrix[1, 0, x-1]))
+                                for_bin.append(np.real(matrix[0, 1, x]))
+                                back_bin.append(np.real(matrix[1, 0, x]))
                         forward.append(np.mean(for_bin)*weight)
                         backward.append(np.mean(back_bin)*weight)
             else:
@@ -1170,7 +1191,8 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
         return self.granger_stat('ts_data_to_info_crit')
     
     def get_granger_f_stat(self):
-        ids = [self.period.animal.identifier, self.period_type, str(self.period.identifier)]
+        ids = [self.period.animal.identifier, self.period_type, str(self.period.identifier), 
+               str(self.current_frequency_band)]
         saved_calc_exists, saved_granger_calc, pickle_path = self.load('granger', ids)
         if saved_calc_exists:
             return saved_granger_calc
@@ -1186,8 +1208,6 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
         return result
     
     def get_granger_stat(self, proc_name):
-        if self.freq_range[0] == 0:
-            raise(ValueError("No 0 frequencies for granger stats"))
         valid_sets, len_sets = self.get_valid_sets()
         results = []
         for i, (set1, set2) in enumerate(valid_sets):
@@ -1207,6 +1227,7 @@ class GrangerSegment(LFPData, GrangerFunctions):
         self.identifier = i
         self.parent= parent_calculator
         self.period = self.parent.period
+        self.period_id = self.period.identifier
         self.period_type = self.parent.period_type
         self.region_1_data = data1
         self.region_2_data = data2

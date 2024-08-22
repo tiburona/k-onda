@@ -1013,13 +1013,13 @@ class LFPPlotter(Plotter):
     def plot_granger(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)
 
-        
         data = {}
         for group in self.lfp.groups:
-            period_data = defaultdict(list)
+            period_data = defaultdict(dict)
             for period_type in self.data_opts['periods']:
                 self.selected_period_type = period_type
-                period_data[period_type] = group.data
+                period_data[period_type]['data'] = group.data
+                period_data[period_type]['sem'] = group.get_sem()
             data[group.identifier] = period_data
 
         nrows = len(self.lfp.groups)
@@ -1029,34 +1029,51 @@ class LFPPlotter(Plotter):
 
         for i, (group, row) in enumerate(zip(self.lfp.groups, axes)):
             for j, (period_type, ax) in enumerate(zip(self.data_opts['periods'], row)):
-                for k, (key, val) in enumerate(data[group.identifier][period_type].items()):
+                for k, (key, val) in enumerate(data[group.identifier][period_type]['data'].items()):
                     # Determine line style based on 'key'
                     line_style = '-' if key == 'forward' else '--'
 
-                    # Plot using the determined line style
+                    # Calculate the standard error envelope data
+                    # Assume `sem_val` contains the standard error values for `val`
+                    sem_val = data[group.identifier][period_type]['sem'][key]
+
+                    # Get the line color
+                    line_color = self.graph_opts['period_colors'][period_type]
+
+                    # Plot the standard error envelope
+                    ax.fill_between(
+                        list(range(self.lfp.freq_range[0], self.lfp.freq_range[1] + 1)),
+                        np.real(val) - sem_val,
+                        np.real(val) + sem_val,
+                        color=line_color,
+                        alpha=0.3  # Control the transparency of the envelope
+                    )
+
+                    # Plot the main line using the determined line style
                     ax.plot(
-                    list(range(self.lfp.freq_range[0], self.lfp.freq_range[1] + 1)),
-                    np.real(val),
-                    line_style + 'o',  # Combine line style with point marker
-                    color=self.graph_opts['period_colors'][period_type],
-                    label=smart_title_case(f"{self.current_region_set.split('_')[k]} Leads")
-                )
+                        list(range(self.lfp.freq_range[0], self.lfp.freq_range[1] + 1)),
+                        np.real(val),
+                        line_style + 'o',  # Combine line style with point marker
+                        color=line_color,
+                        label=smart_title_case(f"{self.current_region_set.split('_')[k]} Leads")
+                    )
 
-                # Set title, labels, and other plot properties
-                ax.set_title(smart_title_case(f'{group.identifier} {period_type}'))
-                if i == 1:
-                    ax.set_xlabel('Frequency')
-                if j == 0:
-                    ax.set_ylabel(smart_title_case(self.data_type))
+                    # Set title, labels, and other plot properties
+                    ax.set_title(smart_title_case(f'{group.identifier} {period_type}'))
+                    if i == 1:
+                        ax.set_xlabel('Frequency')
+                    if j == 0:
+                        ax.set_ylabel(smart_title_case(self.data_type))
 
-                ax.legend(title='Direction')
-                ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+                    ax.legend(title='Direction')
+                    ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 
         plt.tight_layout()
         plt.subplots_adjust(top=0.85)  # Adjust this value as needed
 
         self.fig = fig
         self.close_plot(self.data_type)
+
 
     def plot_correlation(self, data_opts, graph_opts):
         self.initialize(data_opts, graph_opts)

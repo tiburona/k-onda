@@ -406,7 +406,11 @@ class Data(Base):
             else:
                 data_to_append = np.mean(cd) if collapse_sem_data else cd
                 data.append(data_to_append)
-        return sem(data)
+
+        if isinstance(data[0], dict):
+            return {key: sem([child[key] for child in data]) for key in data[0]}
+        else:
+            return sem(data)
 
     @cache_method
     def get_median(self, stop_at='event', extend_by=None, select_by=None):

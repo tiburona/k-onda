@@ -31,7 +31,7 @@ class Stats(Base):
             if not isinstance(self.current_frequency_band, str):
                 translation_table = str.maketrans({k: '_' for k in '[](),'})
                 fb = str(list(fb)).translate(translation_table)
-            if any([s in self.data_type for s in ['coherence', 'correlation', 'phase']]):
+            if any([s in self.data_type for s in ['coherence', 'correlation', 'phase', 'granger']]):
                 self.data_col = f"{self.data_opts['region_set']}_{fb}_{self.data_type}"
             else:
                 self.data_col = f"{self.current_brain_region}_{fb}_{self.data_type}"
@@ -130,7 +130,7 @@ class Stats(Base):
                 other_attributes += ['frequency', 'fb', 'neuron_type', 'neuron_quality']  # TODO: figure out what fb should be changed to post refactor
             if level == 'granger_segment':
                 other_attributes.append('length')
-            if any([w in self.data_type for w in ['coherence', 'correlation', 'phase']]):
+            if any([w in self.data_type for w in ['coherence', 'correlation', 'phase', 'granger']]):
                 other_attributes.append('period_id')
             else:
                 if self.data_opts['time_type'] == 'continuous' and self.data_opts.get('power_deviation'):
@@ -195,8 +195,8 @@ class Stats(Base):
             if self.data_opts.get('aggregator') == 'sum':
                 row_dict = {self.data_col: source.sum_data}
             elif self.data_opts.get('aggregator') == 'none':
-                if source.key:
-                    row_dict = {f"{self.data_col}_{source.key}": source.data}
+                if isinstance(source.data, dict):
+                    row_dict = {f"{self.data_col}_{key}": val for key, val in source.data.items()}
                 else:
                     row_dict = {self.data_col: source.data}
             else:
@@ -209,6 +209,8 @@ class Stats(Base):
                     if val is not None:
                         if attr == 'power_deviation':
                             attr = f"{self.lfp.brain_region}_{self.current_frequency_band}_{attr}"
+                        elif attr == 'period_id':
+                            attr = 'period'
                         row_dict[attr] = val
             rows.append(row_dict)
 
