@@ -47,7 +47,7 @@ class MatlabInterface:
         result = self.execute_function(data, execution_line, results=['moAIC', 'moBIC'])
         return result
     
-    def granger_f_stat(self, data, momax=200, icregmode="''"):
+    def granger_causality(self, data, momax=200, icregmode="''"):
         execution_line = f"""
             [AIC,BIC,moAIC,moBIC] = tsdata_to_infocrit(data, {momax}, {icregmode});
             morder = moBIC;

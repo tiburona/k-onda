@@ -98,8 +98,8 @@ class LFPData(Data):
         return self.get_average('get_phase_trace', stop_at='phase_relationship_event', axis=0)
     
     @cache_method
-    def get_granger_f_stat(self):
-        return self.get_average('get_granger_f_stat', stop_at='granger_calculator', axis=0)
+    def get_granger_causality(self):
+        return self.get_average('get_granger_causality', stop_at='granger_calculator', axis=0)
 
     def get_time_bins(self, data):
         tbs = []
@@ -114,9 +114,6 @@ class LFPData(Data):
 
     def get_frequency_bins(self, data):
         if type(data) == dict:
-            # fbs = [FrequencyBin(i, data[k][i], self, data[k], key=k) for k in data 
-            #        for i in range(len(list(data.values())[0]))]
-            # return fbs 
             fbs = []
             for i in range(len(list(data.values())[0])):
                 point_dict = {key: data[key][i] for key in data}
@@ -1113,7 +1110,7 @@ class GrangerFunctions:
         data = np.vstack((d1, d2))
         proc = getattr(ml, proc_name)
         result = proc(data)
-        if proc_name == 'granger_f_stat':
+        if proc_name == 'granger_causality':
             weight = len(d1)/max_len_sets if do_weight else 1
             matrix = np.array(result[0]['f'])
             index_1 = round(self.freq_range[0]*matrix.shape[2]/(self.sampling_rate/2)) 
@@ -1190,13 +1187,13 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
     def get_granger_model_order(self):
         return self.granger_stat('ts_data_to_info_crit')
     
-    def get_granger_f_stat(self):
+    def get_granger_causality(self):
         ids = [self.period.animal.identifier, self.period_type, str(self.period.identifier), 
                str(self.current_frequency_band)]
         saved_calc_exists, saved_granger_calc, pickle_path = self.load('granger', ids)
         if saved_calc_exists:
             return saved_granger_calc
-        fstat = self.get_granger_stat('granger_f_stat')
+        fstat = self.get_granger_stat('granger_causality')
         if self.data_opts.get('frequency_type') == 'continuous':
             forward = np.sum(np.vstack([forward for forward, _ in fstat]), 0)
             backward = np.sum(np.vstack([backward for _, backward in fstat]), 0)
@@ -1233,8 +1230,8 @@ class GrangerSegment(LFPData, GrangerFunctions):
         self.region_2_data = data2
         self.length = len_set
 
-    def get_granger_f_stat(self):
-        granger_stat = self.get_granger_stat('granger_f_stat')
+    def get_granger_causality(self):
+        granger_stat = self.get_granger_stat('granger_causality')
         return {'forward': np.array(granger_stat[0]), 'backward': np.array(granger_stat[1])}
 
     def get_granger_stat(self, proc_name):

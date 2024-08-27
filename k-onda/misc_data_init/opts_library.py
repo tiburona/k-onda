@@ -167,7 +167,7 @@ POWER_OPTS = {
     'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
     'filter': 'spectrum_estimation', 'store': 'pkl',  'validate_events': True,
     'events': {
-        'pretone': {'pre_stim': .03, 'post_stim': .3}, 'tone': {'pre_stim': .03, 'post_stim': .3}
+        'pretone': {'pre_stim': .15, 'post_stim': .3}, 'tone': {'pre_stim': .15, 'post_stim': .3}
         },
     'rules': {
         'brain_region': 
@@ -199,7 +199,7 @@ PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adju
 
 MRL_OPTS = {'data_class': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
             'data_type': 'mrl', 'brain_regions': ['pl', 'bla', 'hpc'],  'frequency_type': 'block',
-            'periods': {'tone': range(5), 'pretone': range(5)}, 'row_type': 'mrl_calculator',
+            'periods': {'tone': range(1), 'pretone': range(1)}, 'row_type': 'mrl_calculator',
             'validate_events': True,
             'events': {
                 'pretone': {'pre_stim': 0, 'post_stim': 1}, 
@@ -383,7 +383,7 @@ PHASE_PHASE_OPTS = {
 #BLA_PL_INCLUSION = {'animal': [['identifier', 'in', ['IG160', 'IG163', 'IG179']]]}
 
 GRANGER_OPTS = {
-    'data_class': 'lfp', 'data_type': 'granger_f_stat', 'time_type': 'block', 
+    'data_class': 'lfp', 'data_type': 'granger_causality', 'time_type': 'block', 
     'frequency_bands': [(0, 20)], 'frequency_type': 'continuous',  'aggregator': 'none',
     'events': {'pretone': {'post_stim': 1}, 'tone': {'post_stim': 1}},
     'region_sets': [ 'bla_pl'], 'validate_events': True, 
@@ -400,7 +400,7 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 #COHERENCE_SPREADSHEET_OPTS = [COHERENCE_OPTS]
 
-SPREADSHEET_OPTS = [GRANGER_OPTS, BEHAVIOR_OPTS]
+SPREADSHEET_OPTS = [BLA_PL_COHERENCE_OPTS, HPC_PL_COHERENCE_OPTS, BLA_HPC_COHERENCE_OPTS]
 
-RUNNER_OPTS = {'data_opts': GRANGER_OPTS, 'graph_opts': GRAPH_OPTS}
+RUNNER_OPTS = {'data_opts': MRL_OPTS, 'graph_opts': GRAPH_OPTS}
 

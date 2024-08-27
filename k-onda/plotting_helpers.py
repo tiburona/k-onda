@@ -84,7 +84,7 @@ def smart_title_case(s):
     lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 'as', 'but', 'or',
                        'nor', 'is'}
     acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl', 'il', 'bf'}
-    words = re.split(r'(\W+)', s)  # Split string on non-alphanumeric characters, preserving delimiters
+    words = [w for w in re.split(r'([_\W]+)', s) if w not in  ['_', ' ']]
     title_words = []
     for i, word in enumerate(words):
         if word.lower() in lowercase_words and i != 0 and i != len(words) - 1:
@@ -95,7 +95,7 @@ def smart_title_case(s):
             title_words.append(word.capitalize())
         else:
             title_words.append(word)
-    title = ''.join(title_words)
+    title = ' '.join(title_words)
     return title
 
 

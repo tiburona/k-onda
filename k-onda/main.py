@@ -1,7 +1,7 @@
 from utils import log_directory_contents
 from runner import Runner
-from misc_data_init.opts_library import VALIDATION_DATA_OPTS, GRAPH_OPTS, SPREADSHEET_OPTS, RUNNER_OPTS, SPECTROGRAM_OPTS
-import cProfile
+from misc_data_init.opts_library import VALIDATION_DATA_OPTS, SPREADSHEET_OPTS, \
+    BLA_HPC_COHERENCE_RUNNER_OPTS, HPC_PL_COHERENCE_RUNNER_OPTS, BLA_PL_COHERENCE_RUNNER_OPTS
 import pstats
 import signal
 
@@ -16,15 +16,17 @@ def main():
 
 def run():
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json',
-                    lfp=True, behavior=True)
-    runner.run('plot_granger', RUNNER_OPTS, prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
+                    lfp=True)
     runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
                 path='/Users/katie/likhtik/IG_INED_SAFETY_RECALL', filename='granger_behavior',
+                prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})    
+    runner.run('plot_coherence', BLA_PL_COHERENCE_RUNNER_OPTS,
                 prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
+    runner.run('plot_coherence', BLA_HPC_COHERENCE_RUNNER_OPTS,
+                prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS}),
+    runner.run('plot_coherence', HPC_PL_COHERENCE_RUNNER_OPTS,
+                prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS}),
     
-    
-    #runner.run('plot_max_correlations', RUNNER_OPTS)
-
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 

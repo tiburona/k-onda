@@ -337,7 +337,7 @@ class Data(Base):
             child_vals_filtered = [x for x in child_vals
                                    if not (isinstance(x, np.ndarray) and np.isnan(x).all())
                                    and not (isinstance(x, float) and np.isnan(x))]
-            if isinstance(child_vals[0], dict):
+            if len(child_vals) and isinstance(child_vals[0], dict):
                 # Initialize defaultdict to automatically start lists for new keys
                 result_dict = defaultdict(list)
     
