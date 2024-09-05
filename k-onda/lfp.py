@@ -8,7 +8,8 @@ from scipy.signal import cwt, morlet
 from collections import defaultdict, namedtuple
 from copy import deepcopy
 
-from data import Data, TimeBin
+from experiment import Data
+from data import TimeBin
 from context import experiment_context
 from period_constructor import PeriodConstructor
 from context import Subscriber

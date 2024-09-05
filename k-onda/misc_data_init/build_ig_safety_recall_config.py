@@ -80,7 +80,10 @@ exp_info = {
     'frequency_bands': dict(delta=(0, 4), theta_1=(4, 8), theta_2=(8, 12), delta_theta=(0, 12), gamma=(20, 55),
                             hgamma=(70, 120)),
     'behavior_data': os.path.join(root, 'percent_freezing.csv'),
-    'behavior_animal_id_column': 'ID'
+    'behavior_animal_id_column': 'ID',
+    'reference': {
+        'tone': 'pretone'
+    }
 }
 
 mice_with_alt_code = ['IG171', 'IG172', 'IG173', 'IG174', 'IG175', 'IG176', 'IG177', 'IG178', 'IG179', 'IG180']

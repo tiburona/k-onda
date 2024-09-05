@@ -189,9 +189,9 @@ PROPORTION_OPTS = {
     'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
     }
 
-PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'none',
+PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
              'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
-             'periods': {'pretone': range(5), 'tone': range(5)}, 
+             'periods': {'tone': range(5)}, 'levels': ['group'],
              'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
                                 'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
              'events': {'pretone': {'pre_stim': 0.0, 'post_stim': .7}, 'tone': {'pre_stim': .0, 'post_stim': .7}}}
@@ -346,9 +346,9 @@ GROUP_STAT_PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'adjustment'
 
 PSTH_OPTS = {'data_class': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
              'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
-             'periods': {'tone': range(5)}, 
-             'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
-                                'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
+             'periods': {'tone': range(5)}, 'levels': ['group'],
+             'filters': {'unit': {'quality': ('in', NEURON_QUALITY)}, 
+                        'animal': {'identifier': ('in', STANDARD_ANIMALS)}},
              'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': 0.05, 'post_stim': .65}}}
 
 COUNT_OPTS = {'data_class': 'spike', 'data_type': 'spike_counts', 'bin_size': 0.01, 'adjustment': 'none',
@@ -402,5 +402,5 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 SPREADSHEET_OPTS = [BLA_PL_COHERENCE_OPTS, HPC_PL_COHERENCE_OPTS, BLA_HPC_COHERENCE_OPTS]
 
-RUNNER_OPTS = {'data_opts': MRL_OPTS, 'graph_opts': GRAPH_OPTS}
+RUNNER_OPTS = {'data_opts': PSTH_OPTS, 'graph_opts': GRAPH_OPTS}
 

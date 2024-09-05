@@ -16,14 +16,12 @@ class PeriodConstructor:
             try:
                 period_info = self.period_info
             except AttributeError:
-                period_info = self.parent.period_info
+                period_info = self.animal.period_info
             filtered_period_info = {k: v for k, v in period_info.items() if bool(v.get('relative')) == bool(boo)}
             for period_type in filtered_period_info:
                 self.periods[period_type] = function(period_type, filtered_period_info[period_type])
 
     def construct_periods(self, period_type, period_info):
-        if self.identifier == 'CH130':
-            a = 'foo'
         periods = []
         num_events = len([event for events_list in period_info['events'] for event in
                           events_list])  # all the events for this period type
@@ -42,13 +40,12 @@ class PeriodConstructor:
                 onset = onset * self.sampling_rate/self.spike_target.sampling_rate
                 period_events = period_events * self.sampling_rate/self.spike_target.sampling_rate
             event_ind += len(period_info['events'][i])
-            periods.append(self.period_class(self, i, period_type, period_info, onset, events=period_events))
+            periods.append(self.period_class(self, i, period_type, period_info, onset, 
+                                             events=period_events, experiment=self.experiment))
         return periods
 
     def construct_relative_periods(self, period_type, period_info):
         periods = []
-        if self.identifier == 'CH130':
-            a = 'foo'
         paired_periods = self.periods[period_info['target']]
         exceptions = period_info.get('exceptions')
 
@@ -62,8 +59,8 @@ class PeriodConstructor:
                 duration = period_info.get('duration')
             if self.name == 'animal':  # if self is animal this is an lfp period
                 shift -= sum(paired_period.convolution_padding)
-            shift_in_samples = shift * self.sampling_rate
-            event_duration = paired_period.period_info['event_duration'] * self.sampling_rate
+            shift_in_samples = shift * self.experiment.sampling_rate
+            event_duration = paired_period.period_info['event_duration'] * self.experiment.sampling_rate
             onset = paired_period.onset + shift_in_samples
             event_starts = []
             for es in paired_period.event_starts:
@@ -72,8 +69,9 @@ class PeriodConstructor:
                     event_starts.append(ref_es)
             event_starts = np.array(event_starts)
             duration = duration if duration else paired_period.duration
-            reference_period = self.period_class(self, i, period_type, period_info, onset, events=event_starts,
-                                               target_period=paired_period, is_relative=True)
+            reference_period = self.period_class(self, i, period_type, period_info, onset, 
+                                                 events=event_starts, target_period=paired_period, 
+                                                 is_relative=True, experiment=self.experiment)
             paired_period.paired_period = reference_period
             periods.append(reference_period)
         return periods

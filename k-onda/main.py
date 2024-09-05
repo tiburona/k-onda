@@ -1,9 +1,10 @@
 from utils import log_directory_contents
 from runner import Runner
-from misc_data_init.opts_library import VALIDATION_DATA_OPTS, SPREADSHEET_OPTS, \
-    BLA_HPC_COHERENCE_RUNNER_OPTS, HPC_PL_COHERENCE_RUNNER_OPTS, BLA_PL_COHERENCE_RUNNER_OPTS
+from misc_data_init.opts_library import RUNNER_OPTS
 import pstats
 import signal
+import cProfile
+import os
 
 
 def timeout_handler(signum, frame):
@@ -11,21 +12,18 @@ def timeout_handler(signum, frame):
 
 
 def main():
-    run()
+    profile_run()
+
+def visualize_profile():
+    stats = pstats.Stats('/Users/katie/likhtik/data/logdir/profile_output.prof')
+
+    # Sort the statistics by cumulative time and print the top 10 functions
+    stats.sort_stats('cumulative').print_stats(10)
 
 
 def run():
-    runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json',
-                    lfp=True)
-    runner.run('make_spreadsheet', SPREADSHEET_OPTS, 
-                path='/Users/katie/likhtik/IG_INED_SAFETY_RECALL', filename='granger_behavior',
-                prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})    
-    runner.run('plot_coherence', BLA_PL_COHERENCE_RUNNER_OPTS,
-                prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS})
-    runner.run('plot_coherence', BLA_HPC_COHERENCE_RUNNER_OPTS,
-                prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS}),
-    runner.run('plot_coherence', HPC_PL_COHERENCE_RUNNER_OPTS,
-                prep={'method': 'validate_events', 'data_opts': VALIDATION_DATA_OPTS}),
+    runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json')
+    runner.run('plot_psth', RUNNER_OPTS)
     
     log_directory_contents('/Users/katie/likhtik/data/logdir')
 
@@ -43,7 +41,12 @@ def profile_run(timeout=1000):
     finally:
         profiler.disable()
         stats = pstats.Stats(profiler).sort_stats('cumulative')
-        stats.print_stats()
+        stats.print_stats(100)
+        profile_filename = os.path.join('/Users/katie/likhtik/data/logdir', 'profile_output.prof')
+        with open(profile_filename, 'w') as f:
+            stats = pstats.Stats(profiler, stream=f).sort_stats('cumulative')
+            stats.print_stats()
+        print(f"Profiling results saved to {profile_filename}")
 
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ import csv
 from scipy.signal import firwin, lfilter
 
 
-from spike import Experiment, Group, Animal, Unit
+from experiment import Experiment, Group, Animal, Unit
 from lfp import LFPExperiment
 from behavior import Behavior
 
@@ -39,25 +39,29 @@ class Initializer:
         self.behavior_data_source = None
 
     def init_experiment(self):
+        self.experiment = Experiment(self.exp_info)
         self.animals = [self.init_animal(animal_info) for animal_info in self.animals_info]
         for animal, animal_info in zip(self.animals, self.animals_info):
             if 'units' in animal_info:
                 self.init_units(animal_info['units'], animal)
         self.groups = [
-            Group(name=condition, animals=[animal for animal in self.animals if animal.condition == condition])
+            Group(name=condition, 
+                  animals=[animal for animal in self.animals if animal.condition == condition],
+                  experiment=self.experiment)
             for condition in self.conditions]
-        self.experiment = Experiment(self.exp_info, self.groups)
+        self.experiment.initialize_groups(self.groups)
         return self.experiment
 
     def init_animal(self, animal_info):  # TODO make sure animal info gets all animal info so it can pass it to lfp
         animal = Animal(animal_info['identifier'], animal_info['condition'], animal_info=animal_info,
-                        neuron_types=self.neuron_types)
+                        neuron_types=self.neuron_types, experiment=self.experiment)
         return animal
 
     def init_units(self, units_info, animal):
         for category in [cat for cat in ['good', 'MUA'] if cat in units_info]:
             for unit_info in units_info[category]:
-                unit = Unit(animal, category, unit_info['spike_times'], unit_info['cluster'], unit_info['mean_waveform'])
+                unit = Unit(animal, category, unit_info['spike_times'], unit_info['cluster'], unit_info['mean_waveform'],
+                            experiment=self.experiment)
                 if category == 'good':
                     unit.neuron_type = unit_info.get('neuron_type')
                     unit.quality = unit_info.get('quality')

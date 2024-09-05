@@ -4,6 +4,7 @@ import numpy as np
 
 
 from data import Data, TimeBin
+from data_generator import DataGenerator
 from period_constructor import PeriodConstructor
 from context import Subscriber
 from utils import cache_method, to_hashable
@@ -22,23 +23,9 @@ overwritten by the base case, most frequently Event.
 class SpikeData(Data):
 
     @property
-    def last_event_vals(self):
-        if hasattr(self, '_last_event_vals'):
-            return self._last_event_vals
-        else:
-            return self.parent.last_event_vals
-
-    @property
     def time_bins(self):
         return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
 
-    @property
-    def mean(self):
-        return np.mean(self.data)
-
-    @property
-    def unit_pairs(self):
-        return [pair for pair in self.children.unit_pairs]
     
     @property
     def hierarchy(self):
@@ -50,20 +37,6 @@ class SpikeData(Data):
         rates = self.get_average('get_unadjusted_rates')
         return rates - np.mean(rates)
 
-    def get_psth(self):
-        return self.get_average('get_psth')
-    
-    def get_spike_counts(self):
-        return self.get_sum('get_spike_counts', stop_at='event')
-
-    def get_spontaneous_firing(self):
-        return self.get_average('get_spontaneous_firing', stop_at='unit')
-
-    def get_cross_correlations(self):
-        return self.get_average('get_cross_correlations', stop_at='unit')
-
-    def get_correlogram(self):
-        return self.get_average('get_correlogram', stop_at='unit')
 
     @cache_method
     def proportion_score(self):
@@ -122,17 +95,13 @@ class Experiment(SpikeData, Subscriber):
     def __init__(self, info, groups):
         self.identifier = info['identifier'] + formatted_now()
         self.conditions = info['conditions']
+        self.data_generator = DataGenerator()
         self._sampling_rate = info['sampling_rate']
         self.set_global_sampling_rate(self._sampling_rate)
         self.stimulus_duration = info.get('stimulus_duration')
-        self.subscribe(self.context)
         self.groups = groups
         self.all_groups = self.groups
         self.all_animals = [animal for group in self.groups for animal in group.animals]
-        self._last_event_vals = None
-        self.last_neuron_type = 'uninitialized'
-        self.last_neuron_quality = 'uninitialized'
-        self.last_period_type = 'uninitialized'
         self._children = self.groups
         for group in self.groups:
             group.parent = self
@@ -156,24 +125,6 @@ class Experiment(SpikeData, Subscriber):
     def all_unit_pairs(self):
         return [unit_pair for unit in self.all_units for unit_pair in unit.get_pairs()]
 
-    def update(self, name):
-        if self.data_class == 'lfp' and self.data_type != 'mrl': #TODO think more about this.
-            return
-        if name == 'data':
-            event_vals = [to_hashable(self.data_opts.get('events'))] + [self.data_opts.get('bin_size')]
-            if event_vals != self.last_event_vals:
-                [unit.update_children() for unit in self.all_units]
-                self._last_event_vals = event_vals
-
-        if name == 'neuron_type':
-            if self.selected_neuron_type != self.last_neuron_type:
-                [animal.update_children() for animal in self.all_animals]
-                self.last_neuron_type = self.selected_neuron_type
-
-        if name == 'period_type':
-            if self.selected_period_type != self.last_period_type:
-                [unit.update_children() for unit in self.all_units]
-
 
 class Group(SpikeData):
     """A group in the experiment, i.e., a collection of animals assigned to a condition, the child of an Experiment,
@@ -184,14 +135,10 @@ class Group(SpikeData):
     def __init__(self, name, animals=None):
         self.identifier = name
         self.animals = animals if animals else []
-        self._children = self.animals
+        self.children = self.animals
         for animal in self.animals:
             animal.parent = self
         self.parent = None
-
-    def update_children(self):
-        self._children = [animal for animal in self.animals if animal.children]
-
 
 class Animal(SpikeData):
     """An animal in the experiment, the child of a group, parent of units. Updates its children, i.e., the active units
@@ -214,18 +161,11 @@ class Animal(SpikeData):
         self.units = defaultdict(list)
         self.raw_lfp = None
         self._children = None
-        self.parent = None
-        self.must_have_children = True       
+        self.parent = None     
 
     @property
     def unit_pairs(self):  # TODO: is this being used for anything? Can it be deleted?
         return [pair for unit in self.units['good'] for pair in unit.pairs]
-
-    def update_children(self):
-        if self.context.vals.get('neuron_type') in ['all', None]:
-            self._children = self.units['good']
-        else:
-            self._children = getattr(self, self.context.vals['neuron_type'])
 
 
 class Unit(SpikeData, PeriodConstructor):
@@ -250,10 +190,6 @@ class Unit(SpikeData, PeriodConstructor):
         self.waveform = waveform
 
     @property
-    def _children(self):
-        return self.filter_by_selected_periods(self.periods)
-
-    @property
     def firing_rate(self):
         return self.animal.sampling_rate * len(self.spike_times) / float(self.spike_times[-1] - self.spike_times[0])
 
@@ -269,9 +205,6 @@ class Unit(SpikeData, PeriodConstructor):
 
     def get_pairs(self):
         return [UnitPair(self, other) for other in [unit for unit in self.animal if unit.identifier != self.identifier]]
-
-    def update_children(self):
-        self.prepare_periods()
 
     @cache_method
     def find_spikes(self, start, stop):
@@ -333,16 +266,16 @@ class Period(SpikeData):
         self.parent = unit
 
     @property
-    def _children(self):
+    def children(self):
         return self.events
 
     @property
     def events(self):
         if not self._events:
-            self.update_children()
+            self.get_events()
         return self._events
 
-    def update_children(self):
+    def get_events(self):
         events_settings = self.data_opts['events'].get(self.period_type, {'pre_stim': 0, 'post_stim': 1})
         pre_stim, post_stim = (events_settings[opt] * self.sampling_rate for opt in ['pre_stim', 'post_stim'])
         if self.is_relative:
@@ -388,12 +321,10 @@ class Event(SpikeData):
         self.identifier = index
         self.period = period
         self.period_type = self.period.period_type
-        self._children = None
         self.parent = period
         events_settings = self.data_opts['events'].get(self.period_type, {'pre_stim': 0, 'post_stim': 1})
         self.pre_stim, self.post_stim = (events_settings[opt] for opt in ['pre_stim', 'post_stim'])
         self.duration = self.pre_stim + self.post_stim
-        self.base_node = True
 
     @cache_method
     def get_psth(self):  # default is to normalize
@@ -468,6 +399,53 @@ class UnitPair(SpikeData):
         for kwarg, default in zip(['axis', 'stop_at'], [0, self.data_opts.get('base', 'period')]):
             kwargs[kwarg] = kwargs[kwarg] if kwarg in kwargs else default
         return self.get_average('get_correlogram', pair=self.pair, num_pairs=len(self.unit.unit_pairs), **kwargs)
+    
+
+class TimeBin(Data):
+    name = 'time_bin'
+
+    def __init__(self, i, val, parent):
+        self.parent = parent
+        self.identifier = i
+        self.val = val
+        self.hierarchy = parent.hierarchy
+        self.period = None
+        for ancestor in self.ancestors:
+            if ancestor.name == 'period':
+                self.period = ancestor
+                break
+            elif hasattr(ancestor, 'period'):
+                self.period = ancestor.period
+                break
+        if self.period:
+            self.period_type = self.period.period_type
+
+    @property
+    def data(self):
+        return self.val
+
+    @property
+    def time(self):
+        if self.data_type == 'correlation':
+            ts = np.arange(-self.data_opts['lags'], self.data_opts['lags'] + 1) / self.sampling_rate
+        else:
+            pre_stim, post_stim = [self.data_opts['events'][self.parent.period_type][val] 
+                                for val in ['pre_stim', 'post_stim']]
+            ts = np.arange(-pre_stim, post_stim, self.data_opts['bin_size'])
+        
+        # Round the timestamps to the nearest 10th of a microsecond
+
+        ts = np.round(ts, decimals=7)
+
+        return ts[self.identifier]
+        
+
+    def get_position_in_period_time_series(self):
+        if self.parent.name == 'event':
+            self.parent.num_bins_per_event * self.parent.identifier + self.identifier
+        else:
+            return self.identifier
+
 
 
 

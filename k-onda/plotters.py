@@ -43,11 +43,11 @@ class Plotter(Base):
         self.invisible_ax = None
         self.grid = None
 
-    def initialize(self, data_opts, graph_opts, neuron_type='all'):
+    def initialize(self, data_opts, graph_opts):
         """Both initializes values on self and sets values for the context."""
         self.graph_opts = graph_opts
-        self.data_opts = data_opts  # Sets data_opts for all subscribers to context
-        self.selected_neuron_type = neuron_type
+        self.data_opts = data_opts  
+        self.experiment.initialize_data()
 
     def close_plot(self, basename):
         self.set_dir_and_filename(basename)
@@ -78,8 +78,8 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
         self.multiplier = 1 if self.plot_type == 'standalone' else 0.5
 
-    def plot(self, data_opts, graph_opts, neuron_type='all'):
-        self.initialize(data_opts, graph_opts, neuron_type)
+    def plot(self, data_opts, graph_opts):
+        self.initialize(data_opts, graph_opts)
         level = self.data_opts['level']
         if level == 'group':
             self.plot_groups()

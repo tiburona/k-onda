@@ -7,7 +7,6 @@ import random
 import string
 from data import Base
 from functools import reduce
-from collections import namedtuple
 
 
 class Stats(Base):
@@ -327,7 +326,7 @@ class Stats(Base):
                                    f'<- df$"{self.data_col}"[df$"{self.data_col}" == 0] + 1e-6'
         elif self.data_opts['post_hoc_type'] == 'lmer':
             model_formula = f'lmer({self.data_col} ~ group {pt_regressor_str} + (1|animal{error_suffix}), data = data)'
-            interaction_model_formula = f'lmer({self.data_col} ~ group * neuron_type {pt_regressor_str} + (1|animal{error_suffix}), data = sub_df)'
+            interaction_model_xormula = f'lmer({self.data_col} ~ group * neuron_type {pt_regressor_str} + (1|animal{error_suffix}), data = sub_df)'
             p_val_index = f'coefficients[{within_nt_p_row}, 5]'
             interaction_p_val_index = f'coefficients[{interaction_p_row}, 5]'
             zero_adjustment_line = ''
