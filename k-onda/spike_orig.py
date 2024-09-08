@@ -3,7 +3,7 @@ from collections import defaultdict
 import numpy as np
 
 
-from data import Data, TimeBin
+from base_data import Data, TimeBin
 from data_generator import DataGenerator
 from period_constructor import PeriodConstructor
 from context import Subscriber

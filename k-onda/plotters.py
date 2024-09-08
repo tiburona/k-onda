@@ -17,7 +17,7 @@ import matplotlib.ticker as ticker
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts
 from plotting_helpers import smart_title_case, formatted_now, PlottingMixin
 from utils import to_serializable
-from data import Base
+from base_data import Base
 from stats import Stats
 from phy_interface import PhyInterface
 
@@ -26,9 +26,8 @@ class Plotter(Base):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple plots of multiple
     kinds of data, see the figure module."""
 
-    def __init__(self, experiment, graph_opts=None, lfp=None, behavior=None, plot_type='standalone'):
+    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         self.experiment = experiment
-        self.lfp = lfp
         self.graph_opts = graph_opts
         self.plot_type = plot_type
         self.fig = None
@@ -858,8 +857,8 @@ class MRLPlotter(Plotter, PlottingMixin):
 
 
 class LFPPlotter(Plotter):
-    def __init__(self, experiment, lfp=None, behavior=None, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, lfp=lfp, behavior=behavior, graph_opts=graph_opts, plot_type=plot_type)
+    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
     def plot_power(self, data_opts, graph_opts):
         self.line_plot_over_periods(data_opts, graph_opts)
@@ -879,10 +878,10 @@ class LFPPlotter(Plotter):
             raise NotImplementedError
 
     def plot_spectrogram_by_groups(self):
-        axes = self.create_figure_and_axes(self.lfp)
+        axes = self.create_figure_and_axes(len(self.experiment.groups))
         group_info = {}
 
-        for i, group in enumerate(self.lfp.groups):
+        for i, group in enumerate(self.experiment.groups):
             im_list, group_min, group_max = self.make_spectrogram_subplots(group, axes[i])
             group_info[group.identifier] = {'im': im_list, 'min': group_min, 'max': group_max}
 
@@ -1176,12 +1175,8 @@ class LFPPlotter(Plotter):
         self.close_plot('max_correlation')
 
 
-
-
-    def create_figure_and_axes(self, parent):
-        ncols = len(self.data_opts['periods'])
-        nrows = len(parent.children)
-        #multipliers = (8, 3) if self.data_opts['level'] == 'animal' else (3, 5)
+    def create_figure_and_axes(self, nrows):
+        ncols = len(self.data_opts['periods'])        #multipliers = (8, 3) if self.data_opts['level'] == 'animal' else (3, 5)
         self.fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*ncols, 4*nrows), sharex=True, sharey=True)
         if ncols == 1:
             axes = axes[:, np.newaxis]
@@ -1224,7 +1219,7 @@ class LFPPlotter(Plotter):
             self.make_stimulus_patch(axes, 0)
 
     def make_stimulus_patch(self, axes, start):
-        [ax.fill_betweenx(self.lfp.freq_range, start, self.experiment.stimulus_duration, color='k', alpha=0.2)
+        [ax.fill_betweenx(self.freq_range, start, self.experiment.stimulus_duration, color='k', alpha=0.2)
          for ax in axes.ravel()]
 
     def set_dir_and_filename(self, basename):

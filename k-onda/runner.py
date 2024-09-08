@@ -32,12 +32,10 @@ PROCEDURE_DICT = {**peristimulus_plots, **mrl_procs, **lfp_procs, **other_proced
 
 class Runner:
 
-    def __init__(self, config_file=None, lfp=False, behavior=False):
+    def __init__(self, config_file=None):
         self.config = config_file if config_file else os.getenv('INIT_CONFIG')
         self.initializer = Initializer(self.config)
         self.experiment = self.initializer.init_experiment()
-        self.lfp = lfp
-        self.behavior = behavior
         self.executing_class = None
         self.executing_instance = None
         self.executing_instances = {}
@@ -49,8 +47,6 @@ class Runner:
         self.proc_name = None
         self.current_data_opts = None
         self.preparatory_method = None
-        self.data_class_kwargs = {dc: getattr(self.initializer, f"init_{dc}_experiment")() 
-                                  for dc in ['lfp', 'behavior'] if getattr(self, dc)}
 
     def load_analysis_config(self, opts):
         if isinstance(opts, str):
@@ -74,20 +70,12 @@ class Runner:
         if self.executing_class.__name__ in self.executing_instances:
             self.executing_instance = self.executing_instances[self.executing_class.__name__]
         else:
-            self.executing_instance = self.executing_class(self.experiment, 
-                                                           **self.data_class_kwargs)
+            self.executing_instance = self.executing_class(self.experiment)
         method = PROCEDURE_DICT[self.proc_name].get('method')
         if method is None:
             method = self.proc_name
         self.executing_method = getattr(self.executing_instance, method)
         self.follow_up_method = PROCEDURE_DICT[self.proc_name].get('follow_up')
-
-    def prepare_prep(self):
-        if self.data_opts['data_class'] == 'spike':
-            self.executing_instance = self.experiment
-        else:
-            self.executing_instance = self.data_class_kwargs[self.data_opts['data_class']]
-        self.executing_method = getattr(self.executing_instance, self.proc_name)
 
     def get_loop_lists(self):
         for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
@@ -158,7 +146,7 @@ class Runner:
         
         if prep:
             self.load_analysis_config(prep)
-            self.prepare_prep()
+            self.executing_method = getattr(self.experiment, self.proc_name)
             self.run_all()
             self.loop_lists = {}
         self.load_analysis_config(opts)

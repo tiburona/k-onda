@@ -145,15 +145,16 @@ SPECTROGRAM_OPTS = {
     'row_type': 'event', 'frequency_type': 'block', 'bin_size': .01, 'level': 'group',
     'brain_regions': ['pl'], 'power_deviation': False, 'time_type': 'continuous', 
     'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 1000, 980, 2),
-    'filter': 'spectrum_estimation', 'store': 'pkl',  'validate_events': True,
+    'remove_noise': 'spectrum_estimation', 'store': 'pkl',  'validate_events': True,
+    'data_path': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL',
     'events': {
         'pretone': {'pre_stim': 0, 'post_stim': .3}, 'tone': {'pre_stim': 0, 'post_stim': .3}
         },
     'rules': {
         'brain_region': 
-        {'pl': [('inclusion_rule', {'animal': [['identifier', 'in', PFC_THETA_POWER_ANIMALS]]})],
-         'bla': [('inclusion_rule', {'animal': [['identifier', 'in', BLA_THETA_POWER_ANIMALS]]})], 
-         'hpc': [('inclusion_rule', {'animal': [['identifier', 'in', HPC_THETA_POWER_ANIMALS]]})]
+        {'pl': [('filter', {'animal': {'identifier': ('in', PFC_THETA_POWER_ANIMALS)}})],
+         'bla': [('filter', {'animal': {'identifier': ('in', BLA_THETA_POWER_ANIMALS)}})], 
+         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_THETA_POWER_ANIMALS)}})]
                                }},
     'matlab_configuration': MATLAB_CONFIG, 
     }
@@ -235,16 +236,18 @@ VALIDATION_DATA_OPTS = {
     'matlab_configuration': MATLAB_CONFIG,
     'frequency_band': (0, 8),
     'threshold': 20,
+     'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
     'events': {
                 'pretone': {'pre_stim': 0, 'post_stim': 1}, 
                 'tone': {'pre_stim': 0, 'post_stim': 1}},
     'rules': {
         'brain_region': 
-        {'pl': [('inclusion_rule', {'animal': [['identifier', 'in', PFC_THETA_POWER_ANIMALS]]})],
-         'bla': [('inclusion_rule', {'animal': [['identifier', 'in', BLA_THETA_POWER_ANIMALS]]})], 
-         'hpc': [('inclusion_rule', {'animal': [['identifier', 'in', HPC_THETA_POWER_ANIMALS]]})]
+        {'pl': [('filter', {'animal': {'identifier': ('in', PFC_THETA_POWER_ANIMALS)}})],
+         'bla': [('filter', {'animal': {'identifier': ('in', BLA_THETA_POWER_ANIMALS)}})], 
+         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_THETA_POWER_ANIMALS)}})]
                                }}
-}
+    }
+
 # BLA_PL_INCLUSION = {'animal': [['identifier', 'in', ['IG160', 'IG163', 'IG179']]]}
 
 
@@ -402,5 +405,5 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 SPREADSHEET_OPTS = [BLA_PL_COHERENCE_OPTS, HPC_PL_COHERENCE_OPTS, BLA_HPC_COHERENCE_OPTS]
 
-RUNNER_OPTS = {'data_opts': PSTH_OPTS, 'graph_opts': GRAPH_OPTS}
+RUNNER_OPTS = {'data_opts': SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
 

@@ -8,8 +8,8 @@ from scipy.signal import cwt, morlet
 from collections import defaultdict, namedtuple
 from copy import deepcopy
 
-from experiment import Data
-from data import TimeBin
+from experiment_group_animal import Data
+from base_data import TimeBin
 from context import experiment_context
 from period_constructor import PeriodConstructor
 from context import Subscriber
@@ -735,9 +735,7 @@ class LFPEvent(LFPData, LFPDataSelector):
 
     def get_original_data(self):
         return self._get_power()
-    
-    def equivalent_event(self, animal):
-        return animal.periods[self.period_type][self.period.identifier][self.identifier]
+
     
     def validator(self):
         if not self.data_opts.get('validate_events'):

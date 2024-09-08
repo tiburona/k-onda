@@ -7,11 +7,9 @@ import csv
 from scipy.signal import firwin, lfilter
 
 
-from experiment import Experiment, Group, Animal, Unit
-from lfp import LFPExperiment
+from experiment_group_animal import Experiment, Group, Animal
+from spike_data_structures import Unit
 from behavior import Behavior
-
-
 
 
 class Initializer:
@@ -72,8 +70,6 @@ class Initializer:
         self.raw_lfp = {}
         for animal in self.animals:
             self.raw_lfp[animal.identifier] = self.get_raw_lfp(animal)
-        self.lfp_experiment = LFPExperiment(self.experiment, self.exp_info, self.raw_lfp)
-        return self.lfp_experiment
 
     def get_raw_lfp(self, animal):
         path_constructor = deepcopy(self.exp_info['lfp_path_constructor'])

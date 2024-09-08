@@ -3,7 +3,7 @@ import pandas as pd
 import json
 from copy import deepcopy
 import numpy as np
-from data import Base
+from base_data import Base
 
 class DataGenerator(Base):
 

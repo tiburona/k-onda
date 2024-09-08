@@ -1,6 +1,6 @@
 from utils import log_directory_contents
 from runner import Runner
-from misc_data_init.opts_library import RUNNER_OPTS
+from misc_data_init.opts_library import RUNNER_OPTS, VALIDATION_DATA_OPTS
 import pstats
 import signal
 import cProfile
@@ -12,7 +12,7 @@ def timeout_handler(signum, frame):
 
 
 def main():
-    profile_run()
+    run()
 
 def visualize_profile():
     stats = pstats.Stats('/Users/katie/likhtik/data/logdir/profile_output.prof')
@@ -21,11 +21,12 @@ def visualize_profile():
     stats.sort_stats('cumulative').print_stats(10)
 
 
-def run():
+def run(log=True):
     runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json')
-    runner.run('plot_psth', RUNNER_OPTS)
-    
-    log_directory_contents('/Users/katie/likhtik/data/logdir')
+    runner.run('plot_spectrogram', RUNNER_OPTS, 
+               prep={'method': 'validate_lfp_events', 'data_opts': VALIDATION_DATA_OPTS})
+    if log:
+        log_directory_contents('/Users/katie/likhtik/data/logdir')
 
 
 def profile_run(timeout=1000):
