@@ -18,36 +18,36 @@ class Data:
         # TODO: Maybe I need a concept transformation in here to deal with the fact that for psth
         # I need to do one last thing, which is divide by std-dev.
         
-    def get_reference_data(self, data_type=None):
-        if data_type is None:
-            data_type = self.data_type
+    def get_reference_data(self, calc_type=None):
+        if calc_type is None:
+            calc_type = self.calc_type
         current_period_type = self.current_filters['period_type']
         self.current_filters['period_type'] = self.experiment.info['reference'][current_period_type]
-        reference_data = self.get_data(data_type)
+        reference_data = self.get_data(calc_type)
         self.current_filters['period_type'] = current_period_type
         return reference_data
 
 
-    def get_data(self, data_type=None):
+    def get_data(self, calc_type=None):
         
-        if data_type is None:
-            data_type = self.data_type
+        if calc_type is None:
+            calc_type = self.calc_type
 
-        data_frame = self.experiment.data_frames.get(data_type)
+        data_frame = self.experiment.data_frames.get(calc_type)
         
         if data_frame is None:
             self.data_generator.make_df()
-            data_frame = self.experiment.data_frames.get(self.data_type)
+            data_frame = self.experiment.data_frames.get(self.calc_type)
 
         data = self.summarize_from_data_frame(data_frame)
         return data
     
     def calculate_data(self):
-        return getattr(self, f"get_{self.data_type}")()
+        return getattr(self, f"get_{self.calc_type}")()
     
     def summarize_from_data_frame(self, summarizer):
-        summarizer = self.summarizers[self.data_type]
-        data = self.experiment.data_frames[self.data_type]
+        summarizer = self.summarizers[self.calc_type]
+        data = self.experiment.data_frames[self.calc_type]
         data = self.filter_data_frame(data)
         for level in reversed(self.hierarchy):
             # group by all levels above this one

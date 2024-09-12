@@ -1,4 +1,4 @@
-# data_class: spike, data_type: psth, events: {'pretone': {'pre_stim': 0.05_ 'post_stim': 0.65}_ 'tone': {'pre_stim': 0.05_ 'post_stim': 0.65}}, bin_size: 0.01, adjustment: none, time_type: block, data_path: ./data, row_type: event
+# kind_of_data: spike, data_type: psth, events: {'pretone': {'pre_stim': 0.05_ 'post_stim': 0.65}_ 'tone': {'pre_stim': 0.05_ 'post_stim': 0.65}}, bin_size: 0.01, adjustment: none, time_type: block, data_path: ./data, row_type: event
 
 rate,event,period_type,period,unit,category,neuron_type,group,animal
 4.285714285714286,0,tone,0,1,good,IN,stress,TESTMOUSE3

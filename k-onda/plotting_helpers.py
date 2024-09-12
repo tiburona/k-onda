@@ -1,14 +1,12 @@
 import re
-from datetime import datetime
-
 
 class PlottingMixin:
     def get_labels(self):
-        adjustment = self.data_opts.get('adjustment')
+        adjustment = self.calc_opts.get('adjustment')
         if not adjustment:
             adjustment = ''
         Hz = '' if adjustment == 'normalized' else ' Spikes per Second'
-        base = self.data_opts.get('base') if self.data_opts.get('base') else ''
+        base = self.calc_opts.get('base') if self.calc_opts.get('base') else ''
 
         return {'psth': ('Time (s)', f'{adjustment.capitalize()} Firing Rate{Hz}'),
                 'proportion': ('Time (s)', ''f'Proportion Positive {base.capitalize() + "s"}'),
@@ -19,7 +17,7 @@ class PlottingMixin:
                 'correlogram':  ('Lags (s)', 'Spikes')}
 
     def set_labels(self, x_and_y_labels=(None, None)):
-        canonical_labels = self.get_labels().get(self.data_type)
+        canonical_labels = self.get_labels().get(self.calc_type)
         labels = [canonical_labels[i] if label is None else label for i, label in enumerate(x_and_y_labels)]
 
         if self.plot_type == 'standalone':
@@ -73,11 +71,6 @@ class PlottingMixin:
                     best_match = color
 
         return best_match
-
-
-def formatted_now():
-    now = datetime.now()
-    return now.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def smart_title_case(s):

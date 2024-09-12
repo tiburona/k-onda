@@ -74,7 +74,7 @@ class MatlabInterface:
             for result in results:
                 result_path = os.path.join(self.session_directory, result + f'.{ext}')
                 ascii = ", '-ascii'" if ext == 'txt' else ""
-                save_line = f"save('{result_path}', '{result}'{ascii});\n"
+                save_line = f"\nsave('{result_path}', '{result}'{ascii});\n"
                 script_file.write(save_line)
         subprocess.run([self.path_to_matlab, "-batch", f"run('{self.script_file_path}')"])
 

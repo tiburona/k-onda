@@ -4,40 +4,71 @@ import pickle
 import json
 import os
 
+from utils import cache_method
+from math_functions import sem
 
 class Base:
 
-    _data_opts = {}
+    _calc_opts = {}
+    _cache = defaultdict(dict)
+    filter = {}
 
     @property
-    def data_opts(self):
-        return Base._data_opts  
+    def calc_opts(self):
+        return Base._calc_opts  
     
-    @data_opts.setter
-    def data_opts(self, value):
-        Base._data_opts = value
-        self.set_filter_from_data_opts()
+    @calc_opts.setter
+    def calc_opts(self, value):
+        Base._calc_opts = value
+        self.set_filter_from_calc_opts()
+        Base._cache = defaultdict(dict)
 
-    def set_filter_from_data_opts(self):
+    @property
+    def cache(self):
+        return Base._cache
+    
+    def clear_cache(self):
+        Base._cache = defaultdict(dict)
+
+    def set_filter_from_calc_opts(self):
         Base.filter = defaultdict(lambda: defaultdict(tuple))
-        for object_type in self.data_opts.get('filter', {}):
-            filters = self.data_opts['filter'][object_type]
-            for property in filters:
-                self.filter[object_type][property] = filters[property]   
-        if self.data_opts.get('validate_events'):
+        filters = self.calc_opts.get('filter', {})
+        if isinstance(filters, list):
+            filters = self.parse_natural_language_filters(filters)
+        for object_type in filters:
+            object_filters = self.calc_opts['filter'][object_type]
+            for property in object_filters:
+                self.filter[object_type][property] = object_filters[property]   
+        if self.calc_opts.get('validate_events'):
             self.filter['event']['is_valid'] = ('==', True)
 
-    @property
-    def data_type(self):
-        return self.data_opts['data_type']
+    @staticmethod
+    def parse_natural_language_filters(filters):
+        # natural language filters should be a list like:
+        # [('for animals, identifier must be in', ['animal1', 'animal2']),
+        #  ('for units, quality must be !=', '3')] 
 
-    @data_type.setter
-    def data_type(self, data_type):
-        self.data_opts['data_type'] = data_type
+        to_return = defaultdict(lambda: defaultdict(tuple))
+        for condition, target_val in filters:
+            split_condition = condition.split(' ')
+            obj_name = split_condition[1][:-2]
+            attr = split_condition[3]
+            be_index = condition.find('be')
+            operator = condition[be_index + 3:]
+            to_return[obj_name][attr] = (operator, target_val)
+        return to_return
 
     @property
-    def data_class(self):
-        return self.data_opts.get('data_class')
+    def calc_type(self):
+        return self.calc_opts['calc_type']
+
+    @calc_type.setter
+    def calc_type(self, calc_type):
+        self.calc_opts['calc_type'] = calc_type
+
+    @property
+    def kind_of_data(self):
+        return self.calc_opts.get('kind_of_data')
 
     @property
     def selected_neuron_type(self):
@@ -61,27 +92,27 @@ class Base:
 
     @property
     def current_frequency_band(self):
-        return self.data_opts['frequency_band']
+        return self.calc_opts['frequency_band']
 
     @current_frequency_band.setter
     def current_frequency_band(self, frequency_band):
-        self.data_opts['frequency_band'] = frequency_band
+        self.calc_opts['frequency_band'] = frequency_band
 
     @property
     def current_brain_region(self):
-        return self.data_opts.get('brain_region')
+        return self.calc_opts.get('brain_region')
 
     @current_brain_region.setter
     def current_brain_region(self, brain_region):
-        self.data_opts['brain_region'] = brain_region
+        self.calc_opts['brain_region'] = brain_region
 
     @property
     def current_region_set(self):
-        return self.data_opts.get('region_set')
+        return self.calc_opts.get('region_set')
 
     @current_region_set.setter
     def current_region_set(self, region_set):
-        self.data_opts['region_set'] = region_set
+        self.calc_opts['region_set'] = region_set
 
     @property
     def freq_range(self):
@@ -98,28 +129,25 @@ class Data(Base):
 
     def __init__(self):
         self.parent = None
-        self.cache = {}
 
-    def get_data(self, data_type=None):
-        if data_type is None:
-            data_type = self.data_type
-        data = getattr(self, f"get_{data_type}")()
-        if (self.data_opts.get('evoked') 
-            and hasattr(self, 'reference')
-            and self.reference is not None):
-            data -= self.reference.get_data(data_type)
+    @property
+    def name(self):
+        return self._name
+
+    def get_calc(self, calc_type=None):
+        if calc_type is None:
+            calc_type = self.calc_type
+        data = getattr(self, f"get_{calc_type}")()
         return data
 
     @property
-    def data(self):
-        if self.data_type in self.cache:
-            return self.cache[self.data_type]
-        data = self.get_data()
-        if self.data_opts.get('evoked'): 
-            data -= self.get_reference_data()
-        self.cache[self.data_type] = data
-        return data
-
+    def calc(self):
+        return self.get_calc()
+    
+    def fetch_opts(self, list_of_opts=None):
+        if list_of_opts is not None:
+            return (self.calc_opts.get(opt) for opt in list_of_opts)
+        
     def include(self, check_ancestors=False):
         return self.select(self.filter, check_ancestors=check_ancestors)
     
@@ -143,22 +171,27 @@ class Data(Base):
                 continue
             obj_filters = filters[obj.name]
             for attr in obj_filters:
-                if hasattr(obj, attr):
-                    object_value = getattr(obj, attr)
-                    operation_symbol, target_value = obj_filters[attr]
-                    function = operations[operation_symbol]
-                    if not function(object_value, target_value):
-                        return False
+                try:
+                    if hasattr(obj, attr):
+                        object_value = getattr(obj, attr)
+                        operation_symbol, target_value = obj_filters[attr]
+                        function = operations[operation_symbol]
+                        if not function(object_value, target_value):
+                            return False
+                except Exception as e:
+                    a = 'foo'
         return True
-            
-    def get_average(self, base_method, stop_at='event', axis=0, **kwargs):
+    
+    @cache_method
+    def get_average(self, base_method, stop_at='event', level=0, axis=0, *args, **kwargs):
         """
         Recursively calculates the average of the values of the computation in the base method on the object's
         descendants.
 
         Parameters:
-        - base_method (str): Name of the method to be called when the recursion reaches the base case.
-        - stop_at (str): The 'name' attribute of the base case object upon which `base_method` should be called.
+        - base_method (str): Name of the method called when the recursion reaches the base case.
+        - stop_at (str): `name` attribute of the base case object the `base_method` is called on.
+        - level (int): a counter for how deep recursion has descended; limits the cache.
         - axis (int or None): Specifies the axis across which to compute the mean.
         - **kwargs: Additional keyword arguments to be passed to the base method.
 
@@ -166,13 +199,11 @@ class Data(Base):
         float or np.array: The mean of the data values from the object's descendants.
         """
         if not self.include():
-            if self.name == 'event':
-                print('yay')
             return float('nan')
-        
+                   
         if self.name == stop_at:  # we are at the base case and will call the base method
             if hasattr(self, base_method) and callable(getattr(self, base_method)):
-                return getattr(self, base_method)(**kwargs)
+                return getattr(self, base_method)(*args, **kwargs)
             else:
                 raise ValueError(f"Invalid base method: {base_method}")
 
@@ -180,8 +211,8 @@ class Data(Base):
             if not len(self.children):
                 return float('nan')
             
-            child_vals = [child.get_average(base_method, axis=axis, stop_at=stop_at, **kwargs) 
-                          for child in self.children]
+            child_vals = [child.get_average(base_method, level=level+1, stop_at=stop_at, axis=axis, 
+                                            **kwargs) for child in self.children]
         
             child_vals = [val for val in child_vals if not self.is_nan(val)]
                 
@@ -195,7 +226,8 @@ class Data(Base):
                         result_dict[key].append(value)
 
                 # Calculate average of the list of values for each key
-                return_dict = {key: self.take_average(values, axis) for key, values in result_dict.items()}
+                return_dict = {key: self.take_average(values, axis) 
+                               for key, values in result_dict.items()}
                 return return_dict
                     
             else:
@@ -207,7 +239,64 @@ class Data(Base):
             return np.nanmean(np.array(vals))
         else:  # compute mean over provided dimension
             return np.nanmean(np.array(vals), axis=axis)
+        
+    @property
+    def mean_data(self):
+        return np.mean(self.calc)
     
+    @property
+    def sem(self):
+        return self.get_sem(collapse_sem_data=True)
+    
+    @property
+    def sem_envelope(self):
+        return self.get_sem(collapse_sem_data=False)
+        
+    def get_sem(self, collapse_sem_data=False):
+        """
+        Calculates the standard error of an object's data. If object's data is a vector, it will always return a float.
+        If object's data is a matrix, the `collapse_sem_data` argument will determine whether it returns the standard
+        error of its children's average data points or whether it computes the standard error over children maintaining
+        the original shape of children's data, as you would want, for instance, if graphing a standard error envelope
+        around firing rate over time.
+        """
+
+        if self.calc_opts.get('sem_level'):
+            sem_children = self.get_descendants(stop_at=self.calc_opts.get('sem_level'))
+        else:
+            sem_children = self.children
+
+        if isinstance(sem_children[0].data, dict):
+
+            return_dict = {}
+
+            for key in sem_children[0]:
+                vals = [child.data[key] for child in sem_children if not self.is_nan(child.data)]
+                if collapse_sem_data:
+                    vals = [np.mean(val) for val in vals]
+                return_dict[key] = sem(vals) 
+
+            return return_dict
+
+        else:
+            vals = [child.data for child in sem_children if not self.is_nan(child.data)]
+
+            if collapse_sem_data:
+                vals = [np.mean(val) for val in vals]
+
+            return sem(vals)
+        
+    @property
+    def scatter(self):
+        return self.get_scatter_points()
+        
+    def get_scatter_points(self):
+        """Returns a list of points of the data values for an object's children for use on, e.g. 
+        a bar graph"""
+        if not self.children:
+            return []
+        return [np.nanmean(child.data) for child in self.children]
+                
     @staticmethod
     def extend_into_bins(sources, extend_by):
         if 'frequency' in extend_by:
@@ -218,7 +307,7 @@ class Data(Base):
             
     def get_median(self, stop_at=None, extend_by=None):
         if not stop_at:
-            stop_at = self.data_opts.get('stop_at')
+            stop_at = self.calc_opts.get('stop_at')
         vals_to_summarize = self.get_descendants(stop_at=stop_at)
         vals_to_summarize = self.extend_into_bins(vals_to_summarize, extend_by)
         return np.median([obj.data for obj in vals_to_summarize])
@@ -256,11 +345,7 @@ class Data(Base):
 
     @property
     def ancestors(self):
-        return self.get_ancestors()  
-
-    @property
-    def descendants(self):
-        return self.get_descendants()    
+        return self.get_ancestors()    
     
     def get_ancestors(self):
        
@@ -270,40 +355,41 @@ class Data(Base):
             return [self]
         return [self] + self.parent.get_ancestors()
     
-    def get_descendants(self, stop_at=None, descendants=None):
+    def get_descendants(self, stop_at=None, descendants=None, all=False):
    
         if descendants is None:
             descendants = []
+
         if self.name == stop_at or not hasattr(self, 'children'):
             descendants.append(self)
         else:
-            if hasattr(self, 'children') and self.children:
-                for child in self.children:
-                    child.get_descendants(descendants=descendants)
+            if all:
+                descendants.append(self)
+
+            for child in self.children:
+                child.get_descendants(descendants=descendants)
+
         return descendants
     
-    def get_reference_data(self, data_type=None):
-        if data_type is None:
-            data_type = self.data_type
-        if hasattr(self, 'reference'):
-            return getattr(self, 'reference').get_data(data_type)
+    def refer(self, data, calc_type=None):
+        if not calc_type:
+            calc_type = self.calc_type
+        if (self.calc_opts.get('evoked') 
+            and hasattr(self, 'reference')
+            and self.reference is not None):
+            return data - self.reference.get_data(calc_type)
         else:
-            period_type = self.selected_period_type
-            reference_period_type = self.experiment.info['reference'][period_type]
-            self.period_type = reference_period_type
-            reference_data = self.get_data(data_type)
-            self.period_type = period_type
-            return reference_data
+            return data
         
     def load(self, calc_name, other_identifiers):
-        store = self.data_opts.get('store', 'pkl')
-        d = os.path.join(self.data_opts['data_path'], self.data_class)
+        store = self.calc_opts.get('store', 'pkl')
+        d = os.path.join(self.calc_opts['data_path'], self.kind_of_data)
         store_dir = os.path.join(d, f"{calc_name}_{store}s")
         for p in [d, store_dir]:
             if not os.path.exists(p):
                 os.mkdir(p)
         store_path = os.path.join(store_dir, '_'.join(other_identifiers) + f".{store}")
-        if os.path.exists(store_path) and not self.data_opts.get('force_recalc'):
+        if os.path.exists(store_path) and not self.calc_opts.get('force_recalc'):
             with open(store_path, 'rb') as f:
                 if store == 'pkl':
                     return_val = pickle.load(f)
@@ -314,7 +400,7 @@ class Data(Base):
             return False, None, store_path
 
     def save(self, result, store_path):
-        store = self.data_opts.get('store', 'pkl')
+        store = self.calc_opts.get('store', 'pkl')
         mode = 'wb' if store == 'pkl' else 'w'
         with open(store_path, mode) as f:
             if store == 'pkl':
@@ -323,20 +409,20 @@ class Data(Base):
                 result_str = json.dumps([arr.tolist() for arr in result])
                 f.write(result_str)
 
-    # def get_data(self, data_type=None):
+    # def get_data(self, calc_type=None):
         
-    #     if data_type is None:
-    #         data_type = self.data_type
+    #     if calc_type is None:
+    #         calc_type = self.calc_type
 
-    #     is_calculated = self.experiment.calculated_data.get(data_type, False)
+    #     is_calculated = self.experiment.calculated_data.get(calc_type, False)
 
     #     if not is_calculated:
-    #         level = self.base_levels[self.data_type]
+    #         level = self.base_levels[self.calc_type]
     #         for ent in getattr(self.experiment, f"all_{level}s"):
-    #             getattr(ent, f"get_{self.data_type}")()
+    #             getattr(ent, f"get_{self.calc_type}")()
         
     #     if self.name == level:
-    #         return self.data[self.data_type]
+    #         return self.data[self.calc_type]
     #     else:
     #         return self.summarize()
 
@@ -358,18 +444,18 @@ class Data(Base):
     
     # def summarize_from_data_frame(self, summarizer):
     #     # TODO I need to figure this out
-    #     summarizer = self.summarizers[self.data_type]
-    #     data = self.experiment.data_frames[self.data_type]
+    #     summarizer = self.summarizers[self.calc_type]
+    #     data = self.experiment.data_frames[self.calc_type]
     #     data = self.filter_data_frame(data)
     #     for ancestor in self.ancestors:
     #         data = data[data[ancestor.name] == ancestor.identifier]
 
-    #     if self.data_opts.get('time_type') == 'continuous':
+    #     if self.calc_opts.get('time_type') == 'continuous':
     #         continuous_time = True
     #     else:
     #         continuous_time = False
         
-    #     if self.data_opts.get('frequency_type') == 'continuous':
+    #     if self.calc_opts.get('frequency_type') == 'continuous':
     #         continuous_freq = True
     #     else:
     #         continuous_freq = False
@@ -379,20 +465,20 @@ class Data(Base):
     #         if level == self.name:
     #             break
     #         group_levels = self.hierarchy[0:self.hierarchy.find(level)]
-    #         if self.data_opts.get('time_type') == 'continuous':
+    #         if self.calc_opts.get('time_type') == 'continuous':
     #             group_levels.append('time')
-    #         if self.data_opts.get('frequency_type') == 'continuous':
+    #         if self.calc_opts.get('frequency_type') == 'continuous':
     #             group_levels.append('frequency')
     #         grouped_data = data.groupby(group_levels)
     #         data = grouped_data.apply(summarizer).reset_index()
 
     #     # TODO: going to have to add brain region and frequency to values string
     #     if continuous_time and continuous_freq:
-    #         value = data.pivot(index='frequency', columns='time', values=self.data_type).values
+    #         value = data.pivot(index='frequency', columns='time', values=self.calc_type).values
     #     elif continuous_time or continuous_freq:
-    #         value = data[self.data_type].values
+    #         value = data[self.calc_type].values
     #     else:
-    #         value = data[self.data_type].iloc[0]
+    #         value = data[self.calc_type].iloc[0]
 
     #     return value
     

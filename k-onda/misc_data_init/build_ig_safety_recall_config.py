@@ -75,7 +75,6 @@ exp_info = {
     'lfp_sampling_rate': 2000,
     'lfp_root': root,
     'lfp_path_constructor': ['identifier'],
-    'lost_signal': .5,
     'stimulus_duration': .05,
     'frequency_bands': dict(delta=(0, 4), theta_1=(4, 8), theta_2=(8, 12), delta_theta=(0, 12), gamma=(20, 55),
                             hgamma=(70, 120)),
@@ -106,8 +105,8 @@ for animal in animal_info:
         unparsed_data = json_data['NEV']['Data']['SerialDigitalIO']['UnparsedData']
         tone_onsets = [ts for i, ts in enumerate(time_stamps) if unparsed_data[i] == tone_on_code]
         events = [[onset + i * 30000 for i in range(30)] for onset in tone_onsets]
-        pretone = {'relative': True, 'target': 'tone', 'shift': -30, 'duration': 30, 'lfp_padding': [1, 1]}
-        tone = {'onsets': tone_onsets, 'events': events, 'duration': 30, 'lfp_padding': [1, 1],
+        pretone = {'relative': True, 'target': 'tone', 'shift': -30, 'duration': 30, 'lfp_padding': [1.25, 1.25]}
+        tone = {'onsets': tone_onsets, 'events': events, 'duration': 30, 'lfp_padding': [1.25, 1.25],
                 'event_duration': 1, 'reference_period_type': 'pretone'}
         animals.append({'identifier': animal, 'period_info': {'tone': tone, 'pretone': pretone}, **animal_info[animal]})
 

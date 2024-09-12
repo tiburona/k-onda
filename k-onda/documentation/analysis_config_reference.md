@@ -6,21 +6,21 @@ limited to a list or a tuple.
 
 ## Plots
 
-If you are plotting, your config must be a dictionary.  It must include the key "data_opts", which must have as its 
-value the data_opts dictionary.  It must also include the key "graph_opts". The data_opts dictionary must include the 
-key "data_type" -- for instance, "psth", "mrl", etc.  This is the type of calculation you are doing.  For right now it 
-must also include the key "data_class" ("spike", "lfp", or "behavior").
+If you are plotting, your config must be a dictionary.  It must include the key "calc_opts", which must have as its 
+value the calc_opts dictionary.  It must also include the key "graph_opts". The calc_opts dictionary must include the 
+key "calc_type" -- for instance, "psth", "mrl", etc.  This is the type of calculation you are doing.  For right now it 
+must also include the key "kind_of_data" ("spike", "lfp", or "behavior").
 
 ## Spreadsheets
 
-The config can be either a dictionary of the form `{"data_opts": {"data_type": "<data_type>", ...}}` or a list of 
-data_opts dictionaries (`[{"data_type": "<data_type>", ...}, {"data_type": "<data_type>", ...}...]`). A list of 
+The config can be either a dictionary of the form `{"calc_opts": {"calc_type": "<calc_type>", ...}}` or a list of 
+calc_opts dictionaries (`[{"calc_type": "<calc_type>", ...}, {"calc_type": "<calc_type>", ...}...]`). A list of 
 dictionaries will include multiple types of data one spreadsheet. As described above, these 
-"data_opts" dictionaries must have the data_class and data_type specified.
+"calc_opts" dictionaries must have the kind_of_data and calc_type specified.
 
 ## Multiple analyses
 
-To learn more about configuration for analyses that need to iterate over multiple versions of `data_opts`, click 
+To learn more about configuration for analyses that need to iterate over multiple versions of `calc_opts`, click 
 [here](#configuring-more-than-one-type-of-calculation).
 
 # Spike Analyses #
@@ -32,7 +32,7 @@ spreadsheet with PSTH values broken out by event and time bin.
 
 ```
 {
-  "data_opts":  {"data_class": "spike", "data_type": "psth", "bin_size": 0.01, "adjustment": "normalized", 
+  "calc_opts":  {"kind_of_data": "spike", "calc_type": "psth", "bin_size": 0.01, "adjustment": "normalized", 
   "events": {"pretone": {"pre_stim": 0, "post_stim": 1}, "tone": {"pre_stim": .05, "post_stim": .65}}, 
   "time_type": "continuous", "row_type": "event", "levels": ["group"], "block_types": {"tone": [0,1,2,3,4]}, 
   "data_path": "</path/where/csvs/are/written>}, 
@@ -136,7 +136,7 @@ to 0, post_stim equal to your period duration, and make sure to select only one 
 "events" opt. Here is an example autocorrelation config:
 
 ```
-{"data_class": "spike", "data_type": "autocorrelation",  'bin_size': 0.01, 'max_lag': 99,
+{"kind_of_data": "spike", "calc_type": "autocorrelation",  'bin_size': 0.01, 'max_lag': 99,
 "events": {"pretone": {"pre_stim": 0, "post_stim": 1, "selection": [0, 150, 30]}, 
 "tone": {"pre_stim": .05, "post_stim": .65}, "selection": [0, 150, 30]},  'block_types': ['tone']}
 ```
@@ -145,7 +145,7 @@ to 0, post_stim equal to your period duration, and make sure to select only one 
 
 ## AUTOCORRELOGRAM ##
 
-The same as for autocorrelation (just change "data_type" to "autocorrelogram").  
+The same as for autocorrelation (just change "calc_type" to "autocorrelogram").  
 
 ## SPECTRUM ##
 
@@ -185,7 +185,7 @@ we are interested in the raw data.  Pre-stim is 0 and post-stim is 1 because our
 analysis we are taking all the data.
 
 ```
-CROSS_CORR_OPTS = {'data_class': 'spike', 'data_type': 'cross-correlation', 'pre_stim': 0, 'post_stim': 1,
+CROSS_CORR_OPTS = {'kind_of_data': 'spike', 'calc_type': 'cross-correlation', 'pre_stim': 0, 'post_stim': 1,
                    'adjustment': 'none', 'bin_size': 0.001, 'levels': ['animal', 'unit_pair'], 
                    'period_types': ['pretone', 'tone'], 'unit_pairs': ['ACH,PV'], 'max_lag': .05}
                    
@@ -193,7 +193,7 @@ CROSS_CORR_OPTS = {'data_class': 'spike', 'data_type': 'cross-correlation', 'pre
 
 ## CORRELOGRAM ##
 
-Same as for cross-correlation, just change "data_type" to "correlogram".
+Same as for cross-correlation, just change "calc_type" to "correlogram".
 
 
 ### Opts for `plot_group_stats` ###
@@ -212,7 +212,7 @@ Opts are as for `plot_psth` with some additions:
 
 ## Power ##
 
-Configuration options that are the same as in spike analyses are "data_class", "data_type", "periods", "events", 
+Configuration options that are the same as in spike analyses are "kind_of_data", "calc_type", "periods", "events", 
 "time_type", "evoked", and "level". As of this writing "level" is only implemented for plot_spectrogram, the frequency x time power plot (the available levels are Group, Animal, and Period). 
 
 A note on implementation here. Power calculations rely on the Matlab program `mtcsg`, and all LFP calculations 
@@ -257,7 +257,7 @@ greater than the animal median for that frequency. The default is not to validat
 
 ## MRL ##
 
-Configuration options that are the same as in spike analyses are "data_class", "data_type", "periods", "evoked", and 
+Configuration options that are the same as in spike analyses are "kind_of_data", "calc_type", "periods", "evoked", and 
 "spontaneous".
 
 "phase" (optional): a string that determines whether  to get the phases for the MRL calculation using the "wavelet" or the "hilbert" method.  Default is "hilbert".

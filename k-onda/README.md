@@ -44,7 +44,7 @@ def main():
 
 ### Plots
 
-The plotting functions that have the form plot_<data_type> can generate plots at multiple levels of the data hierarchy -- 
+The plotting functions that have the form plot_<calc_type> can generate plots at multiple levels of the data hierarchy -- 
 Group, Animal, and Unit (or UnitPair for cross-correlation/cross-correlogram). For definitions of the data hierarchy 
 levels, see [here](documentation/data_hierarchy.md) The higher levels are averaged over the lower ones. Starting with 
 "plot_group_stats" in the following list, plots are currently enabled only at the group level, with exceptions as noted.
@@ -116,20 +116,20 @@ spike.py before doing any other analysis, however it's not actually obligatory t
 these modules have parents and children.  For example, in the spike module, a Period's parent is a Unit, and its 
 children are Events.  Values for plots are calculated on objects, averaging over their children; values for csv files
 
-The Context class is defined in [context.py](context.py).  It keeps track of state variables like `data_opts`, 
+The Context class is defined in [context.py](context.py).  It keeps track of state variables like `calc_opts`, 
 `neuron_type` and `period_type` and notifies subscribers when they change. Each of the three types of data, spike, lfp, 
 and behavior, has a top level experiment class, which subscribes to notifications of context changes and updates its 
 descendants when necessary.  For example, when the current `neuron_type` changes to 'IN', the spike experiment will be 
 notified and call a function on all the animals in the experiment to change the constituents of their `children` 
 property to be just IN's.  This tends to me more important for making graphs and figures, which aggregate data by 
-category, as opposed to csv files. `data_opts` also contains state variables that require updating; units update their 
-constituent periods depending on which events are indicated for inclusion by `data_opts`.
+category, as opposed to csv files. `calc_opts` also contains state variables that require updating; units update their 
+constituent periods depending on which events are indicated for inclusion by `calc_opts`.
 
-Another module which builds on the content of `data_opts` is [data.py](data.py).  Most classes in the app inherit from 
+Another module which builds on the content of `calc_opts` is [data.py](data.py).  Most classes in the app inherit from 
 `Base`, and nearly every class that is a data representation (e.g. `Period`, `LFPAnimal`) inherits from Data. (`TimeBin` 
-is the sole exception).  `Base` contains property methods for accessing aspects of the data_opts or for setting/getting
-aspects of the context.  For example, the `data_type` key in the `data_opts` dict is what informs the program what set 
-of operations it's about to do. When `data_type` is set to 'power', for instance, the `data` property on any object will
+is the sole exception).  `Base` contains property methods for accessing aspects of the calc_opts or for setting/getting
+aspects of the context.  For example, the `calc_type` key in the `calc_opts` dict is what informs the program what set 
+of operations it's about to do. When `calc_type` is set to 'power', for instance, the `data` property on any object will
 return that objects `get_power` method (or raise an error if it does not exist).  The same for 'psth', 'mrl', etc. 
 `Data` contains methods for establishing hierarchical relationships among data representations 
 and for doing standard calculations (like calculating data means and standard deviations over an object's children.)

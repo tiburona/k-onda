@@ -120,7 +120,8 @@ class Initializer:
         row = self.behavior_data_source[animal.identifier]
         animal_data = {key: [] for key in animal.period_info.keys()}
         for period_type in animal_data:
-            animal_data[period_type] = [float(row[key]) for key in row if self.process_column_name(key, period_type)]
+            animal_data[period_type] = [
+                float(row[key]) for key in row if self.process_column_name(key, period_type)]
         return animal_data
 
     @staticmethod

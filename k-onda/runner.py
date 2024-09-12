@@ -6,8 +6,8 @@ from stats import Stats
 from initialize_experiment import Initializer
 
 peristimulus_plots = {
-    f"plot_{data_type}": {'class': PeriStimulusPlotter, 'method': 'plot'}
-    for data_type in [
+    f"plot_{calc_type}": {'class': PeriStimulusPlotter, 'method': 'plot'}
+    for calc_type in [
         'psth', 'proportion', 'autocorrelation', 'spectrum', 'cross_correlation', 'autocorrelogram'
     ]}
 
@@ -42,10 +42,10 @@ class Runner:
         self.executing_method = None
         self.loop_lists = {}
         self.follow_up_method = None
-        self.data_opts = None
+        self.calc_opts = None
         self.graph_opts = None
         self.proc_name = None
-        self.current_data_opts = None
+        self.current_calc_opts = None
         self.preparatory_method = None
 
     def load_analysis_config(self, opts):
@@ -59,9 +59,9 @@ class Runner:
             except json.JSONDecodeError:
                 raise Exception(f"Error decoding JSON from the file: {opts}")
         if isinstance(opts, list):
-            self.data_opts = opts
+            self.calc_opts = opts
         else:
-            self.data_opts = opts.get('data_opts', {})
+            self.calc_opts = opts.get('calc_opts', {})
             self.graph_opts = opts.get('graph_opts', None)
             self.proc_name = opts.get('method')
 
@@ -80,7 +80,7 @@ class Runner:
     def get_loop_lists(self):
         for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
                              'neuron_qualities', 'inclusion_rules', 'region_sets']:
-            opt_list = self.current_data_opts.get(opt_list_key)
+            opt_list = self.current_calc_opts.get(opt_list_key)
             if opt_list is not None:
                 self.loop_lists[opt_list_key] = opt_list
 
@@ -91,51 +91,51 @@ class Runner:
         opt_list_key, opt_list = remaining_loop_lists[current_index]
         for opt in opt_list:
             key = opt_list_key[:-1] if opt_list_key != 'neuron_qualities' else 'neuron_quality'
-            self.current_data_opts[key] = opt
+            self.current_calc_opts[key] = opt
             self.iterate_loop_lists(remaining_loop_lists, current_index + 1)
 
     def apply_rules(self):
-        rules = self.current_data_opts['rules']
-        # Assuming rules is a dictionary like: {'data_type': {'mrl': [('time_type', 'block')]}}
+        rules = self.current_calc_opts['rules']
+        # Assuming rules is a dictionary like: {'calc_type': {'mrl': [('time_type', 'block')]}}
         for data_key, conditions in rules.items():
-            if data_key not in self.current_data_opts:
-                raise ValueError(f"Key '{data_key}' not found in data_opts")
+            if data_key not in self.current_calc_opts:
+                raise ValueError(f"Key '{data_key}' not found in calc_opts")
             for trigger_val, vals_to_assign in conditions.items():
                 for target_key, val_to_assign in vals_to_assign:
-                    if self.current_data_opts[data_key] == trigger_val:
-                        self.current_data_opts[target_key] = val_to_assign
+                    if self.current_calc_opts[data_key] == trigger_val:
+                        self.current_calc_opts[target_key] = val_to_assign
 
     def validate(self):
         # TODO: update animal selection validation
         all_animal_ids = [animal.identifier for animal in self.experiment.all_animals]
-        selected_animals = self.current_data_opts.get('selected_animals')
+        selected_animals = self.current_calc_opts.get('selected_animals')
         if selected_animals is not None and not all([id in all_animal_ids for id in selected_animals]):
             raise ValueError("Missing animals")
-        if self.current_data_opts['data_class'] == 'spike' and self.current_data_opts.get('adjustment') != 'none':
-            if self.current_data_opts.get('evoked'):
+        if self.current_calc_opts['kind_of_data'] == 'spike' and self.current_calc_opts.get('adjustment') != 'none':
+            if self.current_calc_opts.get('evoked'):
                 raise ValueError("It does not make sense to set 'evoked' to True and 'adjustment' to anything other "
                                  "than 'none'.  See Analysis Configuration Reference.")
-            if not self.current_data_opts.get('periods'):
+            if not self.current_calc_opts.get('periods'):
                 raise ValueError("You picked a value for adjustment other than 'none' and haven't specified which "
                                  "periods to include.  This will result in a nonsensical result.  See the Analysis "
                                  "Configuration Reference.")
 
     def execute(self):
-        if self.current_data_opts.get('rules'):
+        if self.current_calc_opts.get('rules'):
             self.apply_rules()
         self.validate()
-        print(f"executing {self.executing_method} with options {self.current_data_opts}")
+        print(f"executing {self.executing_method} with options {self.current_calc_opts}")
         if self.graph_opts is not None:
-            self.executing_method(self.current_data_opts, self.graph_opts)
+            self.executing_method(self.current_calc_opts, self.graph_opts)
         else:
-            self.executing_method(self.current_data_opts)
+            self.executing_method(self.current_calc_opts)
 
     def run_all(self):
 
-        opts_list = self.data_opts if isinstance(self.data_opts, list) else [self.data_opts]
+        opts_list = self.calc_opts if isinstance(self.calc_opts, list) else [self.calc_opts]
             
         for opts in opts_list:
-            self.current_data_opts = opts
+            self.current_calc_opts = opts
             self.get_loop_lists()
             if self.loop_lists:
                 self.iterate_loop_lists(list(self.loop_lists.items()))

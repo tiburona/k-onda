@@ -6,16 +6,16 @@ from base_data import Data
 from period_event import Period, Event
 from period_constructor import PeriodConstructor
 from spike_methods import SpikeMethods
-from math_functions import calc_rates, calc_hist, cross_correlation, \
-    correlogram
+from math_functions import calc_rates, calc_hist, cross_correlation, correlogram
+from utils import cache_method
 
   
 class Unit(Data, PeriodConstructor, SpikeMethods):
 
-    name = 'unit'
+    _name = 'unit'
     
-    def __init__(self, animal, category, spike_times, cluster_id, waveform, experiment=None, neuron_type=None, 
-                 quality=None):
+    def __init__(self, animal, category, spike_times, cluster_id, waveform, experiment=None, 
+                 neuron_type=None, quality=None):
         super().__init__()
         self.animal = animal
         self.category = category
@@ -36,17 +36,18 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
 
     @property
     def firing_rate(self):
-        return self.animal.sampling_rate * len(self.spike_times) / float(self.spike_times[-1] - self.spike_times[0])
+        return self.animal.sampling_rate * len(self.spike_times) / \
+            float(self.spike_times[-1] - self.spike_times[0])
 
     @property
     def unit_pairs(self):
         all_unit_pairs = self.get_pairs()
-        pairs_to_select = self.data_opts.get('unit_pair')
+        pairs_to_select = self.calc_opts.get('unit_pair')
         if pairs_to_select is None:
             return all_unit_pairs
         else:
-            return [unit_pair for unit_pair in all_unit_pairs
-                    if ','.join([unit_pair.unit.neuron_type, unit_pair.pair.neuron_type]) == pairs_to_select]
+            return [unit_pair for unit_pair in all_unit_pairs if ','.join(
+                [unit_pair.unit.neuron_type, unit_pair.pair.neuron_type]) == pairs_to_select]
  
     def spike_prep(self):
         self.prepare_periods()
@@ -62,15 +63,15 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         return [event.spikes for period in self.children for event in period.children]
 
     def get_spontaneous_firing(self):
-        spontaneous_period = self.data_opts.get('spontaneous', 120)
+        spontaneous_period = self.calc_opts.get('spontaneous', 120)
         if not isinstance(spontaneous_period, tuple):
             start = self.earliest_period.onset - spontaneous_period * self.sampling_rate - 1
             stop = self.earliest_period.onset - 1
         else:
             start = spontaneous_period[0] * self.sampling_rate
             stop = spontaneous_period[1] * self.sampling_rate
-        num_bins = round((stop-start) / (self.sampling_rate * self.data_opts['bin_size']))
-        return calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), self.data_opts['bin_size'])
+        num_bins = round((stop-start) / (self.sampling_rate * self.calc_opts['bin_size']))
+        return calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), self.calc_opts['bin_size'])
 
     def get_firing_std_dev(self, period_types=None):
         if period_types is None:  # default: take all period_types
@@ -79,11 +80,11 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
                        for rate in period.get_all_firing_rates() if period_type in period_types])
 
     def get_cross_correlations(self, axis=0):
-        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.data_opts.get('base', 'period'))
+        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
 
     def get_correlogram(self, axis=0):
-        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.data_opts.get('base', 'period'))
+        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
 
 
@@ -133,28 +134,20 @@ class SpikeEvent(Event):
         self.spikes = spikes
         self.spikes_original_times = spikes_original_times
         self.cls = 'spike'
-        self.cache = {}
        
     def get_psth(self):
         rates = self.get_firing_rates() 
-        self.selected_period_type = self.reference.period_type
         reference_rates = self.reference.get_firing_rates()
-        self.selected_period_type = self.period_type
         rates -= reference_rates
-        if self.data_opts.get('adjustment') == 'normalized':
-            rates /= self.unit.get_firing_std_dev(period_types=self.period_type,)  # same as dividing unit psth by std dev 
-        self.cache = {}    
+        rates /= self.unit.get_firing_std_dev(period_types=self.period_type,)  # same as dividing unit psth by std dev 
         return rates
 
+    @cache_method
     def get_firing_rates(self):
-        bin_size = self.data_opts['bin_size']
+        bin_size = self.calc_opts['bin_size']
         spike_range = (-self.pre_stim, self.post_stim)
-        if 'rates' in self.cache:
-            return self.cache['rates']
-        else:
-            rates = calc_rates(self.spikes, self.num_bins_per_event, spike_range, bin_size)
-            self.cache['rates'] = rates
-        return rates
+        rates = calc_rates(self.spikes, self.num_bins_per_event, spike_range, bin_size)
+        return self.refer(rates)
     
     def get_spike_counts(self):
         return calc_hist(self.spikes, self.num_bins_per_event, (-self.pre_stim, self.post_stim))
@@ -162,17 +155,17 @@ class SpikeEvent(Event):
     def get_cross_correlations(self, pair=None):
         other = pair.periods[self.period_type][self.period.identifier].events[self.identifier]
         cross_corr = cross_correlation(self.get_unadjusted_rates(), other.get_unadjusted_rates(), mode='full')
-        boundary = round(self.data_opts['max_lag'] / self.data_opts['bin_size'])
+        boundary = round(self.calc_opts['max_lag'] / self.calc_opts['bin_size'])
         midpoint = cross_corr.size // 2
         return cross_corr[midpoint - boundary:midpoint + boundary + 1]
 
     def get_correlogram(self, pair=None, num_pairs=None):
-        max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
+        max_lag, bin_size = (self.calc_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = round(max_lag/bin_size)
         return correlogram(lags, bin_size, self.spikes, pair.spikes, num_pairs)
 
     def get_autocorrelogram(self):
-        max_lag, bin_size = (self.data_opts[opt] for opt in ['max_lag', 'bin_size'])
+        max_lag, bin_size = (self.calc_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = round(max_lag / bin_size)
         return correlogram(lags, bin_size, self.spikes, self.spikes, 1)
 

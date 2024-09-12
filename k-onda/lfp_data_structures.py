@@ -26,9 +26,6 @@ class LFPDataSelector:
         ind2 = np.argmax(self.spectrogram[1] > self.freq_range[1] + tolerance)  # first index > end of freq range
         val_to_return = self.spectrogram[0][ind1:ind2, :]
         return val_to_return
-        
-    def trimmed_spectrogram(self):
-        return self.sliced_spectrogram[:, 75:-75]  # TODO: 75 should be a function of period length and mtscg args
 
     @property
     def sliced_spectrogram(self):
@@ -53,26 +50,17 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
                          target_period=target_period, is_relative=is_relative, events=events)
         self.animal = animal
         self.parent = animal
-        self.lfp_padding = self.period_info.get('lfp_padding')
-        start_pad_samples, end_pad_samples = np.array(self.lfp_padding) * self.lfp_sampling_rate
+        padding = self.calc_opts['lfp_padding']
+        start_pad, end_pad = np.round(np.array(padding) * self.lfp_sampling_rate).astype(int)
         self.duration_in_samples = round(self.duration * self.lfp_sampling_rate)
-        self.start = self.onset
+        self.start = round(self.onset)
         self.stop = self.start + self.duration_in_samples
-        self.pad_start = self.start - start_pad_samples
-        self.pad_stop = self.stop + end_pad_samples
+        self.pad_start = self.start - start_pad
+        self.pad_stop = self.stop + end_pad
         self._spectrogram = None
         
     @property
-    def processed_data(self):
-        return self.get_data_from_animal_dict(self.animal.processed_lfp, 
-                                              self.pad_start, self.pad_stop)
-    
-    @property
-    def raw_data(self):
-        return self.get_data_from_animal_dict(self.raw_lfp, self.pad_start, self.pad_stop)
-
-    @property
-    def processed_data(self):
+    def padded_data(self):
         return self.get_data_from_animal_dict(self.animal.processed_lfp, 
                                               self.pad_start, self.pad_stop)
         
@@ -89,14 +77,17 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
     
     @property
     def spectrogram(self):
-        if self._spectrogram is None or self.current_brain_region != self.last_brain_region:
+        if self._spectrogram is None:
             self._spectrogram = self.calc_cross_spectrogram()
-            self.last_brain_region = self.current_brain_region
+        last_frequency = self.freq_range[1]
+        index_of_last_frequency = np.where(self._spectrogram[1] > last_frequency)[0][0]
+        self._spectrogram[0] = self._spectrogram[0][0:index_of_last_frequency, :]
         return self._spectrogram
 
     def get_events(self):
-        lost_signal = self.experiment.info['lost_signal']
-        true_beginning = self.lfp_padding[0] - lost_signal/2
+        padding, lost_signal, bin_size = self.fetch_opts(['lfp_padding', 'lost_signal', 'bin_size'])
+
+        true_beginning = padding[0] - lost_signal[0]
         time_bins = np.array(self.spectrogram[2])
         events = []
         epsilon = 1e-6  # a small offset to avoid floating-point issues
@@ -108,8 +99,9 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
                 (event_start - self.onset)/self.lfp_sampling_rate + true_beginning - self.pre_stim
                 , 2)
             spect_end = round(spect_start + self.pre_stim + self.post_stim, 2)
-            num_points = round(np.ceil((spect_end - spect_start) / .01 - epsilon))  # TODO: the .01s in here depend on the mtcsg args
-            event_times = np.linspace(spect_start, spect_start + (num_points * .01), num_points, endpoint=False)
+            num_points = round(np.ceil((spect_end - spect_start) / bin_size - epsilon))  
+            event_times = np.linspace(spect_start, spect_start + (num_points * bin_size), 
+                                      num_points, endpoint=False)
             event_times = event_times[event_times < spect_end]
 
             # a binary mask that is True when a time bin in the spectrogram belongs to this event
@@ -123,18 +115,21 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
     @property
     def extended_data(self):
         data = self.events[0].data
-        for event in self:
+        for event in self.events[1:]:
             data = np.concatenate((data, event.data), axis=1)
         return data
     
     def calc_cross_spectrogram(self):
-        arg_set = self.data_opts['power_arg_set']
-        pickle_args = [self.animal.identifier, self.data_opts['brain_region']] + [str(arg) for arg in arg_set] + \
-                      [self.period_type, str(self.identifier)]
+        power_arg_set = self.calc_opts['power_arg_set']
+        arg_set = [[self.animal.identifier, self.calc_opts['brain_region']], 
+                       [str(arg) for arg in power_arg_set], 
+                       [self.period_type, str(self.identifier)], 
+                       ['padding'], [str(pad) for pad in [self.calc_opts['lfp_padding']]]]
+        pickle_args = [item for sublist in arg_set for item in sublist]
         saved_calc_exists, result, pickle_path = self.load('spectrogram', pickle_args)
         if not saved_calc_exists:
-            ml = MatlabInterface(self.data_opts['matlab_configuration'])
-            result = ml.mtcsg(self.processed_data, *arg_set)
+            ml = MatlabInterface(self.calc_opts['matlab_configuration'])
+            result = ml.mtcsg(self.padded_data, *power_arg_set)
             self.save(result, pickle_path)
         return [np.array(arr) for arr in result]
     
@@ -142,8 +137,8 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
 class LFPEvent(Event, LFPMethods, LFPDataSelector):
     name = 'event'
 
-    def __init__(self, id, event_times, mask, period):
-        super().__init__(period, id)
+    def __init__(self, identifier, event_times, mask, period):
+        super().__init__(period, identifier)
         self.event_times = event_times
         self.mask = mask
         self.parent = period
@@ -157,7 +152,5 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
             self.period.identifier][self.identifier]
     
     def get_power(self):
-        return np.array(self.sliced_spectrogram)[:, self.mask]
-            
-   
-
+        return self.refer(np.array(self.sliced_spectrogram)[:, self.mask])
+    

@@ -4,7 +4,6 @@ import numpy as np
 from math_functions import sem
 from utils import cache_method, find_ancestor_attribute
 from collections import defaultdict
-import os
 
 
 class Base:

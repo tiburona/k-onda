@@ -10,7 +10,7 @@ from bins import BinMethods
 
 class Experiment(Data):
 
-    name = 'experiment'
+    _name = 'experiment'
 
     def __init__(self, info):
         super().__init__()
@@ -42,7 +42,7 @@ class Experiment(Data):
     
     @property
     def all_lfp_periods(self):
-        return [period for animal in self.all_animals for period in animal.all_lfp_periods]
+        return [period for animal in self.all_animals for period in animal.get_all('lfp_periods')]
 
     def initialize_groups(self, groups):
         self.groups = groups
@@ -55,36 +55,28 @@ class Experiment(Data):
             entity.experiment = self
 
     def initialize_data(self):
-        self.clear_cache()
-        if self.data_class == 'spike':
+        if self.kind_of_data == 'spike':
             for unit in self.all_units:
                 unit.spike_prep()
-        elif self.data_class == 'lfp':
+        elif self.kind_of_data == 'lfp':
             for animal in self.all_animals:
                 if not animal.include():
                     continue
                 animal.lfp_prep()
-        elif self.data_class == 'behavior':
+        elif self.kind_of_data == 'behavior':
             pass
         else:
-            raise ValueError("Unknown data class")      
-        
-    def clear_cache(self):
-        objects_to_clear = self.all_groups + self.all_animals
-        if self.data_class == 'spike':
-            objects_to_clear += self.all_units
-        for obj in objects_to_clear:
-            obj.cache = {}
+            raise ValueError("Unknown data class") 
 
-    def validate_lfp_events(self, data_opts):
-        self.data_opts = data_opts
+    def validate_lfp_events(self, calc_opts):
+        self.calc_opts = calc_opts
         self.initialize_data()
         for animal in self.all_animals:
             animal.validate_events()
         
 
 class Group(Data, SpikeMethods, LFPMethods, BinMethods):
-    name = 'group'
+    _name = 'group'
 
     def __init__(self, name, animals=None, experiment=None):
         super().__init__()
@@ -98,7 +90,7 @@ class Group(Data, SpikeMethods, LFPMethods, BinMethods):
 
 
 class Animal(Data, PeriodConstructor, SpikeMethods, LFPPrepMethods, LFPMethods, BinMethods):
-    name = 'animal'
+    _name = 'animal'
 
     def __init__(self, identifier, condition, animal_info, experiment=None, neuron_types=None):
         super().__init__()
@@ -120,11 +112,11 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPPrepMethods, LFPMethods, 
         self.phase_relationship_calculators = defaultdict(list)
         self.raw_lfp = None 
         self._processed_lfp = {}
-        self.data_class_to_period_type = {
+        self.kind_of_data_to_period_type = {
             'lfp': LFPPeriod
         }
         self.lfp_event_validity = defaultdict(dict)
 
     @property
     def children(self):
-        return getattr(self, f"select_{self.data_class}_children")()
+        return getattr(self, f"select_{self.kind_of_data}_children")()

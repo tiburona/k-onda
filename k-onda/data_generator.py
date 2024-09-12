@@ -18,7 +18,7 @@ class DataGenerator(Base):
         
 
     def check_for_preexisting_file(self):
-        file_path = os.path.join(self.file_path, self.data_type, self.experiment_id)
+        file_path = os.path.join(self.file_path, self.calc_type, self.experiment_id)
         csv_path = file_path + '.csv'
         json_path = file_path + '.json'
         if os.path.exists(csv_path) and os.path.exists(json_path):
@@ -44,7 +44,7 @@ class DataGenerator(Base):
     # TODO: this needs to be called first, in the prep step to running
     def set_attributes(self, data_opts):
         self.data_opts = data_opts
-        if self.data_class == 'lfp':
+        if self.kind_of_data == 'lfp':
             fb = self.current_frequency_band
             if not isinstance(self.current_frequency_band, str):
                 translation_table = str.maketrans({k: '_' for k in '[](),'})
@@ -54,11 +54,11 @@ class DataGenerator(Base):
         self.opts_dicts.append(deepcopy(self.data_opts))
 
         key = self.set_data_key()  # TODO Here I should add the opts
-        level = self.base_levels[self.data_type]
+        level = self.base_levels[self.calc_type]
         sources = getattr(self.experiment, f'all_{level}s')
 
     def initialize_data_dicts(self):
-        level = self.base_levels[self.data_type]
+        level = self.base_levels[self.calc_type]
         sources = getattr(self.experiment, f'all_{level}s')
         
 
@@ -78,8 +78,8 @@ class DataGenerator(Base):
         self.experiment.data_frames[name] = df
 
     def set_data_key(self):
-        name = self.data_type
-        if 'lfp' in self.data_class:
+        name = self.calc_type
+        if 'lfp' in self.kind_of_data:
             name += f"_{self.current_brain_region}_{self.current_frequency_band}"
         return name
 
@@ -99,16 +99,16 @@ class DataGenerator(Base):
         include the data column, source identifiers, ancestor identifiers, and any other specified attributes.
 
         """
-        level = self.base_levels[self.data_type]
+        level = self.base_levels[self.calc_type]
         
         other_attributes = ['period_type']
         
-        if 'lfp' in self.data_class:
-            if self.data_type in ['mrl']:
+        if 'lfp' in self.kind_of_data:
+            if self.calc_type in ['mrl']:
                 other_attributes += ['frequency', 'fb', 'neuron_type', 'neuron_quality']  # TODO: figure out what fb should be changed to post refactor
             if level == 'granger_segment':
                 other_attributes.append('length')
-            if any([w in self.data_type for w in ['coherence', 'correlation', 'phase', 'granger']]):
+            if any([w in self.calc_type for w in ['coherence', 'correlation', 'phase', 'granger']]):
                 other_attributes.append('period_id')
         else:
             other_attributes += ['category', 'neuron_type', 'quality']
@@ -138,7 +138,7 @@ class DataGenerator(Base):
 
         Notes:
         - The function first determines the relevant data sources based on the specified `level` and the object's
-          `data_class` attribute.
+          `kind_of_data` attribute.
         - If the `frequency_type` in `data_opts` is set to 'continuous', the function further breaks down the sources
           based on frequency bins.
         - Similarly, if the `time_type` in `data_opts` is set to 'continuous', the sources are further broken down based
@@ -149,20 +149,20 @@ class DataGenerator(Base):
         """
 
         rows = []
-        if self.data_class == 'lfp':
+        if self.kind_of_data == 'lfp':
             experiment = self.lfp
-        elif self.data_class == 'behavior':
+        elif self.kind_of_data == 'behavior':
             experiment = self.behavior
         else:
             experiment = self.experiment
 
         if level in ['event', 'period']:
-            level = self.data_class + '_' + level
+            level = self.kind_of_data + '_' + level
 
-        if self.data_class == 'spike':
+        if self.kind_of_data == 'spike':
             for unit in self.experiment.all_units:
                 unit.prepare_periods()
-        elif self.data_class == 'lfp':
+        elif self.kind_of_data == 'lfp':
             for animal in self.experiment.all_animals:
                 animal.prepare_periods()
 
@@ -172,7 +172,7 @@ class DataGenerator(Base):
 
         sources = getattr(experiment, f'all_{level}s')
 
-        calcs = [(source, getattr(source, f"get_{self.data_type}")()) for source in sources]
+        calcs = [(source, getattr(source, f"get_{self.calc_type}")()) for source in sources]
 
 
 
@@ -185,15 +185,15 @@ class DataGenerator(Base):
             calcs = [(time_bin, time_bin.data) for source, data in calcs 
                        for time_bin in source.get_time_bins(data)]
         
-        if self.data_class == 'lfp':
-            if any([s in self.data_type for s in ['coherence', 'correlation', 'phase', 'granger']]):
+        if self.kind_of_data == 'lfp':
+            if any([s in self.calc_type for s in ['coherence', 'correlation', 'phase', 'granger']]):
                 self.data_col = f"{
-                    self.data_opts['region_set']}_{self.current_frequency_band}_{self.data_type}"
+                    self.data_opts['region_set']}_{self.current_frequency_band}_{self.calc_type}"
             else:
                 self.data_col = f"{
-                    self.current_brain_region}_{self.current_frequency_band}_{self.data_type}"
+                    self.current_brain_region}_{self.current_frequency_band}_{self.calc_type}"
         else:
-            self.data_col = self.data_type
+            self.data_col = self.calc_type
       
         for source, data in calcs:
             if self.data_opts.get('aggregator') == 'sum':

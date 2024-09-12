@@ -13,10 +13,9 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
 import matplotlib.ticker as ticker
 
-
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts
-from plotting_helpers import smart_title_case, formatted_now, PlottingMixin
-from utils import to_serializable
+from plotting_helpers import smart_title_case, PlottingMixin
+from utils import to_serializable, formatted_now
 from base_data import Base
 from stats import Stats
 from phy_interface import PhyInterface
@@ -42,10 +41,9 @@ class Plotter(Base):
         self.invisible_ax = None
         self.grid = None
 
-    def initialize(self, data_opts, graph_opts):
+    def initialize(self, calc_opts):
         """Both initializes values on self and sets values for the context."""
-        self.graph_opts = graph_opts
-        self.data_opts = data_opts  
+        self.calc_opts = calc_opts  
         self.experiment.initialize_data()
 
     def close_plot(self, basename):
@@ -65,7 +63,7 @@ class Plotter(Base):
         opts_filename = self.fname.replace('png', 'txt')
         # Writing the dictionary to a file in JSON format
         with open(os.path.join(path, opts_filename), 'w') as file:
-            json.dump(to_serializable(self.data_opts), file)
+            json.dump(to_serializable(self.calc_opts), file)
 
         plt.close(self.fig)
 
@@ -77,9 +75,9 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
         self.multiplier = 1 if self.plot_type == 'standalone' else 0.5
 
-    def plot(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts)
-        level = self.data_opts['level']
+    def plot(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
+        level = self.calc_opts['level']
         if level == 'group':
             self.plot_groups()
         elif level == 'animal':
@@ -101,19 +99,19 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
     def plot_groups_data(self):
         self.iterate_through_group_subdivisions()
         self.set_y_scales()
-        if self.data_type not in ['spontaneous_firing', 'cross_correlations']:
+        if self.calc_type not in ['spontaneous_firing', 'cross_correlations']:
             self.set_pip_patches()
-        if self.data_type in ['cross_correlations', 'correlogram']:
-            n1, n2 = self.data_opts['unit_pairs'][0].split(',')
+        if self.calc_type in ['cross_correlations', 'correlogram']:
+            n1, n2 = self.calc_opts['unit_pairs'][0].split(',')
             self.set_labels(x_and_y_labels=('Lags (s)', f"{n1} to {n2}"))
         else:
             self.set_labels()
 
     def get_subdivisions(self):
-        subdivision = 'period' if self.data_type in ['cross_correlations', 'correlogram'] else 'neuron'
+        subdivision = 'period' if self.calc_type in ['cross_correlations', 'correlogram'] else 'neuron'
         types_attribute = getattr(self.experiment, f"{subdivision}_types")
         if subdivision != 'period':
-            self.selected_period_type = list(self.data_opts['periods'].keys())[0]  # TODO: this is really kludgy
+            self.selected_period_type = list(self.calc_opts['periods'].keys())[0]  # TODO: this is really kludgy
         return subdivision, types_attribute
 
     def iterate_through_group_subdivisions(self):  # TODO: why do autocorr and spectrum graph these in different orders
@@ -177,13 +175,13 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
             self.close_plot(f"{animal.identifier} unit {i + 1} to {marker2}")
 
     def plot_units_level_data(self, data_sources, i):
-        multi = 2 if self.data_type == 'psth' else 1
+        multi = 2 if self.calc_type == 'psth' else 1
         n_subplots = min(self.graph_opts['units_in_fig'], len(data_sources) - i)
         self.fig = plt.figure(figsize=(15, 3 * multi * n_subplots))
         self.fig.subplots_adjust(top=0.8, bottom=.14)
         gs = GridSpec(n_subplots * multi, 1, figure=self.fig)
         for j in range(i, i + n_subplots):
-            if self.data_type == 'psth':
+            if self.calc_type == 'psth':
                 axes = [self.fig.add_subplot(gs[2 * (j - i), 0]), self.fig.add_subplot(gs[2 * (j - i) + 1, 0])]
             else:
                 axes = [self.fig.add_subplot(gs[j - i, 0])]
@@ -191,26 +189,26 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         self.set_units_plot_frame_and_spacing()
 
     def plot_unit_level_data(self, data_source, axes):
-        if self.data_type == 'psth':
+        if self.calc_type == 'psth':
             self.add_raster(data_source, axes)
         subplotter = PeriStimulusSubplotter(self, data_source, self.graph_opts, axes[-1])
-        plotting_func = getattr(subplotter, f"plot_{self.data_type}")
+        plotting_func = getattr(subplotter, f"plot_{self.calc_type}")
         plotting_func()
         if self.graph_opts.get('sem'):
             subplotter.add_sem()
 
     def add_raster(self, unit, axes):
         subplotter = PeriStimulusSubplotter(self, unit, self.graph_opts, axes[0])
-        subplotter.y = unit.get_spikes_by_events()  # overwrites subplotter.y defined by data_type, which is psth
+        subplotter.y = unit.get_spikes_by_events()  # overwrites subplotter.y defined by calc_type, which is psth
         subplotter.plot_raster()
 
     def set_units_plot_frame_and_spacing(self):
         # Add a big subplot without frame and set the x and y labels for this subplot
         big_subplot = self.fig.add_subplot(111, frame_on=False)
         big_subplot.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        big_subplot.set_xlabel(self.get_labels()[self.data_type][0], labelpad=10, fontsize=14)
-        if not self.data_type == 'psth':
-            self.set_labels(x_and_y_labels=('', self.get_labels()[self.data_type][1]))
+        big_subplot.set_xlabel(self.get_labels()[self.calc_type][0], labelpad=10, fontsize=14)
+        if not self.calc_type == 'psth':
+            self.set_labels(x_and_y_labels=('', self.get_labels()[self.calc_type][1]))
         self.fig.subplots_adjust(top=0.8, bottom=0.2, hspace=0.5)
 
     def get_ylim(self, ax, y_min, y_max):
@@ -230,33 +228,33 @@ class PeriStimulusPlotter(Plotter, PlottingMixin):
         ax.set_title(title, fontsize=17 * self.multiplier)
 
     def make_footer(self):
-        text_vals = [('bin size', self.data_opts['bin_size']), ('selected events', self.join_events(' ')),
+        text_vals = [('bin size', self.calc_opts['bin_size']), ('selected events', self.join_events(' ')),
                      ('time generated', formatted_now())]
-        [text_vals.append((k, self.data_opts[k])) for k in ['adjustment, average_method'] if k in self.data_opts]
+        [text_vals.append((k, self.calc_opts[k])) for k in ['adjustment, average_method'] if k in self.calc_opts]
         text = '  '.join([f"{k}: {v}" for k, v in text_vals])
-        if self.data_type in ['autocorr', 'spectrum']:  # TODO update this with changes made to autocorrelation and spetrum
-            ac_vals = [('method', self.data_opts['ac_key'])]
+        if self.calc_type in ['autocorr', 'spectrum']:  # TODO update this with changes made to autocorrelation and spetrum
+            ac_vals = [('method', self.calc_opts['ac_key'])]
             ac_text = '  '.join([f"{k}: {v}" for k, v in ac_vals])
             text = f"{text}\n{ac_text}"
         self.fig.text(0.5, 0.02, text, ha='center', va='bottom', fontsize=15)
 
     def set_dir_and_filename(self, basename):
-        tags = [self.data_type]
+        tags = [self.calc_type]
         self.dir_tags = tags + [self.join_events('_')]
         tags.insert(0, basename)
         if self.selected_neuron_type:
             tags += [self.selected_neuron_type]
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
-        if self.data_opts.get('base'):
-            tags += [self.data_opts.get('base')]
+        if self.calc_opts.get('base'):
+            tags += [self.calc_opts.get('base')]
         self.fname = f"{'_'.join(tags)}.png"
 
     def join_events(self, s):
         tag = ''
-        for key in self.data_opts:
+        for key in self.calc_opts:
             if 'event' in key:
-                tag += key + '_' + s.join([str(t) for t in self.data_opts[key]])
+                tag += key + '_' + s.join([str(t) for t in self.calc_opts[key]])
         return tag
 
     def set_gridspec_axes(self, fig, gridspec, numrows, numcols, invisible_ax=None):
@@ -288,7 +286,7 @@ class PeriStimulusSubplotter(Plotter, PlottingMixin):
         self.g_opts = graph_opts
         self.ax = ax
         self.x = None
-        self.y = data_source.data
+        self.y = data_source.calc
         self.parent_type = parent_type
         self.multiplier = multiplier
         self.plot_type = 'subplot'
@@ -299,14 +297,14 @@ class PeriStimulusSubplotter(Plotter, PlottingMixin):
         self.ax.set_xticks(xticks)
         self.ax.tick_params(axis='both', which='major', labelsize=10 * self.multiplier, length=5 * self.multiplier,
                             width=2 * self.multiplier)
-        if self.data_type in ['spontaneous_firing', 'cross_correlations']:
-            self.ax.set_xticklabels(xticks * self.data_opts['bin_size'])
+        if self.calc_type in ['spontaneous_firing', 'cross_correlations']:
+            self.ax.set_xticklabels(xticks * self.calc_opts['bin_size'])
 
         if y_min is not None and y_max is not None:
             self.ax.set_ylim(y_min, y_max)
 
     def plot_raster(self):
-        pre, post = [self.data_opts['events'][self.selected_period_type][opt] for opt in ['pre_stim', 'post_stim']]
+        pre, post = [self.calc_opts['events'][self.selected_period_type][opt] for opt in ['pre_stim', 'post_stim']]
         for i, spiketrain in enumerate(self.y):
             for spike in spiketrain:
                 self.ax.vlines(spike, i + .5, i + 1.5)
@@ -336,33 +334,33 @@ class PeriStimulusSubplotter(Plotter, PlottingMixin):
             self.set_labels(x_and_y_labels=(x_label, y_label))
 
     def plot_psth(self):
-        pre, post = [self.data_opts['events'][self.selected_period_type][opt] for opt in ['pre_stim', 'post_stim']]
-        xlabel, ylabel = self.get_labels()[self.data_opts['data_type']]
-        self.plot_bar(width=self.data_opts['bin_size'], x_min=-pre, x_max=post, num=len(self.y), x_tick_min=0,
+        pre, post = [self.calc_opts['events'][self.selected_period_type][opt] for opt in ['pre_stim', 'post_stim']]
+        xlabel, ylabel = self.get_labels()[self.calc_opts['calc_type']]
+        self.plot_bar(width=self.calc_opts['bin_size'], x_min=-pre, x_max=post, num=len(self.y), x_tick_min=0,
                       x_step=self.g_opts['tick_step'], y_label=ylabel)
 
     def plot_proportion(self):
         self.plot_psth()
 
     def plot_autocorr(self):
-        opts = self.data_opts
+        opts = self.calc_opts
         self.plot_bar(width=opts['bin_size'] * .95, x_min=opts['bin_size'], x_max=opts['max_lag'] * opts['bin_size'],
                       num=opts['max_lag'], x_tick_min=0, x_step=self.g_opts['tick_step'], y_min=min(self.y),
                       y_max=max(self.y))
 
     def plot_spectrum(self):
-        freq_range, max_lag, bin_size = (self.data_opts.get(opt) for opt in ['freq_range', 'max_lag', 'bin_size'])
+        freq_range, max_lag, bin_size = (self.calc_opts.get(opt) for opt in ['freq_range', 'max_lag', 'bin_size'])
         first, last = get_spectrum_fenceposts(freq_range, max_lag, bin_size)
         self.x = get_positive_frequencies(max_lag, bin_size)[first:last]
         self.ax.plot(self.x, self.y)
 
     def plot_spontaneous_firing(self):  # TODO: don't hardcode period
-        opts = self.data_opts
-        self.plot_bar(width=opts['bin_size'], x_min=0, x_max=int(120 / self.data_opts['bin_size']), num=len(self.y),
+        opts = self.calc_opts
+        self.plot_bar(width=opts['bin_size'], x_min=0, x_max=int(120 / self.calc_opts['bin_size']), num=len(self.y),
                       x_tick_min=0, x_step=self.g_opts['tick_step'], y_label='Firing Rate (Spikes per Second')
 
     def plot_cross_correlations(self):
-        opts = self.data_opts
+        opts = self.calc_opts
         boundary = round(opts['max_lag'] / opts['bin_size'])
         tick_step = self.plotter.graph_opts['tick_step']
         if self.data_source.name == 'group' and 'group_colors' in self.g_opts:
@@ -373,7 +371,7 @@ class PeriStimulusSubplotter(Plotter, PlottingMixin):
         self.ax.bar(self.x, self.y, color=color)
         tick_positions = np.arange(-boundary, boundary + 1, tick_step)
         tick_labels = np.arange(-opts['max_lag'], opts['max_lag'] + opts['bin_size'],
-                                tick_step * self.data_opts['bin_size'])
+                                tick_step * self.calc_opts['bin_size'])
         self.ax.set_xticks(tick_positions)
         self.ax.set_xticklabels([f'{label:.2f}' for label in tick_labels])
 
@@ -381,11 +379,11 @@ class PeriStimulusSubplotter(Plotter, PlottingMixin):
         self.plot_cross_correlations()
 
     def plot_data(self):
-        getattr(self, f"plot_{self.data_type}")()
+        getattr(self, f"plot_{self.calc_type}")()
 
     def add_sem(self):
-        opts = self.data_opts
-        if opts['data_type'] in ['autocorr', 'spectrum'] and opts['ac_key'] == self.data_source.name + '_by_rates':
+        opts = self.calc_opts
+        if opts['calc_type'] in ['autocorr', 'spectrum'] and opts['ac_key'] == self.data_source.name + '_by_rates':
             print("It doesn't make sense to add standard error to a graph of autocorr over rates.  Skipping.")
             return
         sem = self.data_source.sem_envelope
@@ -397,27 +395,27 @@ class GroupStatsPlotter(PeriStimulusPlotter):
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
-    def plot_group_stats(self, data_opts, graph_opts=None, sig_markers=True):
-        self.initialize(data_opts, graph_opts, neuron_type='all')
+    def plot_group_stats(self, calc_opts, graph_opts=None, sig_markers=True):
+        self.initialize(calc_opts, graph_opts, neuron_type='all')
         self.fig, self.axs = plt.subplots(2, 1, figsize=(15, 15))
         self.current_ax = None
         self.plot_group_stats_data(sig_markers=sig_markers)
         self.close_plot('stats_plot')
 
     def plot_group_stats_data(self, sig_markers=True):
-        self.stats = Stats(self.experiment, self.data_opts)
+        self.stats = Stats(self.experiment, self.calc_opts)
         
         period_to_plot = self.graph_opts.get('period', 'tone')
-        pre_stim, post_stim = (self.data_opts['events'][period_to_plot][opt] 
+        pre_stim, post_stim = (self.calc_opts['events'][period_to_plot][opt] 
                                for opt in ['pre_stim', 'post_stim'])
-        bin_size = self.data_opts.get('bin_size')
+        bin_size = self.calc_opts.get('bin_size')
 
         for row, neuron_type in enumerate(self.experiment.neuron_types):
             self.selected_neuron_type = neuron_type
             for group in self.experiment.groups:
                 color = self.graph_opts['group_colors'][group.identifier]
-                x = np.arange(len(group.data)) * bin_size
-                y = group.data
+                x = np.arange(len(group.calc)) * bin_size
+                y = group.calc
                 if max(y) > self.y_max:
                     self.y_max = max(y)
                 if min(y) < self.y_min:
@@ -453,7 +451,7 @@ class GroupStatsPlotter(PeriStimulusPlotter):
         self.place_legend()
 
     def add_significance_markers(self, p_values, p_type, row=None, y=None):
-        bin_size = self.data_opts.get('bin_size')
+        bin_size = self.calc_opts.get('bin_size')
         for time_bin, p_value in enumerate(p_values):
             if p_value < .05:
                 self.get_significance_markers(row, p_type, time_bin, bin_size, y, p_values)
@@ -496,8 +494,8 @@ class PiePlotter(Plotter):
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
-    def unit_upregulation_pie_chart(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts, neuron_type='all')
+    def unit_upregulation_pie_chart(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts, neuron_type='all')
         labels = ['Up', 'Down', 'No Change']
         colors = ['yellow', 'blue', 'green']
 
@@ -590,17 +588,17 @@ class MRLPlotter(Plotter, PlottingMixin):
     def __init__(self, experiment, lfp=None, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, lfp=lfp, graph_opts=graph_opts, plot_type=plot_type)
 
-    def mrl_rose_plot(self, data_opts, graph_opts):
-        self.make_plot(data_opts, graph_opts, 'rose_plot', self.make_rose_plot, 'polar')
+    def mrl_rose_plot(self, calc_opts, graph_opts):
+        self.make_plot(calc_opts, graph_opts, 'rose_plot', self.make_rose_plot, 'polar')
 
-    def mrl_heat_map(self, data_opts, graph_opts):
-        self.make_plot(data_opts, graph_opts, 'heat_map', self.make_heat_map, None)
+    def mrl_heat_map(self, calc_opts, graph_opts):
+        self.make_plot(calc_opts, graph_opts, 'heat_map', self.make_heat_map, None)
 
-    def make_plot(self, data_opts, graph_opts, basename, plot_func, projection):
-        self.initialize(data_opts, graph_opts, neuron_type='all')
+    def make_plot(self, calc_opts, graph_opts, basename, plot_func, projection):
+        self.initialize(calc_opts, graph_opts, neuron_type='all')
         self.fig = plt.figure(figsize=(15, 15))
 
-        ncols = 2 if self.data_opts.get('adjustment') == 'relative' else 4
+        ncols = 2 if self.calc_opts.get('adjustment') == 'relative' else 4
 
         self.axs = [
             [self.fig.add_subplot(2, ncols, 1 + ncols * row + col, projection=projection) for col in range(ncols)]
@@ -610,7 +608,7 @@ class MRLPlotter(Plotter, PlottingMixin):
         for i, neuron_type in enumerate(self.experiment.neuron_types):
             self.selected_neuron_type = neuron_type
             for j, group in enumerate(self.lfp.groups): # TODO: think about how this should work now with multiple periods
-                if self.data_opts.get('adjustment') == 'relative':
+                if self.calc_opts.get('adjustment') == 'relative':
                     self.selected_period_type = 'tone'
                     plot_func(group, self.axs[i][j], title=f"{group.identifier.capitalize()} {neuron_type}")
                 else:
@@ -621,14 +619,14 @@ class MRLPlotter(Plotter, PlottingMixin):
         self.selected_neuron_type = None
         self.close_plot(basename)
 
-    def plot_phase_phase_over_frequencies(self, data_opts, graph_opts):
-        self.line_plot_over_frequencies(data_opts, graph_opts)
+    def plot_phase_phase_over_frequencies(self, calc_opts, graph_opts):
+        self.line_plot_over_frequencies(calc_opts, graph_opts)
 
-    def line_plot_over_frequencies(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts)
-        period_groups = self.data_opts.get('period_groups')
+    def line_plot_over_frequencies(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
+        period_groups = self.calc_opts.get('period_groups')
         period_groups = period_groups if period_groups else [None]
-        original_periods = deepcopy(self.data_opts['periods'])
+        original_periods = deepcopy(self.calc_opts['periods'])
 
         fig_x_dim = len(list(range(*self.lfp.freq_range)))
         ncols = 2 if len(self.lfp.groups) > 1 and len(period_groups) > 1 else 1
@@ -641,10 +639,10 @@ class MRLPlotter(Plotter, PlottingMixin):
                 ax = axes[coords[0], coords[1]]
                 if len(period_groups) > 1:
                     new_periods = {p: original_periods[p][slice(*pg)] for p in original_periods}
-                    self.update_data_opts([(['periods'], new_periods)])
-                for period_type in self.data_opts['periods']:
+                    self.update_calc_opts([(['periods'], new_periods)])
+                for period_type in self.calc_opts['periods']:
                     self.selected_period_type = period_type
-                    data = group.data
+                    data = group.calc
                     ax.plot(list(range(self.lfp.freq_range[0], self.lfp.freq_range[1])), data, 
                         '-o', label=period_type.capitalize(), 
                         color=self.graph_opts['period_colors'][period_type][pg])
@@ -654,28 +652,28 @@ class MRLPlotter(Plotter, PlottingMixin):
                 if len(period_groups) > 1:
                     ax_title += f' Periods {period_groups[j][0]+1}-{period_groups[j][1]}'
                 ax.set_title(ax_title)
-                ax.set_ylabel(self.data_type.capitalize())
+                ax.set_ylabel(self.calc_type.capitalize())
                 if i == 1:  # Set xlabel on the last row
                     ax.set_xlabel('Frequency')
                 ax.legend(title='Period Type')
                 ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 
         if len(period_groups) > 1:
-            self.update_data_opts([(['periods'], original_periods)])
+            self.update_calc_opts([(['periods'], original_periods)])
 
         plt.tight_layout()
         plt.subplots_adjust(top=0.85)  # Adjust this value as needed
 
         self.fig = fig
-        self.close_plot(self.data_type)
+        self.close_plot(self.calc_type)
 
-    def interate_through_groups_and_periods(self, data_opts, graph_opts, method):
-        self.initialize(data_opts, graph_opts)
-        period_groups = self.data_opts.get('period_groups')
+    def interate_through_groups_and_periods(self, calc_opts, graph_opts, method):
+        self.initialize(calc_opts, graph_opts)
+        period_groups = self.calc_opts.get('period_groups')
         period_groups = period_groups if period_groups else [None]
-        original_periods = deepcopy(self.data_opts['periods'])
+        original_periods = deepcopy(self.calc_opts['periods'])
         nrows = len(self.lfp.groups) * len(period_groups)
-        ncols = len(self.data_opts['periods'])
+        ncols = len(self.calc_opts['periods'])
         fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*nrows, 5*ncols), sharex=True)
         axes = np.array(axes).reshape(2, -1)  # This makes sure axes is always 2D even if ncols or nrows is 1
         period_type = None
@@ -683,7 +681,7 @@ class MRLPlotter(Plotter, PlottingMixin):
             for j, pg in enumerate(period_groups):
                 if len(period_groups) > 1:
                     new_periods = {p: original_periods[p][slice(*pg)] for p in original_periods}
-                    self.update_data_opts([(['periods'], new_periods)])
+                    self.update_calc_opts([(['periods'], new_periods)])
                 for k, period_type in enumerate(original_periods):
                     ax = axes[i*len(self.lfp.groups) + j, k]
                     self.selected_period_type = period_type
@@ -694,7 +692,7 @@ class MRLPlotter(Plotter, PlottingMixin):
                     if len(period_groups) > 1:
                         ax_title += f' Periods {period_groups[j][0]+1}-{period_groups[j][1]}'
                     ax.set_title(ax_title)
-                    ax.set_ylabel(self.data_type.capitalize())
+                    ax.set_ylabel(self.calc_type.capitalize())
                     if i*len(self.lfp.groups) + j == len(self.lfp.groups) * len(period_groups) -1:  # Set xlabel on the last row
                         ax.set_xlabel('Time')
                     ax.legend(title='Period Type')
@@ -703,30 +701,30 @@ class MRLPlotter(Plotter, PlottingMixin):
         plt.subplots_adjust(top=0.85)  # Adjust this value as needed
 
         self.fig = fig
-        self.close_plot(self.data_type)
+        self.close_plot(self.calc_type)
 
-    def make_phase_phase_rose_plot(self, data_opts, graph_opts):
+    def make_phase_phase_rose_plot(self, calc_opts, graph_opts):
         method = getattr(self, 'make_rose_plot')
-        self.interate_through_groups_and_periods(data_opts, graph_opts, method)
+        self.interate_through_groups_and_periods(calc_opts, graph_opts, method)
 
-    def make_phase_phase_trace_plot(self, data_opts, graph_opts):
+    def make_phase_phase_trace_plot(self, calc_opts, graph_opts):
         method = getattr(self, 'make_trace_plot')
-        self.interate_through_groups_and_periods(data_opts, graph_opts, method)
+        self.interate_through_groups_and_periods(calc_opts, graph_opts, method)
 
     def make_trace_plot(self, group, ax, period_type='', pg=None, title=''):
-        data = group.data
+        data = group.calc
         # Plot the initial data with normal settings
         ax.plot(range(len(data[0])), data[0], '-o', label=period_type.capitalize(),
                 color=self.get_color(group=group.identifier, period_type=period_type, period_group=pg))
 
         # Plot the event data with slightly thicker lines for better visibility
         for event in group.phase_relationship_events:
-            data = event.data
+            data = event.calc
             ax.plot(range(len(data[0])), data[0], '-', label=period_type.capitalize(),
                     color=self.get_color(group=group.identifier, period_type=period_type, period_group=pg),
                     linewidth=0.1,  # Adjusted to a slightly thicker value for better rendering
                     alpha=0.2)
-        event_info = self.data_opts.get('events')
+        event_info = self.calc_opts.get('events')
         if event_info:
             pre_stim = event_info[period_type]['pre_stim']
         else:
@@ -744,7 +742,7 @@ class MRLPlotter(Plotter, PlottingMixin):
         n_bins = 36
         bin_edges = np.linspace(0, 2 * np.pi, n_bins + 1)
         width = 2 * np.pi / n_bins
-        ax.bar(bin_edges[:-1], group.data, width=width, align='edge', 
+        ax.bar(bin_edges[:-1], group.calc, width=width, align='edge', 
                color=self.get_color(group=group, period_type=period_type, period_group=pg), alpha=1)
         current_ticks = ax.get_yticks()
         ax.set_yticks(current_ticks[::2])  # every second tick
@@ -756,7 +754,7 @@ class MRLPlotter(Plotter, PlottingMixin):
             tags.extend(self.current_region_set.split('_'))
         else:
             tags.append(self.current_brain_region)
-        self.dir_tags = [self.data_type]
+        self.dir_tags = [self.calc_type]
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
         self.fname = f"{basename}_{'_'.join(tags)}.png"
@@ -769,15 +767,15 @@ class MRLPlotter(Plotter, PlottingMixin):
         cbar = ax.figure.colorbar(im, ax=ax, label='MRL')
         ax.set_title(title)
 
-    def mrl_bar_plot(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts, neuron_type='all')
+    def mrl_bar_plot(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts, neuron_type='all')
 
         data = []
-        if data_opts.get('spontaneous'):
+        if calc_opts.get('spontaneous'):
             for neuron_type in self.experiment.neuron_types:
                 self.selected_neuron_type = neuron_type
                 for group in self.lfp.groups:
-                    data.append([neuron_type, group.identifier, group.data, group.sem, group.scatter,
+                    data.append([neuron_type, group.identifier, group.calc, group.sem, group.scatter,
                                  group.grandchildren_scatter])
             df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Average MRL', 'sem', 'scatter', 'unit_scatter'])
         else: 
@@ -786,7 +784,7 @@ class MRLPlotter(Plotter, PlottingMixin):
                 for group in self.lfp.groups:
                     for period_type in self.experiment.period_types:
                         self.selected_period_type = period_type
-                        data.append([neuron_type, group.identifier, period_type, group.data, group.sem, group.scatter,
+                        data.append([neuron_type, group.identifier, period_type, group.calc, group.sem, group.scatter,
                                      group.grandchildren_scatter])
             df = pd.DataFrame(data, columns=['Neuron Type', 'Group', 'Period', 'Average MRL', 'sem', 'scatter',
                                              'unit_scatter'])
@@ -794,7 +792,7 @@ class MRLPlotter(Plotter, PlottingMixin):
         group_order = df['Group'].unique()
 
         # Plot creation
-        if data_opts.get('spontaneous'):
+        if calc_opts.get('spontaneous'):
             g = sns.catplot(data=df, x='Group', y='Average MRL', row='Neuron Type', kind='bar',
                             height=4, aspect=1.5, dodge=False, legend=False, order=group_order)
         else:
@@ -809,7 +807,7 @@ class MRLPlotter(Plotter, PlottingMixin):
         for ax, neuron_type in zip(g.axes.flat, self.experiment.neuron_types):
             bars = ax.patches
             num_groups = len(group_order)
-            num_periods = len(period_order) if not data_opts.get('spontaneous') else 1
+            num_periods = len(period_order) if not calc_opts.get('spontaneous') else 1
             total_bars = num_groups * num_periods
 
             for i in range(total_bars):
@@ -817,7 +815,7 @@ class MRLPlotter(Plotter, PlottingMixin):
                 row_selector = {'Neuron Type': neuron_type, 'Group': group}
                 bar = bars[i]
                 bar.set_facecolor(self.graph_opts['group_colors'][group])
-                if not data_opts.get('spontaneous'):
+                if not calc_opts.get('spontaneous'):
                     period = period_order[i // num_periods]
                     row_selector['Period'] = period
                     period_hatches = self.graph_opts.get('period_hatches', {'tone': '/', 'pretone': ''})
@@ -837,14 +835,14 @@ class MRLPlotter(Plotter, PlottingMixin):
                 ax.set_title(neuron_type, fontsize=14)
 
         # Additional customizations for the non-spontaneous case
-        if not data_opts.get('spontaneous'):
+        if not calc_opts.get('spontaneous'):
             legend_elements = [
                 Patch(facecolor='white', hatch=period_hatches[period_type]*3, edgecolor='black', label=period_type.upper())
                 for period_type in period_order]
             g.fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, .9))
 
         # Saving the plot
-        title = 'average_mrl_during_spontaneous_firing' if data_opts.get('spontaneous') else 'average_mrl'
+        title = 'average_mrl_during_spontaneous_firing' if calc_opts.get('spontaneous') else 'average_mrl'
         self.fig = g.fig
         self.close_plot(title)
 
@@ -852,7 +850,7 @@ class MRLPlotter(Plotter, PlottingMixin):
         pass  # todo: make this do something
 
     def add_significance_markers(self):
-        self.stats = Stats(self.experiment, self.context, self.data_opts, lfp=self.lfp)
+        self.stats = Stats(self.experiment, self.context, self.calc_opts, lfp=self.lfp)
         # TODO: implement this
 
 
@@ -860,19 +858,19 @@ class LFPPlotter(Plotter):
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
-    def plot_power(self, data_opts, graph_opts):
-        self.line_plot_over_periods(data_opts, graph_opts)
+    def plot_power(self, calc_opts, graph_opts):
+        self.line_plot_over_periods(calc_opts, graph_opts)
 
-    def plot_coherence(self, data_opts, graph_opts):
-        self.line_plot_over_periods(data_opts, graph_opts)
+    def plot_coherence(self, calc_opts, graph_opts):
+        self.line_plot_over_periods(calc_opts, graph_opts)
 
-    def plot_spectrogram(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts)
-        if self.data_opts['level'] == 'group':
+    def plot_spectrogram(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
+        if self.calc_opts['level'] == 'group':
             self.plot_spectrogram_by_groups()
-        elif self.data_opts['level'] == 'animal':
+        elif self.calc_opts['level'] == 'animal':
             self.plot_spectrogram_by_animals()
-        elif self.data_opts['level'] == 'period':
+        elif self.calc_opts['level'] == 'period':
             self.plot_spectrogram_periods()
         else:
             raise NotImplementedError
@@ -881,7 +879,10 @@ class LFPPlotter(Plotter):
         axes = self.create_figure_and_axes(len(self.experiment.groups))
         group_info = {}
 
+        self.calc_opts['cache'] = -1 # caching doesn't speed this up 
+
         for i, group in enumerate(self.experiment.groups):
+           
             im_list, group_min, group_max = self.make_spectrogram_subplots(group, axes[i])
             group_info[group.identifier] = {'im': im_list, 'min': group_min, 'max': group_max}
 
@@ -911,7 +912,7 @@ class LFPPlotter(Plotter):
     def plot_spectrogram_periods(self):
         for group in self.lfp.groups:
             for animal in group:
-                nrows = sum([len(self.data_opts['periods'][period_type]) for period_type in self.data_opts['periods']])
+                nrows = sum([len(self.calc_opts['periods'][period_type]) for period_type in self.calc_opts['periods']])
                 if self.graph_opts.get('extend_periods'):
                     extend = True
                     width, ncols = 30, 1
@@ -920,12 +921,12 @@ class LFPPlotter(Plotter):
                     width, ncols = 10, 2
                 self.fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(width*ncols, 5*nrows), sharex=True)
                 i = 0
-                for period_type in self.data_opts['periods']:
+                for period_type in self.calc_opts['periods']:
                     self.selected_period_type = period_type
                     periods=[]
 
                     for period in animal:
-                        data = period.data if not extend else period.extended_data
+                        data = period.calc if not extend else period.extended_data
                         im = self.generate_image(axes[i], period)
                         repeat = period.event_duration if period.event_duration else period.target_period.event_duration
                         #self.set_up_stimulus_patches(np.array([axes[i]]), repeat=repeat)
@@ -934,17 +935,17 @@ class LFPPlotter(Plotter):
                         i += 1
                 self.close_plot(f"Spectrogram {animal.identifier} Periods")
 
-    def plot_coherence_over_frequencies(self, data_opts, graph_opts):
-        self.line_plot_over_frequencies(data_opts, graph_opts)
+    def plot_coherence_over_frequencies(self, calc_opts, graph_opts):
+        self.line_plot_over_frequencies(calc_opts, graph_opts)
 
-    def line_plot_over_frequencies(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts)
+    def line_plot_over_frequencies(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
         data = {}
         for group in self.lfp.groups:
             period_data = defaultdict(list)
-            for period_type in self.data_opts['periods']:
+            for period_type in self.calc_opts['periods']:
                 self.selected_period_type = period_type
-                period_data[period_type] = group.data
+                period_data[period_type] = group.calc
             data[group.identifier] = period_data
 
         fig_x_dim = len(list(range(*self.lfp.freq_range)))
@@ -957,7 +958,7 @@ class LFPPlotter(Plotter):
                 color=self.graph_opts['period_colors'][period_type])
 
             ax.set_title(smart_title_case(f'{group.identifier} Group'))
-            ax.set_ylabel(self.data_type.capitalize())
+            ax.set_ylabel(self.calc_type.capitalize())
             if i == 1:
                 ax.set_xlabel('Frequency')
             ax.legend(title='Period Type')
@@ -967,26 +968,28 @@ class LFPPlotter(Plotter):
         plt.subplots_adjust(top=0.85)  # Adjust this value as needed
 
         self.fig = fig
-        self.close_plot(self.data_type)
+        self.close_plot(self.calc_type)
 
-
-    def line_plot_over_periods(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts)
+    def line_plot_over_periods(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
+        self.cache_level = 1  # save animal values in cache for sem and scatter calculations
         data = []
-        periods = deepcopy(self.data_opts['periods'])
-        for group in self.lfp.groups:
+        periods = deepcopy(self.calc_opts['periods'])
+
+        for group in self.experiment.groups:
             for period_type in periods:
                 self.selected_period_type = period_type
                 for period in periods[period_type]:
-                    self.update_data_opts([(['periods', period_type], [period])])
-                    data.append([group.identifier, period + 1, period_type, group.mean_data, group.sem, group.scatter])
-        self.update_data_opts([(['periods'], periods)])  # put this key, val pair back the way it was for further graphs
-
+                    self.calc_opts['periods'][period_type] = [period]
+                    data.append([group.identifier, period + 1, period_type, group.mean_data, 
+                                 group.sem, group.scatter])
+                    self.clear_cache()
+        self.calc_opts['periods'] = periods
         df = pd.DataFrame(data, columns=['Group', 'Period', 'Period_Type', 'Power', 'SEM', 'Scatter'])
 
 
         # Plotting
-        fig_x_dim = 2.5 * len(sorted(self.data_opts['periods'].values(), key=len)[-1])
+        fig_x_dim = 2.5 * len(sorted(self.calc_opts['periods'].values(), key=len)[-1])
         fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(fig_x_dim, 5), sharey=True)
 
         # Iterate over each group
@@ -999,7 +1002,7 @@ class LFPPlotter(Plotter):
             ax.set_title(smart_title_case(f'{group} Group'))
             ax.set_xlabel('Period')
             if i == 0:
-                ax.set_ylabel(self.data_type.capitalize())
+                ax.set_ylabel(self.calc_type.capitalize())
             ax.legend(title='Trial Type')
             ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 
@@ -1007,27 +1010,27 @@ class LFPPlotter(Plotter):
         plt.subplots_adjust(top=0.85)  # Adjust this value as needed
 
         self.fig = fig
-        self.close_plot(self.data_type)
+        self.close_plot(self.calc_type)
 
-    def plot_granger(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts)
+    def plot_granger(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
 
         data = {}
         for group in self.lfp.groups:
             period_data = defaultdict(dict)
-            for period_type in self.data_opts['periods']:
+            for period_type in self.calc_opts['periods']:
                 self.selected_period_type = period_type
                 period_data[period_type]['data'] = group.data
                 period_data[period_type]['sem'] = group.get_sem()
             data[group.identifier] = period_data
 
         nrows = len(self.lfp.groups)
-        ncols = len(self.data_opts['periods'])
+        ncols = len(self.calc_opts['periods'])
         fig_x_dim = len(list(range(*self.lfp.freq_range))) 
         fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(fig_x_dim, 5), sharex=True)
 
         for i, (group, row) in enumerate(zip(self.lfp.groups, axes)):
-            for j, (period_type, ax) in enumerate(zip(self.data_opts['periods'], row)):
+            for j, (period_type, ax) in enumerate(zip(self.calc_opts['periods'], row)):
                 for k, (key, val) in enumerate(data[group.identifier][period_type]['data'].items()):
                     # Determine line style based on 'key'
                     line_style = '-' if key == 'forward' else '--'
@@ -1062,7 +1065,7 @@ class LFPPlotter(Plotter):
                     if i == 1:
                         ax.set_xlabel('Frequency')
                     if j == 0:
-                        ax.set_ylabel(smart_title_case(self.data_type))
+                        ax.set_ylabel(smart_title_case(self.calc_type))
 
                     ax.legend(title='Direction')
                     ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
@@ -1071,23 +1074,22 @@ class LFPPlotter(Plotter):
         plt.subplots_adjust(top=0.85)  # Adjust this value as needed
 
         self.fig = fig
-        self.close_plot(self.data_type)
+        self.close_plot(self.calc_type)
 
-
-    def plot_correlation(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts)
+    def plot_correlation(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
         data = {}
         for group in self.lfp.groups:
             period_data = defaultdict(list)
-            for period_type in self.data_opts['periods']:
+            for period_type in self.calc_opts['periods']:
                 self.selected_period_type = period_type
-                period_data[period_type] = group.data
+                period_data[period_type] = group.calc
             data[group.identifier] = period_data
 
-        fig_x_dim = self.data_opts['lags']/20
+        fig_x_dim = self.calc_opts['lags']/20
         fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(fig_x_dim, 10), sharex=True)
 
-        total_samples = self.data_opts.get('lags', 100) * 2 + 1
+        total_samples = self.calc_opts.get('lags', 100) * 2 + 1
         mid_index = total_samples // 2
         ms_per_sample = 1000 / self.lfp.sampling_rate  
 
@@ -1102,7 +1104,7 @@ class LFPPlotter(Plotter):
                     color=self.graph_opts['period_colors'][period_type])
 
             ax.set_title(smart_title_case(f'{group.identifier} Group'))
-            ax.set_ylabel(self.data_type.capitalize())
+            ax.set_ylabel(self.calc_type.capitalize())
             ax.legend(title='Period Type')
             if i == 1:
                 ax.set_xlabel('Lags (ms)')
@@ -1115,24 +1117,24 @@ class LFPPlotter(Plotter):
         plt.subplots_adjust(top=0.85)  
 
         self.fig = fig
-        self.close_plot(self.data_type)
+        self.close_plot(self.calc_type)
 
-    def plot_max_correlations(self, data_opts, graph_opts):
-        self.initialize(data_opts, graph_opts)
+    def plot_max_correlations(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
         data = {}
         for group in self.lfp.groups:
             period_data = defaultdict(list)
-            for period_type in self.data_opts['periods']:
+            for period_type in self.calc_opts['periods']:
                 self.selected_period_type = period_type
                 period_data[period_type] = group.get_sum('get_max_histogram', 
                                                         stop_at='correlation_calculator')
             data[group.identifier] = period_data
 
-        fig_x_dim = self.data_opts['lags'] * self.data_opts['bin_size'] * 10
+        fig_x_dim = self.calc_opts['lags'] * self.calc_opts['bin_size'] * 10
         fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(fig_x_dim, 10), sharex=True)
 
-        num_lags = self.data_opts.get('lags', self.lfp.sampling_rate/10)  
-        bin_size = self.data_opts.get('bin_size', .01) # in seconds
+        num_lags = self.calc_opts.get('lags', self.lfp.sampling_rate/10)  
+        bin_size = self.calc_opts.get('bin_size', .01) # in seconds
         lags_per_bin = bin_size * self.lfp.sampling_rate
         number_of_bins = round(num_lags * 2 / lags_per_bin)
 
@@ -1176,7 +1178,7 @@ class LFPPlotter(Plotter):
 
 
     def create_figure_and_axes(self, nrows):
-        ncols = len(self.data_opts['periods'])        #multipliers = (8, 3) if self.data_opts['level'] == 'animal' else (3, 5)
+        ncols = len(self.calc_opts['periods'])        #multipliers = (8, 3) if self.calc_opts['level'] == 'animal' else (3, 5)
         self.fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*ncols, 4*nrows), sharex=True, sharey=True)
         if ncols == 1:
             axes = axes[:, np.newaxis]
@@ -1186,13 +1188,13 @@ class LFPPlotter(Plotter):
         data_source_min = float('inf')
         data_source_max = float('-inf')
         im_list = []
-        for i, period_type in enumerate(self.data_opts['periods']):
+        for i, period_type in enumerate(self.calc_opts['periods']):
             self.selected_period_type = period_type
-            data = data_source.data
+            data = data_source.calc
             im = self.generate_image(axes[i], data)
-            period_str = period_type.capitalize() if len(self.data_opts['periods']) > 1 else ''
+            period_str = period_type.capitalize() if len(self.calc_opts['periods']) > 1 else ''
             data_id = data_source.identifier
-            if self.data_opts['level'] == 'group':
+            if self.calc_opts['level'] == 'group':
                 data_id = data_id.capitalize()
             axes[i].set_title(f"{data_id} {period_str}")
             im_list.append(im)
@@ -1201,10 +1203,10 @@ class LFPPlotter(Plotter):
         return im_list, data_source_min, data_source_max
 
     def generate_image(self, ax, data):
-        pre_stim, post_stim = (self.data_opts['events'][self.selected_period_type][opt]
+        pre_stim, post_stim = (self.calc_opts['events'][self.selected_period_type][opt]
                                for opt in ('pre_stim', 'post_stim'))
         im = ax.imshow(data, cmap='jet', interpolation='nearest', aspect='auto',
-                            extent=[-pre_stim, post_stim, *self.current_frequency_band], origin='lower')
+                            extent=[-pre_stim, post_stim, *self.freq_range], origin='lower')
         return im
 
     def set_clim_and_make_colorbar(self, axes, im_list, minimum, maximum):
@@ -1213,7 +1215,7 @@ class LFPPlotter(Plotter):
 
     def set_up_stimulus_patches(self, axes, repeat=None):
         if repeat:
-            for start in np.arange(0, self.data_opts['events'][self.selected_period_type]['post_stim'], repeat):
+            for start in np.arange(0, self.calc_opts['events'][self.selected_period_type]['post_stim'], repeat):
                 self.make_stimulus_patch(axes, start)
         else:
             self.make_stimulus_patch(axes, 0)
@@ -1223,16 +1225,16 @@ class LFPPlotter(Plotter):
          for ax in axes.ravel()]
 
     def set_dir_and_filename(self, basename):
-        if all([s not in self.data_type for s in ('coherence', 'correlation', 'granger')]):
+        if all([s not in self.calc_type for s in ('coherence', 'correlation', 'granger')]):
             brain_region = self.current_brain_region
         else:
-            brain_region = self.data_opts.get('region_set')
+            brain_region = self.calc_opts.get('region_set')
         title_string = f"{'_'.join([brain_region, str(self.current_frequency_band), basename])}"
         
         self.title = smart_title_case(title_string.replace('_', ' '))
         self.fig.suptitle(self.title, weight='bold', y=.98, fontsize=14)
         self.fname = f"{title_string}.png"
-        self.dir_tags = [self.data_type]
+        self.dir_tags = [self.calc_type]
 
     def make_footer(self):
         pass

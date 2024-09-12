@@ -14,7 +14,7 @@ class Bin(Data):
         self.period_type = copy(self.selected_period_type)
 
     @property
-    def data(self):
+    def calc(self):
         return self.val
 
 
@@ -25,12 +25,12 @@ class TimeBin(Bin):
     def __init__(self, index, val, parent, parent_data):
         super().__init__(index, val, parent, parent_data) 
 
-        if self.data_type == 'correlation':
-            ts = np.arange(-self.data_opts['lags'], self.data_opts['lags'] + 1) / self.sampling_rate
+        if self.calc_type == 'correlation':
+            ts = np.arange(-self.calc_opts['lags'], self.calc_opts['lags'] + 1) / self.sampling_rate
         else:
-            pre_stim, post_stim = [self.data_opts['events'][self.period_type][opt] 
+            pre_stim, post_stim = [self.calc_opts['events'][self.period_type][opt] 
                                 for opt in ['pre_stim', 'post_stim']]
-            bin_size = self.data_opts.get('bin_size')
+            bin_size = self.calc_opts.get('bin_size')
             if bin_size is None:
                 try:
                     bin_size = parent.spectrogram_bin_size
@@ -51,7 +51,7 @@ class TimeBinMethods:
 
     @property
     def time_bins(self):
-        return self.get_time_bins(self.data)
+        return self.get_time_bins(self.calc)
     
 
 class FrequencyBin(Bin, TimeBinMethods):
@@ -67,16 +67,16 @@ class FrequencyBin(Bin, TimeBinMethods):
             representative = parent
         if 'calculator' in parent.name or parent.name == 'event':
             representative = parent.period
-        elif self.name == 'animal':
+        elif parent.name == 'animal':
             representative = parent.children[0]
-        elif self.name == 'group':
+        elif parent.name == 'group':
             representative = parent.children[0].children[0]
         else:
             raise ValueError("Unexpected Object Type")
         
-        if self.data_type == 'power': 
+        if self.calc_type == 'power': 
             self.frequency = representative.spectrogram[1][index]
-        elif 'phase' in self.data_type:
+        elif 'phase' in self.calc_type:
             self.frequency = representative.frequency_bands[index][0]
         else:
             freq_range = list(range(self.freq_range[0], self.freq_range[1] + 1)) 

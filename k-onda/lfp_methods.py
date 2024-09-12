@@ -9,21 +9,24 @@ import os
 class LFPPrepMethods:
 
     def select_lfp_children(self):
-        if self.data_type == 'power':
+        if self.calc_type == 'power':
             attr = 'lfp_periods'
         else:
-            attr = f"{self.data_type}_calculators"
+            attr = f"{self.calc_type}_calculators"
         if self.selected_period_type:
-            return getattr(self, attr)[self.selected_period_type]
+            children = getattr(self, attr)[self.selected_period_type]
+            if self.selected_period_type in self.calc_opts.get('periods', {}):
+                return [child for i, child in enumerate(children)
+                        if i in self.calc_opts['periods'][self.selected_period_type]]
+            else:
+                return children
         else:
             return self.get_all(attr)
 
     def lfp_prep(self):
-        if not self.raw_lfp:
-            self.raw_lfp = self.get_raw_lfp()
         self.prepare_periods()
-        if self.data_type != 'power':
-            getattr(self, f"prepare_{self.data_type}_calculators")()
+        if self.calc_type != 'power':
+            getattr(self, f"prepare_{self.calc_type}_calculators")()
 
     def get_raw_lfp(self):
         path_constructor = deepcopy(self.experiment.info['lfp_path_constructor'])
@@ -65,16 +68,18 @@ class LFPPrepMethods:
     
     def process_lfp(self):
         
-        for brain_region in self.raw_lfp:
-            data = self.raw_lfp[brain_region]/4
-            filter = self.data_opts.get('remove_noise', 'filtfilt')
+        raw_lfp = self.get_raw_lfp()
+
+        for brain_region in raw_lfp:
+            data = raw_lfp[brain_region]/4
+            filter = self.calc_opts.get('remove_noise', 'filtfilt')
             if filter == 'filtfilt':
-                filtered = filter_60_hz(data, self.sampling_rate)
+                filtered = filter_60_hz(data, self.lfp_sampling_rate)
             elif filter == 'spectrum_estimation':
                 ids = [self.identifier, brain_region]
                 saved_calc_exists, filtered, pickle_path = self.load('filter', ids)
                 if not saved_calc_exists:
-                    ml = MatlabInterface(self.data_opts['matlab_configuration'])
+                    ml = MatlabInterface(self.calc_opts['matlab_configuration'])
                     filtered = ml.filter(data)
                     self.save(filtered, pickle_path)
                 filtered = np.squeeze(np.array(filtered))
@@ -96,7 +101,7 @@ class LFPPrepMethods:
         def validate_event(event, standard):
             for frequency in event.frequency_bins: 
                 for time_bin in frequency.time_bins:
-                    if time_bin.data > self.data_opts.get('threshold', 20) * standard:
+                    if time_bin.data > self.calc_opts.get('threshold', 20) * standard:
                         print(f"{region} {self.identifier} {event.period_type} "
                         f"{event.period.identifier} {event.identifier} invalid!")
                         return False
@@ -114,12 +119,8 @@ class LFPPrepMethods:
 
 
 class LFPMethods:
-
-    @property
-    def spectrogram_bin_size(self):
-        return .01 # TODO must change when there's more mtcsg args
  
     def get_power(self):
-        return self.get_average('get_power', stop_at=self.data_opts.get('base', 'event'))
+        return self.get_average('get_power', stop_at=self.calc_opts.get('base', 'event'))
     
     

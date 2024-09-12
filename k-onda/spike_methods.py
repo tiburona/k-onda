@@ -7,7 +7,7 @@ class SpikeMethods:
             return self.units['good']
 
     def get_psth(self):
-        return self.get_average('get_psth', stop_at=self.data_opts.get('base', 'event'))
+        return self.get_average('get_psth', stop_at=self.calc_opts.get('base', 'event'))
     
     def get_firing_rates(self):
-        return self.get_average('get_firing_rates', stop_at=self.data_opts.get('base', 'event'))
+        return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'))

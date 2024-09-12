@@ -2,8 +2,12 @@ from base_data import Data
 from bins import BinMethods
 
 class Period(Data, BinMethods):
+
+    _name = 'period'
+
     def __init__(self, index, period_type, period_info, onset, target_period=None, 
                  is_relative=False, experiment=None, events=None):
+        super().__init__()
         self.identifier = index
         self.period_type = period_type
         self.period_info = period_info
@@ -19,7 +23,7 @@ class Period(Data, BinMethods):
         self.event_duration = period_info.get('event_duration')
         if self.event_duration is None:
             self.event_duration = target_period.event_duration
-        self.events_settings = self.data_opts['events'].get(
+        self.events_settings = self.calc_opts['events'].get(
             self.period_type, {'pre_stim': 0, 'post_stim': 1})
         self.pre_stim, self.post_stim = (self.events_settings[opt] 
                                          for opt in ['pre_stim', 'post_stim'])
@@ -46,7 +50,7 @@ class Period(Data, BinMethods):
 
 class Event(Data, BinMethods):
 
-    name = 'event'
+    _name = 'event'
 
     def __init__(self, period, index):
         super().__init__()
@@ -54,12 +58,11 @@ class Event(Data, BinMethods):
         self.identifier = index
         self.parent = period
         self.period_type = self.period.period_type
-        events_settings = self.data_opts['events'].get(self.period_type, 
+        events_settings = self.calc_opts['events'].get(self.period_type, 
                                                        {'pre_stim': 0, 'post_stim': 1})
         self.pre_stim, self.post_stim = (events_settings[opt] for opt in ['pre_stim', 'post_stim'])
         self.duration = self.pre_stim + self.post_stim
         self.experiment = self.period.experiment
-        self.data_cache = {}
 
     @property
     def reference(self):
@@ -73,8 +76,8 @@ class Event(Data, BinMethods):
         
     @property
     def num_bins_per_event(self):
-        bin_size = self.data_opts.get('bin_size')
-        pre_stim, post_stim = (self.data_opts['events'][self.period_type].get(opt) 
+        bin_size = self.calc_opts.get('bin_size')
+        pre_stim, post_stim = (self.calc_opts['events'][self.period_type].get(opt) 
                                for opt in ['pre_stim', 'post_stim'])
         return round((pre_stim + post_stim) / bin_size)
     
