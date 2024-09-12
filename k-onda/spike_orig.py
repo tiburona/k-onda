@@ -24,7 +24,7 @@ class SpikeData(Data):
 
     @property
     def time_bins(self):
-        return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
+        return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.calc)]
 
     
     @property
@@ -76,10 +76,10 @@ class SpikeData(Data):
             int: 1 if upregulated, -1 if downregulated, 0 otherwise.
         """
         first_ind, last_ind = (int(x / self.data_opts['bin_size']) for x in duration)
-        activity = np.mean(self.data[first_ind:last_ind])
-        if activity > std_dev * np.std(self.data):
+        activity = np.mean(self.calc[first_ind:last_ind])
+        if activity > std_dev * np.std(self.calc):
             return 1
-        elif activity < -std_dev * np.std(self.data):
+        elif activity < -std_dev * np.std(self.calc):
             return -1
         else:
             return 0
@@ -421,7 +421,7 @@ class TimeBin(Data):
             self.period_type = self.period.period_type
 
     @property
-    def data(self):
+    def calc(self):
         return self.val
 
     @property

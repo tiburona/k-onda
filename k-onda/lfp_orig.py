@@ -29,11 +29,11 @@ class LFPData(Data):
             print(f"{self.identifier}")
             print(f"\n")
 
-        return self.get_frequency_bins(self.data)
+        return self.get_frequency_bins(self.calc)
 
     @property
     def time_bins(self):
-        return self.get_time_bins(self.data)
+        return self.get_time_bins(self.calc)
 
     @property
     def freq_range(self):
@@ -776,7 +776,7 @@ class FrequencyBin(LFPData):
         self.validator = self.parent.validator if hasattr(self.parent, 'validator') else True
 
     @property
-    def data(self):
+    def calc(self):
         return self.val
 
     @property
@@ -811,7 +811,7 @@ class MRLCalculator(LFPData, MRLFunctions):
 
     @property
     def mean_over_frequency(self):
-        return np.mean(self.data, axis=0)
+        return np.mean(self.calc, axis=0)
 
     def get_wavelet_phases(self, scale):
         cwt_matrix = cwt(self.period.unpadded_data, morlet, [scale])
@@ -1053,7 +1053,7 @@ class CorrelationCalculator(RegionRelationshipCalculator):
     def lags(self):
         if self.data_type == 'lag_of_max_correlation':
             raise ValueError("Data type is max correlation; there are not multiple lags.")
-        return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.data)]
+        return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.calc)]
     
     def get_max_histogram(self):
         lag_of_max = self.get_lag_of_max_correlation()

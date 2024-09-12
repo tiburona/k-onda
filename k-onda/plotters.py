@@ -41,10 +41,84 @@ class Plotter(Base):
         self.invisible_ax = None
         self.grid = None
 
-    def initialize(self, calc_opts):
+    def initialize(self, calc_opts, graph_opts):
         """Both initializes values on self and sets values for the context."""
         self.calc_opts = calc_opts  
+        self.graph_opts = graph_opts
         self.experiment.initialize_data()
+
+    def create_group_plot_figure_and_axes(
+            self, ax_key, data_source_type, period_types, neuron_types=None, 
+            row_multiple=5, col_multiple=5, sharex=True, sharey=True):
+
+        dims = {}
+
+        for key, val in ax_key.items():
+            if val == 'data_source':
+                dims[key] = len(getattr(self.experiment, data_source_type))
+            elif val == 'period_type':
+                dims[key] = len(period_types)
+            elif val == 'neuron_type':
+                dims[key] = len(neuron_types)
+            else:
+                raise NotImplementedError
+        nrows = dims['rows']
+        ncols = dims['cols']
+
+        self.fig, axes = plt.subplots(
+            nrows=nrows, ncols=ncols, figsize=(row_multiple*ncols, col_multiple*nrows), 
+            sharex=sharex, sharey=sharey)
+        
+        if dims['cols'] == 1:
+            axes = axes[:, np.newaxis]
+        return axes
+
+    def create_animal_or_unit_plot_figure_and_axes():
+        pass
+
+    def iterate_through_data_sources(self, data_sources, neuron_types=None, process_calc=None, 
+                                     rows='data_source', cols='period_type'):
+        
+        results = []
+        row = col = None
+        periods = self.calc_opts['periods']
+
+        def assign_row_and_col_inds(division, ind, row, col):
+            if rows == division:
+                row = ind
+            if cols == division:
+                col = ind
+            return row, col
+            
+        for i, pt in enumerate(periods):
+            self.selected_period_type = pt
+            row, col = assign_row_and_col_inds('period_type', i, row, col)
+
+            neuron_types = neuron_types if neuron_types else [None]
+            for j, nt in enumerate(neuron_types):
+                row, col = assign_row_and_col_inds('neuron_type', j, row, col)
+                if nt is not None:
+                    self.selected_neuron_type = nt
+
+                period_list = periods[pt] if periods else [None]
+                original_periods = self.calc_opts['periods']
+                for k, p in enumerate(period_list):
+                    row, col = assign_row_and_col_inds('period', k, row, col)
+                    if p:
+                        self.calc_opts['periods'][pt] = [p]
+
+                    for l, data_source in enumerate(data_sources):
+                        row, col = assign_row_and_col_inds('data_source', l, row, col)
+
+                        if process_calc:
+                            results.append(process_calc(data_source, row, col, pt=pt, nt=nt))
+                        else:
+                            results.append(data_source.calc)
+
+                self.calc_opts['periods'] = original_periods
+        
+        return results 
+
 
     def close_plot(self, basename):
         self.set_dir_and_filename(basename)
@@ -874,31 +948,73 @@ class LFPPlotter(Plotter):
             self.plot_spectrogram_periods()
         else:
             raise NotImplementedError
+    
+    @staticmethod
+    def initialize_mins_and_maxes(data_sources):
+        global_min = float('inf')
+        global_max = float('-inf') 
+        mins_and_maxes = {data_source.identifier: {'min': float('inf'), 'max': float('-inf')} 
+                          for data_source in data_sources}
+        return global_min, global_max, mins_and_maxes
 
     def plot_spectrogram_by_groups(self):
-        axes = self.create_figure_and_axes(len(self.experiment.groups))
-        group_info = {}
 
         self.calc_opts['cache'] = -1 # caching doesn't speed this up 
 
-        for i, group in enumerate(self.experiment.groups):
-           
-            im_list, group_min, group_max = self.make_spectrogram_subplots(group, axes[i])
-            group_info[group.identifier] = {'im': im_list, 'min': group_min, 'max': group_max}
+        ax_key = {'rows': 'data_source', 'cols': 'period_type'}
+        groups = self.experiment.groups
+        pts = self.calc_opts['periods'].keys()
+        axes = self.create_group_plot_figure_and_axes(ax_key, 'groups', pts)
+
+        global_min, global_max, mins_and_maxes = self.initialize_mins_and_maxes(groups)
+        
+        def get_ims(data_source, row, col, pt, **_):
+            nonlocal global_min, global_max, mins_and_maxes
+            ax = axes[row, col]
+            ax_title = f"{data_source.identifier.capitalize()} {pt.capitalize()}"
+            ax.set_title(ax_title)
+            data = data_source.calc
+            im = self.generate_image(axes[row, col], data)
+            data_min, data_max = data.min(), data.max()
+            global_min, global_max = min(global_min, data_min), max(global_max, data_max)
+            mins_and_maxes[data_source.identifier]['min'] = min(
+                mins_and_maxes[data_source.identifier]['min'], data_min)
+            mins_and_maxes[data_source.identifier]['max'] = max(
+                mins_and_maxes[data_source.identifier]['max'], data_max)
+            return im
+
+        ims = self.iterate_through_data_sources(groups, process_calc=get_ims)
 
         if self.graph_opts.get('equal_color_scales') == 'by_subplot':
-            global_min = min([group_dict['min'] for group_dict in group_info.values()])
-            global_max = min([group_dict['min'] for group_dict in group_info.values()])
-            ims = [im for group_dict in group_info.values() for im in group_dict['im']]
             self.set_clim_and_make_colorbar(axes, ims, global_min, global_max)
         elif self.graph_opts.get('equal_color_scales') == 'within_group':
-            for i, group in enumerate(group_info):
-                self.set_clim_and_make_colorbar(axes[i, :], *(group_info[group][k] for k in ['im', 'min', 'max']))
+            for i, group in enumerate(groups):
+                self.set_clim_and_make_colorbar(axes[i, :], ims, 
+                                                *mins_and_maxes[group.identifier].values())
         else:
-            for im in group_info[group]['im']:
-                self.set_clim_and_make_colorbar([im.axes], [im], im.get_array().min(), im.get_array().max())
+            for im in ims:
+                self.set_clim_and_make_colorbar([im.axes], [im], im.get_array().min(), 
+                                                im.get_array().max())
         self.set_up_stimulus_patches(axes)
         self.close_plot('Spectrogram')
+
+    def make_spectrogram_subplots(self, data_source, axes):
+        data_source_min = float('inf')
+        data_source_max = float('-inf')
+        im_list = []
+        for i, period_type in enumerate(self.calc_opts['periods']):
+            self.selected_period_type = period_type
+            data = data_source.calc
+            im = self.generate_image(axes[i], data)
+            period_str = period_type.capitalize() if len(self.calc_opts['periods']) > 1 else ''
+            data_id = data_source.identifier
+            if self.calc_opts['level'] == 'group':
+                data_id = data_id.capitalize()
+            axes[i].set_title(f"{data_id} {period_str}")
+            im_list.append(im)
+            data_source_min = min(data_source_min, data.min())
+            data_source_max = max(data_source_max, data.max())
+        return im_list, data_source_min, data_source_max
 
     def plot_spectrogram_by_animals(self):
         for i, group in enumerate(self.lfp.groups):
@@ -1178,29 +1294,13 @@ class LFPPlotter(Plotter):
 
 
     def create_figure_and_axes(self, nrows):
-        ncols = len(self.calc_opts['periods'])        #multipliers = (8, 3) if self.calc_opts['level'] == 'animal' else (3, 5)
+        ncols = len(self.calc_opts['periods'])       
         self.fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*ncols, 4*nrows), sharex=True, sharey=True)
         if ncols == 1:
             axes = axes[:, np.newaxis]
         return axes
 
-    def make_spectrogram_subplots(self, data_source, axes):
-        data_source_min = float('inf')
-        data_source_max = float('-inf')
-        im_list = []
-        for i, period_type in enumerate(self.calc_opts['periods']):
-            self.selected_period_type = period_type
-            data = data_source.calc
-            im = self.generate_image(axes[i], data)
-            period_str = period_type.capitalize() if len(self.calc_opts['periods']) > 1 else ''
-            data_id = data_source.identifier
-            if self.calc_opts['level'] == 'group':
-                data_id = data_id.capitalize()
-            axes[i].set_title(f"{data_id} {period_str}")
-            im_list.append(im)
-            data_source_min = min(data_source_min, data.min())
-            data_source_max = max(data_source_max, data.max())
-        return im_list, data_source_min, data_source_max
+  
 
     def generate_image(self, ax, data):
         pre_stim, post_stim = (self.calc_opts['events'][self.selected_period_type][opt]

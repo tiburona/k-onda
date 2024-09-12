@@ -42,7 +42,6 @@ class EventValidator:
 
 
 class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
-    name = 'period'
 
     def __init__(self, animal, index, period_type, period_info, onset, events=None, 
                  target_period=None, is_relative=False, experiment=None):
@@ -135,7 +134,6 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
     
 
 class LFPEvent(Event, LFPMethods, LFPDataSelector):
-    name = 'event'
 
     def __init__(self, identifier, event_times, mask, period):
         super().__init__(period, identifier)

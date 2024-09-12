@@ -147,7 +147,7 @@ SPECTROGRAM_OPTS = {
     'periods': {'pretone': range(5), 'tone': range(5)}, 'power_arg_set': (2048, 2000, 500, 480, 2),
     'lost_signal': [.125, .125], 'bin_size': .01, 'lfp_padding': [.625, .625],
     'remove_noise': 'filtfilt', 'store': 'pkl',  'validate_events': True,
-    'frequency_bands': [(30, 50), (70, 120)], 'kind_of_data': 'lfp', 'data_type': 'power',
+    'frequency_bands': [(30, 50), (70, 120)], 'kind_of_data': 'lfp', 'calc_type': 'power',
     'data_path': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL',
     'events': {
         'pretone': {'pre_stim': .15, 'post_stim': .3}, 'tone': {'pre_stim': .15, 'post_stim': .3}
@@ -230,7 +230,7 @@ BLA_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(BLA_THETA_POWER_AN
 
 VALIDATION_DATA_OPTS = {
     'kind_of_data': 'lfp',
-    'data_type': 'power',
+    'calc_type': 'power',
     'brain_regions': ['pl', 'hpc', 'bla'],
     'power_arg_set': (2048, 2000, 1000, 980, 2), 
     'bin_size': .01, 
@@ -398,5 +398,5 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 SPREADSHEET_OPTS = [BLA_PL_COHERENCE_OPTS, HPC_PL_COHERENCE_OPTS, BLA_HPC_COHERENCE_OPTS]
 
-RUNNER_OPTS = {'data_opts': SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
+RUNNER_OPTS = {'calc_opts': SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
 

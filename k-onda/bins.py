@@ -20,7 +20,7 @@ class Bin(Data):
 
 class TimeBin(Bin):
 
-    name = 'time_bin'
+    _name = 'time_bin'
 
     def __init__(self, index, val, parent, parent_data):
         super().__init__(index, val, parent, parent_data) 
@@ -56,7 +56,7 @@ class TimeBinMethods:
 
 class FrequencyBin(Bin, TimeBinMethods):
 
-    name = 'frequency_bin'
+    _name = 'frequency_bin'
 
     def __init__(self, index, val, parent, parent_data):
         super().__init__(index, val, parent, parent_data) 
@@ -100,7 +100,7 @@ class FrequencyBinMethods:
 
     @property
     def frequency_bins(self):
-        return self.get_frequency_bins(self.data)
+        return self.get_frequency_bins(self.calc)
     
 
 class BinMethods(TimeBinMethods, FrequencyBinMethods):

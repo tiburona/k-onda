@@ -1,5 +1,5 @@
 from base_data import Data
-from plotting_helpers import formatted_now
+from utils import formatted_now
 from spike_methods import SpikeMethods
 from lfp_methods import LFPMethods, LFPPrepMethods
 from lfp_data_structures import LFPPeriod
