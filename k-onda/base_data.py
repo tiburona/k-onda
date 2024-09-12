@@ -241,7 +241,7 @@ class Data(Base):
             return np.nanmean(np.array(vals), axis=axis)
         
     @property
-    def mean_data(self):
+    def mean(self):
         return np.mean(self.calc)
     
     @property
@@ -251,6 +251,9 @@ class Data(Base):
     @property
     def sem_envelope(self):
         return self.get_sem(collapse_sem_data=False)
+    
+    def get_mean(self, axis=0):
+        return np.mean(self.calc, axis=axis)
         
     def get_sem(self, collapse_sem_data=False):
         """
@@ -266,12 +269,12 @@ class Data(Base):
         else:
             sem_children = self.children
 
-        if isinstance(sem_children[0].data, dict):
+        if isinstance(sem_children[0].calc, dict):
 
             return_dict = {}
 
             for key in sem_children[0]:
-                vals = [child.data[key] for child in sem_children if not self.is_nan(child.data)]
+                vals = [child.calc[key] for child in sem_children if not self.is_nan(child.calc)]
                 if collapse_sem_data:
                     vals = [np.mean(val) for val in vals]
                 return_dict[key] = sem(vals) 
@@ -279,7 +282,7 @@ class Data(Base):
             return return_dict
 
         else:
-            vals = [child.data for child in sem_children if not self.is_nan(child.data)]
+            vals = [child.calc for child in sem_children if not self.is_nan(child.calc)]
 
             if collapse_sem_data:
                 vals = [np.mean(val) for val in vals]

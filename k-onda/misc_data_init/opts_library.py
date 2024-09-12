@@ -108,7 +108,7 @@ PL_MRL_ANIMALS = list(set(PFC_THETA_POWER_ANIMALS) & set(STANDARD_ANIMALS))
 BLA_MRL_ANIMALS = list(set(BLA_THETA_POWER_ANIMALS) & set(STANDARD_ANIMALS))
 
 GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
-              'sem': False, 'footer': True, 'equal_y_scales': True, 'equal_color_scales': 'within_group',
+              'sem': False, 'footer': True, 'equal_y_scales': True, 'equal_color_scales': 'within_data_source',
               'group_colors': {'control': '#6C4675', 'defeat': '#F2A354'}, 'period_colors':
                   {'pretone': '#E75480', 'tone': '#76BD4E'}, 'period_order': ['pretone', 'tone']
               }

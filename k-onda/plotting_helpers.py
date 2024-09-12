@@ -15,6 +15,24 @@ class PlottingMixin:
                 'spontaneous_firing': ('Time(s)', 'Firing Rate (Samples per Second)'),
                 'cross_correlations': ('Lags (s)', 'Cross-Correlation'),
                 'correlogram':  ('Lags (s)', 'Spikes')}
+    
+      
+    @staticmethod
+    def divide_data_sources_into_sets(data_sources, max):
+        sets = []
+        counter = 0
+        while counter < max:
+            sets.append(data_sources[counter:counter + max])
+            counter += max  
+        return sets
+    
+    @staticmethod
+    def initialize_mins_and_maxes(data_sources):
+        global_min = float('inf')
+        global_max = float('-inf') 
+        mins_and_maxes = {data_source.identifier: {'min': float('inf'), 'max': float('-inf')} 
+                          for data_source in data_sources}
+        return global_min, global_max, mins_and_maxes
 
     def set_labels(self, x_and_y_labels=(None, None)):
         canonical_labels = self.get_labels().get(self.calc_type)
