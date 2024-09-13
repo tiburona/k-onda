@@ -57,6 +57,7 @@ class Event(Data, BinMethods):
         self.period = period
         self.identifier = index
         self.parent = period
+        self.parent = period
         self.period_type = self.period.period_type
         events_settings = self.calc_opts['events'].get(self.period_type, 
                                                        {'pre_stim': 0, 'post_stim': 1})
@@ -72,7 +73,9 @@ class Event(Data, BinMethods):
         if not reference_period_type:
             return None
         else:
-            return self.period.parent.periods[reference_period_type][self.period.identifier]
+            period = self if self.name == 'period' else self.parent
+            reference_periods = getattr(period.parent, f"{self.kind_of_data}_periods")
+            return reference_periods[reference_period_type][period.identifier]
         
     @property
     def num_bins_per_event(self):

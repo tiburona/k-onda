@@ -29,6 +29,13 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         self.identifier = str(self.animal.units[category].index(self) + 1)
         self.spike_periods = defaultdict(list)
         self.parent = animal
+        self.kind_of_data_to_period_type = {
+            'spike': SpikePeriod
+        }
+
+    @property
+    def children(self):
+        return self.select_children('spike_periods')
         
     @property
     def all_periods(self):
@@ -51,7 +58,6 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
  
     def spike_prep(self):
         self.prepare_periods()
-        self.children = self.get_all('spike_periods')
 
     def get_pairs(self):
         return [UnitPair(self, other) for other in [unit for unit in self.animal if unit.identifier != self.identifier]]
@@ -76,8 +82,11 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
     def get_firing_std_dev(self, period_types=None):
         if period_types is None:  # default: take all period_types
             period_types = [period_type for period_type in self.spike_periods]
-        return np.std([rate for period_type, periods in self.spike_periods.items() for period in periods
-                       for rate in period.get_all_firing_rates() if period_type in period_types])
+        return np.std([
+            rate for period_type, periods in self.spike_periods.items() 
+            for period in periods 
+            for rate in period.get_all_firing_rates()
+            if period_type in period_types])
 
     def get_cross_correlations(self, axis=0):
         return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
@@ -96,17 +105,18 @@ class SpikePeriod(Period, SpikeMethods):
 
     name = 'period'
 
-    def __init__(self, unit, index, period_type, period_info, onset, events=None, 
-                 target_period=None, is_relative=False, experiment=None):
-        super().__init__(index, period_type, period_info, onset, experiment=experiment, 
-                         target_period=target_period, is_relative=is_relative)
+    def __init__(self, unit, index, period_type, period_info, onset, 
+                 events=None, target_period=None, is_relative=False, 
+                 experiment=None):
+        super().__init__(index, period_type, period_info, onset, events=events, 
+                         experiment=experiment, target_period=target_period, 
+                         is_relative=is_relative)
         self.unit = unit
         self.animal = self.unit.animal
         self.parent = unit
-        self.cls = 'spike'
 
     def get_events(self):
-        pre_stim, post_stim = (self.pre_stim, self.post_stim) * self.sampling_rate
+        pre_stim, post_stim = np.array([self.pre_stim, self.post_stim]) * self.sampling_rate
         for i, start in enumerate(self.event_starts):
             spikes = self.unit.find_spikes(start - pre_stim, start + post_stim)
             self._events.append(
@@ -133,20 +143,25 @@ class SpikeEvent(Event):
         self.unit = unit
         self.spikes = spikes
         self.spikes_original_times = spikes_original_times
-        self.cls = 'spike'
+        self.private_cache = {}
        
     def get_psth(self):
         rates = self.get_firing_rates() 
         reference_rates = self.reference.get_firing_rates()
         rates -= reference_rates
         rates /= self.unit.get_firing_std_dev(period_types=self.period_type,)  # same as dividing unit psth by std dev 
+        self.private_cache = {}
         return rates
 
-    @cache_method
     def get_firing_rates(self):
         bin_size = self.calc_opts['bin_size']
         spike_range = (-self.pre_stim, self.post_stim)
-        rates = calc_rates(self.spikes, self.num_bins_per_event, spike_range, bin_size)
+        if 'rates' in self.private_cache:
+            rates = self.private_cache['rates']
+        else:
+            rates = calc_rates(self.spikes, self.num_bins_per_event, spike_range, bin_size)
+        if self.calc_type == 'psth':
+            self.private_cache['rates'] = rates
         return self.refer(rates)
     
     def get_spike_counts(self):

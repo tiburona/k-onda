@@ -190,7 +190,7 @@ PROPORTION_OPTS = {
     'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
     }
 
-PSTH_OPTS = {'kind_of_data': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
+PSTH_OPTS = {'kind_of_data': 'spike', 'calc_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
              'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
              'periods': {'tone': range(5)}, 'levels': ['group'],
              'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
@@ -340,7 +340,7 @@ GROUP_STAT_PSTH_OPTS = {'kind_of_data': 'spike', 'data_type': 'psth', 'adjustmen
                         'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
                         'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 'animal': [['identifier', 'in', STANDARD_ANIMALS]]}}
 
-PSTH_OPTS = {'kind_of_data': 'spike', 'data_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
+PSTH_OPTS = {'kind_of_data': 'spike', 'calc_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
              'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
              'periods': {'tone': range(5)}, 'levels': ['group'],
              'filters': {'unit': {'quality': ('in', NEURON_QUALITY)}, 
@@ -398,5 +398,5 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 SPREADSHEET_OPTS = [BLA_PL_COHERENCE_OPTS, HPC_PL_COHERENCE_OPTS, BLA_HPC_COHERENCE_OPTS]
 
-RUNNER_OPTS = {'calc_opts': SPECTROGRAM_OPTS, 'graph_opts': GRAPH_OPTS}
+RUNNER_OPTS = {'calc_opts': PSTH_OPTS, 'graph_opts': GRAPH_OPTS}
 

@@ -3,6 +3,7 @@ from utils import formatted_now
 from spike_methods import SpikeMethods
 from lfp_methods import LFPMethods, LFPPrepMethods
 from lfp_data_structures import LFPPeriod
+from spike_data_structures import SpikePeriod
 from collections import defaultdict
 from period_constructor import PeriodConstructor
 from bins import BinMethods
@@ -23,7 +24,12 @@ class Experiment(Data):
         self.groups = None
         self.all_groups = None
         self.children = self.groups
+        self._ancestors = [self]
 
+    @property
+    def ancestors(self):
+        return self._ancestors
+    
     @property
     def all_units(self):
         return [unit for animal in self.all_animals for unit in animal.units['good']]
@@ -58,6 +64,7 @@ class Experiment(Data):
         if self.kind_of_data == 'spike':
             for unit in self.all_units:
                 unit.spike_prep()
+                a = 'foo'
         elif self.kind_of_data == 'lfp':
             for animal in self.all_animals:
                 if not animal.include():
@@ -82,10 +89,10 @@ class Group(Data, SpikeMethods, LFPMethods, BinMethods):
         super().__init__()
         self.identifier = name
         self.animals = animals if animals else []
-        for animal in self.animals:
-            animal.parent = self
         self.experiment = experiment
         self.parent = experiment
+        for animal in self.animals:
+            animal.parent = self
         self.children = self.animals
 
 
@@ -113,7 +120,8 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPPrepMethods, LFPMethods, 
         self.raw_lfp = None 
         self._processed_lfp = {}
         self.kind_of_data_to_period_type = {
-            'lfp': LFPPeriod
+            'lfp': LFPPeriod,
+            'spike_period': SpikePeriod
         }
         self.lfp_event_validity = defaultdict(dict)
 

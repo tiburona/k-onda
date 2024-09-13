@@ -28,11 +28,20 @@ class PlottingMixin:
     
     @staticmethod
     def initialize_mins_and_maxes(data_sources):
-        global_min = float('inf')
-        global_max = float('-inf') 
         mins_and_maxes = {data_source.identifier: {'min': float('inf'), 'max': float('-inf')} 
                           for data_source in data_sources}
-        return global_min, global_max, mins_and_maxes
+        mins_and_maxes['global'] = {'min': float('inf'), 'max': float('-inf')}
+        return mins_and_maxes
+    
+    @staticmethod
+    def evaluate_mins_and_maxes(data_source, data, mins_and_maxes):
+        data_min, data_max = data.min(), data.max()
+        mins_and_maxes[data_source.identifier]['min'] = min(
+            mins_and_maxes[data_source.identifier]['min'], data_min)
+        mins_and_maxes[data_source.identifier]['max'] = max(
+                mins_and_maxes[data_source.identifier]['max'], data_max)
+        mins_and_maxes['global']['min'] = min(mins_and_maxes['global']['min'], data_min)
+        mins_and_maxes['global']['max'] = min(mins_and_maxes['global']['max'], data_max)
 
     def set_labels(self, x_and_y_labels=(None, None)):
         canonical_labels = self.get_labels().get(self.calc_type)

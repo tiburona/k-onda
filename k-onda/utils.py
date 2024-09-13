@@ -27,7 +27,8 @@ def cache_method(method):
         if 'level' in kwargs and isinstance(kwargs['level'], int) and kwargs['level'] > cache_level:
             return method(self, *args, **kwargs)
             
-        key_list = [method.__name__, self.selected_neuron_type, self.selected_period_type]
+        key_list = [self.calc_type, method.__name__, self.selected_neuron_type, 
+                    self.selected_period_type]
         for obj in list(reversed(self.ancestors))[1:]:
             key_list.append(obj.name)
             key_list.append(obj.identifier)

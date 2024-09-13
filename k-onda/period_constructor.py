@@ -10,10 +10,22 @@ class PeriodConstructor:
     
     def get_all(self, attr):
         return [item for sublist in getattr(self, attr).values() for item in sublist]
+    
+    def select_children(self, attr):
+        if self.selected_period_type:
+            children = getattr(self, attr)[self.selected_period_type]
+            if self.selected_period_type in self.calc_opts.get('periods', {}):
+                return [child for i, child in enumerate(children)
+                        if i in self.calc_opts['periods'][self.selected_period_type]]
+            else:
+                return children
+        else:
+            return self.get_all(attr)
 
     def prepare_periods(self):
         self.period_class = self.kind_of_data_to_period_type[self.kind_of_data]
-        for boo, function in zip((False, True), (self.construct_periods, self.construct_relative_periods)):
+        for boo, function in zip((False, True), (self.construct_periods, 
+                                                 self.construct_relative_periods)):
             try:
                 period_info = self.period_info
             except AttributeError:
@@ -25,6 +37,7 @@ class PeriodConstructor:
                 periods[period_type] = function(period_type, filtered_period_info[period_type])
 
     def construct_periods(self, period_type, period_info):
+        a = 'foo'
         periods = []
         if not period_info:
             return []

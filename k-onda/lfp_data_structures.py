@@ -139,7 +139,6 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
         super().__init__(period, identifier)
         self.event_times = event_times
         self.mask = mask
-        self.parent = period
         self.animal = period.animal
         self.period_type = self.parent.period_type
         self.spectrogram = self.parent.spectrogram

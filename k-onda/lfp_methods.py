@@ -13,15 +13,7 @@ class LFPPrepMethods:
             attr = 'lfp_periods'
         else:
             attr = f"{self.calc_type}_calculators"
-        if self.selected_period_type:
-            children = getattr(self, attr)[self.selected_period_type]
-            if self.selected_period_type in self.calc_opts.get('periods', {}):
-                return [child for i, child in enumerate(children)
-                        if i in self.calc_opts['periods'][self.selected_period_type]]
-            else:
-                return children
-        else:
-            return self.get_all(attr)
+        return self.select_children(attr)
 
     def lfp_prep(self):
         self.prepare_periods()

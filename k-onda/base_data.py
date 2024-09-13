@@ -11,7 +11,9 @@ class Base:
 
     _calc_opts = {}
     _cache = defaultdict(dict)
-    filter = {}
+    _filter = {}
+    _selected_period_type = ''
+    _selected_neuron_type = ''
 
     @property
     def calc_opts(self):
@@ -30,8 +32,16 @@ class Base:
     def clear_cache(self):
         Base._cache = defaultdict(dict)
 
+    @property
+    def filter(self):
+        return Base._filter
+    
+    @filter.setter
+    def filter(self, filter):
+        Base._filter = filter
+
     def set_filter_from_calc_opts(self):
-        Base.filter = defaultdict(lambda: defaultdict(tuple))
+        self.filter = defaultdict(lambda: defaultdict(tuple))
         filters = self.calc_opts.get('filter', {})
         if isinstance(filters, list):
             filters = self.parse_natural_language_filters(filters)
@@ -57,6 +67,10 @@ class Base:
             operator = condition[be_index + 3:]
             to_return[obj_name][attr] = (operator, target_val)
         return to_return
+    
+    @property
+    def kind_of_data(self):
+        return self.calc_opts.get('kind_of_data')
 
     @property
     def calc_type(self):
@@ -67,28 +81,20 @@ class Base:
         self.calc_opts['calc_type'] = calc_type
 
     @property
-    def kind_of_data(self):
-        return self.calc_opts.get('kind_of_data')
-
-    @property
     def selected_neuron_type(self):
-        if not self.filter['unit']['neuron_type']:
-            return None
-        return self.filter['unit']['neuron_type'][1]
+        return Base._selected_neuron_type
 
     @selected_neuron_type.setter
     def selected_neuron_type(self, neuron_type):
-        self.filter['unit']['neuron_type'] = ('==', neuron_type)
+        Base._selected_neuron_type = neuron_type
 
     @property
     def selected_period_type(self):
-        if not self.filter['period']['period_type']:
-            return None
-        return self.filter['period']['period_type'][1]
-
+        return Base._selected_period_type
+        
     @selected_period_type.setter
     def selected_period_type(self, period_type):
-        self.filter['period']['period_type'] = ('==', period_type)
+        Base._selected_period_type = period_type
 
     @property
     def current_frequency_band(self):
@@ -124,9 +130,6 @@ class Base:
 
 class Data(Base):
 
-    summarizers = {'psth': np.mean, 'firing_rates': np.mean,
-                   'proportion': np.mean, 'spike_count': np.sum}
-
     def __init__(self):
         self.parent = None
 
@@ -137,8 +140,7 @@ class Data(Base):
     def get_calc(self, calc_type=None):
         if calc_type is None:
             calc_type = self.calc_type
-        data = getattr(self, f"get_{calc_type}")()
-        return data
+        return getattr(self, f"get_{calc_type}")()
 
     @property
     def calc(self):
@@ -207,31 +209,35 @@ class Data(Base):
             else:
                 raise ValueError(f"Invalid base method: {base_method}")
 
-        else: 
-            if not len(self.children):
-                return float('nan')
-            
-            child_vals = [child.get_average(base_method, level=level+1, stop_at=stop_at, axis=axis, 
-                                            **kwargs) for child in self.children]
+        if not len(self.children):
+            return float('nan')
         
-            child_vals = [val for val in child_vals if not self.is_nan(val)]
-                
-            if len(child_vals) and isinstance(child_vals[0], dict):
-                # Initialize defaultdict to automatically start lists for new keys
-                result_dict = defaultdict(list)
-    
-                # Aggregate values from each dictionary under their corresponding keys
-                for child_val in child_vals:
-                    for key, value in child_val.items():
-                        result_dict[key].append(value)
+        child_vals = []
 
-                # Calculate average of the list of values for each key
-                return_dict = {key: self.take_average(values, axis) 
-                               for key, values in result_dict.items()}
-                return return_dict
-                    
-            else:
-                return self.take_average(child_vals, axis)
+        for child in self.children:
+            if not child.include():
+                continue
+            child_val = child.get_average(
+                base_method, level=level+1, stop_at=stop_at, axis=axis, **kwargs)
+            if not self.is_nan(child_val):
+                child_vals.append(child_val)
+            
+        if len(child_vals) and isinstance(child_vals[0], dict):
+            # Initialize defaultdict to automatically start lists for new keys
+            result_dict = defaultdict(list)
+
+            # Aggregate values from each dictionary under their corresponding keys
+            for child_val in child_vals:
+                for key, value in child_val.items():
+                    result_dict[key].append(value)
+
+            # Calculate average of the list of values for each key
+            return_dict = {key: self.take_average(values, axis) 
+                            for key, values in result_dict.items()}
+            return return_dict
+                
+        else:
+            return self.take_average(child_vals, axis)
             
     @staticmethod        
     def take_average(vals, axis):
@@ -348,16 +354,8 @@ class Data(Base):
 
     @property
     def ancestors(self):
-        return self.get_ancestors()    
-    
-    def get_ancestors(self):
-       
-        if not hasattr(self, 'parent'):
-            return []
-        if not hasattr(self.parent, 'ancestors'):
-            return [self]
-        return [self] + self.parent.get_ancestors()
-    
+        return [self] + self.parent.ancestors
+        
     def get_descendants(self, stop_at=None, descendants=None, all=False):
    
         if descendants is None:
