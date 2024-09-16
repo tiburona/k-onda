@@ -5,7 +5,7 @@ import numpy as np
 
 from base_data import Data, TimeBin
 from data_generator import DataGenerator
-from period_constructor import PeriodConstructor
+from period_constructor import PeriodConstructorMethods
 from context import Subscriber
 from utils import cache_method, to_hashable
 from plotting_helpers import formatted_now
@@ -168,7 +168,7 @@ class Animal(SpikeData):
         return [pair for unit in self.units['good'] for pair in unit.pairs]
 
 
-class Unit(SpikeData, PeriodConstructor):
+class Unit(SpikeData, PeriodConstructorMethods):
     """A unit that was recorded from in the experiment, the child of an animal, parent of periods. Inherits from
     PeriodConstructorUpdates to build its children. Updates its children when the `selected_period_type` or the events
     structure (from data_opts) changes."""

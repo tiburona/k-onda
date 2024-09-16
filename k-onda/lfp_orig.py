@@ -11,7 +11,7 @@ from copy import deepcopy
 from experiment_group_animal import Data
 from base_data import TimeBin
 from context import experiment_context
-from period_constructor import PeriodConstructor
+from period_constructor import PeriodConstructorMethods
 from context import Subscriber
 from matlab_interface import MatlabInterface
 from math_functions import *
@@ -343,7 +343,7 @@ class LFPGroup(LFPData):
         self._children = [animal for animal in self.experiment.all_animals if animal.condition == self.identifier]
 
 
-class LFPAnimal(LFPData, PeriodConstructor):
+class LFPAnimal(LFPData, PeriodConstructorMethods):
     """An animal in the experiment. Processes the raw LFP data and divides it into periods."""
 
     name = 'animal'
@@ -554,7 +554,7 @@ class EventValidator:
         return {i: valid for i, valid in enumerate(validity[self.period_type][period.identifier])}
 
 
-class LFPPeriod(LFPData, PeriodConstructor, LFPDataSelector, EventValidator):
+class LFPPeriod(LFPData, PeriodConstructorMethods, LFPDataSelector, EventValidator):
     """A period in the experiment. Preprocesses data, initiates calls to Matlab to get the cross-spectrogram, and
     generates LFPEvents. Inherits from LFPSelector to be able to return portions of its data."""
 

@@ -1,4 +1,5 @@
 import numpy as np
+from copy import deepcopy
 from collections import defaultdict
 import pickle
 import json
@@ -7,6 +8,7 @@ import os
 from utils import cache_method
 from math_functions import sem
 
+
 class Base:
 
     _calc_opts = {}
@@ -14,6 +16,7 @@ class Base:
     _filter = {}
     _selected_period_type = ''
     _selected_neuron_type = ''
+    original_periods = None
 
     @property
     def calc_opts(self):
@@ -44,29 +47,34 @@ class Base:
         self.filter = defaultdict(lambda: defaultdict(tuple))
         filters = self.calc_opts.get('filter', {})
         if isinstance(filters, list):
-            filters = self.parse_natural_language_filters(filters)
-        for object_type in filters:
-            object_filters = self.calc_opts['filter'][object_type]
-            for property in object_filters:
-                self.filter[object_type][property] = object_filters[property]   
-        if self.calc_opts.get('validate_events'):
-            self.filter['event']['is_valid'] = ('==', True)
+            for filter in filters:
+                self.add_to_filter(self.parse_natural_language_filter(filter))
+        else:
+            for object_type in filters:
+                object_filters = self.calc_opts['filter'][object_type]
+                for property in object_filters:
+                    self.filter[object_type][property] = object_filters[property]   
+            if self.calc_opts.get('validate_events'):
+                self.filter['event']['is_valid'] = ('==', True)
 
+    def add_to_filters(self, obj_name, attr, operator, target_val):
+         self.filter[obj_name][attr] = (operator, target_val)
+
+    def del_from_filters(self, obj_name, attr):
+        del self.filter[obj_name][attr]
+    
     @staticmethod
-    def parse_natural_language_filters(filters):
-        # natural language filters should be a list like:
-        # [('for animals, identifier must be in', ['animal1', 'animal2']),
-        #  ('for units, quality must be !=', '3')] 
-
-        to_return = defaultdict(lambda: defaultdict(tuple))
-        for condition, target_val in filters:
-            split_condition = condition.split(' ')
-            obj_name = split_condition[1][:-2]
-            attr = split_condition[3]
-            be_index = condition.find('be')
-            operator = condition[be_index + 3:]
-            to_return[obj_name][attr] = (operator, target_val)
-        return to_return
+    def parse_natural_language_filter(filter):
+        # natural language filter should be a tubple like:
+        # ex1: ('for animals, identifier must be in', ['animal1', 'animal2'])
+        # ex2L ('for units, quality must be !=', '3')] 
+        condition, target_val = filter
+        split_condition = condition.split(' ')
+        obj_name = split_condition[1][:-2]
+        attr = split_condition[3]
+        be_index = condition.find('be')
+        operator = condition[be_index + 3:]
+        return obj_name, attr, operator, target_val
     
     @property
     def kind_of_data(self):
@@ -97,6 +105,26 @@ class Base:
         Base._selected_period_type = period_type
 
     @property
+    def selected_period_group(self):
+        return tuple(self.calc_opts['periods'][self.selected_period_type])
+    
+    @selected_period_group.setter
+    def selected_period_group(self, period_group):
+        self.original_periods = deepcopy(self.calc_opts['periods'])
+        self.calc_opts['periods'][self.selected_period_type] = period_group
+
+    def reset_periods(self):
+        self.period_group = self.original_periods
+
+    def call_method_with_period_groups(self, period_groups, method, data_source):
+        result = []
+        for p_group in period_groups[self.selected_period_type]:
+            self.selected_period_group = p_group
+            result.append(method(data_source))
+        self.reset_periods
+        return result
+    
+    @property
     def current_frequency_band(self):
         return self.calc_opts['frequency_band']
 
@@ -107,7 +135,7 @@ class Base:
     @property
     def current_brain_region(self):
         return self.calc_opts.get('brain_region')
-
+    
     @current_brain_region.setter
     def current_brain_region(self, brain_region):
         self.calc_opts['brain_region'] = brain_region
@@ -126,6 +154,14 @@ class Base:
             return self.experiment.info['frequency_bands'][self.current_frequency_band]
         else:
             return self.current_frequency_band
+        
+    @property
+    def pre_stim(self):
+        return self.calc_opts.get('events', {}).get(self.selected_period_type, {}).get('pre_stim')
+    
+    @property
+    def post_stim(self):
+        return self.calc_opts.get('events', {}).get(self.selected_period_type, {}).get('post_stim')
 
 
 class Data(Base):
@@ -153,6 +189,23 @@ class Data(Base):
     def include(self, check_ancestors=False):
         return self.select(self.filter, check_ancestors=check_ancestors)
     
+    def active(self):
+        return self.include() and self in self.parent.children
+    
+    @property
+    def parent_identifier(self):
+        try:
+            return self.parent.identifier
+        except AttributeError:
+            return None
+        
+    @property
+    def grandparent_identifier(self):
+        try:
+            return self.ancestors[-3].identifier
+        except IndexError:
+            return None
+            
     def select(self, filters, check_ancestors=False):
         operations = {
             '==': lambda a, b: a == b,
@@ -173,15 +226,12 @@ class Data(Base):
                 continue
             obj_filters = filters[obj.name]
             for attr in obj_filters:
-                try:
-                    if hasattr(obj, attr):
-                        object_value = getattr(obj, attr)
-                        operation_symbol, target_value = obj_filters[attr]
-                        function = operations[operation_symbol]
-                        if not function(object_value, target_value):
-                            return False
-                except Exception as e:
-                    a = 'foo'
+                if hasattr(obj, attr):
+                    object_value = getattr(obj, attr)
+                    operation_symbol, target_value = obj_filters[attr]
+                    function = operations[operation_symbol]
+                    if not function(object_value, target_value):
+                        return False
         return True
     
     @cache_method
@@ -409,87 +459,3 @@ class Data(Base):
             else:
                 result_str = json.dumps([arr.tolist() for arr in result])
                 f.write(result_str)
-
-    # def get_data(self, calc_type=None):
-        
-    #     if calc_type is None:
-    #         calc_type = self.calc_type
-
-    #     is_calculated = self.experiment.calculated_data.get(calc_type, False)
-
-    #     if not is_calculated:
-    #         level = self.base_levels[self.calc_type]
-    #         for ent in getattr(self.experiment, f"all_{level}s"):
-    #             getattr(ent, f"get_{self.calc_type}")()
-        
-    #     if self.name == level:
-    #         return self.data[self.calc_type]
-    #     else:
-    #         return self.summarize()
-
-   
-
-
-        
-    # def summarize(self, data, axis=0):
-
-    #     summary_func = np.mean
-        
-    #     for vals in data:
-    #         if isinstance(vals[0], dict):
-    #             vals = [v for val in vals for k, v in val.items() if not self.filter_out(k)]
-    #             return summary_func(self.summarize(vals), axis=axis)
-    #         else:
-    #             return [val for val in data.values()]
-
-    
-    # def summarize_from_data_frame(self, summarizer):
-    #     # TODO I need to figure this out
-    #     summarizer = self.summarizers[self.calc_type]
-    #     data = self.experiment.data_frames[self.calc_type]
-    #     data = self.filter_data_frame(data)
-    #     for ancestor in self.ancestors:
-    #         data = data[data[ancestor.name] == ancestor.identifier]
-
-    #     if self.calc_opts.get('time_type') == 'continuous':
-    #         continuous_time = True
-    #     else:
-    #         continuous_time = False
-        
-    #     if self.calc_opts.get('frequency_type') == 'continuous':
-    #         continuous_freq = True
-    #     else:
-    #         continuous_freq = False
-        
-    #     for level in reversed(self.hierarchy):
-    #         # group by all levels below this one, successively
-    #         if level == self.name:
-    #             break
-    #         group_levels = self.hierarchy[0:self.hierarchy.find(level)]
-    #         if self.calc_opts.get('time_type') == 'continuous':
-    #             group_levels.append('time')
-    #         if self.calc_opts.get('frequency_type') == 'continuous':
-    #             group_levels.append('frequency')
-    #         grouped_data = data.groupby(group_levels)
-    #         data = grouped_data.apply(summarizer).reset_index()
-
-    #     # TODO: going to have to add brain region and frequency to values string
-    #     if continuous_time and continuous_freq:
-    #         value = data.pivot(index='frequency', columns='time', values=self.calc_type).values
-    #     elif continuous_time or continuous_freq:
-    #         value = data[self.calc_type].values
-    #     else:
-    #         value = data[self.calc_type].iloc[0]
-
-    #     return value
-    
-    # def filter_data_frame(self, data):
-    #     # common filters: neuron_type, period_type, frequency, neuron quality
-    #     # expected form of filter
-    #     # {'period_type': 'tone'}
-
-    #     for key, val in self.current_filters.items():
-    #         data = data[data[key] == val]  
-    #         return data
-
-

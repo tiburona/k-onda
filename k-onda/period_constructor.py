@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class PeriodConstructor:
+class PeriodConstructorMethods:
 
     @property
     def earliest_period(self):
@@ -23,7 +23,7 @@ class PeriodConstructor:
             return self.get_all(attr)
 
     def prepare_periods(self):
-        self.period_class = self.kind_of_data_to_period_type[self.kind_of_data]
+        self.period_class = self.experiment.kind_of_data_to_period_type[self.kind_of_data]
         for boo, function in zip((False, True), (self.construct_periods, 
                                                  self.construct_relative_periods)):
             try:
@@ -37,7 +37,6 @@ class PeriodConstructor:
                 periods[period_type] = function(period_type, filtered_period_info[period_type])
 
     def construct_periods(self, period_type, period_info):
-        a = 'foo'
         periods = []
         if not period_info:
             return []
@@ -110,3 +109,10 @@ class PeriodConstructor:
             paired_period.paired_period = reference_period
             periods.append(reference_period)
         return periods
+    
+    def construct_combination_period(self):
+        # This is just a placeholder for something it's easy to imagine someone wanting to 
+        # implement, an average or a concatenation of more than one period, but for now you can 
+        # accomplish largely the same thing in the experiment specification, just by defining more 
+        # periods, even if they comprise other defined periods.
+        pass

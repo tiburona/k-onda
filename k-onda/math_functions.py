@@ -341,6 +341,14 @@ def regularize_angles(x):
     regularize = np.vectorize(lambda x: np.arctan2(np.sin(x), np.cos(x)))
     return regularize(x)
 
+def nearest_power_of_10(value):
+    if value == 0:
+        return 0
+    log10_value = math.log10(abs(value))
+    rounded_log10 = round(log10_value)
+    result = 10 ** rounded_log10
+    return result if value > 0 else -result
+
 
 
 

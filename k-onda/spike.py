@@ -4,13 +4,22 @@ from collections import defaultdict
 from bisect import bisect_left as bs_left, bisect_right as bs_right
 from base_data import Data
 from period_event import Period, Event
-from period_constructor import PeriodConstructor
+from period_constructor import PeriodConstructorMethods
 from spike_methods import SpikeMethods
 from math_functions import calc_rates, calc_hist, cross_correlation, correlogram
 from utils import cache_method
 
-  
-class Unit(Data, PeriodConstructor, SpikeMethods):
+
+class SpikeMethods:
+
+    def get_psth(self):
+        return self.get_average('get_psth', stop_at=self.calc_opts.get('base', 'event'))
+    
+    def get_firing_rates(self):
+        return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'))
+
+
+class Unit(Data, PeriodConstructorMethods, SpikeMethods):
 
     _name = 'unit'
     
@@ -183,6 +192,14 @@ class SpikeEvent(Event):
         max_lag, bin_size = (self.calc_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = round(max_lag / bin_size)
         return correlogram(lags, bin_size, self.spikes, self.spikes, 1)
-
     
 
+class SpikePrepMethods:
+
+    def select_spike_children(self):
+        if self.selected_neuron_type:
+            return getattr(self, self.selected_neuron_type)
+        else: 
+            return self.units['good']
+
+    

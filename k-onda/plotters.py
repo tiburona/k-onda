@@ -10,13 +10,13 @@ from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
-from matplotlib.gridspec import GridSpec
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.patches import Patch
 import matplotlib.ticker as ticker
 
-from math_functions import get_positive_frequencies, get_spectrum_fenceposts
+from math_functions import get_positive_frequencies, get_spectrum_fenceposts, nearest_power_of_10
 from plotting_helpers import smart_title_case, PlottingMixin
-from utils import to_serializable, formatted_now
+from utils import to_serializable
 from base_data import Base
 from stats import Stats
 from phy_interface import PhyInterface
@@ -48,95 +48,243 @@ class Plotter(Base):
         self.graph_opts = graph_opts
         self.experiment.initialize_data()
 
-    def create_figure_and_axes(
-            self, ax_key, data_sources, period_types=None, neuron_types=None, 
-            row_multiple=5, col_multiple=5, sharex=True, sharey=True):
+    def create_figures(self, source_type, subsets=None, partitions=None, dim_maxes=(2, 2), 
+        initialize_period='', plots_per_partition = (1, None)):
+        
+        # figure out how many rows and cols a single subplot has, and a single data source has
+        subplot_dims = [1, 1]
+        source_dims = [1, 1]
 
-        dims = {}
+        if all([v is not None and 'period_type' not in v for v in (subsets, partitions)]):
+            self.selected_period_type == initialize_period
 
-        for key, val in ax_key.items():
-            if val == 'data_source':
-                dims[key] = len(data_sources)
-            elif val == 'period_type':
-                dims[key] = len(period_types)
-            elif val == 'neuron_type':
-                dims[key] = len(neuron_types)
-            else:
-                raise NotImplementedError
+        for partition_type, partition_info in partitions.items():
+            num_members = len(partitions[partition_type]['members'])
+            if 'dim' in partition_info:
+                multiple = 1
+                #multiple = plots_per_partition[0] if plots_per_partition[1] == dim else 1  # TODO work through this in more detail
+                dim = partition_info['dim']
+                subplot_dims[dim] = multiple * num_members 
+            if partition_type != 'data_source':
+                source_dims[dim] = multiple * num_members
             
-        nrows = dims.get('rows', 1)
-        ncols = dims.get('cols', 1)
-
-        self.fig, axes = plt.subplots(
-            nrows=nrows, ncols=ncols, figsize=(row_multiple*ncols, col_multiple*nrows), 
-            sharex=sharex, sharey=sharey)
-
-        axes = np.atleast_2d(axes)
-
-        return axes
-
-    # iterate through divisions
-    # finally iterate through data_sources
-    # from there you can branch - you can start a new plot (possibly calling iterate through divisions again)
-    # or call the data processing function 
-
-    def iterate_through_divisions(self, data_sources, neuron_types=None, process_calc=None, 
-                                     periods=None, rows='data_source', cols='period_type'):
+        # Get the number of plots you can fit in a row or column, and the number of data souces that
+        # can fit in a figure. 
+        _, max_sources_in_fig = self.get_maxes(dim_maxes, source_dims)
+        max_plots_in_dims, _ = self.get_maxes(dim_maxes, subplot_dims)
+        max_plots_in_fig = min(max_plots_in_dims)
         
-        results = []
-        row = col = None
 
-        def assign_row_and_col_inds(division, ind, row, col):
-            if rows == division:
-                row = ind
-            if cols == division:
-                col = ind
-            return row, col       
+        # Any division of our plots is going to be within a figure, not between them.
+        if subsets is None:
+            s_set = getattr(self.experiment, f"all_{source_type}s")
+            self.create_figure(s_set, subplot_dims, max_plots_in_dims, partitions)
 
-        if not periods:
-            periods = {key: [None] for key in self.calc_opts['periods']} 
-
-        for i, data_source in enumerate(data_sources):
-            row, col = assign_row_and_col_inds('data_source', i, row, col) 
-
-            for j, pt in enumerate(periods.keys()):
-                self.selected_period_type = pt
-                row, col = assign_row_and_col_inds('period_type', j, row, col)
-
-                neuron_types = neuron_types if neuron_types else [None]
-                for k, nt in enumerate(neuron_types):
-                    row, col = assign_row_and_col_inds('neuron_type', k, row, col)
-                    if nt is not None:
-                        self.selected_neuron_type = nt
-
-                    p_list = periods[pt]
-                    original_periods = deepcopy(self.calc_opts['periods'])
-                    p_vals = []
-                    for p_group in p_list:
-                        if p_group:
-                            self.calc_opts['periods'][pt] = p_group
-                            p_vals.append(data_source.mean)
-
-                    self.calc_opts['periods'] = original_periods
-
-                    if process_calc:
-                        if row == None: row = 0
-                        if col == None: col = 0
-                        results.append(
-                            process_calc(data_source, row, col, pt=pt, nt=nt, p_list=p_list, 
-                                         p_vals=p_vals))
+        # Divide our plots so figures only contain one value of a partition (for instance, a figure 
+        # of only IN units).
+        else:
+            for subset, members in subsets:
+                for member in members:
+                    if subset in ['period_type', 'neuron_type']:
+                        setattr(self, f"selected_{subset}", member) 
                     else:
-                        results.append(data_source.calc)
-        
-        return results 
+                        self.add_to_filters(source_type, subset, '==', member) 
+                    sources = [s for s in getattr(self.experiment, f"all_{source_type}") 
+                                if s.active()]
+                    s_sets = self.divide_data_sources_into_sets(sources, max_sources_in_fig)
 
-    def iterate_through_data_sources(self, data_sources, process_calc, max_cols=3):
-        results = []
-        sets = self.get_sets_of_data_sources(data_sources, max_cols)
-        for i, ds_set in enumerate(sets):
-            for j, ds in enumerate(ds_set):
-                row, col = i, j
-                results.append(process_calc(ds, row, col,))
+                    for s_set in s_sets:
+                        self.create_figure(s_set, subplot_dims, max_plots_in_dims, partitions)
+                    self.del_from_filters(source_type, subset)
+
+    def get_maxes(self, max_dims, dims):
+        max_in_dims = [int(np.floor(mx_d/d)) for d, mx_d in zip(dims, reversed(max_dims))]
+        max_in_fig = max_in_dims[0] * max_in_dims[1]
+        return max_in_dims, max_in_fig
+                      
+    def create_figure(self, sources, subplot_dims, max_plots_in_dims, partitions):
+        
+        # Get the dimensions of the figure in subplots. (Subplots will later have their own internal
+        # dimensions). We first fill a row, then a column. The reverse is not currently implemented.
+        num_plots_in_fig = len(sources) if 'data_source' not in partitions else 1
+        gridrows = int(num_plots_in_fig/max_plots_in_dims[0])
+        gridcols = int(min(num_plots_in_fig, max_plots_in_dims[1]))
+
+        self.current_fig = plt.figure()
+        self.current_container_grid = GridSpec(gridrows, gridcols) # TODO add in something to make ratios and spacing configurable
+        self.get_gridspec_axes(self.current_fig, self.current_container_grid, gridrows, 
+                                     gridcols)
+
+        counter = 0
+        for row in range(gridrows):
+            for col in range(gridcols):
+                # if data_sources is in partitions, a single subplot has all the sources we've 
+                # passed. Otherwise, there is one source per subplot.
+                subplot_sources = sources if 'data_source' in partitions else [sources[counter]]
+                counter += 1
+                self.create_subplot(subplot_sources, subplot_dims, row, col, partitions)
+
+        self.save_and_close_fig()
+
+    def create_subplot(self, sources, subplot_dims, row, col, partitions):
+
+        self.current_subplot_grid = GridSpecFromSubplotSpec(
+            *subplot_dims, subplot_spec=self.current_container_grid[row, col])
+        self.get_gridspec_axes(self.current_fig, self.current_subplot_grid, *subplot_dims)  
+        self.iterate_over_partitions_and_fetch_calc(sources, partitions)
+
+    def get_gridspec_axes(self, fig, gridspec, numrows, numcols):
+
+        if numrows > 1 and numcols > 1:
+            axes = np.array([
+                [plt.Subplot(fig, gridspec[row, col]) for col in range(numcols)]
+                for row in range(numrows)
+            ])
+        elif numrows == 1 or numcols == 1: 
+            axes = np.array([plt.Subplot(fig, gridspec[i]) for i in range(max(numrows, numcols))])
+        else:
+            raise ValueError("Number of rows or columns must be greater than zero.")
+
+        for ax in np.ravel(axes):
+            fig.add_subplot(ax)
+
+        return axes        
+
+    def get_subplot_ax(self, gridspec_slice, invisible=False):
+        ax1 = plt.Subplot(self.fig, gridspec_slice)
+        self.fig.add_subplot(ax1)
+        if invisible:
+            ax1.tick_params(left=False, right=False, labelleft=False, labelbottom=False, bottom=False)
+            for position in ['top', 'right', 'bottom', 'left']:
+                ax1.spines[position].set_visible(False)
+        return ax1
+
+    def iterate_over_partitions_and_fetch_calc(self, sources, partitions):
+        """
+        Uses the information in `partitions` to make any relevant changes to calc_opts so that 
+        every final calculation will be on appropriately partitioned data: one data source, one 
+        neuron_type if applicable, one period_type if applicable, and however many period_groups 
+        are applicable. Gets the calculation from the data source.  Finally calls 
+        self.process_calc (defined on the descendant class that originally called the `plot` 
+        method) to plot the calculation on the ax.
+        """
+        
+        index = [None, None]
+
+        def assign_dims(partition_type, ind):
+            if partition_type not in partitions:
+                return
+            dim = partitions[partition_type].get('dim')
+            if dim is not None:
+                index[dim] = ind
+
+        neuron_types, period_types, period_groups = [
+            partitions.get(t, {}).get('members', [None]) 
+            for t in ('neuron_type', 'period_type', 'period_group') 
+        ]
+
+        results = []  
+
+        for i, source in enumerate(sources):
+            assign_dims('data_source', i)
+            for j, neuron_type in enumerate(neuron_types):
+                if neuron_type: self.selected_neuron_type = neuron_type
+                assign_dims('neuron_type', j)
+                for k, period_type in enumerate(period_types):
+                    if period_type: self.selected_period_type = period_type
+                    assign_dims('period_type', k)
+
+                    if period_groups[0]:
+                        calcs = self.call_method_with_period_groups(
+                            self, period_groups, lambda x: x.calc, source)
+                    else:
+                        calcs = [source.calc]
+                            
+                    ax = plt.Subplot(self.current_fig, 
+                                     self.current_subplot_grid[index[0], index[1]])
+                    self.current_fig.add_subplot(ax)
+
+                    results.append(self.process_calc(source, calcs, ax, partitions=partitions))    
+                        
+        return results
+
+    
+     # def create_figure_and_axes(
+    #         self, ax_key, data_sources, period_types=None, neuron_types=None, 
+    #         row_multiple=5, col_multiple=5, sharex=True, sharey=True):
+
+    #     dims = {}
+
+    #     for key, val in ax_key.items():
+    #         if val == 'data_source':
+    #             dims[key] = len(data_sources)
+    #         elif val == 'period_type':
+    #             dims[key] = len(period_types)
+    #         elif val == 'neuron_type':
+    #             dims[key] = len(neuron_types)
+    #         else:
+    #             raise NotImplementedError
+            
+    #     nrows = dims.get('rows', 1)
+    #     ncols = dims.get('cols', 1)
+
+    #     self.fig, axes = plt.subplots(
+    #         nrows=nrows, ncols=ncols, figsize=(row_multiple*ncols, col_multiple*nrows), 
+    #         sharex=sharex, sharey=sharey)
+
+    #     axes = np.atleast_2d(axes)
+
+    #     return axes
+
+    # def iterate_through_partitions(self, data_sources, neuron_types=None, process_calc=None, 
+    #                                  periods=None, rows='data_source', cols='period_type'):
+        
+    #     results = []
+    #     row = col = None
+
+    #     def assign_row_and_col_inds(partition, ind, row, col):
+    #         if rows == partition:
+    #             row = ind
+    #         if cols == partition:
+    #             col = ind
+    #         return row, col       
+
+    #     if not periods:
+    #         periods = {key: [None] for key in self.calc_opts['periods']} 
+
+    #     for i, data_source in enumerate(data_sources):
+    #         row, col = assign_row_and_col_inds('data_source', i, row, col) 
+
+    #         for j, pt in enumerate(periods.keys()):
+    #             self.selected_period_type = pt
+    #             row, col = assign_row_and_col_inds('period_type', j, row, col)
+
+    #             neuron_types = neuron_types if neuron_types else [None]
+    #             for k, nt in enumerate(neuron_types):
+    #                 row, col = assign_row_and_col_inds('neuron_type', k, row, col)
+    #                 if nt is not None:
+    #                     self.selected_neuron_type = nt
+
+    #                 p_list = periods[pt]
+    #                 original_periods = deepcopy(self.calc_opts['periods'])
+    #                 p_vals = []
+    #                 for p_group in p_list:
+    #                     if p_group:
+    #                         self.calc_opts['periods'][pt] = p_group
+    #                         p_vals.append(data_source.mean)
+
+    #                 self.calc_opts['periods'] = original_periods
+
+    #                 if process_calc:
+    #                     if row == None: row = 0
+    #                     if col == None: col = 0
+    #                     results.append(
+    #                         process_calc(data_source, row, col, pt=pt, nt=nt, p_list=p_list, 
+    #                                      p_vals=p_vals))
+    #                 else:
+    #                     results.append(data_source.calc)
+        
+    #     return results 
     
     def close_plot(self, basename):
         plt.tight_layout()
@@ -144,15 +292,14 @@ class Plotter(Base):
         self.set_dir_and_filename(basename)
         self.save_and_close_fig()
 
-    def save_and_close_fig(self):
-        dirs = [self.graph_opts['graph_dir']]
-        if self.dir_tags is not None:
-            dirs += self.dir_tags
+    def save_and_close_fig(self, basename=''):
+        dirs = [self.graph_opts['graph_dir'], self.calc_type]
         path = os.path.join(*dirs)
         os.makedirs(path, exist_ok=True)
-        self.fig.savefig(os.path.join(path, self.fname))
+        fname = basename if basename else self.calc_type
+        self.current_fig.savefig(os.path.join(path, fname))
         
-        opts_filename = self.fname.replace('png', 'txt')
+        opts_filename = fname.replace('png', 'txt')
         # Writing the dictionary to a file in JSON format
         with open(os.path.join(path, opts_filename), 'w') as file:
             json.dump(to_serializable(self.calc_opts), file)
@@ -210,180 +357,62 @@ class Plotter(Base):
             sets = [data_sources]
         return sets
 
-class PeriStimulusPlotter(Plotter, PlottingMixin):
+class HistogramPlotter(Plotter, PlottingMixin):
     """Makes plots where the x-axis is time around the stimulus, and y can be a variety of types of data."""
 
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
-        self.multiplier = 1 if self.plot_type == 'standalone' else 0.5
+        self.multiplier = 5 # figure out what affects this
 
+    def process_calc(self, source, calcs, ax, **_):
+        _, ylabel = self.get_labels()[self.calc_opts['calc_type']]
+
+        if f"{source.name}_colors" in self.graph_opts:
+            color = self.graph_opts[f"{source.name}_colors"][source.identifier]
+        else:
+            color = 'black'
+
+        x = np.linspace(-self.pre_stim, self.post_stim, len(source.calc))
+        ax.bar(x, calcs[0], width=self.calc_opts['bin_size'], color=color)
+    
+        ax.set_facecolor('white')
+        ax.patch.set_alpha(0.2)
+
+        try:
+            x_step, x_start = self.get_ticks() 
+        except AttributeError:
+            "executing class must have method get_ticks"
+
+        ax.set_xlim(x[0], x[-1])  
+        ax.set_xticks(np.arange(x_start, x[-1], step=x_step))
+        ax.tick_params(axis='both', which='major', labelsize=10 * self.multiplier, 
+                            length=5 * self.multiplier, width=2 * self.multiplier)
+      
+
+class PeriStimulusHistogramPlotter(HistogramPlotter):
+
+    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
+        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
+    
     def plot(self, calc_opts, graph_opts):
         self.initialize(calc_opts, graph_opts)
-        level = self.calc_opts['level']
-        if level == 'group':
-            self.plot_peristimulus_histogram('group')
-        elif level == 'animal':
-            for group in self.experiment.groups:
-                self.plot_animals(group)
-        elif level == 'unit':
-            [self.plot_units(animal) for group in self.experiment.groups for animal in group.children]
-        elif level == 'unit_pair':
-            [self.plot_unit_pairs(unit) for unit in self.experiment.all_units]
-        else:
-            print('unrecognized plot type')
+        self.selected_period_type = 'tone'
 
-    def plot_peristimulus_histogram(self, data_source='group'):
-             
-        def get_hist(data_source, row, col, pt, nt, **_):
-            nonlocal mins_and_maxes
-            ax = axes[row, col]
-            data = data_source.calc
-            self.make_subplot(
-                data_source, ax, title=f'{data_source.identifier} {nt}')
-            #hist = self.generate_hist(axes[row, col], data)
-            self.evaluate_mins_and_maxes(data_source, data, mins_and_maxes)
-            return data
+        if self.calc_opts.get('level') == 'group':
+            partitions = {
+                'neuron_type': {'dim': 0, 'members': self.experiment.neuron_types},
+                'data_source': {'dim': 1, 'members': self.experiment.all_groups}}
+            self.create_figures('group', partitions=partitions, dim_maxes=(2, 2)) 
 
-        ax_key = {'rows': 'data_source', 'cols': 'neuron_type'}
-        period_types = self.calc_opts['periods'].keys()
-        neuron_types = self.experiment.neuron_types
-
-        if data_source == 'group':
-            groups = self.experiment.groups
-            axes = self.create_figure_and_axes(ax_key, groups, period_types, neuron_types)
-            self.axes = axes
-            mins_and_maxes = self.initialize_mins_and_maxes(groups)
-            self.iterate_through_divisions(groups, neuron_types=neuron_types, rows='neuron_type',
-                                           cols='data_source', process_calc=get_hist)
-            if self.calc_type not in ['spontaneous_firing', 'cross_correlations']:
-                self.set_pip_patches()
-
-        if self.calc_type not in ['spontaneous_firing', 'cross_correlations']:
-            self.set_pip_patches()
-        if self.calc_type in ['cross_correlations', 'correlogram']:
-            n1, n2 = self.calc_opts['unit_pairs'][0].split(',')
-            self.set_labels(x_and_y_labels=('Lags (s)', f"{n1} to {n2}"))
-        else:
-            self.set_labels()
+    def get_ticks(self):
+    
+        x_step = self.graph_opts.get(
+            'tick_step', nearest_power_of_10((self.pre_stim + self.post_stim)/10))
         
-        self.close_plot(self.calc_type)
-
-    def make_subplot(self, data_source, ax, title=''):
-        subplotter = PeriStimulusSubplotter(self, data_source, self.graph_opts, ax, self.plot_type,
-                                            multiplier=self.multiplier)
-        subplotter.plot_data()
-        if self.graph_opts.get('sem'):
-            subplotter.add_sem()
-        self.prettify_subplot(ax, title=title, y_min=min(subplotter.y), y_max=max(subplotter.y))
-
-    def plot_unit_pairs(self, unit):
-        unit_pairs = unit.unit_pairs
-        pair_categories = set([unit_pair.pair_category for unit_pair in unit_pairs])
-        for pair_category in pair_categories:
-            data_sources = [pair for pair in unit_pairs if pair.pair_category == pair_category]
-            for i in range(0, len(data_sources), self.graph_opts['units_in_fig']):
-                self.plot_units_level_data(data_sources, i)
-                marker2 = min(i + self.graph_opts['units_in_fig'], len(data_sources))
-                self.close_plot(
-                    f"{unit.animal.identifier} {pair_category} unit {unit.identifier} pair {i + 1} to {marker2}")
-
-    def plot_units(self, animal):
-        for i in range(0, len(animal.children), self.graph_opts['units_in_fig']):
-            self.plot_units_level_data(animal.children, i)
-            marker2 = min(i + self.graph_opts['units_in_fig'], len(animal.children))
-            self.close_plot(f"{animal.identifier} unit {i + 1} to {marker2}")
-
-    def plot_units_level_data(self, data_sources, i):
-        multi = 2 if self.calc_type == 'psth' else 1
-        n_subplots = min(self.graph_opts['units_in_fig'], len(data_sources) - i)
-        self.fig = plt.figure(figsize=(15, 3 * multi * n_subplots))
-        self.fig.subplots_adjust(top=0.8, bottom=.14)
-        gs = GridSpec(n_subplots * multi, 1, figure=self.fig)
-        for j in range(i, i + n_subplots):
-            if self.calc_type == 'psth':
-                axes = [self.fig.add_subplot(gs[2 * (j - i), 0]), self.fig.add_subplot(gs[2 * (j - i) + 1, 0])]
-            else:
-                axes = [self.fig.add_subplot(gs[j - i, 0])]
-            self.plot_unit_level_data(data_sources[j], axes)
-        self.set_units_plot_frame_and_spacing()
-
-    def plot_unit_level_data(self, data_source, axes):
-        if self.calc_type == 'psth':
-            self.add_raster(data_source, axes)
-        subplotter = PeriStimulusSubplotter(self, data_source, self.graph_opts, axes[-1])
-        plotting_func = getattr(subplotter, f"plot_{self.calc_type}")
-        plotting_func()
-        if self.graph_opts.get('sem'):
-            subplotter.add_sem()
-
-    def add_raster(self, unit, axes):
-        subplotter = PeriStimulusSubplotter(self, unit, self.graph_opts, axes[0])
-        subplotter.y = unit.get_spikes_by_events()  # overwrites subplotter.y defined by calc_type, which is psth
-        subplotter.plot_raster()
-
-    def set_units_plot_frame_and_spacing(self):
-        # Add a big subplot without frame and set the x and y labels for this subplot
-        big_subplot = self.fig.add_subplot(111, frame_on=False)
-        big_subplot.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        big_subplot.set_xlabel(self.get_labels()[self.calc_type][0], labelpad=10, fontsize=14)
-        if not self.calc_type == 'psth':
-            self.set_labels(x_and_y_labels=('', self.get_labels()[self.calc_type][1]))
-        self.fig.subplots_adjust(top=0.8, bottom=0.2, hspace=0.5)
-
-    def get_ylim(self, ax, y_min, y_max):
-        self.y_min = min(self.y_min, ax.get_ylim()[0], y_min)
-        self.y_max = max(self.y_max, ax.get_ylim()[1], y_max)
-
-    def set_y_scales(self):
-        if self.graph_opts['equal_y_scales']:
-            [ax.set_ylim(self.y_min, self.y_max) for ax in self.axs.flatten()]
-
-    def set_pip_patches(self):
-        [ax.fill_betweenx([self.y_min, self.y_max], 0, self.experiment.stimulus_duration, color='k', alpha=0.2)
-         for ax in self.axes.flatten()]
-
-    def prettify_subplot(self, ax, title, y_min, y_max):
-        self.get_ylim(ax, y_min, y_max)
-        ax.set_title(title, fontsize=17 * self.multiplier)
-
-    def set_dir_and_filename(self, basename):
-        tags = [self.calc_type]
-        self.dir_tags = tags + [self.join_events('_')]
-        tags.insert(0, basename)
-        if self.selected_neuron_type:
-            tags += [self.selected_neuron_type]
-        self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
-        self.fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
-        if self.calc_opts.get('base'):
-            tags += [self.calc_opts.get('base')]
-        self.fname = f"{'_'.join(tags)}.png"
-
-    def join_events(self, s):
-        tag = ''
-        for key in self.calc_opts:
-            if 'event' in key:
-                tag += key + '_' + s.join([str(t) for t in self.calc_opts[key]])
-        return tag
-
-    def set_gridspec_axes(self, fig, gridspec, numrows, numcols, invisible_ax=None):
-        self.fig = fig
-        self.grid = gridspec
-
-        if numrows > 1 and numcols > 1:
-            self.axs = np.array([
-                [plt.Subplot(fig, gridspec[row, col]) for col in range(numcols)]
-                for row in range(numrows)
-            ])
-        elif numrows == 1 or numcols == 1:  # For case where only one row or one column
-            self.axs = np.array([plt.Subplot(fig, gridspec[i]) for i in range(max(numrows, numcols))])
-        else:
-            raise ValueError("Number of rows or columns must be greater than zero.")
-
-        for ax in np.ravel(self.axs):
-            fig.add_subplot(ax)
-
-        self.invisible_ax = invisible_ax
-
+        x_start = self.graph_opts.get(
+            'tick_start', x_step if self.pre_stim % x_step == 0 else self.pre_stim % x_step
+        )
+        return x_step, x_start 
 
 class PeriStimulusSubplotter(Plotter, PlottingMixin):
     """Constructs a subplot of a PeriStimulusPlot."""
@@ -443,7 +472,7 @@ class PeriStimulusSubplotter(Plotter, PlottingMixin):
 
     def plot_psth(self):
         pre, post = [self.calc_opts['events'][self.selected_period_type][opt] for opt in ['pre_stim', 'post_stim']]
-        xlabel, ylabel = self.get_labels()[self.calc_opts['calc_type']]
+        _, ylabel = self.get_labels()[self.calc_opts['calc_type']]
         self.plot_bar(width=self.calc_opts['bin_size'], x_min=-pre, x_max=post, num=len(self.y), x_tick_min=0,
                       x_step=self.g_opts['tick_step'], y_label=ylabel)
 
@@ -496,104 +525,6 @@ class PeriStimulusSubplotter(Plotter, PlottingMixin):
             return
         sem = self.data_source.sem_envelope
         self.ax.fill_between(self.x, self.y - sem, self.y + sem, color='blue', alpha=0.2)
-
-
-class GroupStatsPlotter(PeriStimulusPlotter):
-
-    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
-
-    def plot_group_stats(self, calc_opts, graph_opts=None, sig_markers=True):
-        self.initialize(calc_opts, graph_opts, neuron_type='all')
-        self.fig, self.axs = plt.subplots(2, 1, figsize=(15, 15))
-        self.current_ax = None
-        self.plot_group_stats_data(sig_markers=sig_markers)
-        self.close_plot('stats_plot')
-
-    def plot_group_stats_data(self, sig_markers=True):
-        self.stats = Stats(self.experiment, self.calc_opts)
-        
-        period_to_plot = self.graph_opts.get('period', 'tone')
-        pre_stim, post_stim = (self.calc_opts['events'][period_to_plot][opt] 
-                               for opt in ['pre_stim', 'post_stim'])
-        bin_size = self.calc_opts.get('bin_size')
-
-        for row, neuron_type in enumerate(self.experiment.neuron_types):
-            self.selected_neuron_type = neuron_type
-            for group in self.experiment.groups:
-                color = self.graph_opts['group_colors'][group.identifier]
-                x = np.arange(len(group.calc)) * bin_size
-                y = group.calc
-                if max(y) > self.y_max:
-                    self.y_max = max(y)
-                if min(y) < self.y_min:
-                    self.y_min = min(y)
-                self.axs[row].plot(x, y, label=group.identifier, color=color)
-                sem = group.get_sem()
-                self.axs[row].fill_between(x, y - sem, y + sem, color=color, alpha=0.2)
-
-            self.axs[row].set_title(f"{neuron_type}", fontsize=17 * self.multiplier, loc='left')
-            
-            self.axs[row].set_xticks(np.arange(pre_stim, post_stim, 
-                                               step=self.graph_opts['tick_step']))
-            self.axs[row].tick_params(axis='both', which='major', labelsize=10 * self.multiplier,
-                                      length=5 * self.multiplier, width=2 * self.multiplier)
-            self.current_ax = self.axs[row]
-            self.set_labels()
-
-        self.selected_neuron_type = None
-        
-        if sig_markers:
-            interaction_ps, neuron_type_specific_ps = self.stats.get_post_hoc_results()
-            self.add_significance_markers(interaction_ps, 'interaction')
-                
-        for row, neuron_type in enumerate(self.experiment.neuron_types):
-            self.axs[row].set_ylim(self.y_min * 1.1, self.y_max * 1.1)
-            self.axs[row].set_xlim(pre_stim, post_stim)
-            [self.axs[row].spines[side].set_visible(False) for side in ['top', 'right']]
-            if sig_markers:
-                 self.add_significance_markers(neuron_type_specific_ps[neuron_type], 
-                                              'within_condition', row=row, y=self.y_max * 1.05)
-
-           
-        self.place_legend()
-
-    def add_significance_markers(self, p_values, p_type, row=None, y=None):
-        bin_size = self.calc_opts.get('bin_size')
-        for time_bin, p_value in enumerate(p_values):
-            if p_value < .05:
-                self.get_significance_markers(row, p_type, time_bin, bin_size, y, p_values)
-
-    def get_significance_markers(self, row, p_type, time_bin, bin_size, y, p_values):
-        if p_type == 'within_condition':
-            self.axs[row].annotate('*', (time_bin * bin_size, y * 0.85), fontsize=20 * self.multiplier,
-                                   ha='center', color='black')
-        else:
-            self.get_interaction_text(time_bin, p_values)
-
-    def get_interaction_text(self, time_bin, p_values):
-        # calculate the x position as a fraction of the plot width
-        x = time_bin / len(p_values)
-        y = 0.485
-
-        if self.plot_type == 'standalone':
-            left = self.axs[0].get_position().xmin
-            right = self.axs[0].get_position().xmax
-            x = left + (right - left) * x
-
-        else:
-            gridspec_position = self.grid.get_subplot_params(self.fig)
-            x = gridspec_position.left + (gridspec_position.right - gridspec_position.left) * x
-            y = gridspec_position.bottom + (gridspec_position.top - gridspec_position.bottom) / 2 - .01
-
-        self.fig.text(x, y, "\u2020", fontsize=15 * self.multiplier, ha='center', color='black')
-
-    def place_legend(self):
-        if self.plot_type == 'standalone':
-            x, y = 1, 1
-            lines = [mlines.Line2D([], [], color=color, label=condition, linewidth=2 * self.multiplier)
-                     for color, condition in zip(['green', 'orange'], ['Control', 'Stressed'])]
-            self.fig.legend(handles=lines, loc='upper left', bbox_to_anchor=(x, y), prop={'size': 14 * self.multiplier})
 
 
 class PiePlotter(Plotter):
@@ -955,7 +886,7 @@ class LFPPlotter(Plotter):
 
             axes = self.create_figure_and_axes(ax_key, ds_set, pts)
             mins_and_maxes = self.initialize_mins_and_maxes(ds_set)
-            ims = self.iterate_through_divisions(ds_set, process_calc=get_ims)
+            ims = self.iterate_through_partitions(ds_set, process_calc=get_ims)
 
             if self.graph_opts.get('equal_color_scales') == 'by_subplot':
                 self.set_clim_and_make_colorbar(axes, ims, *mins_and_maxes['global'].values())

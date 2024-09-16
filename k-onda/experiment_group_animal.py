@@ -1,12 +1,11 @@
-from base_data import Data
-from utils import formatted_now
-from spike_methods import SpikeMethods
-from lfp_methods import LFPMethods, LFPPrepMethods
-from lfp_data_structures import LFPPeriod
-from spike_data_structures import SpikePeriod
 from collections import defaultdict
-from period_constructor import PeriodConstructor
+
+from base_data import Data
+from lfp import LFPPeriod, LFPMethods, LFPPrepMethods
+from spike import SpikePeriod, SpikeMethods, SpikePrepMethods
+from period_constructor import PeriodConstructorMethods
 from bins import BinMethods
+from utils import formatted_now
 
 
 class Experiment(Data):
@@ -25,6 +24,10 @@ class Experiment(Data):
         self.all_groups = None
         self.children = self.groups
         self._ancestors = [self]
+        self.kind_of_data_to_period_type = {
+            'lfp': LFPPeriod,
+            'spike': SpikePeriod
+        }
 
     @property
     def ancestors(self):
@@ -64,7 +67,6 @@ class Experiment(Data):
         if self.kind_of_data == 'spike':
             for unit in self.all_units:
                 unit.spike_prep()
-                a = 'foo'
         elif self.kind_of_data == 'lfp':
             for animal in self.all_animals:
                 if not animal.include():
@@ -73,7 +75,7 @@ class Experiment(Data):
         elif self.kind_of_data == 'behavior':
             pass
         else:
-            raise ValueError("Unknown data class") 
+            raise ValueError("Unknown kind of data") 
 
     def validate_lfp_events(self, calc_opts):
         self.calc_opts = calc_opts
@@ -96,7 +98,8 @@ class Group(Data, SpikeMethods, LFPMethods, BinMethods):
         self.children = self.animals
 
 
-class Animal(Data, PeriodConstructor, SpikeMethods, LFPPrepMethods, LFPMethods, BinMethods):
+class Animal(Data, PeriodConstructorMethods, SpikePrepMethods, SpikeMethods, LFPPrepMethods, 
+             LFPMethods, BinMethods):
     _name = 'animal'
 
     def __init__(self, identifier, condition, animal_info, experiment=None, neuron_types=None):
@@ -110,19 +113,14 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPPrepMethods, LFPMethods, 
         if neuron_types is not None:
             for nt in neuron_types:
                 setattr(self, nt, [])
+        self._processed_lfp = {}
         self.units = defaultdict(list)
         self.lfp_periods = defaultdict(list)
         self.mrl_calculators = defaultdict(list)
+        self.granger_calculators = defaultdict(list)
         self.coherence_calculators = defaultdict(list)
         self.correlation_calculators = defaultdict(list)
-        self.granger_calculators = defaultdict(list)
         self.phase_relationship_calculators = defaultdict(list)
-        self.raw_lfp = None 
-        self._processed_lfp = {}
-        self.kind_of_data_to_period_type = {
-            'lfp': LFPPeriod,
-            'spike_period': SpikePeriod
-        }
         self.lfp_event_validity = defaultdict(dict)
 
     @property

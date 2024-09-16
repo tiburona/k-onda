@@ -1,12 +1,14 @@
 import json
 import os
 
-from plotters import PeriStimulusPlotter, GroupStatsPlotter, PiePlotter, NeuronTypePlotter, MRLPlotter, LFPPlotter
+from matplotlib.pylab import cond
+
+from plotters import PeriStimulusHistogramPlotter, PiePlotter, NeuronTypePlotter, MRLPlotter, LFPPlotter
 from stats import Stats
 from initialize_experiment import Initializer
 
 peristimulus_plots = {
-    f"plot_{calc_type}": {'class': PeriStimulusPlotter, 'method': 'plot'}
+    f"plot_{calc_type}": {'class': PeriStimulusHistogramPlotter, 'method': 'plot'}
     for calc_type in [
         'psth', 'proportion', 'autocorrelation', 'spectrum', 'cross_correlation', 'autocorrelogram'
     ]}
@@ -20,7 +22,7 @@ lfp_procs = {f'plot_{meth}': {'class': LFPPlotter, 'method': f'plot_{meth}'} for
               'max_correlations', 'granger']}
 
 other_procedures = {
-    'plot_group_stats': {'class': GroupStatsPlotter, 'method': 'plot_group_stats'},
+    #'plot_group_stats': {'class': GroupStatsPlotter, 'method': 'plot_group_stats'},
     'make_spreadsheet': {'class': Stats, 'method': 'make_df', 'follow_up': 'make_spreadsheet'},
     'unit_upregulation_pie_chart': {'class': PiePlotter, 'method': 'unit_upregulation_pie_chart'},
     'neuron_type_scatterplot': {'class': NeuronTypePlotter, 'method': 'scatterplot'},
@@ -96,15 +98,32 @@ class Runner:
 
     def apply_rules(self):
         rules = self.current_calc_opts['rules']
-        # Assuming rules is a dictionary like: {'calc_type': {'mrl': [('time_type', 'block')]}}
-        for data_key, conditions in rules.items():
-            if data_key not in self.current_calc_opts:
-                raise ValueError(f"Key '{data_key}' not found in calc_opts")
-            for trigger_val, vals_to_assign in conditions.items():
-                for target_key, val_to_assign in vals_to_assign:
-                    if self.current_calc_opts[data_key] == trigger_val:
-                        self.current_calc_opts[target_key] = val_to_assign
+        if isinstance(rules, dict):
+            for rule in rules:
+                self.assign_per_rule(*self.parse_natural_language_rule(rule))
+        else:          
+            # Assuming rules is a dictionary like: {'calc_type': {'mrl': [('time_type', 'block')]}}
+            for trigger_k, conditions in rules.items():
+                for trigger_v, target_vals in conditions.items():
+                    for target_k, target_v in target_vals:
+                        self.assign_per_rule(trigger_k, trigger_v, target_k, target_v)
+    
+    def assign_per_rule(self, trigger_k, trigger_v, target_k, target_v):
+        if trigger_k not in self.current_calc_opts:
+            raise ValueError(f"Key '{trigger_k}' not found in calc_opts")
+        if self.current_calc_opts[trigger_k] == trigger_v:
+            self.current_calc_opts[target_k] = target_v
 
+    def parse_natural_language_rule(self, rule):
+        # assuming rule is a tuple like ('if brain_region is bla', frequency_band is', 'theta')
+        # or ('if brain_region is bla, frequency_bands are',  ['theta_1', 'theta_2'])
+        string, target_val = rule
+        split_string = '_'.split(string)
+        trigger_key = split_string[1]
+        trigger_val = split_string[3][:-1]
+        target_key = split_string[4]
+        return trigger_key, trigger_val, target_key, target_val
+        
     def validate(self):
         # TODO: update animal selection validation
         all_animal_ids = [animal.identifier for animal in self.experiment.all_animals]

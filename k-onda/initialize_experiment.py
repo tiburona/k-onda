@@ -8,7 +8,7 @@ from scipy.signal import firwin, lfilter
 
 
 from experiment_group_animal import Experiment, Group, Animal
-from spike_data_structures import Unit
+from spike import Unit
 from behavior import Behavior
 
 
