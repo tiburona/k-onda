@@ -207,8 +207,155 @@ class Plotter(Base):
                     results.append(self.process_calc(source, calcs, ax, partitions=partitions))    
                         
         return results
+    
+class PartitionProcessor(Base):
+
+    def __init__(self, parent_plotter, partition_dict):
+        super().__init__()
+        self.parent_plotter = parent_plotter
+        self.subplot_spec = partition_dict.pop('subplot') if 'subplot' in partition_dict else None
+        self.segment_spec = partition_dict.pop('segment') if 'segment' in partition_dict else None
+            
+    def process_partition_level(self, current_partition, partition_type, partitions, sources, 
+                                index=None):
+        
+        # todo this doesn't make sense.  if sources is a partition you must iterate
+        # over sources
+      
+        if index is None:
+            index = [None, None]
+
+        for i, member in enumerate(current_partition['members']):
+            dim = current_partition.get('dim')
+            if dim is not None:
+                index[dim] = i
+
+            if partition_type != 'data_source':
+                getattr(self, f"selected_{partition_type}") = member
+
+            # Process nested partitions recursively
+            if len(partitions) > 1:
+                remaining_partitions = {k: v for k, v in partitions.items() if k != partition_type}
+                self.process_partition_level(next(iter(remaining_partitions.items())), 
+                                             remaining_partitions, sources, index)
+        else:
+            if self.child_subplot_spec:
+                self.subplot_from_subplot_spec(self.child_subplot_spec)
+            else:
+                if self.segment_spec:
+                    results = [self.process_calc(source) for source in sources]
+
+        return results
+    
+    def segment(self, segment_spec, sources):
+        results = []
+
+        if segment_spec.get('is_partition'):
+            pp = PartitionProcessor(segment_spec['partition'])
+            args = 'foo'
+            results = pp.process_partition_level(*args)
+        else:
+            for member in segment_spec['members']:
+                if segment_spec['segment_type'] != 'data_source':
+                    getattr(self.experiment, f"selected_{partition_type}") = member
+
+                    
+
+
+            
+                
+                
+
+
+            
+
+        
 
     
+
+
+class Subplotter(Base):
+
+    def __init__(self, fig, parent_grid_spec, index, sources, subsets=None, partition_spec=None, 
+                 segments=None, plots_per_source = (1, 1)):
+        super.__int__()
+        self.fig = fig
+        self.parent_grid_spec = parent_grid_spec
+        self.index = index
+        self.sources = sources
+        self.subsets = subsets
+        if partition_spec:
+            self.partition_processor = PartitionProcessor(self, partition_spec)
+        else:
+            self.partition_processor = None
+        self.segments = segments
+        self.plots_per_source = plots_per_source
+        self.grid = self.create_grid()
+
+    def sublot_spec_to_args():
+        # this should take the subplot_spec and 
+        pass
+
+    def get_partitions(self):
+        self.partitions = self.p
+
+    def generate_child_subplot(self, subplot_spec):
+        index = 'foo'
+        sources = 'foo'
+        partitions = 'foo'
+        return Subplotter(self.fig, self.grid, index, sources)
+    
+    def get_child_subplots_and_process_data(self):
+        if self.partition_processor:
+            self.partition_processor.process_partition_level() # need to add first key, val pair in dict here
+
+    def calculate_my_dimensions(self):
+         
+        subplot_dims = []
+        source_dims = []
+
+        for partition_type, partition_info in self.partitions.items():
+            num_members = len(self.partitions[partition_type]['members'])
+            dim = partition_info.get('dim')
+            if not dim:
+                continue
+            multiple = self.plots_per_source[dim]
+            subplot_dims[dim] = multiple * num_members 
+            if partition_type != 'data_source':
+                source_dims[dim] = multiple * num_members
+        return subplot_dims, source_dims
+
+    def create_grid(self):
+        subplot_dims, _ = self.calculate_my_dimensions()
+        gs = GridSpecFromSubplotSpec(*subplot_dims, subplot_spec=self.parent_grid_spec[*self.index])
+        return gs
+    
+    def get_all_axes(self):
+        axes = []
+        dims = self.calculate_dimensions()
+        for i in range(dims(i)):
+            for j in range(dims(j)):
+                ax = self.get(self.parent_grid_spec[*self.index])
+                axes.append(ax)
+        return axes
+    
+    def get_ax(self, gridspec_slice):
+        ax = plt.Subplot(self.fig, gridspec_slice)
+        self.fig.add_subplot(ax)
+        return ax
+
+    @staticmethod
+    def assign_dims(current_partition, index, ind):
+        dim = current_partition.get('dim')
+        if dim is not None:
+            index[dim] = ind
+
+    
+def process_segment(self, source):
+    pass
+
+
+
      # def create_figure_and_axes(
     #         self, ax_key, data_sources, period_types=None, neuron_types=None, 
     #         row_multiple=5, col_multiple=5, sharex=True, sharey=True):

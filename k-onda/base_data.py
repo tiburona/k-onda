@@ -110,19 +110,19 @@ class Base:
     
     @selected_period_group.setter
     def selected_period_group(self, period_group):
-        self.original_periods = deepcopy(self.calc_opts['periods'])
+        # self.original_periods = deepcopy(self.calc_opts['periods'])
         self.calc_opts['periods'][self.selected_period_type] = period_group
 
-    def reset_periods(self):
-        self.period_group = self.original_periods
+    # def reset_periods(self):
+    #     self.period_group = self.original_periods
 
-    def call_method_with_period_groups(self, period_groups, method, data_source):
-        result = []
-        for p_group in period_groups[self.selected_period_type]:
-            self.selected_period_group = p_group
-            result.append(method(data_source))
-        self.reset_periods
-        return result
+    # def call_method_with_period_groups(self, period_groups, method, data_source):
+    #     result = []
+    #     for p_group in period_groups[self.selected_period_type]:
+    #         self.selected_period_group = p_group
+    #         result.append(method(data_source))
+    #     self.reset_periods
+    #     return result
     
     @property
     def current_frequency_band(self):
