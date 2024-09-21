@@ -31,7 +31,7 @@ class LFPPrepMethods:
         except OSError:
             return {}
         reader.parse_header()
-        if all([k not in self.animal_info for k in ['lfp_electrodes', 'lfp_from_stereotrodes']]):
+        if all(k not in self.animal_info for k in ('lfp_electrodes', 'lfp_from_stereotrodes')):
             return {}
         data_to_return = {region: reader.nsx_datas[3][0][:, val]
                           for region, val in self.animal_info['lfp_electrodes'].items()}

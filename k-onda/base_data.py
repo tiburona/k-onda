@@ -110,19 +110,7 @@ class Base:
     
     @selected_period_group.setter
     def selected_period_group(self, period_group):
-        # self.original_periods = deepcopy(self.calc_opts['periods'])
         self.calc_opts['periods'][self.selected_period_type] = period_group
-
-    # def reset_periods(self):
-    #     self.period_group = self.original_periods
-
-    # def call_method_with_period_groups(self, period_groups, method, data_source):
-    #     result = []
-    #     for p_group in period_groups[self.selected_period_type]:
-    #         self.selected_period_group = p_group
-    #         result.append(method(data_source))
-    #     self.reset_periods
-    #     return result
     
     @property
     def current_frequency_band(self):
@@ -155,6 +143,11 @@ class Base:
         else:
             return self.current_frequency_band
         
+    def get_data_sources(self, data_object_type=None):
+        if not data_object_type:
+            data_object_type = self.calc_opts['level']
+        return getattr(self.experiment, f"all_{data_object_type}s")
+        
     @property
     def pre_stim(self):
         return self.calc_opts.get('events', {}).get(self.selected_period_type, {}).get('pre_stim')
@@ -176,6 +169,9 @@ class Data(Base):
     def get_calc(self, calc_type=None):
         if calc_type is None:
             calc_type = self.calc_type
+        concatenate = self.calc_opts.get('concatenate', {}).get(self.name)
+        if concatenate:
+            return self.concatenate()
         return getattr(self, f"get_{calc_type}")()
 
     @property
@@ -282,19 +278,12 @@ class Data(Base):
                     result_dict[key].append(value)
 
             # Calculate average of the list of values for each key
-            return_dict = {key: self.take_average(values, axis) 
+            return_dict = {key: np.nanmean(values, axis) 
                             for key, values in result_dict.items()}
             return return_dict
                 
         else:
-            return self.take_average(child_vals, axis)
-            
-    @staticmethod        
-    def take_average(vals, axis):
-        if axis is None:  # compute mean over all dimensions
-            return np.nanmean(np.array(vals))
-        else:  # compute mean over provided dimension
-            return np.nanmean(np.array(vals), axis=axis)
+            return np.nanmean(child_vals, axis)
         
     @property
     def mean(self):
@@ -376,10 +365,13 @@ class Data(Base):
             return True
         elif isinstance(value, np.ndarray) and np.all(np.isnan(value)):
             return True
-        elif isinstance(value, dict) and all([self.is_nan(val) for val in value.values()]):
+        elif isinstance(value, dict) and all(self.is_nan(val) for val in value.values()):
             return True                                
         else:
             return False
+        
+    def concatenate(self):
+        return np.array([child.calc for child in self.children])
 
     @property
     def hierarchy(self):

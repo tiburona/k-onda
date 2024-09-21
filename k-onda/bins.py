@@ -47,6 +47,8 @@ class TimeBin(Bin):
 class TimeBinMethods:
          
     def get_time_bins(self, data):
+        if data.shape > 2 and all(dim > 1 for dim in data.shape):
+            return [TimeBin(i, slice_, self, data) for i, slice_ in enumerate(data[..., -1])]
         return [TimeBin(i, data_point, self, data) for i, data_point in enumerate(data)]
 
     @property
@@ -94,6 +96,9 @@ class FrequencyBin(Bin, TimeBinMethods):
     
     
 class FrequencyBinMethods:
+
+    # TODO: consider whether in the future if the possible dimensionality of data grows 
+    # you are really going to need explicit trackers of what dim is what.
 
     def get_frequency_bins(self, data):
         return [FrequencyBin(i, data_point, self, data) for i, data_point in enumerate(data)]

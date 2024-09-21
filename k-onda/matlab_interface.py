@@ -80,7 +80,7 @@ class MatlabInterface:
 
         timeout = 360
         start_time = time.time()
-        while not all([os.path.exists(path) for path in results_paths]):
+        while not all(os.path.exists(path) for path in results_paths):
             if time.time() - start_time >= timeout:
                 raise TimeoutError(f"Timeout after {timeout} seconds while waiting for file {self.result_file_path}")
             time.sleep(1)  # Wait for 1 second

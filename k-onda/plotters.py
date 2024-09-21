@@ -22,25 +22,66 @@ from stats import Stats
 from phy_interface import PhyInterface
 
 
-class Plotter(Base):
+class Subset:
+    pass
+
+class Section:
+    pass
+
+class Segment:
+    pass
+
+class PlotBase(Base):
+    _experiment = None
+    _origin_plotter = None
+    _current_plotter = None
+    _current_figurer = None
+    _current_ax = None
+    
+    @property
+    def experiment(self):
+        return PlotBase._experiment
+    
+    @property
+    def origin_plotter(self):
+        return Plotter._origin_plotter
+    
+    @origin_plotter.setter
+    def origin_plotter(self, origin_plotter):
+        Plotter._origin_plotter = origin_plotter 
+
+    @property
+    def active_plotter(self):
+        return PlotBase._current_plotter
+    
+    @active_plotter.setter
+    def active_plotter(self, current_plotter):
+        PlotBase._current_plotter = current_plotter 
+
+    @property
+    def active_figurer(self):
+        return PlotBase._active_figurer
+    
+    @active_figurer.setter
+    def active_figurer(self, active_figurer):
+        PlotBase._active_figurer = active_figurer
+
+    @property
+    def active_ax(self):
+        return PlotBase._current_ax
+    
+    @active_ax.setter
+    def active_ax(self, current_ax):
+        PlotBase._current_ax = current_ax 
+   
+
+class Plotter(PlotBase):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple 
     plots of multiple kinds of data, see the figure module."""
 
-    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
-        self.experiment = experiment
+    def __init__(self, experiment, graph_opts=None):
+        PlotBase._experiment = experiment
         self.graph_opts = graph_opts
-        self.plot_type = plot_type
-        self.fig = None
-        self.axs = None
-        self.y_min = float('inf')
-        self.y_max = float('-inf')
-        self.fname = ''
-        self.title = ''
-        self.dir_tags = None
-        self.stats = None
-        self.full_axes = None
-        self.invisible_ax = None
-        self.grid = None
 
     def initialize(self, calc_opts, graph_opts):
         """Both initializes values on self and sets values for the context."""
@@ -48,390 +89,256 @@ class Plotter(Base):
         self.graph_opts = graph_opts
         self.experiment.initialize_data()
 
-    def create_figures(self, source_type, subsets=None, partitions=None, dim_maxes=(2, 2), 
-        initialize_period='', plots_per_partition = (1, None)):
-        
-        # figure out how many rows and cols a single subplot has, and a single data source has
-        subplot_dims = [1, 1]
-        source_dims = [1, 1]
+    def process_plot_spec(self, plot_spec, sources=None):
 
-        if all([v is not None and 'period_type' not in v for v in (subsets, partitions)]):
-            self.selected_period_type == initialize_period
+        # for psth, plot spec should look like:
+        # ('section', 
+        # {'data_source': {'members': self.experiment.all_groups, 'dim': 0}, 
+        # 'neuron_type': {'members': ['PN', 'IN'], 'dim': 3}
+        # }}
 
-        for partition_type, partition_info in partitions.items():
-            num_members = len(partitions[partition_type]['members'])
-            if 'dim' in partition_info:
-                multiple = 1
-                #multiple = plots_per_partition[0] if plots_per_partition[1] == dim else 1  # TODO work through this in more detail
-                dim = partition_info['dim']
-                subplot_dims[dim] = multiple * num_members 
-            if partition_type != 'data_source':
-                source_dims[dim] = multiple * num_members
+
+        processor_classes = {
+            'section': Section,
+            'segment': Segment,
+            'subset': Subset
+        }
+
+        processor_type, processor_info = plot_spec
+        processor = processor_classes[processor_type](
+            self, self, processor_type, processor_info, sources
+        )
+        processor.start()
             
-        # Get the number of plots you can fit in a row or column, and the number of data souces that
-        # can fit in a figure. 
-        _, max_sources_in_fig = self.get_maxes(dim_maxes, source_dims)
-        max_plots_in_dims, _ = self.get_maxes(dim_maxes, subplot_dims)
-        max_plots_in_fig = min(max_plots_in_dims)
-        
-
-        # Any division of our plots is going to be within a figure, not between them.
-        if subsets is None:
-            s_set = getattr(self.experiment, f"all_{source_type}s")
-            self.create_figure(s_set, subplot_dims, max_plots_in_dims, partitions)
-
-        # Divide our plots so figures only contain one value of a partition (for instance, a figure 
-        # of only IN units).
-        else:
-            for subset, members in subsets:
-                for member in members:
-                    if subset in ['period_type', 'neuron_type']:
-                        setattr(self, f"selected_{subset}", member) 
-                    else:
-                        self.add_to_filters(source_type, subset, '==', member) 
-                    sources = [s for s in getattr(self.experiment, f"all_{source_type}") 
-                                if s.active()]
-                    s_sets = self.divide_data_sources_into_sets(sources, max_sources_in_fig)
-
-                    for s_set in s_sets:
-                        self.create_figure(s_set, subplot_dims, max_plots_in_dims, partitions)
-                    self.del_from_filters(source_type, subset)
-
-    def get_maxes(self, max_dims, dims):
-        max_in_dims = [int(np.floor(mx_d/d)) for d, mx_d in zip(dims, reversed(max_dims))]
-        max_in_fig = max_in_dims[0] * max_in_dims[1]
-        return max_in_dims, max_in_fig
-                      
-    def create_figure(self, sources, subplot_dims, max_plots_in_dims, partitions):
-        
-        # Get the dimensions of the figure in subplots. (Subplots will later have their own internal
-        # dimensions). We first fill a row, then a column. The reverse is not currently implemented.
-        num_plots_in_fig = len(sources) if 'data_source' not in partitions else 1
-        gridrows = int(num_plots_in_fig/max_plots_in_dims[0])
-        gridcols = int(min(num_plots_in_fig, max_plots_in_dims[1]))
-
-        self.current_fig = plt.figure()
-        self.current_container_grid = GridSpec(gridrows, gridcols) # TODO add in something to make ratios and spacing configurable
-        self.get_gridspec_axes(self.current_fig, self.current_container_grid, gridrows, 
-                                     gridcols)
-
-        counter = 0
-        for row in range(gridrows):
-            for col in range(gridcols):
-                # if data_sources is in partitions, a single subplot has all the sources we've 
-                # passed. Otherwise, there is one source per subplot.
-                subplot_sources = sources if 'data_source' in partitions else [sources[counter]]
-                counter += 1
-                self.create_subplot(subplot_sources, subplot_dims, row, col, partitions)
-
-        self.save_and_close_fig()
-
-    def create_subplot(self, sources, subplot_dims, row, col, partitions):
-
-        self.current_subplot_grid = GridSpecFromSubplotSpec(
-            *subplot_dims, subplot_spec=self.current_container_grid[row, col])
-        self.get_gridspec_axes(self.current_fig, self.current_subplot_grid, *subplot_dims)  
-        self.iterate_over_partitions_and_fetch_calc(sources, partitions)
-
-    def get_gridspec_axes(self, fig, gridspec, numrows, numcols):
-
-        if numrows > 1 and numcols > 1:
-            axes = np.array([
-                [plt.Subplot(fig, gridspec[row, col]) for col in range(numcols)]
-                for row in range(numrows)
-            ])
-        elif numrows == 1 or numcols == 1: 
-            axes = np.array([plt.Subplot(fig, gridspec[i]) for i in range(max(numrows, numcols))])
-        else:
-            raise ValueError("Number of rows or columns must be greater than zero.")
-
-        for ax in np.ravel(axes):
-            fig.add_subplot(ax)
-
-        return axes        
-
-    def get_subplot_ax(self, gridspec_slice, invisible=False):
-        ax1 = plt.Subplot(self.fig, gridspec_slice)
-        self.fig.add_subplot(ax1)
-        if invisible:
-            ax1.tick_params(left=False, right=False, labelleft=False, labelbottom=False, bottom=False)
-            for position in ['top', 'right', 'bottom', 'left']:
-                ax1.spines[position].set_visible(False)
-        return ax1
-
-    def iterate_over_partitions_and_fetch_calc(self, sources, partitions):
-        """
-        Uses the information in `partitions` to make any relevant changes to calc_opts so that 
-        every final calculation will be on appropriately partitioned data: one data source, one 
-        neuron_type if applicable, one period_type if applicable, and however many period_groups 
-        are applicable. Gets the calculation from the data source.  Finally calls 
-        self.process_calc (defined on the descendant class that originally called the `plot` 
-        method) to plot the calculation on the ax.
-        """
-        
-        index = [None, None]
-
-        def assign_dims(partition_type, ind):
-            if partition_type not in partitions:
-                return
-            dim = partitions[partition_type].get('dim')
-            if dim is not None:
-                index[dim] = ind
-
-        neuron_types, period_types, period_groups = [
-            partitions.get(t, {}).get('members', [None]) 
-            for t in ('neuron_type', 'period_type', 'period_group') 
-        ]
-
-        results = []  
-
-        for i, source in enumerate(sources):
-            assign_dims('data_source', i)
-            for j, neuron_type in enumerate(neuron_types):
-                if neuron_type: self.selected_neuron_type = neuron_type
-                assign_dims('neuron_type', j)
-                for k, period_type in enumerate(period_types):
-                    if period_type: self.selected_period_type = period_type
-                    assign_dims('period_type', k)
-
-                    if period_groups[0]:
-                        calcs = self.call_method_with_period_groups(
-                            self, period_groups, lambda x: x.calc, source)
-                    else:
-                        calcs = [source.calc]
-                            
-                    ax = plt.Subplot(self.current_fig, 
-                                     self.current_subplot_grid[index[0], index[1]])
-                    self.current_fig.add_subplot(ax)
-
-                    results.append(self.process_calc(source, calcs, ax, partitions=partitions))    
-                        
-        return results
+    def make_fig(self):
+        self.active_figurer = Figurer()
+        self.active_plotter = Subplotter(self.active_figurer, [0, 0], first = True)
+        self.active_ax = self.active_plotter.get_ax(self.active_figurer.gs[0, 0])
+        return self.active_figurer, self.active_plotter, self.active_ax 
     
-class PartitionProcessor(Base):
+    def close_plot(self, basename='', fig=None):
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85)
+        if not fig:
+            fig = self.active_figurer.fig  
+        self.set_dir_and_filename(fig, basename)
+        self.save_and_close_fig(fig, basename)
 
-    def __init__(self, parent_plotter, partition_dict):
+    def set_dir_and_filename(self, fig, basename):
+        tags = [basename] if basename else [self.calc_type]
+        self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
+        fig.suptitle(self.title, weight='bold', y=.95, fontsize=20)
+        self.fname = f"{'_'.join(tags)}.png"
+
+    def save_and_close_fig(self, fig, basename):
+        dirs = [self.graph_opts['graph_dir'], self.calc_type]
+        path = os.path.join(*dirs)
+        os.makedirs(path, exist_ok=True)
+        fname = basename if basename else self.calc_type
+        fig.savefig(os.path.join(path, fname))
+        opts_filename = fname.replace('png', 'txt')
+
+        with open(os.path.join(path, opts_filename), 'w') as file:
+            json.dump(to_serializable(self.calc_opts), file)
+        plt.close(fig)
+
+
+class Partition(PlotBase):
+
+    def __init__(self, origin_plotter, parent_plotter, processor_type, specification, sources=None, 
+                 fig=None, index=None):
         super().__init__()
+        self.origin_plotter = origin_plotter
         self.parent_plotter = parent_plotter
-        self.subplot_spec = partition_dict.pop('subplot') if 'subplot' in partition_dict else None
-        self.segment_spec = partition_dict.pop('segment') if 'segment' in partition_dict else None
-            
-    def process_partition_level(self, current_partition, partition_type, partitions, sources, 
-                                index=None):
-        
-        # todo this doesn't make sense.  if sources is a partition you must iterate
-        # over sources
-      
-        if index is None:
-            index = [None, None]
+        self.specification = specification
+        self.sources = sources
+        self.next = None
+        self.index = None
+        for k in ('segment', 'section'):
+            if k in specification:
+                self.next = (k, specification.pop(k))
+        self.info = {}
+        if fig == None:
+            self.fig, self.active_plotter, self.ax = self.parent_plotter.make_fig()
+            self.index = [0, 0]
+        self.prep()
 
-        for i, member in enumerate(current_partition['members']):
-            dim = current_partition.get('dim')
-            if dim is not None:
-                index[dim] = i
+    def start(self, sources=None):
+        if sources is None:
+            sources = self.sources
+        if sources is None:
+            sources = self.get_data_sources()
+        self.process_divider(*next(iter(self.specification.items())), self.specification, sources)
 
-            if partition_type != 'data_source':
-                getattr(self, f"selected_{partition_type}") = member
+    def process_divider(self, divider_type, current_divider, divisions, sources):
 
-            # Process nested partitions recursively
-            if len(partitions) > 1:
-                remaining_partitions = {k: v for k, v in partitions.items() if k != partition_type}
-                self.process_partition_level(next(iter(remaining_partitions.items())), 
-                                             remaining_partitions, sources, index)
-        else:
-            if self.child_subplot_spec:
-                self.subplot_from_subplot_spec(self.child_subplot_spec)
+        for i, member in enumerate(current_divider['members']):
+            self.set_dims(current_divider, i)
+            if divider_type == 'data_type':
+                sources = [member]
+                self.current_info['source'] = member.identifier
             else:
-                if self.segment_spec:
-                    results = [self.process_calc(source) for source in sources]
+                setattr(self, f"selected_{divider_type}", member)
+                self.info[divider_type] = member
 
-        return results
-    
-    def segment(self, segment_spec, sources):
-        results = []
+            if len(divisions) > 1:
+                remaining_divisions = {k: v for k, v in divisions.items() if k != divider_type}
+                self.process_divider(*next(iter(remaining_divisions.items())), remaining_divisions, sources)
+            else:
+                self.wrap_up()
+                    # there are three kinds of actions to take here
+                    # 1) if I am a subset, generate a new figure
+                    # 2) if I am a section, generate a new subplot
 
-        if segment_spec.get('is_partition'):
-            pp = PartitionProcessor(segment_spec['partition'])
-            args = 'foo'
-            results = pp.process_partition_level(*args)
+                    # 3) if I am a segment, add to the dict and list that are going to 
+                    # make the dataframe.
+                    # if i = len(current_divider['members'] - 1):
+                    # 
+
+                if self.next:
+                    processor_type, _ = self.next
+                    processor = self.processor_classes[processor_type](
+                        self.current_plotter, *self.followup, sources, info=self.current_info)
+                    processor.start()
+                
+                
+
+class Section(Partition):
+    def __init__(self, origin_plotter, parent_plotter, processor_type, specification, sources=None, 
+                 info=None, index=[None, None]):
+          super().__init__(origin_plotter, parent_plotter, processor_type, specification, sources, info)
+          self.index = index
+
+    def set_dims(self, current_divider, i):
+        if 'dim' in current_divider:
+            self.index[current_divider['dim']] = i
+
+    def prep(self):
+        self.active_plotter = Subplotter(self.active_plotter, self.index, self.specification, 
+                                          self.sources)
+
+
+    def wrap_up(self):
+        ax = self.active_plotter.axes[*self.index]
+
+        if self.next:
+            # do next thing
+            pass
         else:
-            for member in segment_spec['members']:
-                if segment_spec['segment_type'] != 'data_source':
-                    getattr(self.experiment, f"selected_{partition_type}") = member
-
-                    
-
-
-            
+            # make data frame
+            data = []
+            columns = []
+            for k, v in self.info.items():
+                if k == 'data_source':
+                    columns.append(v.name)
+                    data.append(v.identifier)
+                    columns.append('calc')
+                    data.append(v.calc)
+                else:
+                    columns.append(k)
+                    data.append(v)
+            data_frame = pd.DataFrame([data], columns=columns)
                 
-                
+            self.origin_plotter.process_calc(data_frame, ax=ax)
 
+          
 
+class Figurer(Base):
             
+    def __init__(self):
+        self.fig = plt.figure()
+        self.gs = GridSpec(1, 1, figure=self.fig)
 
-        
 
-    
+class Subplotter(Plotter):
 
-
-class Subplotter(Base):
-
-    def __init__(self, fig, parent_grid_spec, index, sources, subsets=None, partition_spec=None, 
-                 segments=None, plots_per_source = (1, 1)):
-        super.__int__()
-        self.fig = fig
-        self.parent_grid_spec = parent_grid_spec
+    def __init__(self, parent, index, spec=None, sources=None, first=False):
+        self.fig = self.active_figurer.fig
+        self.parent = parent
         self.index = index
         self.sources = sources
-        self.subsets = subsets
-        if partition_spec:
-            self.partition_processor = PartitionProcessor(self, partition_spec)
-        else:
-            self.partition_processor = None
-        self.segments = segments
-        self.plots_per_source = plots_per_source
-        self.grid = self.create_grid()
+        self.spec = spec
+        self.first = first
+        self.gs = self.create_grid()
+        self._axes = None
 
-    def sublot_spec_to_args():
-        # this should take the subplot_spec and 
-        pass
-
-    def get_partitions(self):
-        self.partitions = self.p
-
-    def generate_child_subplot(self, subplot_spec):
-        index = 'foo'
-        sources = 'foo'
-        partitions = 'foo'
-        return Subplotter(self.fig, self.grid, index, sources)
+    @property
+    def axes(self):
+        if self._axes is None:
+            self._axes = self.get_all_axes()
+        return self._axes
     
-    def get_child_subplots_and_process_data(self):
-        if self.partition_processor:
-            self.partition_processor.process_partition_level() # need to add first key, val pair in dict here
+    @property
+    def dims(self):
+        return self.calculate_my_dimensions()
 
     def calculate_my_dimensions(self):
-         
-        subplot_dims = []
-        source_dims = []
-
-        for partition_type, partition_info in self.partitions.items():
-            num_members = len(self.partitions[partition_type]['members'])
-            dim = partition_info.get('dim')
-            if not dim:
-                continue
-            multiple = self.plots_per_source[dim]
-            subplot_dims[dim] = multiple * num_members 
-            if partition_type != 'data_source':
-                source_dims[dim] = multiple * num_members
-        return subplot_dims, source_dims
-
+        dims = [1, 1]
+        if self.first:
+            return dims
+        for division in self.spec.values():
+            if 'dim' in division:
+                dims[division['dim']] = len(division['members'])
+        return dims
+        
     def create_grid(self):
-        subplot_dims, _ = self.calculate_my_dimensions()
-        gs = GridSpecFromSubplotSpec(*subplot_dims, subplot_spec=self.parent_grid_spec[*self.index])
+        gs = GridSpecFromSubplotSpec(*self.calculate_my_dimensions(), 
+                                     subplot_spec=self.parent.gs[*self.index])
         return gs
     
     def get_all_axes(self):
-        axes = []
-        dims = self.calculate_dimensions()
-        for i in range(dims(i)):
-            for j in range(dims(j)):
-                ax = self.get(self.parent_grid_spec[*self.index])
-                axes.append(ax)
-        return axes
+        return np.array([
+            [self.get_ax(self.gs[i, j]) for j in range(self.dims[1])] for i in range(self.dims[0])
+            ])
     
     def get_ax(self, gridspec_slice):
         ax = plt.Subplot(self.fig, gridspec_slice)
         self.fig.add_subplot(ax)
         return ax
 
-    @staticmethod
-    def assign_dims(current_partition, index, ind):
-        dim = current_partition.get('dim')
-        if dim is not None:
-            index[dim] = ind
+class HistogramPlotter(Plotter):
+    
+    def __init__(self, experiment):
+        super().__init__(experiment)
+    
+    def plot_hist(self, x, y, width, ax):
+        ax.bar(x, y, width=width)        
+
+
+class PeriStimulusHistogramPlotter(HistogramPlotter):
+
+    def __init__(self, experiment):
+        super().__init__(experiment)
+
+    def plot(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
+        if not graph_opts.get('plot_spec'):
+            plot_spec = (
+                'section', 
+                {'neuron_type': {'dim': 0, 'members': self.experiment.neuron_types},
+                 'data_source': {'dim': 1, 'members': self.experiment.all_groups},
+                 'period_type': {'members': list(self.calc_opts['periods'].keys())}}
+                 )
+        self.process_plot_spec(plot_spec)
+        self.close_plot()
+
+    def process_calc(self, data_frame, ax):
+        #self.do_stuff_like_set_title(data_frame)
+        num_bins = round((self.pre_stim + self.post_stim)/self.calc_opts['bin_size'])
+        x = np.linspace(self.pre_stim, self.post_stim, num_bins)
+        y = data_frame['calc'].iloc[0]
+        self.plot_hist(x, y, self.calc_opts['bin_size'], ax)
+    
+    def add_stimulus_patch(self):
+        pass
 
     
-def process_segment(self, source):
-    pass
 
 
+   
 
-     # def create_figure_and_axes(
-    #         self, ax_key, data_sources, period_types=None, neuron_types=None, 
-    #         row_multiple=5, col_multiple=5, sharex=True, sharey=True):
 
-    #     dims = {}
-
-    #     for key, val in ax_key.items():
-    #         if val == 'data_source':
-    #             dims[key] = len(data_sources)
-    #         elif val == 'period_type':
-    #             dims[key] = len(period_types)
-    #         elif val == 'neuron_type':
-    #             dims[key] = len(neuron_types)
-    #         else:
-    #             raise NotImplementedError
-            
-    #     nrows = dims.get('rows', 1)
-    #     ncols = dims.get('cols', 1)
-
-    #     self.fig, axes = plt.subplots(
-    #         nrows=nrows, ncols=ncols, figsize=(row_multiple*ncols, col_multiple*nrows), 
-    #         sharex=sharex, sharey=sharey)
-
-    #     axes = np.atleast_2d(axes)
-
-    #     return axes
-
-    # def iterate_through_partitions(self, data_sources, neuron_types=None, process_calc=None, 
-    #                                  periods=None, rows='data_source', cols='period_type'):
-        
-    #     results = []
-    #     row = col = None
-
-    #     def assign_row_and_col_inds(partition, ind, row, col):
-    #         if rows == partition:
-    #             row = ind
-    #         if cols == partition:
-    #             col = ind
-    #         return row, col       
-
-    #     if not periods:
-    #         periods = {key: [None] for key in self.calc_opts['periods']} 
-
-    #     for i, data_source in enumerate(data_sources):
-    #         row, col = assign_row_and_col_inds('data_source', i, row, col) 
-
-    #         for j, pt in enumerate(periods.keys()):
-    #             self.selected_period_type = pt
-    #             row, col = assign_row_and_col_inds('period_type', j, row, col)
-
-    #             neuron_types = neuron_types if neuron_types else [None]
-    #             for k, nt in enumerate(neuron_types):
-    #                 row, col = assign_row_and_col_inds('neuron_type', k, row, col)
-    #                 if nt is not None:
-    #                     self.selected_neuron_type = nt
-
-    #                 p_list = periods[pt]
-    #                 original_periods = deepcopy(self.calc_opts['periods'])
-    #                 p_vals = []
-    #                 for p_group in p_list:
-    #                     if p_group:
-    #                         self.calc_opts['periods'][pt] = p_group
-    #                         p_vals.append(data_source.mean)
-
-    #                 self.calc_opts['periods'] = original_periods
-
-    #                 if process_calc:
-    #                     if row == None: row = 0
-    #                     if col == None: col = 0
-    #                     results.append(
-    #                         process_calc(data_source, row, col, pt=pt, nt=nt, p_list=p_list, 
-    #                                      p_vals=p_vals))
-    #                 else:
-    #                     results.append(data_source.calc)
-        
-    #     return results 
+class Misc:
     
     def close_plot(self, basename):
         plt.tight_layout()
@@ -504,62 +411,62 @@ def process_segment(self, source):
             sets = [data_sources]
         return sets
 
-class HistogramPlotter(Plotter, PlottingMixin):
-    """Makes plots where the x-axis is time around the stimulus, and y can be a variety of types of data."""
+# class HistogramPlotter(Plotter, PlottingMixin):
+#     """Makes plots where the x-axis is time around the stimulus, and y can be a variety of types of data."""
 
-    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
-        self.multiplier = 5 # figure out what affects this
+#     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
+#         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
+#         self.multiplier = 5 # figure out what affects this
 
-    def process_calc(self, source, calcs, ax, **_):
-        _, ylabel = self.get_labels()[self.calc_opts['calc_type']]
+#     def process_calc(self, source, calcs, ax, **_):
+#         _, ylabel = self.get_labels()[self.calc_opts['calc_type']]
 
-        if f"{source.name}_colors" in self.graph_opts:
-            color = self.graph_opts[f"{source.name}_colors"][source.identifier]
-        else:
-            color = 'black'
+#         if f"{source.name}_colors" in self.graph_opts:
+#             color = self.graph_opts[f"{source.name}_colors"][source.identifier]
+#         else:
+#             color = 'black'
 
-        x = np.linspace(-self.pre_stim, self.post_stim, len(source.calc))
-        ax.bar(x, calcs[0], width=self.calc_opts['bin_size'], color=color)
+#         x = np.linspace(-self.pre_stim, self.post_stim, len(source.calc))
+#         ax.bar(x, calcs[0], width=self.calc_opts['bin_size'], color=color)
     
-        ax.set_facecolor('white')
-        ax.patch.set_alpha(0.2)
+#         ax.set_facecolor('white')
+#         ax.patch.set_alpha(0.2)
 
-        try:
-            x_step, x_start = self.get_ticks() 
-        except AttributeError:
-            "executing class must have method get_ticks"
+#         try:
+#             x_step, x_start = self.get_ticks() 
+#         except AttributeError:
+#             "executing class must have method get_ticks"
 
-        ax.set_xlim(x[0], x[-1])  
-        ax.set_xticks(np.arange(x_start, x[-1], step=x_step))
-        ax.tick_params(axis='both', which='major', labelsize=10 * self.multiplier, 
-                            length=5 * self.multiplier, width=2 * self.multiplier)
+#         ax.set_xlim(x[0], x[-1])  
+#         ax.set_xticks(np.arange(x_start, x[-1], step=x_step))
+#         ax.tick_params(axis='both', which='major', labelsize=10 * self.multiplier, 
+#                             length=5 * self.multiplier, width=2 * self.multiplier)
       
 
-class PeriStimulusHistogramPlotter(HistogramPlotter):
+# class PeriStimulusHistogramPlotter(HistogramPlotter):
 
-    def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
-        super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
+#     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
+#         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
     
-    def plot(self, calc_opts, graph_opts):
-        self.initialize(calc_opts, graph_opts)
-        self.selected_period_type = 'tone'
+#     def plot(self, calc_opts, graph_opts):
+#         self.initialize(calc_opts, graph_opts)
+#         self.selected_period_type = 'tone'
 
-        if self.calc_opts.get('level') == 'group':
-            partitions = {
-                'neuron_type': {'dim': 0, 'members': self.experiment.neuron_types},
-                'data_source': {'dim': 1, 'members': self.experiment.all_groups}}
-            self.create_figures('group', partitions=partitions, dim_maxes=(2, 2)) 
+#         if self.calc_opts.get('level') == 'group':
+#             partitions = {
+#                 'neuron_type': {'dim': 0, 'members': self.experiment.neuron_types},
+#                 'data_source': {'dim': 1, 'members': self.experiment.all_groups}}
+#             self.create_figures('group', partitions=partitions, dim_maxes=(2, 2)) 
 
-    def get_ticks(self):
+#     def get_ticks(self):
     
-        x_step = self.graph_opts.get(
-            'tick_step', nearest_power_of_10((self.pre_stim + self.post_stim)/10))
+#         x_step = self.graph_opts.get(
+#             'tick_step', nearest_power_of_10((self.pre_stim + self.post_stim)/10))
         
-        x_start = self.graph_opts.get(
-            'tick_start', x_step if self.pre_stim % x_step == 0 else self.pre_stim % x_step
-        )
-        return x_step, x_start 
+#         x_start = self.graph_opts.get(
+#             'tick_start', x_step if self.pre_stim % x_step == 0 else self.pre_stim % x_step
+#         )
+#         return x_step, x_start 
 
 class PeriStimulusSubplotter(Plotter, PlottingMixin):
     """Constructs a subplot of a PeriStimulusPlot."""
