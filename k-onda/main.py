@@ -13,8 +13,9 @@ def main():
 
 
 def run(log=True):
-    runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json')
-    runner.run('plot_psth', RUNNER_OPTS) 
+    #runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json')
+    runner = Runner(config_file='/Users/katie/likhtik/MS_26/init_config.json')
+    runner.run('plot_scatter', RUNNER_OPTS) 
                #prep={'method': 'validate_lfp_events', 'calc_opts': VALIDATION_DATA_OPTS})
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')

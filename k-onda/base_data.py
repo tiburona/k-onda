@@ -143,10 +143,18 @@ class Base:
         else:
             return self.current_frequency_band
         
-    def get_data_sources(self, data_object_type=None):
+    def get_data_sources(self, data_object_type=None, identifiers=None, identifier=None):
         if not data_object_type:
-            data_object_type = self.calc_opts['level']
-        return getattr(self.experiment, f"all_{data_object_type}s")
+            data_object_type = self.calc_opts['base']
+            if data_object_type in ['period', 'event']:
+                data_object_type = f"{self.kind_of_data}_{data_object_type}"
+        data_sources = getattr(self.experiment, f"all_{data_object_type}s")
+        if identifiers:
+            return [source for source in data_sources if source.identifier in identifiers]
+        if identifier:
+            return [source for source in data_sources if source.identifier == identifier][0]
+
+
         
     @property
     def pre_stim(self):
@@ -169,9 +177,6 @@ class Data(Base):
     def get_calc(self, calc_type=None):
         if calc_type is None:
             calc_type = self.calc_type
-        concatenate = self.calc_opts.get('concatenate', {}).get(self.name)
-        if concatenate:
-            return self.concatenate()
         return getattr(self, f"get_{calc_type}")()
 
     @property
@@ -333,17 +338,6 @@ class Data(Base):
                 vals = [np.mean(val) for val in vals]
 
             return sem(vals)
-        
-    @property
-    def scatter(self):
-        return self.get_scatter_points()
-        
-    def get_scatter_points(self):
-        """Returns a list of points of the data values for an object's children for use on, e.g. 
-        a bar graph"""
-        if not self.children:
-            return []
-        return [np.nanmean(child.data) for child in self.children]
                 
     @staticmethod
     def extend_into_bins(sources, extend_by):
@@ -358,7 +352,7 @@ class Data(Base):
             stop_at = self.calc_opts.get('stop_at')
         vals_to_summarize = self.get_descendants(stop_at=stop_at)
         vals_to_summarize = self.extend_into_bins(vals_to_summarize, extend_by)
-        return np.median([obj.data for obj in vals_to_summarize])
+        return np.median([obj.calc for obj in vals_to_summarize])
 
     def is_nan(self, value):
         if isinstance(value, float) and np.isnan(value):
@@ -369,9 +363,58 @@ class Data(Base):
             return True                                
         else:
             return False
+    
+    @property
+    def concatenation(self):
+        return self.concatenate()
+    
+    def concatenate(self, method=None, level=-1):   
+        return np.concatenate(self.accumulate(method=method, level=level)[level])
+   
+    @property
+    def scatter(self):
+        return self.accumulate(default_attr='mean', level=-1)[-1]
+    
+    def accumulate(self, method=None, level=-1, default_attr='calc', accumulator=None):
+        """Accumulate values by applying a method or default attribute, and gather them into lists."""
         
-    def concatenate(self):
-        return np.array([child.calc for child in self.children])
+        # Initialize the accumulator as a dictionary if not provided
+        if accumulator is None:
+            accumulator = {}
+
+        # Extend the list at the given level with individual results from each child
+        process_results = lambda results, acc: acc.setdefault(level, []).extend(results) or acc
+
+        # Call the recursive apply method to gather results
+        return self.recursive_apply(
+            method=method, level=level, default_attr=default_attr, 
+            accumulator=accumulator, process_results=process_results)
+
+
+
+    def recursive_apply(self, method=None, level=-1, default_attr=None, accumulator=None, process_results=None):
+        """Generalized recursive function to apply a method or default method to children."""
+        
+        # Function to apply either the passed method or the default attribute
+        f = lambda x: method(x) if method else getattr(x, default_attr)
+
+        # Base case: if we are at the desired level, apply function to self or children
+        if level >= 0:
+            if not hasattr(self, 'children') or not len(self.children):
+                return f(self)  # No children, apply to self
+
+            else:
+                # Apply to each child and collect the results into a list (don't concatenate yet)
+                child_results = [f(child) for child in self.children]
+                return process_results(child_results, accumulator)  # Append results to accumulator
+            
+        # Recursive case: if we are not at the desired level, go deeper
+        else:
+            return self.recursive_apply(
+                method=method, level=level+1, default_attr=default_attr, 
+                accumulator=accumulator, process_results=process_results)
+
+  
 
     @property
     def hierarchy(self):

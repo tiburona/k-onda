@@ -304,7 +304,7 @@ class Period(SpikeData):
         return np.mean(self.get_unadjusted_counts())
 
     def find_equivalent(self, unit):
-        return [period for period in unit.children][self.identifier]
+        return [period for period in unit.children][self.identifier] 
 
 
 class Event(SpikeData):

@@ -40,19 +40,13 @@ class PeriodConstructorMethods:
         periods = []
         if not period_info:
             return []
-        num_events = len([event for events_list in period_info['events'] for event in
-                          events_list])  # all the events for this period type
-
-        if self.calc_opts.get('events', {}).get(period_type, {}).get('selection') is not None:
-            events = slice(*self.calc_opts['events'][period_type]['selection'])
-        else:
-            events = slice(0, num_events) # default is to take all events
-        # indices of the events used in this data analysis
-        selected_event_indices = list(range(num_events))[events]  
         # the time stamp of the beginning of a period
-        period_onsets = period_info['onsets']  
-        # the time stamps of things that happen within the period   
-        period_events = period_info['events']          
+        period_onsets = period_info['onsets'] 
+        
+        period_events, selected_event_indices = self.event_times_and_indices(
+            period_info, period_type, period_onsets
+        )
+                 
         if self.kind_of_data == 'lfp': # type: ignore
             conversion_factor = self.lfp_sampling_rate/self.sampling_rate # type: ignore
             # For LFP, you need a subtraction for 0 indexing. For spikes, onsets are used to 
@@ -64,13 +58,34 @@ class PeriodConstructorMethods:
         # rate with which their onsets were recorded.  Conversion to LFP sampling rates takes place
         # in the init function of those periods.
         for i, (onset, events) in enumerate(zip(period_onsets, period_events)):
-
-            period_events = np.array([
-                ev for j, ev in enumerate(events) if event_ind + j in selected_event_indices])
-            event_ind += len(period_info['events'][i])
+            if events:
+                period_events = np.array([
+                    ev for j, ev in enumerate(events) if event_ind + j in selected_event_indices])
+                event_ind += len(period_info['events'][i])
+            else:
+                period_events = []
             periods.append(self.period_class(self, i, period_type, period_info, onset, 
                                              events=period_events, experiment=self.experiment)) # type: ignore
         return periods
+    
+    def event_times_and_indices(self, period_info, period_type, period_onsets):
+        if not period_info.get('events'):
+            return [[] for _ in period_onsets], None
+        else:
+            # the time stamps of things that happen within the period   
+            period_events = period_info['events'] 
+
+            num_events = len([event for events_list in period_events for event in
+                            events_list])  # all the events for this period type
+
+            if self.calc_opts.get('events', {}).get(period_type, {}).get('selection') is not None:
+                events = slice(*self.calc_opts['events'][period_type]['selection'])
+            else:
+                events = slice(0, num_events) # default is to take all events
+            # indices of the events used in this data analysis
+            selected_event_indices = list(range(num_events))[events]  
+
+            return period_events, selected_event_indices
 
     def construct_relative_periods(self, period_type, period_info):
 
@@ -93,10 +108,14 @@ class PeriodConstructorMethods:
             if self.name == 'animal':  # type: ignore
                 shift -= sum(self.calc_opts['lfp_padding']) # type: ignore
             shift_in_samples = shift * sampling_rate
-            event_duration = paired_period.period_info['event_duration'] * sampling_rate
             onset = paired_period.onset + shift_in_samples
-
             event_starts = []
+            event_duration = paired_period
+            if paired_period.period_info.get('event_duration'):
+                event_duration = paired_period.period_info['event_duration'] * sampling_rate
+            else:
+                event_duration = None
+
             for es in paired_period.event_starts:
                 ref_es = es + shift_in_samples
                 if ref_es + event_duration <= paired_period.onset:

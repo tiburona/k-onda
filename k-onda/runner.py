@@ -3,7 +3,7 @@ import os
 
 from matplotlib.pylab import cond
 
-from plotters import PeriStimulusHistogramPlotter, PiePlotter, NeuronTypePlotter, MRLPlotter, LFPPlotter
+from plotters import PeriStimulusHistogramPlotter, PiePlotter, NeuronTypePlotter, MRLPlotter, LFPPlotter,CategoricalScatterPlotter
 from stats import Stats
 from initialize_experiment import Initializer
 
@@ -26,7 +26,8 @@ other_procedures = {
     'make_spreadsheet': {'class': Stats, 'method': 'make_df', 'follow_up': 'make_spreadsheet'},
     'unit_upregulation_pie_chart': {'class': PiePlotter, 'method': 'unit_upregulation_pie_chart'},
     'neuron_type_scatterplot': {'class': NeuronTypePlotter, 'method': 'scatterplot'},
-    'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'}
+    'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'},
+    'plot_scatter': {'class': CategoricalScatterPlotter, 'method': 'plot'}
 }
 
 PROCEDURE_DICT = {**peristimulus_plots, **mrl_procs, **lfp_procs, **other_procedures}

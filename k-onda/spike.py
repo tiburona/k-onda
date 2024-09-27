@@ -7,7 +7,7 @@ from period_event import Period, Event
 from period_constructor import PeriodConstructorMethods
 from spike_methods import SpikeMethods
 from math_functions import calc_rates, calc_hist, cross_correlation, correlogram
-from utils import cache_method
+from bins import BinMethods
 
 
 class SpikeMethods:
@@ -17,13 +17,63 @@ class SpikeMethods:
     
     def get_firing_rates(self):
         return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'))
+    
+class RateMethods:
+
+    # Methods shared by SpikePeriod and SpikeEvent
+    
+    @property
+    def spikes(self):
+        return [spike for spike in self.unit.find_spikes(*self.spike_range)]
+    
+    @property
+    def spikes_in_seconds_from_start(self):
+        return [(spike - self.start)/self.sampling_rate 
+                for spike in self.unit.find_spikes(*self.spike_range)]
+    
+    @property
+    def spike_range(self):
+        return (self.start, self.stop)
+    
+    def get_psth(self):
+        stop_at=self.calc_opts.get('base', 'event')
+        if self.name == stop_at:
+            return self._get_psth()
+        else:
+            return self.get_average('get_psth', stop_at=stop_at)
+    
+    def get_firing_rates(self):
+        stop_at=self.calc_opts.get('base', 'event')
+        if self.name == stop_at:
+            return self._get_firing_rates()
+        else:
+            return self.get_average('get_firing_rates', stop_at=stop_at)
+    
+
+    def _get_psth(self):
+        rates = self.get_firing_rates() 
+        reference_rates = self.reference.get_firing_rates()
+        rates -= reference_rates
+        rates /= self.unit.get_firing_std_dev(period_types=self.period_type,)  # same as dividing unit psth by std dev 
+        self.private_cache = {}
+        return rates
+
+    def _get_firing_rates(self):
+        bin_size = self.calc_opts['bin_size']
+        if 'rates' in self.private_cache:
+            rates = self.private_cache['rates']
+        else:
+            rates = calc_rates(self.spikes, self.num_bins_per, self.spike_range, bin_size)
+        if self.calc_type == 'psth':
+            self.private_cache['rates'] = rates
+        return self.refer(rates)
 
 
 class Unit(Data, PeriodConstructorMethods, SpikeMethods):
 
     _name = 'unit'
     
-    def __init__(self, animal, category, spike_times, cluster_id, waveform, experiment=None, 
+    def __init__(self, animal, category, spike_times, cluster_id, waveform=None, experiment=None, 
                  neuron_type=None, quality=None):
         super().__init__()
         self.animal = animal
@@ -88,14 +138,8 @@ class Unit(Data, PeriodConstructorMethods, SpikeMethods):
         num_bins = round((stop-start) / (self.sampling_rate * self.calc_opts['bin_size']))
         return calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), self.calc_opts['bin_size'])
 
-    def get_firing_std_dev(self, period_types=None):
-        if period_types is None:  # default: take all period_types
-            period_types = [period_type for period_type in self.spike_periods]
-        return np.std([
-            rate for period_type, periods in self.spike_periods.items() 
-            for period in periods 
-            for rate in period.get_all_firing_rates()
-            if period_type in period_types])
+    def get_firing_std_dev(self):
+        return np.std([self.concatenate(method='get_firing_rates', level=-2)])
 
     def get_cross_correlations(self, axis=0):
         return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
@@ -110,7 +154,8 @@ class UnitPair:
     pass
 
 
-class SpikePeriod(Period, SpikeMethods):
+
+class SpikePeriod(Period, RateMethods):
 
     name = 'period'
 
@@ -123,58 +168,36 @@ class SpikePeriod(Period, SpikeMethods):
         self.unit = unit
         self.animal = self.unit.animal
         self.parent = unit
-
+        self.private_cache = {}
+        self.start = self.onset
+        self.stop = self.onset + self.duration*self.sampling_rate
+        
     def get_events(self):
-        pre_stim, post_stim = np.array([self.pre_stim, self.post_stim]) * self.sampling_rate
-        for i, start in enumerate(self.event_starts):
-            spikes = self.unit.find_spikes(start - pre_stim, start + post_stim)
-            self._events.append(
-                SpikeEvent(self, self.unit, 
-                           [((spike - start) / self.sampling_rate) for spike in spikes],
-                           [(spike / self.sampling_rate) for spike in spikes], i))
-
-    def get_all_firing_rates(self):
-        return [event.get_firing_rates() for event in self.events]
-    
-    def get_all_spike_counts(self):
-        return [event.get_spike_counts() for event in self.events]
-
-    def mean_firing_rate(self):
-        return np.mean(self.get_firing_rates())
-    
-    def mean_spike_counts(self):
-        return np.mean(self.get_spike_counts())
+        self._events = [SpikeEvent(self, self.unit, start, i) 
+                        for i, start in enumerate(self.event_starts)]
 
 
-class SpikeEvent(Event):
-    def __init__(self, period, unit, spikes, spikes_original_times, index):
+class SpikeEvent(Event, RateMethods, BinMethods):
+    def __init__(self, period, unit, start,  index):
         super().__init__(period, index)
         self.unit = unit
-        self.spikes = spikes
-        self.spikes_original_times = spikes_original_times
         self.private_cache = {}
-       
-    def get_psth(self):
-        rates = self.get_firing_rates() 
-        reference_rates = self.reference.get_firing_rates()
-        rates -= reference_rates
-        rates /= self.unit.get_firing_std_dev(period_types=self.period_type,)  # same as dividing unit psth by std dev 
-        self.private_cache = {}
-        return rates
+        self._start = start
 
-    def get_firing_rates(self):
-        bin_size = self.calc_opts['bin_size']
-        spike_range = (-self.pre_stim, self.post_stim)
-        if 'rates' in self.private_cache:
-            rates = self.private_cache['rates']
-        else:
-            rates = calc_rates(self.spikes, self.num_bins_per_event, spike_range, bin_size)
-        if self.calc_type == 'psth':
-            self.private_cache['rates'] = rates
-        return self.refer(rates)
+    @property
+    def start(self):
+        self._start - self.pre_stim*self.sampling_rate
+
+    @property
+    def stop(self):
+        self._start + self.post_stim*self.sampling_rate
+
+    @property
+    def spike_range(self):
+        return (-self.pre_stim, self.post_stim)
     
     def get_spike_counts(self):
-        return calc_hist(self.spikes, self.num_bins_per_event, (-self.pre_stim, self.post_stim))
+        return calc_hist(self.spikes, self.num_bins_per, self.spike_range)
 
     def get_cross_correlations(self, pair=None):
         other = pair.periods[self.period_type][self.period.identifier].events[self.identifier]

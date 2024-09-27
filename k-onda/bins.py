@@ -109,7 +109,17 @@ class FrequencyBinMethods:
     
 
 class BinMethods(TimeBinMethods, FrequencyBinMethods):
-    pass
+
+    @property
+    def num_bins_per(self):
+        if self.parent.__class__.__name__[0:3] == 'LFP':
+            sampling_rate = self.lfp_sampling_rate
+        else:
+            sampling_rate = self.sampling_rate
+        bin_size = self.calc_opts.get('bin_size') * sampling_rate
+        if not hasattr(self, 'start') and hasattr(self, 'stop'):
+            return None
+        return round((self.stop-self.start) / bin_size)
 
 
 

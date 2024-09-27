@@ -190,12 +190,9 @@ PROPORTION_OPTS = {
     'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
     }
 
-PSTH_OPTS = {'kind_of_data': 'spike', 'calc_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
-             'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
-             'periods': {'tone': range(5)}, 'levels': ['group'],
-             'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 
-                                'animal': [['identifier', 'in', STANDARD_ANIMALS]]},
-             'events': {'pretone': {'pre_stim': 0.0, 'post_stim': .7}, 'tone': {'pre_stim': .0, 'post_stim': .7}}}
+PSTH_OPTS = {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'bin_size': 0.01,
+             'average_method': 'mean', 'time_type': 'continuous', 
+             'periods': {'prelight': range(5), 'light': range(5), 'tone': range(5)}, 'base': 'period'}
 
 
 MRL_OPTS = {'kind_of_data': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
@@ -340,12 +337,12 @@ GROUP_STAT_PSTH_OPTS = {'kind_of_data': 'spike', 'data_type': 'psth', 'adjustmen
                         'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
                         'inclusion_rule': {'unit': [['quality', 'in', NEURON_QUALITY]], 'animal': [['identifier', 'in', STANDARD_ANIMALS]]}}
 
-PSTH_OPTS = {'kind_of_data': 'spike', 'calc_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
-             'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
-             'periods': {'tone': range(5)}, 'levels': ['group'],
-             'filters': {'unit': {'quality': ('in', NEURON_QUALITY)}, 
-                        'animal': {'identifier': ('in', STANDARD_ANIMALS)}},
-             'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': 0.05, 'post_stim': .65}}}
+# PSTH_OPTS = {'kind_of_data': 'spike', 'calc_type': 'psth', 'bin_size': 0.01, 'adjustment': 'normalized',
+            #  'average_method': 'mean', 'time_type': 'continuous', 'row_type': 'event', 
+            #  'periods': {'tone': range(5)}, 'levels': ['group'],
+            #  'filters': {'unit': {'quality': ('in', NEURON_QUALITY)}, 
+            #             'animal': {'identifier': ('in', STANDARD_ANIMALS)}},
+            #  'events': {'pretone': {'pre_stim': 0.05, 'post_stim': .65}, 'tone': {'pre_stim': 0.05, 'post_stim': .65}}}
 
 COUNT_OPTS = {'kind_of_data': 'spike', 'data_type': 'spike_counts', 'bin_size': 0.01, 'adjustment': 'none',
             'time_type': 'continuous', 'row_type': 'event', 

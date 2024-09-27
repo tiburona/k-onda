@@ -1,6 +1,8 @@
 from base_data import Data
 from bins import BinMethods
 
+
+
 class Period(Data, BinMethods):
 
     _name = 'period'
@@ -21,12 +23,16 @@ class Period(Data, BinMethods):
         self.duration = period_info.get('duration')
         self.reference_period_type = period_info.get('reference_period_type')
         self.event_duration = period_info.get('event_duration')
-        if self.event_duration is None:
+        if target_period and hasattr(target_period, 'event_duration'):
             self.event_duration = target_period.event_duration
-        self.events_settings = self.calc_opts['events'].get(
-            self.period_type, {'pre_stim': 0, 'post_stim': 1})
-        self._pre_stim, self._post_stim = (self.events_settings[opt] 
+        
+        if 'events' in self.calc_opts:
+            self.events_settings = self.calc_opts['events'].get(
+                self.period_type, {'pre_stim': 0, 'post_stim': 1})
+            self._pre_stim, self._post_stim = (self.events_settings[opt] 
                                          for opt in ['pre_stim', 'post_stim'])
+        else:
+            self._pre_stim, self._post_stim, self.events_settings = (None, None, None)
         
     @property
     def pre_stim(self):
@@ -94,12 +100,7 @@ class Event(Data, BinMethods):
             reference_periods = getattr(period.parent, f"{self.kind_of_data}_periods")
             return reference_periods[reference_period_type][period.identifier]
         
-    @property
-    def num_bins_per_event(self):
-        bin_size = self.calc_opts.get('bin_size')
-        pre_stim, post_stim = (self.calc_opts['events'][self.period_type].get(opt) 
-                               for opt in ['pre_stim', 'post_stim'])
-        return round((pre_stim + post_stim) / bin_size)
+   
     
     
   

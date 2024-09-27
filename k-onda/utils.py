@@ -7,6 +7,29 @@ from datetime import datetime
 
 DEBUG_MODE = 0
 
+class classproperty(property):
+    def __get__(self, instance, owner):
+        return super().__get__(owner)
+
+    def __set__(self, instance, value):
+        return super().__set__(instance, value)
+
+
+def make_class_property(attr_name, setter=True):
+    def getter(cls):
+        return getattr(cls, attr_name, None)  # Retrieve class-level attribute
+
+    if setter:
+        def setter(cls, value):
+            setattr(cls, attr_name, value)  # Set class-level attribute
+        return classproperty(getter, setter)
+    else:
+        return classproperty(getter)
+
+
+
+
+
 
 def cache_method(method):
     """

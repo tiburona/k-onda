@@ -110,7 +110,6 @@ for animal in animal_info:
                 'event_duration': 1, 'reference_period_type': 'pretone'}
         animals.append({'identifier': animal, 'period_info': {'tone': tone, 'pretone': pretone}, **animal_info[animal]})
 
-
 for i, animal in enumerate(animals):
     if animal['identifier'] in STANDARD_ANIMALS:
         with open(os.path.join(root, animal['identifier'], f"{animal['identifier']}_units_info.json"), 'r') as f:

@@ -6,7 +6,7 @@ import seaborn as sns
 import pandas as pd
 from copy import deepcopy
 import json
-from collections import defaultdict
+from collections import defaultdict, deque
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
@@ -16,10 +16,11 @@ import matplotlib.ticker as ticker
 
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts, nearest_power_of_10
 from plotting_helpers import smart_title_case, PlottingMixin
-from utils import to_serializable
+from utils import to_serializable, make_class_property
 from base_data import Base
 from stats import Stats
 from phy_interface import PhyInterface
+from plotter_base import PlotterBase
 
 
 class Subset:
@@ -31,58 +32,18 @@ class Section:
 class Segment:
     pass
 
-class PlotBase(Base):
-    _experiment = None
-    _origin_plotter = None
-    _current_plotter = None
-    _current_figurer = None
-    _current_ax = None
-    
-    @property
-    def experiment(self):
-        return PlotBase._experiment
-    
-    @property
-    def origin_plotter(self):
-        return Plotter._origin_plotter
-    
-    @origin_plotter.setter
-    def origin_plotter(self, origin_plotter):
-        Plotter._origin_plotter = origin_plotter 
 
-    @property
-    def active_plotter(self):
-        return PlotBase._current_plotter
-    
-    @active_plotter.setter
-    def active_plotter(self, current_plotter):
-        PlotBase._current_plotter = current_plotter 
 
-    @property
-    def active_figurer(self):
-        return PlotBase._active_figurer
-    
-    @active_figurer.setter
-    def active_figurer(self, active_figurer):
-        PlotBase._active_figurer = active_figurer
 
-    @property
-    def active_ax(self):
-        return PlotBase._current_ax
-    
-    @active_ax.setter
-    def active_ax(self, current_ax):
-        PlotBase._current_ax = current_ax 
-   
 
-class Plotter(PlotBase):
+class Plotter(PlotterBase):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple 
     plots of multiple kinds of data, see the figure module."""
 
     def __init__(self, experiment, graph_opts=None):
-        PlotBase._experiment = experiment
+        self.experiment = experiment
         self.graph_opts = graph_opts
-
+        
     def initialize(self, calc_opts, graph_opts):
         """Both initializes values on self and sets values for the context."""
         self.calc_opts = calc_opts  
@@ -104,17 +65,15 @@ class Plotter(PlotBase):
             'subset': Subset
         }
 
-        processor_type, processor_info = plot_spec
-        processor = processor_classes[processor_type](
-            self, self, processor_type, processor_info, sources
-        )
+        self.active_spec_type, self.active_spec = list(plot_spec.items())[0]
+        processor = processor_classes[self.active_spec_type](self, self, sources)
         processor.start()
             
     def make_fig(self):
         self.active_figurer = Figurer()
-        self.active_plotter = Subplotter(self.active_figurer, [0, 0], first = True)
-        self.active_ax = self.active_plotter.get_ax(self.active_figurer.gs[0, 0])
-        return self.active_figurer, self.active_plotter, self.active_ax 
+        self.active_plotter = Subplotter(self.active_figurer, [0, 0], first=True)
+        self.active_ax = self.active_plotter.get_ax(0, 0)
+        return self.active_figurer.fig
     
     def close_plot(self, basename='', fig=None):
         plt.tight_layout()
@@ -143,105 +102,120 @@ class Plotter(PlotBase):
         plt.close(fig)
 
 
-class Partition(PlotBase):
+class Partition(PlotterBase):
 
-    def __init__(self, origin_plotter, parent_plotter, processor_type, specification, sources=None, 
-                 fig=None, index=None):
+    def __init__(self, origin_plotter, parent_plotter, sources=None, 
+                 parent_processor = None, info=None):
         super().__init__()
         self.origin_plotter = origin_plotter
         self.parent_plotter = parent_plotter
-        self.specification = specification
+        self.spec = self.active_spec
         self.sources = sources
         self.next = None
-        self.index = None
+        self.parent_processor = parent_processor
         for k in ('segment', 'section'):
-            if k in specification:
-                self.next = (k, specification.pop(k))
-        self.info = {}
-        if fig == None:
-            self.fig, self.active_plotter, self.ax = self.parent_plotter.make_fig()
-            self.index = [0, 0]
-        self.prep()
+            if k in self.spec:
+                self.next = {k: self.spec.pop(k)}
+        if self.active_figurer == None:
+            self.fig = self.parent_plotter.make_fig()
+        else:
+            self.fig = self.active_figurer.fig
+        self.inherited_info = info if info else {}
+        self.info_list = []
+        self.processor_classes = {
+            'section': Section,
+            'segment': Segment,
+            'subset': Subset
+        }
 
     def start(self, sources=None):
         if sources is None:
             sources = self.sources
         if sources is None:
             sources = self.get_data_sources()
-        self.process_divider(*next(iter(self.specification.items())), self.specification, sources)
+        self.process_divider(*next(iter(self.spec.items())), self.spec, sources)
 
     def process_divider(self, divider_type, current_divider, divisions, sources):
 
         for i, member in enumerate(current_divider['members']):
+            info = {}
             self.set_dims(current_divider, i)
-            if divider_type == 'data_type':
-                sources = [member]
-                self.current_info['source'] = member.identifier
+            if divider_type in ['data_source', 'group', 'animal', 'unit', 'period', 'event']:
+                if type(member) in [int, str]:
+                    sources = [self.get_data_sources(member)]
+                else:
+                    sources = [member]
+        
+                info['attr'] = current_divider.get('attr', 'calc')
+                info['data_source'] = member
+                info[member.name] = member.identifier
             else:
-                setattr(self, f"selected_{divider_type}", member)
-                self.info[divider_type] = member
+                #setattr(self, f"selected_{divider_type}", member)
+                info[divider_type] = member
 
             if len(divisions) > 1:
                 remaining_divisions = {k: v for k, v in divisions.items() if k != divider_type}
                 self.process_divider(*next(iter(remaining_divisions.items())), remaining_divisions, sources)
             else:
-                self.wrap_up()
-                    # there are three kinds of actions to take here
-                    # 1) if I am a subset, generate a new figure
-                    # 2) if I am a section, generate a new subplot
-
-                    # 3) if I am a segment, add to the dict and list that are going to 
-                    # make the dataframe.
-                    # if i = len(current_divider['members'] - 1):
-                    # 
+                updated_info = self.inherited_info | info
+                self.info_list.append(updated_info)
+                self.wrap_up(current_divider, i)
 
                 if self.next:
-                    processor_type, _ = self.next
-                    processor = self.processor_classes[processor_type](
-                        self.current_plotter, *self.followup, sources, info=self.current_info)
+                    self.active_spec_type, self.active_spec = list(self.next.items())[0]
+                    processor = self.processor_classes[self.active_spec_type](
+                        self.origin_plotter, self.active_plotter, sources, info=updated_info)
                     processor.start()
-                
-                
+
+    def get_calcs(self):
+        for d in self.info_list:
+            for k, v in d.items():
+                if k in ['neuron_type', 'period_type', 'period_group']:
+                    setattr(self, f"selected_{k}", v) 
+            attr = d['attr']
+            d[attr] = getattr(d['data_source'], attr)
+                 
 
 class Section(Partition):
-    def __init__(self, origin_plotter, parent_plotter, processor_type, specification, sources=None, 
-                 info=None, index=[None, None]):
-          super().__init__(origin_plotter, parent_plotter, processor_type, specification, sources, info)
-          self.index = index
+    def __init__(self, origin_plotter, parent_plotter, sources=None, 
+                  index=None):
+          super().__init__(origin_plotter, parent_plotter, sources)
+          self.index = index if index else [0, 0]
+          self.active_plotter = Subplotter(self.active_plotter, self.index, self.spec, 
+                                          self.sources)
 
     def set_dims(self, current_divider, i):
         if 'dim' in current_divider:
             self.index[current_divider['dim']] = i
 
-    def prep(self):
-        self.active_plotter = Subplotter(self.active_plotter, self.index, self.specification, 
-                                          self.sources)
-
-
-    def wrap_up(self):
-        ax = self.active_plotter.axes[*self.index]
+    def wrap_up(self, *_):
+        self.active_ax = self.active_plotter.axes[*self.index]
 
         if self.next:
             # do next thing
             pass
         else:
-            # make data frame
-            data = []
-            columns = []
-            for k, v in self.info.items():
-                if k == 'data_source':
-                    columns.append(v.name)
-                    data.append(v.identifier)
-                    columns.append('calc')
-                    data.append(v.calc)
-                else:
-                    columns.append(k)
-                    data.append(v)
-            data_frame = pd.DataFrame([data], columns=columns)
-                
-            self.origin_plotter.process_calc(data_frame, ax=ax)
+            self.get_calcs()
+            self.origin_plotter.process_calc(self.info_list)
 
-          
+
+class Segment(Partition):
+    def __init__(self, origin_plotter, parent_plotter, sources=None, info=None):
+          super().__init__(origin_plotter, parent_plotter, sources, info=info)
+          self.data = []
+          self.columns = []
+
+    def prep(self):
+        pass
+    
+    def set_dims(self, *_):
+        pass
+
+    def wrap_up(self, current_divider, i): 
+        self.get_calcs()
+        if i == len(current_divider['members']) - 1:
+            self.origin_plotter.process_calc(self.info_list)
+    
 
 class Figurer(Base):
             
@@ -261,7 +235,12 @@ class Subplotter(Plotter):
         self.first = first
         self.gs = self.create_grid()
         self._axes = None
-
+        if first:
+            self._ax_visibility = np.array([[False]])
+        else:
+            self._ax_visibility = np.array(
+                [[True for _ in range(self.dims[1])] for _ in range(self.dims[0])])
+        
     @property
     def axes(self):
         if self._axes is None:
@@ -271,6 +250,14 @@ class Subplotter(Plotter):
     @property
     def dims(self):
         return self.calculate_my_dimensions()
+    
+    @property
+    def ax_visibility(self):
+        return self._ax_visibility
+    
+    @ax_visibility.setter
+    def ax_visibility(self, visibility):
+        self._ax_visibility = visibility
 
     def calculate_my_dimensions(self):
         dims = [1, 1]
@@ -288,27 +275,150 @@ class Subplotter(Plotter):
     
     def get_all_axes(self):
         return np.array([
-            [self.get_ax(self.gs[i, j]) for j in range(self.dims[1])] for i in range(self.dims[0])
+            [self.get_ax(i, j) for j in range(self.dims[1])] for i in range(self.dims[0])
             ])
     
-    def get_ax(self, gridspec_slice):
+    def get_ax(self, i, j):
+        gridspec_slice = self.gs[i, j]
         ax = plt.Subplot(self.fig, gridspec_slice)
+        ax.set_visible(self.ax_visibility[i, j])
         self.fig.add_subplot(ax)
         return ax
 
 class HistogramPlotter(Plotter):
     
+    def plot_hist(self, x, y, width, ax):
+        ax.bar(x, y, width=width) 
+
+
+class CategoryPlotter(Plotter):
+
     def __init__(self, experiment):
         super().__init__(experiment)
+        self.plot_spec = None
+
+    def plot(self, calc_opts, graph_opts):
+         self.initialize(calc_opts, graph_opts)
+         self.plot_spec = graph_opts.get('plot_spec')
+         self.process_plot_spec()
+         self.close_plot()
     
-    def plot_hist(self, x, y, width, ax):
-        ax.bar(x, y, width=width)        
+    def process_calc(self, info):
+
+        self.bar_width = self.graph_opts.get('bar_width', .2)
+        
+        for row in info:
+            aesthetic_args = self.get_aesthetics(row)
+            position = self.find_position(row, self.active_spec)
+            bar = self.active_ax.bar(position, getattr(row['data_source'], row['attr']), 
+                                     self.bar_width, **aesthetic_args)
+    
+    # {'period_type': {'aesthetic': {'light_on': {'color': 'green'}}}}
+    def get_aesthetics(self, row):
+
+        aesthetics = {}
+        for label in row.keys():
+            for member, attrs_vals in self.active_spec.get(label, {}).get('aesthetic', {}).items():
+                if row[label] == member or member == '___':
+                    aesthetics.update(attrs_vals)
+        return aesthetics
+
+    def find_position(self, observation, division_types=None, start_position=0):
+        segment_info = self.active_spec
+        if division_types is None:
+            division_types = deque(sorted(
+                [k for k in segment_info.keys() if 'grouping' in segment_info[k]], 
+                key=lambda x: segment_info[x]['grouping']))
+        
+        current_division_type = division_types.popleft()
+        
+        mult_factor = 1
+        for dt in division_types:
+            bars_width = len(segment_info[dt]['members']) * self.bar_width
+            spacing = 2 * segment_info[dt].get('spacing', self.bar_width/.5)
+            mult_factor *= bars_width + spacing
+        
+        value = observation[current_division_type]
+        index = segment_info[current_division_type]['members'].index(value)
+        
+        position = index * mult_factor + start_position
+        
+        if len(division_types) == 0:
+            return position
+        else:
+            return self.find_position(
+                observation, segment_info, division_types=division_types, start_position=position)
+
+
+class CategoricalScatterPlotter(CategoryPlotter):
+
+    def __init__(self, experiment):
+        super().__init__(experiment)
+        self.plot_spec = None
+
+    def plot(self, calc_opts, graph_opts):
+        self.initialize(calc_opts, graph_opts)
+        # TODO: you might sometimes want different segments for different axes in a section
+        plot_spec = {
+            'section': 
+            {
+                'unit': {
+                    'members': self.experiment.all_units, 'dim': 1, 'attr': 'scatter'
+                    },
+                'segment': {
+                    'period_type': {
+                        'members': list(self.calc_opts['periods'].keys()),
+                        'grouping': 0,
+                        'spacing': .1,
+                        'aesthetic': {
+                            '___': {'color': 'red'},
+                            'prelight': {'background_color': ('white', .2)},
+                            'light': {'background_color': ('green', .2)},
+                            'tone': {'background_color': ('green', .2)}
+                            }}}}}
+        self.process_plot_spec(plot_spec)
+        self.close_plot()
+
+         # section: {'data_source': {'members': ['1', '2', '3'], 'dim': 0}
+         #           'segment': {'period_type': {'members': ['prelight', 'light', 'tone'], 'grouping':0},
+         #                       'aesthetic': 'background_color'}}'
+
+    def process_calc(self, info):
+
+        self.cat_width = self.graph_opts.get('cat_width', .6)
+        
+        for row in info:
+            if self.active_spec_type == 'segment':
+                position = self.find_position(row)
+            else:
+                # do something else
+                pass
+            val = row[row['attr']]
+            jitter = np.random.rand(len(val)) * self.cat_width/2 - self.cat_width/4
+            aesthetic_args = self.get_aesthetics(row)
+            if 'background_color' in aesthetic_args:
+                background_color, alpha = aesthetic_args.pop('background_color')
+                self.active_ax.axvspan(
+                    position - self.cat_width/2, position + self.cat_width/2, 
+                    facecolor=background_color, alpha=alpha)
+            self.active_ax.scatter([position + j for j in jitter], val, **aesthetic_args)
+
+
+
+
+
+
+        
+       
+        
+
+
+
+        
+
 
 
 class PeriStimulusHistogramPlotter(HistogramPlotter):
-
-    def __init__(self, experiment):
-        super().__init__(experiment)
 
     def plot(self, calc_opts, graph_opts):
         self.initialize(calc_opts, graph_opts)
@@ -322,15 +432,18 @@ class PeriStimulusHistogramPlotter(HistogramPlotter):
         self.process_plot_spec(plot_spec)
         self.close_plot()
 
-    def process_calc(self, data_frame, ax):
+    def process_calc(self, data_frame):
         #self.do_stuff_like_set_title(data_frame)
         num_bins = round((self.pre_stim + self.post_stim)/self.calc_opts['bin_size'])
         x = np.linspace(self.pre_stim, self.post_stim, num_bins)
         y = data_frame['calc'].iloc[0]
-        self.plot_hist(x, y, self.calc_opts['bin_size'], ax)
+        self.plot_hist(x, y, self.calc_opts['bin_size'], self.active_ax)
     
     def add_stimulus_patch(self):
         pass
+
+
+
 
     
 
