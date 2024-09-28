@@ -13,6 +13,8 @@ import matplotlib.lines as mlines
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.patches import Patch
 import matplotlib.ticker as ticker
+from mpl_toolkits.axes_grid1 import Divider, Size
+
 
 from math_functions import get_positive_frequencies, get_spectrum_fenceposts, nearest_power_of_10
 from plotting_helpers import smart_title_case, PlottingMixin
@@ -50,7 +52,7 @@ class Plotter(PlotterBase):
         self.graph_opts = graph_opts
         self.experiment.initialize_data()
 
-    def process_plot_spec(self, plot_spec, sources=None):
+    def process_plot_spec(self, plot_spec):
 
         # for psth, plot spec should look like:
         # ('section', 
@@ -66,17 +68,19 @@ class Plotter(PlotterBase):
         }
 
         self.active_spec_type, self.active_spec = list(plot_spec.items())[0]
-        processor = processor_classes[self.active_spec_type](self, self, sources)
+        processor = processor_classes[self.active_spec_type](self)
         processor.start()
             
     def make_fig(self):
-        self.active_figurer = Figurer()
+        # Get aspect ratio from the root plot spec
+        aspect_ratio = self.active_spec.get('aspect', 1)
+        self.active_figurer = Figurer(aspect_ratio)
         self.active_plotter = Subplotter(self.active_figurer, [0, 0], first=True)
-        self.active_ax = self.active_plotter.get_ax(0, 0)
+        self.active_ax = self.active_plotter.axes[0, 0]
         return self.active_figurer.fig
+
     
     def close_plot(self, basename='', fig=None):
-        plt.tight_layout()
         plt.subplots_adjust(top=0.85)
         if not fig:
             fig = self.active_figurer.fig  
@@ -104,38 +108,40 @@ class Plotter(PlotterBase):
 
 class Partition(PlotterBase):
 
-    def __init__(self, origin_plotter, parent_plotter, sources=None, 
+  
+
+    def __init__(self, origin_plotter, parent_plotter=None, 
                  parent_processor = None, info=None):
         super().__init__()
+
         self.origin_plotter = origin_plotter
         self.parent_plotter = parent_plotter
-        self.spec = self.active_spec
-        self.sources = sources
-        self.next = None
         self.parent_processor = parent_processor
+        self.inherited_info = info if info else {}
+
+        self.spec = self.active_spec
+        self.next = None
         for k in ('segment', 'section'):
             if k in self.spec:
                 self.next = {k: self.spec.pop(k)}
         if self.active_figurer == None:
-            self.fig = self.parent_plotter.make_fig()
+            self.fig = self.origin_plotter.make_fig()
+            self.parent_plotter = self.active_plotter
         else:
             self.fig = self.active_figurer.fig
-        self.inherited_info = info if info else {}
+        
         self.info_list = []
+
         self.processor_classes = {
             'section': Section,
             'segment': Segment,
             'subset': Subset
         }
 
-    def start(self, sources=None):
-        if sources is None:
-            sources = self.sources
-        if sources is None:
-            sources = self.get_data_sources()
-        self.process_divider(*next(iter(self.spec.items())), self.spec, sources)
+    def start(self):
+        self.process_divider(*next(iter(self.spec.items())), self.spec)
 
-    def process_divider(self, divider_type, current_divider, divisions, sources):
+    def process_divider(self, divider_type, current_divider, divisions):
 
         for i, member in enumerate(current_divider['members']):
             info = {}
@@ -155,7 +161,7 @@ class Partition(PlotterBase):
 
             if len(divisions) > 1:
                 remaining_divisions = {k: v for k, v in divisions.items() if k != divider_type}
-                self.process_divider(*next(iter(remaining_divisions.items())), remaining_divisions, sources)
+                self.process_divider(*next(iter(remaining_divisions.items())), remaining_divisions)
             else:
                 updated_info = self.inherited_info | info
                 self.info_list.append(updated_info)
@@ -164,7 +170,7 @@ class Partition(PlotterBase):
                 if self.next:
                     self.active_spec_type, self.active_spec = list(self.next.items())[0]
                     processor = self.processor_classes[self.active_spec_type](
-                        self.origin_plotter, self.active_plotter, sources, info=updated_info)
+                        self.origin_plotter, parent_plotter=self.active_plotter, info=updated_info)
                     processor.start()
 
     def get_calcs(self):
@@ -177,12 +183,37 @@ class Partition(PlotterBase):
                  
 
 class Section(Partition):
-    def __init__(self, origin_plotter, parent_plotter, sources=None, 
-                  index=None):
-          super().__init__(origin_plotter, parent_plotter, sources)
-          self.index = index if index else [0, 0]
-          self.active_plotter = Subplotter(self.active_plotter, self.index, self.spec, 
-                                          self.sources)
+    def __init__(self, origin_plotter, parent_plotter=None, index=None):
+        super().__init__(origin_plotter, parent_plotter=parent_plotter)
+        self.index = index if index else [0, 0]
+
+        if 'aspect' in self.spec:
+            self.aspect = self.spec.pop('aspect')
+        else:
+            d, n = self.dimensions_of_subplot
+            self.aspect = n / d  # Default aspect ratio based on dimensions
+
+        # Extract margins from the spec with sensible defaults
+        self.margin_h = self.spec.pop('margin_h', 0.05)  # Default horizontal margin
+        self.margin_w = self.spec.pop('margin_w', 0.05)  # Default vertical margin
+
+        self.active_plotter = Subplotter(
+            self.parent_plotter,
+            self.index,
+            self.spec,
+            aspect=self.aspect,
+            margin_h=self.margin_h,
+            margin_w=self.margin_w
+        )
+
+    
+    @property 
+    def dimensions_of_subplot(self):
+        dims = [1, 1]
+        for division in self.spec.values():
+            if 'dim' in division:
+                dims[division['dim']] = len(division['members'])
+        return dims
 
     def set_dims(self, current_divider, i):
         if 'dim' in current_divider:
@@ -200,10 +231,8 @@ class Section(Partition):
 
 
 class Segment(Partition):
-    def __init__(self, origin_plotter, parent_plotter, sources=None, info=None):
-          super().__init__(origin_plotter, parent_plotter, sources, info=info)
-          self.data = []
-          self.columns = []
+    def __init__(self, origin_plotter, parent_plotter=None, info=None):
+          super().__init__(origin_plotter, parent_plotter, info=info)
 
     def prep(self):
         pass
@@ -218,34 +247,121 @@ class Segment(Partition):
     
 
 class Figurer(Base):
-            
-    def __init__(self):
-        self.fig = plt.figure()
-        self.gs = GridSpec(1, 1, figure=self.fig)
+    def __init__(self, aspect_ratio=1):
+        width = 6  # Base width in inches
+        height = width * aspect_ratio
+        self.fig = plt.figure(figsize=(width, height))
 
 
 class Subplotter(Plotter):
-
-    def __init__(self, parent, index, spec=None, sources=None, first=False):
+    def __init__(self, parent, index, spec=None, sources=None, first=False, aspect=1, margin_h=0.05, margin_w=0.05):
         self.fig = self.active_figurer.fig
         self.parent = parent
         self.index = index
         self.sources = sources
         self.spec = spec
         self.first = first
-        self.gs = self.create_grid()
+        self.aspect = aspect
+        self.margin_h = margin_h
+        self.margin_w = margin_w
         self._axes = None
+
         if first:
             self._ax_visibility = np.array([[False]])
+            # For the root divider, use the entire figure
+            self.parent_rect = [0, 0, 1, 1]
         else:
             self._ax_visibility = np.array(
-                [[True for _ in range(self.dims[1])] for _ in range(self.dims[0])])
-        
-    @property
-    def axes(self):
-        if self._axes is None:
-            self._axes = self.get_all_axes()
-        return self._axes
+                [[True for _ in range(self.dims[1])] for _ in range(self.dims[0])]
+            )
+            # Get the parent axes' position in figure coordinates
+            parent_ax = self.parent.axes[*self.index]
+            self.parent_rect = self.get_axes_position_in_fig_coords(parent_ax)
+
+        self.create_divider()
+        self.make_all_axes()
+
+    def get_axes_position_in_fig_coords(self, ax):
+    # Transform axes position to figure coordinates
+        bbox = ax.get_position()
+        return [bbox.x0, bbox.y0, bbox.width, bbox.height]
+
+
+    def create_divider(self):
+        nrows, ncols = self.calculate_my_dimensions()
+        aspect = self.aspect
+
+        # Calculate initial h_unit and v_unit
+        h_unit = 1 / ncols
+        v_unit = h_unit * aspect
+
+        # Calculate total height and width
+        total_height = nrows * v_unit
+        total_width = ncols * h_unit
+
+        # Scale down if necessary
+        scale = min(1 / total_height, 1 / total_width, 1)
+        h_unit *= scale
+        v_unit *= scale
+        total_height *= scale
+        total_width *= scale
+
+        # Adjust total_height and total_width to account for margins
+        # Margins are specified as fractions of parent rectangle's size
+        margin_w_frac = self.margin_w  # Fraction of parent width
+        margin_h_frac = self.margin_h  # Fraction of parent height
+
+        # Available space within parent rectangle after margins
+        available_width = 1 - 2 * margin_w_frac
+        available_height = 1 - 2 * margin_h_frac
+
+        # Rescale h_unit and v_unit to fit into available space
+        width_scale = available_width / total_width
+        height_scale = available_height / total_height
+        scale = min(width_scale, height_scale, 1)
+        h_unit *= scale
+        v_unit *= scale
+        total_width *= scale
+        total_height *= scale
+
+        # Create lists of Size objects for widths and heights
+        h = [Size.Scaled(h_unit)] * ncols
+        v = [Size.Scaled(v_unit)] * nrows
+
+        # Calculate offsets to position the axes grid within the parent rectangle,
+        # considering margins and centering
+        offset_x_frac = margin_w_frac + (available_width - total_width) / 2
+        offset_y_frac = margin_h_frac + (available_height - total_height) / 2
+
+        # Now, compute the absolute position in figure coordinates
+        parent_left, parent_bottom, parent_width, parent_height = self.parent_rect
+
+        rect_left = parent_left + offset_x_frac * parent_width
+        rect_bottom = parent_bottom + offset_y_frac * parent_height
+        rect_width = total_width * parent_width
+        rect_height = total_height * parent_height
+
+        # Create the divider
+        self.divider = Divider(
+            self.fig,
+            [rect_left, rect_bottom, rect_width, rect_height],
+            h,
+            v,
+            aspect=False
+        )
+
+
+
+    def make_all_axes(self):
+        self.axes = np.empty((self.dims[0], self.dims[1]), dtype=object)
+        for i in range(self.dims[0]):
+            for j in range(self.dims[1]):
+                # Create a new axes at the specified position
+                locator = self.divider.new_locator(nx=j, ny=i)
+                ax = self.fig.add_axes([0, 0, 1, 1])
+                ax.set_axes_locator(locator)
+                ax.set_visible(self._ax_visibility[i, j])
+                self.axes[i, j] = ax
     
     @property
     def dims(self):
@@ -267,23 +383,7 @@ class Subplotter(Plotter):
             if 'dim' in division:
                 dims[division['dim']] = len(division['members'])
         return dims
-        
-    def create_grid(self):
-        gs = GridSpecFromSubplotSpec(*self.calculate_my_dimensions(), 
-                                     subplot_spec=self.parent.gs[*self.index])
-        return gs
-    
-    def get_all_axes(self):
-        return np.array([
-            [self.get_ax(i, j) for j in range(self.dims[1])] for i in range(self.dims[0])
-            ])
-    
-    def get_ax(self, i, j):
-        gridspec_slice = self.gs[i, j]
-        ax = plt.Subplot(self.fig, gridspec_slice)
-        ax.set_visible(self.ax_visibility[i, j])
-        self.fig.add_subplot(ax)
-        return ax
+
 
 class HistogramPlotter(Plotter):
     
@@ -361,7 +461,7 @@ class CategoricalScatterPlotter(CategoryPlotter):
         # TODO: you might sometimes want different segments for different axes in a section
         plot_spec = {
             'section': 
-            {
+            {   'aspect': 4,
                 'unit': {
                     'members': self.experiment.all_units, 'dim': 1, 'attr': 'scatter'
                     },

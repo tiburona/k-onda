@@ -59,7 +59,7 @@ def memory_profile_run():
 
     try:
         run()
-
+ 
     except MemoryError as e:
         print("MemoryError encountered:", e)
         # Handle the memory error if necessary
