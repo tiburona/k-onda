@@ -5,10 +5,11 @@ class PlottingMixin:
         adjustment = self.calc_opts.get('adjustment')
         if not adjustment:
             adjustment = ''
-        Hz = '' if adjustment == 'normalized' else ' Spikes per Second'
+        Hz = '' if adjustment == 'normalized' else ' (Spikes per Second)'
         base = self.calc_opts.get('base') if self.calc_opts.get('base') else ''
 
         return {'psth': ('Time (s)', f'{adjustment.capitalize()} Firing Rate{Hz}'),
+                'firing_rates': ('', 'Firing Rate (Spikes per Second)'),
                 'proportion': ('Time (s)', ''f'Proportion Positive {base.capitalize() + "s"}'),
                 'autocorr': ('Lags (s)', 'Autocorrelation'),
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum'),

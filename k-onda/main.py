@@ -61,7 +61,7 @@ def memory_profile_run():
         run()
  
     except MemoryError as e:
-        print("MemoryError encountered:", e)
+       print("MemoryError encountered:", e)
         # Handle the memory error if necessary
     finally:
         # Always take the memory snapshot, even in case of errors

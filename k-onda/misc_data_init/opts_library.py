@@ -192,7 +192,7 @@ PROPORTION_OPTS = {
 
 PSTH_OPTS = {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'bin_size': 0.01,
              'average_method': 'mean', 'time_type': 'continuous', 
-             'periods': {'prelight': range(5), 'light': range(5), 'tone': range(5)}, 'base': 'period'}
+             'periods': {'prelight': range(10), 'light': range(10), 'tone': range(10)}, 'base': 'period'}
 
 
 MRL_OPTS = {'kind_of_data': 'lfp', 'time_type': 'block', 'frequency_bands': ['theta_1', 'theta_2'], 
