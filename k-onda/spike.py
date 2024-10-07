@@ -8,6 +8,7 @@ from period_constructor import PeriodConstructorMethods
 from spike_methods import SpikeMethods
 from math_functions import calc_rates, calc_hist, cross_correlation, correlogram
 from bins import BinMethods
+from phy_interface import PhyInterface
 
 
 class SpikeMethods:
@@ -59,7 +60,7 @@ class RateMethods:
         return rates
 
     def _get_firing_rates(self):
-        bin_size = self.calc_opts['bin_size']
+        bin_size = self.calc_opts.get('bin_size', .01)
         if 'rates' in self.private_cache:
             rates = self.private_cache['rates']
         else:
@@ -127,17 +128,6 @@ class Unit(Data, PeriodConstructorMethods, SpikeMethods):
     def get_spikes_by_events(self):
         return [event.spikes for period in self.children for event in period.children]
 
-    def get_spontaneous_firing(self):
-        spontaneous_period = self.calc_opts.get('spontaneous', 120)
-        if not isinstance(spontaneous_period, tuple):
-            start = self.earliest_period.onset - spontaneous_period * self.sampling_rate - 1
-            stop = self.earliest_period.onset - 1
-        else:
-            start = spontaneous_period[0] * self.sampling_rate
-            stop = spontaneous_period[1] * self.sampling_rate
-        num_bins = round((stop-start) / (self.sampling_rate * self.calc_opts['bin_size']))
-        return calc_rates(self.find_spikes(start, stop), num_bins, (start, stop), self.calc_opts['bin_size'])
-
     def get_firing_std_dev(self):
         return np.std([self.concatenate(method='get_firing_rates', level=-2)])
 
@@ -148,6 +138,16 @@ class Unit(Data, PeriodConstructorMethods, SpikeMethods):
     def get_correlogram(self, axis=0):
         return np.mean([pair.get_correlogram(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
+    
+    def get_waveform(self):
+        if self.waveform is not None:
+            return self.waveform
+        else:
+            phy = PhyInterface(self.calc_opts['data_path'], self.parent.identifier)
+            electrodes = phy.cluster_dict[self.cluster_id]['electrodes']
+            wf = phy.get_mean_waveforms(self.cluster_id, electrodes)
+            self.waveform = wf
+            return wf
 
 
 class UnitPair:

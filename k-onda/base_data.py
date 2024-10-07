@@ -144,7 +144,7 @@ class Base:
             return self.current_frequency_band
         
     def get_data_sources(self, data_object_type=None, identifiers=None, identifier=None):
-        if not data_object_type:
+        if data_object_type is None:
             data_object_type = self.calc_opts['base']
             if data_object_type in ['period', 'event']:
                 data_object_type = f"{self.kind_of_data}_{data_object_type}"
@@ -368,53 +368,34 @@ class Data(Base):
     def concatenation(self):
         return self.concatenate()
     
-    def concatenate(self, method=None, level=-1):   
-        return np.concatenate(self.accumulate(method=method, level=level)[level])
+    def concatenate(self, method=None, max_depth=-1):   
+        return np.concatenate(self.accumulate(method=method, max_depth=max_depth)[max_depth])
    
     @property
     def scatter(self):
-        return self.accumulate(default_attr='mean', level=-1)[-1]
+        return self.accumulate(default_attr='mean', max_depth=1)[1]
     
-    def accumulate(self, method=None, level=-1, default_attr='calc', accumulator=None):
-        """Accumulate values by applying a method or default attribute, and gather them into lists."""
-        
-        # Initialize the accumulator as a dictionary if not provided
-        if accumulator is None:
-            accumulator = {}
-
-        # Extend the list at the given level with individual results from each child
-        process_results = lambda results, acc: acc.setdefault(level, []).extend(results) or acc
-
-        # Call the recursive apply method to gather results
-        return self.recursive_apply(
-            method=method, level=level, default_attr=default_attr, 
-            accumulator=accumulator, process_results=process_results)
-
-
-
-    def recursive_apply(self, method=None, level=-1, default_attr=None, accumulator=None, process_results=None):
+    @property
+    def grandchildren_scatter(self):
+        return self.accumulate(default_attr='mean', max_depth=2)[2]
+    
+    def accumulate(self, method=None, max_depth=1, depth=0, default_attr=None, accumulator=None):
         """Generalized recursive function to apply a method or default method to children."""
-        
-        # Function to apply either the passed method or the default attribute
+
         f = lambda x: method(x) if method else getattr(x, default_attr)
+        
+        if accumulator is None:
+            accumulator = defaultdict(list)
 
-        # Base case: if we are at the desired level, apply function to self or children
-        if level >= 0:
-            if not hasattr(self, 'children') or not len(self.children):
-                return f(self)  # No children, apply to self
-
-            else:
-                # Apply to each child and collect the results into a list (don't concatenate yet)
-                child_results = [f(child) for child in self.children]
-                return process_results(child_results, accumulator)  # Append results to accumulator
-            
-        # Recursive case: if we are not at the desired level, go deeper
+        if depth == max_depth:
+            accumulator[depth].append(f(self))
         else:
-            return self.recursive_apply(
-                method=method, level=level+1, default_attr=default_attr, 
-                accumulator=accumulator, process_results=process_results)
+            if hasattr(self, 'children'):  
+                for child in self.children:
+                    child.accumulate(method, max_depth, depth + 1, default_attr, accumulator)
 
-  
+        return accumulator        
+    
 
     @property
     def hierarchy(self):

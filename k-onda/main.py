@@ -1,6 +1,6 @@
 from utils import log_directory_contents
 from runner import Runner
-from misc_data_init.opts_library import RUNNER_OPTS, VALIDATION_DATA_OPTS
+from misc_data_init.opts_library import RUNNER_OPTS, VALIDATION_DATA_OPTS, MS_26_OPTS
 import pstats
 import signal
 import cProfile
@@ -15,7 +15,7 @@ def main():
 def run(log=True):
     #runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json')
     runner = Runner(config_file='/Users/katie/likhtik/MS_26/init_config.json')
-    runner.run('plot_scatter', RUNNER_OPTS) 
+    runner.run(MS_26_OPTS) 
                #prep={'method': 'validate_lfp_events', 'calc_opts': VALIDATION_DATA_OPTS})
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')
@@ -49,7 +49,7 @@ def profile_run(timeout=1000):
 def visualize_profile():
     stats = pstats.Stats('/Users/katie/likhtik/data/logdir/profile_output.prof')
 
-    # Sort the statistics by cumulative time and print the top 10 functions
+    # Sort the statistics by cumulative time and print the top 10 functions 
     stats.sort_stats('cumulative').print_stats(10)
 
 

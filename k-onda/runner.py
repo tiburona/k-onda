@@ -1,39 +1,19 @@
 import json
 import os
 
-from matplotlib.pylab import cond
 
-from plotters import PeriStimulusHistogramPlotter, PiePlotter, NeuronTypePlotter, MRLPlotter, LFPPlotter,CategoricalScatterPlotter
+from opts_validator import OptsValidator
 from stats import Stats
+from layout import Layout
+from plotters import CategoricalScatterPlotter, PeriStimulusHistogramPlotter
 from initialize_experiment import Initializer
 
-peristimulus_plots = {
-    f"plot_{calc_type}": {'class': PeriStimulusHistogramPlotter, 'method': 'plot'}
-    for calc_type in [
-        'psth', 'proportion', 'autocorrelation', 'spectrum', 'cross_correlation', 'autocorrelogram'
-    ]}
 
-mrl_procs = {meth: {'class': MRLPlotter, 'method': meth} for meth in 
-             ['mrl_bar_plot', 'mrl_rose_plot', 'mrl_heat_map', 'plot_phase_phase_over_frequencies',
-              'make_phase_phase_rose_plot', 'make_phase_phase_trace_plot']}
-
-lfp_procs = {f'plot_{meth}': {'class': LFPPlotter, 'method': f'plot_{meth}'} for meth in 
-             ['power', 'coherence', 'coherence_over_frequencies', 'spectrogram', 'correlation', 
-              'max_correlations', 'granger']}
-
-other_procedures = {
-    #'plot_group_stats': {'class': GroupStatsPlotter, 'method': 'plot_group_stats'},
-    'make_spreadsheet': {'class': Stats, 'method': 'make_df', 'follow_up': 'make_spreadsheet'},
-    'unit_upregulation_pie_chart': {'class': PiePlotter, 'method': 'unit_upregulation_pie_chart'},
-    'neuron_type_scatterplot': {'class': NeuronTypePlotter, 'method': 'scatterplot'},
-    'plot_waveforms': {'class': NeuronTypePlotter, 'method': 'plot_waveforms'},
-    'plot_scatter': {'class': CategoricalScatterPlotter, 'method': 'plot'}
-}
-
-PROCEDURE_DICT = {**peristimulus_plots, **mrl_procs, **lfp_procs, **other_procedures}
+PROCEDURE_DICT = {
+    'categorical_scatter': CategoricalScatterPlotter}
 
 
-class Runner:
+class Runner(OptsValidator):
 
     def __init__(self, config_file=None):
         self.config = config_file if config_file else os.getenv('INIT_CONFIG')
@@ -61,24 +41,40 @@ class Runner:
                 raise Exception(f"File not found: {opts}")
             except json.JSONDecodeError:
                 raise Exception(f"Error decoding JSON from the file: {opts}")
-        if isinstance(opts, list):
-            self.calc_opts = opts
-        else:
-            self.calc_opts = opts.get('calc_opts', {})
-            self.graph_opts = opts.get('graph_opts', None)
-            self.proc_name = opts.get('method')
+        self.opts = opts
 
-    def prepare(self):
-        self.executing_class = PROCEDURE_DICT[self.proc_name]['class']
+    def run_main(self, opts):
+        if self.proc_name == 'make_figure':
+            self.executing_class = Layout
+            self.set_executing_instance()
+            self.executing_method = getattr(self.executing_instance, 'make_figure')
+            self.executing_method(self.opts)
+        
+        elif self.proc_name == 'make_plots':
+            self.executing_class = PROCEDURE_DICT[opts['plot_type']]
+            self.set_executing_instance()
+            self.executing_method = getattr(self.executing_instance, 'plot')
+            calc_opts = self.opts['calc_opts']
+            self.plot_spec = self.opts['plot_spec']
+            opts_list = [calc_opts]
+            self.run_list(opts_list)
+
+        elif self.proc_name == 'make_csv':
+            self.executing_class = Stats
+            self.set_executing_instance()
+            self.executing_method = getattr(self.executing_instance, 'make_df')
+            self.follow_up_method = 'make_csv'
+            opts_list = self.opts if isinstance(self.opts, list) else [self.opts]
+            self.run_list(opts_list)
+
+        else:
+            raise ValueError("Unknown proc name")
+
+    def set_executing_instance(self):
         if self.executing_class.__name__ in self.executing_instances:
             self.executing_instance = self.executing_instances[self.executing_class.__name__]
         else:
             self.executing_instance = self.executing_class(self.experiment)
-        method = PROCEDURE_DICT[self.proc_name].get('method')
-        if method is None:
-            method = self.proc_name
-        self.executing_method = getattr(self.executing_instance, method)
-        self.follow_up_method = PROCEDURE_DICT[self.proc_name].get('follow_up')
 
     def get_loop_lists(self):
         for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
@@ -124,36 +120,24 @@ class Runner:
         trigger_val = split_string[3][:-1]
         target_key = split_string[4]
         return trigger_key, trigger_val, target_key, target_val
-        
-    def validate(self):
-        # TODO: update animal selection validation
-        all_animal_ids = [animal.identifier for animal in self.experiment.all_animals]
-        selected_animals = self.current_calc_opts.get('selected_animals')
-        if selected_animals is not None and not all([id in all_animal_ids for id in selected_animals]):
-            raise ValueError("Missing animals")
-        if self.current_calc_opts['kind_of_data'] == 'spike' and self.current_calc_opts.get('adjustment') != 'none':
-            if self.current_calc_opts.get('evoked'):
-                raise ValueError("It does not make sense to set 'evoked' to True and 'adjustment' to anything other "
-                                 "than 'none'.  See Analysis Configuration Reference.")
-            if not self.current_calc_opts.get('periods'):
-                raise ValueError("You picked a value for adjustment other than 'none' and haven't specified which "
-                                 "periods to include.  This will result in a nonsensical result.  See the Analysis "
-                                 "Configuration Reference.")
 
     def execute(self):
         if self.current_calc_opts.get('rules'):
             self.apply_rules()
-        self.validate()
         print(f"executing {self.executing_method} with options {self.current_calc_opts}")
         if self.graph_opts is not None:
             self.executing_method(self.current_calc_opts, self.graph_opts)
         else:
             self.executing_method(self.current_calc_opts)
 
-    def run_all(self):
+    def prep(self, prep):
+        self.validate_and_load(prep)
+        self.executing_method = getattr(self.experiment, self.proc_name)
+        self.run_list()
+        self.loop_lists = {}
 
-        opts_list = self.calc_opts if isinstance(self.calc_opts, list) else [self.calc_opts]
-            
+    def run_list(self, opts_list):
+
         for opts in opts_list:
             self.current_calc_opts = opts
             self.get_loop_lists()
@@ -162,16 +146,16 @@ class Runner:
             else:
                 self.execute()
 
-    def run(self, proc_name, opts, *args, prep=None, **kwargs):
+    def validate_and_load(self, opts):
+        self.validate_opts(opts)
+        self.proc_name = opts['procedure']
+        self.load_analysis_config(opts)
+
+    def run(self, opts, *args, prep=None, **kwargs):
         
         if prep:
-            self.load_analysis_config(prep)
-            self.executing_method = getattr(self.experiment, self.proc_name)
-            self.run_all()
-            self.loop_lists = {}
-        self.load_analysis_config(opts)
-        self.proc_name = proc_name
-        self.prepare()
-        self.run_all()
+            self.prep()
+        self.validate_and_load(opts)
+        self.run_main(opts)
         if self.follow_up_method is not None:
-            getattr(self.executing_instance, self.follow_up_method)(*args, **kwargs)
+            self.follow_up_method(*args, **kwargs)

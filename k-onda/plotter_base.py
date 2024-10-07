@@ -4,10 +4,11 @@ class PlotterBase(Base):
     _experiment = None
     _origin_plotter = None
     _active_plotter = None
-    _active_figurer = None
+    _active_fig = None
     _active_ax = None
     _active_spec_type = None
     _active_spec = None
+    _is_layout = False
 
     @property
     def experiment(self):
@@ -34,12 +35,12 @@ class PlotterBase(Base):
         PlotterBase._active_plotter = value
 
     @property
-    def active_figurer(self):
-        return PlotterBase._active_figurer
+    def active_fig(self):
+        return PlotterBase._active_fig
 
-    @active_figurer.setter
-    def active_figurer(self, value):
-        PlotterBase._active_figurer = value
+    @active_fig.setter
+    def active_fig(self, value):
+        PlotterBase._active_fig = value
 
     @property
     def active_ax(self):
@@ -64,4 +65,13 @@ class PlotterBase(Base):
     @active_spec.setter
     def active_spec(self, value):
         PlotterBase._active_spec = value
+
+    @property
+    def is_layout(self):
+        return PlotterBase._is_layout
+    
+    @is_layout.setter
+    def is_layout(self, value):
+        PlotterBase._is_layout = value
+
 

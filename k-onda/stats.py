@@ -215,7 +215,7 @@ class Stats(Base):
 
         return rows
 
-    def make_spreadsheet(self, path=None, filename=None, force_recalc=True):
+    def make_csv(self, path=None, filename=None, force_recalc=True):
         """
         Creates a spreadsheet (CSV file) from a specified DataFrame stored within the object.
 
