@@ -91,7 +91,16 @@ class Plotter(PlotterBase, PlottingMixin):
         with open(os.path.join(path, opts_filename), 'w') as file:
             json.dump(to_serializable(self.calc_opts), file)
         plt.close(fig)
-    
+
+    def get_aesthetics(self, row):
+        return {
+            attr: val
+            for label in row
+            for member, attrs_vals in self.active_spec.get(label, {}).get('aesthetic', {}).items()
+            if row[label] == member or member == '___'
+            for attr, val in attrs_vals.items()
+        }
+        
 
 class HistogramPlotter(Plotter):
     
@@ -112,14 +121,7 @@ class CategoryPlotter(Plotter):
                                      self.bar_width, **aesthetic_args)
     
     # {'period_type': {'aesthetic': {'light_on': {'color': 'green'}}}}
-    def get_aesthetics(self, row):
-
-        aesthetics = {}
-        for label in row.keys():
-            for member, attrs_vals in self.active_spec.get(label, {}).get('aesthetic', {}).items():
-                if row[label] == member or member == '___':
-                    aesthetics.update(attrs_vals)
-        return aesthetics
+    
 
     def find_position(self, observation, division_types=None, start_position=0):
         segment_info = self.active_spec
@@ -261,16 +263,18 @@ class CategoricalScatterPlotter(CategoryPlotter):
                 inner_positions = current_positions
 
 class LinePlotter(Plotter):
-    pass
-
-class WaveformPlotter(LinePlotter):
-  
-
     def process_calc(self, info):
         ax = self.active_ax
         for row in info:
             val = row[row['attr']]
-            ax.plot(np.arange(len(val)), val)
+            ax.plot(np.arange(len(val)), val, **self.get_aesthetics(row))
+
+
+class WaveformPlotter(LinePlotter):
+    pass
+  
+
+    
 
 
 

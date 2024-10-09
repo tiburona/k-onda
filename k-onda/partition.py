@@ -17,7 +17,8 @@ class Partition(PlotterBase):
         for k in ('segment', 'section'):
             if k in self.spec:
                 self.next = {k: self.spec.pop(k)}
-        self.gs_xy = self.spec.pop('gs_xy') if 'gs_xy' in self.spec else None
+        
+        self.aesthetics = self.spec.pop('aesthetics') if 'aesthetics' in self.spec else {}
 
         if self.active_fig == None:
             self.fig = self.origin_plotter.make_fig()
@@ -82,6 +83,7 @@ class Section(Partition):
                   index=None):
         super().__init__(origin_plotter, parent_plotter=parent_plotter)
         # index should refer to a starting point in the parent gridspec
+        self.gs_xy = self.spec.pop('gs_xy') if 'gs_xy' in self.spec else None
         if index:
             self.starting_index = index
         elif self.gs_xy:
@@ -90,15 +92,11 @@ class Section(Partition):
             self.starting_index = [0, 0]
         self.current_index = deepcopy(self.starting_index)
     
+        self.aspect = self.aesthetics.get('aspect')
+        
 
-
-        if index:
-            a = 'foo'
-           
-        if 'aspect' in self.spec:
-            self.aspect = self.spec.pop('aspect')
-        else:
-            self.aspect = None
+       
+        
         # right now section is assuming that it's taking one spot in a gridspec.
         # but in the layout case it needs to take
 
@@ -129,13 +127,14 @@ class Section(Partition):
         print("starting_index", self.starting_index)
         print("current_index", self.current_index)
         self.active_ax = self.active_plotter.axes[*self.current_index]
-
+        self.active_plotter.apply_aesthetics(self.aesthetics)
+        
         if self.next:
             # do next thing
             pass
         else:
             self.get_calcs()
-            self.origin_plotter.process_calc(self.info_list)
+            self.origin_plotter.process_calc([self.info_list[-1]])
 
 
 class Segment(Partition):

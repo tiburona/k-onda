@@ -22,8 +22,8 @@ class Figurer(PlotterBase):
 
 class Subplotter(PlotterBase):
 
-    def __init__(self, parent, index, spec=None, first=False,
-                 aspect=None, dimensions=None):
+    def __init__(self, parent, index, spec=None, first=False, aspect=None, dimensions=None, 
+                 grid_keywords=None, invisible_axes=None):
         self.fig = self.active_fig
         self.parent = parent
         self.index = index
@@ -31,13 +31,16 @@ class Subplotter(PlotterBase):
         self.first = first
         self.aspect = aspect
         self._dimensions = dimensions
+        self.grid_keywords = grid_keywords
         self.gs = self.create_grid()
         self._axes = None
         if first:
             self._ax_visibility = np.array([[False]])
         else:
             self._ax_visibility = np.array(
-                [[True for _ in range(self.dimensions[1])] for _ in range(self.dimensions[0])])
+                [[True if (i, j) not in invisible_axes else False 
+                  for j in range(self.dimensions[1])] 
+                  for i in range(self.dimensions[0])])
         
     @property
     def axes(self):
@@ -69,11 +72,12 @@ class Subplotter(PlotterBase):
         return dims
         
     def create_grid(self):
-        # subplotter computes a gridspec from subplot spec.  This doesn't make sense for layout if the
-        # parent gs is anything other than the original one ax subplot
-        gs = GridSpecFromSubplotSpec(*self.dimensions, subplot_spec=self.parent.gs[*self.index])
-        return gs
-    
+        grid_keywords = self.grid_keywords if self.grid_keywords else {}
+        return GridSpecFromSubplotSpec(
+            *self.dimensions, 
+            subplot_spec=self.parent.gs[*self.index], 
+            **grid_keywords)
+        
     def make_all_axes(self):
         return np.array([
             [self.make_ax(i, j) for j in range(self.dimensions[1])] for i in range(self.dimensions[0])
@@ -87,4 +91,10 @@ class Subplotter(PlotterBase):
             ax.set_box_aspect(self.aspect)
         ax.index = (i, j)
         return ax
+    
+    def apply_aesthetics(self, aesthetics):
+        for key, val in aesthetics.get('border', {}).items():
+             spine, tick, label = (val[i] in ['T', True, 'True'] for i in range(3))
+             self.active_ax.spines[key].set_visible(spine)
+             self.active_ax.tick_params(**{f"label{key}":label, key:tick})
 

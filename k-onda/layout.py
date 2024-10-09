@@ -23,7 +23,10 @@ class Layout(PlotterBase):
         self.figurer = Figurer()
         self.fig = self.figurer.make_fig()
         self.gs = self.figurer.gs
-        self.subplotter = Subplotter(self, index=[0, 0], dimensions=self.layout_spec['dimensions'])
+        self.subplotter = Subplotter(
+            self, index=[0, 0], dimensions=self.layout_spec['dimensions'], 
+            grid_keywords=self.layout_spec.get('grid_args', {}), 
+            invisible_axes=self.layout_spec.get('invisible_axes', []))
 
     def make_figure(self, layout_spec):
         self.initialize(layout_spec)

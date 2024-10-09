@@ -401,19 +401,23 @@ MS_26_OPTS = {
             'graph_dir': '/Users/katie/likhtik/MS_26',
             'procedure': 'make_figure',
             'dimensions': (2, 4),
+            'grid_args': {'height_ratios': (1, 2)},
+            'invisible_axes': [(0, 3)],
             'components': [
                 {'plot_type': 'waveform', 
                  'gs_xy': [(0, 1), (0, 3)], 
                  'plot_spec': {
                     'section': {
+                        'aesthetics': {
+                            'border': {
+                                'left': 'FFF', 'top': 'FFF', 'right': 'FFF', 'bottom': 'FFF'
+                            }},
                         'data_source': {
                              'type': 'unit', 
                              'members': ['1', '2', '3'], 
                              'dim': 1, 
-                             'attr': 'calc'},
-                         'segment': {
-                           'period_type': {'members': ['prelight', 'light', 'tone']}
-                           }
+                             'attr': 'calc',
+                             'aesthetic': {'___': {'color': 'black'}}}
                  }},
                  'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'waveform', 'base': 'period',
                                'data_path': '/Users/katie/likhtik/MS_26'}},
@@ -421,21 +425,30 @@ MS_26_OPTS = {
                  'gs_xy': [(1, 2), (0, 3)],
                  'plot_spec':{
                     'section': {
-                       'data_source': {
+                        'aesthetics': {'border': {'top': 'FFF', 'right': 'FFF'}},
+                        'data_source': {
                            'type': 'unit', 
                            'members': ['1', '2', '3'], 
                            'dim': 1, 
                            'attr': 'scatter'},
                        'segment': {
-                           'period_type': {'members': ['prelight', 'light', 'tone'], 'grouping': 0}
-                       }
-                   }},
+                           'period_type': {
+                                'members': ['prelight', 'light', 'tone'], 
+                                'grouping': 0,
+                                'spacing': .075,
+                                'aesthetic': {
+                                    '___': {'color': 'black'},
+                                    'prelight': {'background_color': ('white', .2)},
+                                    'light': {'background_color': ('green', .2)},
+                                    'tone': {'background_color': ('green', .2)}
+                        }}}}},
                    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
                                  'bin_size': .01}},
                 {'plot_type':'categorical_scatter',
                  'gs_xy': [(1, 2), (3, 4)],
                  'plot_spec': {
                     'section': {
+                        'aesthetics': { 'border': {'top': 'FFF', 'right': 'FFF'}},
                         'data_source': {
                             'type': 'animal', 
                             'members': ['MS26'], 
@@ -443,7 +456,15 @@ MS_26_OPTS = {
                             'attr':'grandchildren_scatter'},
                         'segment': {
                             'period_type': {
-                                'members': ['prelight', 'light', 'tone'], 'grouping': 0}
+                                'members': ['prelight', 'light', 'tone'], 
+                                'grouping': 0,
+                                'spacing': .075,
+                                'aesthetic': {
+                                    '___': {'color': 'black'},
+                                    'prelight': {'background_color': ('white', .2)},
+                                    'light': {'background_color': ('green', .2)},
+                                    'tone': {'background_color': ('green', .2)}
+                        }}
                           }
                   }},
                   'calc_opts':{'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
