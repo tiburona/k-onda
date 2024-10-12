@@ -2,14 +2,10 @@ from ast import Sub
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
 from plotter_base import PlotterBase
-from plotters import Figurer, CategoricalScatterPlotter, PeriStimulusHistogramPlotter, WaveformPlotter
+from plotters import Figurer, ExecutivePlotter
 from subplotter import Subplotter, Figurer
 
 
-PLOTTING_CLASSES = {
-    'categorical_scatter': CategoricalScatterPlotter,
-    'waveform': WaveformPlotter,
-}
 
 
 class Layout(PlotterBase):
@@ -33,14 +29,16 @@ class Layout(PlotterBase):
     
         for component in self.layout_spec['components']:
             self.active_plotter = self.subplotter
-            plot_cls, plot_spec, calc_opts, xy = (
-                component[k] for k in ['plot_type', 'plot_spec', 'calc_opts', 'gs_xy'])
+            plot_type, plot_spec, calc_opts, xy = (
+                component.get(k) for k in ['plot_type', 'plot_spec', 'calc_opts', 'gs_xy'])
             self.active_fig = self.fig.add_subfigure(self.subplotter.gs[*(slice(*d) for d in xy)])
             # Call the plot function
-            plotter = PLOTTING_CLASSES[plot_cls](self.experiment)
-            graph_opts = {'plot_spec': plot_spec, 'graph_dir': self.layout_spec['graph_dir']}
+            graph_opts = {'plot_spec': plot_spec, 'graph_dir': self.layout_spec['graph_dir'], 
+                          'plot_type': plot_type}
+            plotter = ExecutivePlotter(self.experiment)
             plotter.plot(calc_opts=calc_opts, graph_opts=graph_opts, parent_figure=self.active_fig,
                          index=[xy[0][0], xy[1][0]])
+            self.active_aesthetics = None
 
         basename = self.layout_spec.get('figure_name', 'figure')
         plotter.close_plot(basename=basename, fig=self.fig, do_title=False)

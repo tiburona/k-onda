@@ -5,12 +5,10 @@ import os
 from opts_validator import OptsValidator
 from stats import Stats
 from layout import Layout
-from plotters import CategoricalScatterPlotter, PeriStimulusHistogramPlotter
+from plotters import ExecutivePlotter
 from initialize_experiment import Initializer
 
 
-PROCEDURE_DICT = {
-    'categorical_scatter': CategoricalScatterPlotter}
 
 
 class Runner(OptsValidator):
@@ -45,36 +43,32 @@ class Runner(OptsValidator):
 
     def run_main(self, opts):
         if self.proc_name == 'make_figure':
-            self.executing_class = Layout
-            self.set_executing_instance()
-            self.executing_method = getattr(self.executing_instance, 'make_figure')
-            self.executing_method(self.opts)
+            self.set_executors(Layout, 'make_figure')
+            self.executing_method(opts)
         
         elif self.proc_name == 'make_plots':
-            self.executing_class = PROCEDURE_DICT[opts['plot_type']]
-            self.set_executing_instance()
-            self.executing_method = getattr(self.executing_instance, 'plot')
-            calc_opts = self.opts['calc_opts']
+            self.set_executors(ExecutivePlotter, 'plot')
+            calc_opts = opts['calc_opts']
             self.plot_spec = self.opts['plot_spec']
             opts_list = [calc_opts]
             self.run_list(opts_list)
 
         elif self.proc_name == 'make_csv':
-            self.executing_class = Stats
-            self.set_executing_instance()
-            self.executing_method = getattr(self.executing_instance, 'make_df')
+            self.set_executors(Stats, 'make_df')
             self.follow_up_method = 'make_csv'
-            opts_list = self.opts if isinstance(self.opts, list) else [self.opts]
+            opts_list = opts if isinstance(self.opts, list) else [opts]
             self.run_list(opts_list)
 
         else:
             raise ValueError("Unknown proc name")
-
-    def set_executing_instance(self):
+        
+    def set_executors(self, cls, method):
+        self.executing_class = cls
         if self.executing_class.__name__ in self.executing_instances:
             self.executing_instance = self.executing_instances[self.executing_class.__name__]
         else:
             self.executing_instance = self.executing_class(self.experiment)
+        self.executing_method = getattr(self.executing_instance, method)
 
     def get_loop_lists(self):
         for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 

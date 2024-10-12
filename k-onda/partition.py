@@ -14,11 +14,16 @@ class Partition(PlotterBase):
         self.spec = self.active_spec
         self.next = None
         self.parent_processor = parent_processor
+
         for k in ('segment', 'section'):
             if k in self.spec:
-                self.next = {k: self.spec.pop(k)}
-        
-        self.aesthetics = self.spec.pop('aesthetics') if 'aesthetics' in self.spec else {}
+                self.next = {k: self.spec[k]}
+        self.layers = self.spec.get('layers', {})
+        if self.parent_processor:
+            self.layers.update(self.parent_processor.layers)
+        self.aesthetics = self.spec.get('aesthetics', {})
+        if self.parent_processor:
+            self.aesthetics.update(self.parent_processor.aesthetics)
 
         if self.active_fig == None:
             self.fig = self.origin_plotter.make_fig()
@@ -26,7 +31,8 @@ class Partition(PlotterBase):
         else:
             self.fig = self.active_fig
         self.inherited_info = info if info else {}
-        self.info_list = []
+        self.info_by_division = []
+        self.info_by_attr = {}
         self.processor_classes = {
             'section': Section,
             'segment': Segment,
@@ -34,7 +40,7 @@ class Partition(PlotterBase):
         }
 
     def start(self):
-        self.process_divider(*next(iter(self.spec.items())), self.spec)
+        self.process_divider(*next(iter(self.spec['divisions'].items())), self.spec['divisions'])
 
     def process_divider(self, divider_type, current_divider, divisions):
 
@@ -47,12 +53,10 @@ class Partition(PlotterBase):
                         identifiers=[member], data_object_type=current_divider['type'])[0]
                 else:
                     source = member
-        
-                info['attr'] = current_divider.get('attr', 'calc')
+
                 info['data_source'] = source
                 info[source.name] = source.identifier
             else:
-                #setattr(self, f"selected_{divider_type}", member)
                 info[divider_type] = member
 
             if len(divisions) > 1:
@@ -60,7 +64,7 @@ class Partition(PlotterBase):
                 self.process_divider(*next(iter(remaining_divisions.items())), remaining_divisions)
             else:
                 updated_info = self.inherited_info | info
-                self.info_list.append(updated_info)
+                self.info_by_division.append(updated_info)
                 self.wrap_up(current_divider, i)
 
                 if self.next:
@@ -70,18 +74,23 @@ class Partition(PlotterBase):
                     processor.start()
 
     def get_calcs(self):
-        for d in self.info_list:
-            for k, v in d.items():
-                if k in ['neuron_type', 'period_type', 'period_group']:
-                    setattr(self, f"selected_{k}", v) 
-            attr = d['attr']
-            d[attr] = getattr(d['data_source'], attr)
-                 
+        for d in self.info_by_division:
+            # Set selected attributes if applicable
+            for key in ['neuron_type', 'period_type', 'period_group']:
+                if key in d:
+                    setattr(self, f"selected_{key}", d[key])
+            
+            # Determine the list of attributes, with a fallback if none are found
+            attrs = [layer['attr'] for layer in self.layers if 'attr' in layer] or [
+                self.active_spec.get('attr', 'calc')]
+           
+            d.update({attr: getattr(d['data_source'], attr) for attr in attrs})
 
 class Section(Partition):
     def __init__(self, origin_plotter, parent_plotter=None,
-                  index=None):
-        super().__init__(origin_plotter, parent_plotter=parent_plotter)
+                  index=None, parent_processor=None):
+        super().__init__(origin_plotter, parent_plotter=parent_plotter, 
+                         parent_processor=parent_processor)
         # index should refer to a starting point in the parent gridspec
         self.gs_xy = self.spec.pop('gs_xy') if 'gs_xy' in self.spec else None
         if index:
@@ -91,18 +100,8 @@ class Section(Partition):
         else:
             self.starting_index = [0, 0]
         self.current_index = deepcopy(self.starting_index)
-    
+
         self.aspect = self.aesthetics.get('aspect')
-        
-
-       
-        
-        # right now section is assuming that it's taking one spot in a gridspec.
-        # but in the layout case it needs to take
-
-        # this thinks it needs to create a subplot, but in the layout case it already exists
-        # can I make this either receive a subplot as an argument or create one?
-        # how would I pass it down?
 
         if not self.is_layout:
             self.active_plotter = Subplotter(
@@ -134,12 +133,14 @@ class Section(Partition):
             pass
         else:
             self.get_calcs()
-            self.origin_plotter.process_calc([self.info_list[-1]])
+            self.origin_plotter.delegate([self.info_by_division.pop()])
 
 
 class Segment(Partition):
-    def __init__(self, origin_plotter, parent_plotter, sources=None, info=None):
-          super().__init__(origin_plotter, parent_plotter, sources, info=info)
+    def __init__(self, origin_plotter, parent_plotter, info=None,
+                 parent_processor=None):
+          super().__init__(origin_plotter, parent_plotter, info=info,
+                           parent_processor=parent_processor)
           self.data = []
           self.columns = []
 
@@ -152,7 +153,7 @@ class Segment(Partition):
     def wrap_up(self, current_divider, i): 
         self.get_calcs()
         if i == len(current_divider['members']) - 1:
-            self.origin_plotter.process_calc(self.info_list)
+            self.origin_plotter.delegate(self.info_by_division)
 
 
 class Subset:

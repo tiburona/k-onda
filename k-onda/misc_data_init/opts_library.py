@@ -408,16 +408,17 @@ MS_26_OPTS = {
                  'gs_xy': [(0, 1), (0, 3)], 
                  'plot_spec': {
                     'section': {
+                        'attr': 'calc',
                         'aesthetics': {
                             'border': {
-                                'left': 'FFF', 'top': 'FFF', 'right': 'FFF', 'bottom': 'FFF'
-                            }},
+                                'left': 'FFF', 'top': 'FFF', 'right': 'FFF', 'bottom': 'FFF'}, 
+                            'default':
+                                {'color': 'black'}},
+                        'divisions': {
                         'data_source': {
                              'type': 'unit', 
                              'members': ['1', '2', '3'], 
-                             'dim': 1, 
-                             'attr': 'calc',
-                             'aesthetic': {'___': {'color': 'black'}}}
+                             'dim': 1}}
                  }},
                  'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'waveform', 'base': 'period',
                                'data_path': '/Users/katie/likhtik/MS_26'}},
@@ -426,21 +427,30 @@ MS_26_OPTS = {
                  'plot_spec':{
                     'section': {
                         'aesthetics': {'border': {'top': 'FFF', 'right': 'FFF'}},
+                        'divisions': {
                         'data_source': {
                            'type': 'unit', 
                            'members': ['1', '2', '3'], 
-                           'dim': 1, 
-                           'attr': 'scatter'},
+                           'dim': 1}},
                        'segment': {
-                           'period_type': {
-                                'members': ['prelight', 'light', 'tone'], 
-                                'grouping': 0,
-                                'spacing': .075,
-                                'aesthetic': {
-                                    '___': {'color': 'black'},
+                            'aesthetics': {
+                                'period_type': {
                                     'prelight': {'background_color': ('white', .2)},
                                     'light': {'background_color': ('green', .2)},
-                                    'tone': {'background_color': ('green', .2)}
+                                    'tone': {'background_color': ('green', .2)}}},
+                           'layers': [
+                                {'plot_type': 'categorical_scatter', 
+                                 'attr': 'scatter',
+                                 'aesthetics': {'default': {'cat_width': 2.5, 'spacing': 0.5, 'color': 'black'}}},
+                                 {'plot_type': 'categorical_line',
+                                  'attr': 'mean',
+                                  'aesthetics': {'default': {'cat_width': 2.5, 'spacing': 0.5, 'colors': 'blue', 
+                                                             'linestyles': '--'}}}
+                                  ],
+                            'divisions': {
+                                'period_type': {
+                                    'members': ['prelight', 'light', 'tone'], 
+                                    'grouping': 0  
                         }}}}},
                    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
                                  'bin_size': .01}},
@@ -448,23 +458,32 @@ MS_26_OPTS = {
                  'gs_xy': [(1, 2), (3, 4)],
                  'plot_spec': {
                     'section': {
-                        'aesthetics': { 'border': {'top': 'FFF', 'right': 'FFF'}},
+                        'aesthetics': {'border': {'top': 'FFF', 'right': 'FFF'}},
+                        'divisions': {
                         'data_source': {
                             'type': 'animal', 
                             'members': ['MS26'], 
                             'dim': 1, 
-                            'attr':'grandchildren_scatter'},
+                            'attr': 'grandchildren_scatter'}},
                         'segment': {
-                            'period_type': {
-                                'members': ['prelight', 'light', 'tone'], 
-                                'grouping': 0,
-                                'spacing': .075,
-                                'aesthetic': {
-                                    '___': {'color': 'black'},
+                            'aesthetics': {
+                                'period_type': {
                                     'prelight': {'background_color': ('white', .2)},
                                     'light': {'background_color': ('green', .2)},
-                                    'tone': {'background_color': ('green', .2)}
-                        }}
+                                    'tone': {'background_color': ('green', .2)}}
+                        },
+                            'layers': [
+                               {'plot_type': 'categorical_scatter', 
+                                'aesthetics': {'default': {'cat_width': 2.5, 'spacing': 0.5, 'color': 'black'}},
+                                 'attr': 'scatter'}, 
+                               {'plot_type': 'categorical_line', 
+                                'attr': 'mean', 
+                                'aesthetics': {'default': {'cat_width': 2.5, 'spacing': 0.5, 'colors': 'blue', 
+                                                           'linestyles': '--'}}}],
+                            'divisions': {
+                                'period_type': {
+                                    'members': ['prelight', 'light', 'tone'], 
+                                    'grouping': 0}}
                           }
                   }},
                   'calc_opts':{'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',

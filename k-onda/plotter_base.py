@@ -8,6 +8,8 @@ class PlotterBase(Base):
     _active_ax = None
     _active_spec_type = None
     _active_spec = None
+    _active_plot_type = None
+    _active_aesthetics = None
     _is_layout = False
 
     @property
@@ -73,5 +75,22 @@ class PlotterBase(Base):
     @is_layout.setter
     def is_layout(self, value):
         PlotterBase._is_layout = value
+
+    @property
+    def active_plot_type(self):
+        return PlotterBase._active_plot_type
+    
+    @active_plot_type.setter
+    def active_plot_type(self, value):
+        PlotterBase._active_plot_type = value
+
+    @property
+    def active_aesthetics(self):
+        return PlotterBase._active_aesthetics
+    
+    @active_aesthetics.setter
+    def active_aesthetics(self, value):
+        PlotterBase._active_aesthetics = value
+    
 
 

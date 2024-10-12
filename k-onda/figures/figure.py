@@ -10,7 +10,7 @@ import pickle
 main_folder_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(main_folder_path)
 
-from plotters import Plotter, PeriStimulusPlotter, GroupStatsPlotter
+from plotters import ExecutivePlotter, PeriStimulusPlotter, GroupStatsPlotter
 from phy_interface import PhyInterface
 from initialize_experiment import Initializer
 from misc_data_init.opts_library import FIGURE_1_OPTS, PSTH_OPTS, PROPORTION_OPTS, GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS
@@ -22,7 +22,7 @@ init.init_experiment()
 expt = init.experiment
 
 
-class Figure(Plotter):
+class Figure(ExecutivePlotter):
     """A class to create a three row figure for the safety paper."""
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)

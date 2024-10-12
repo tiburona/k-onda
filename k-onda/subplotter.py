@@ -94,7 +94,7 @@ class Subplotter(PlotterBase):
     
     def apply_aesthetics(self, aesthetics):
         for key, val in aesthetics.get('border', {}).items():
-             spine, tick, label = (val[i] in ['T', True, 'True'] for i in range(3))
-             self.active_ax.spines[key].set_visible(spine)
-             self.active_ax.tick_params(**{f"label{key}":label, key:tick})
+            spine, tick, label = (val[i] in ['T', True, 'True'] for i in range(3))
+            self.active_ax.spines[key].set_visible(spine)
+            self.active_ax.tick_params(**{f"label{key}":label, key:tick})
 

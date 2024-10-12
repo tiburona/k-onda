@@ -26,7 +26,10 @@ from plotter_base import PlotterBase
 from partition import Section, Segment, Subset
 from subplotter import Figurer
 
-class Plotter(PlotterBase, PlottingMixin):
+
+
+
+class ExecutivePlotter(PlotterBase, PlottingMixin):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple 
     plots of multiple kinds of data, see the figure module."""
 
@@ -92,62 +95,86 @@ class Plotter(PlotterBase, PlottingMixin):
             json.dump(to_serializable(self.calc_opts), file)
         plt.close(fig)
 
-    def get_aesthetics(self, row):
-        return {
-            attr: val
-            for label in row
-            for member, attrs_vals in self.active_spec.get(label, {}).get('aesthetic', {}).items()
-            if row[label] == member or member == '___'
-            for attr, val in attrs_vals.items()
-        }
-        
+    def delegate(self, info):
 
-class HistogramPlotter(Plotter):
+        def send(plot_type):
+            PLOT_TYPES[plot_type]().process_calc(info, main=main, aesthetics=aesthetics)
+
+        aesthetics = self.active_spec.get('aesthetics', {})
+        main = True
+        if 'layers' in self.active_spec:
+            for layer in self.active_spec['layers']:
+                main = layer.get('main', True)
+                aesthetics.update(layer.get('aesthetics', {}))
+                if 'attr' in layer:
+                    self.active_spec['attr'] = layer['attr']
+                if 'plot_type' in layer:
+                    send(layer['plot_type'])
+                else:
+                    send(self.graph_opts['plot_type'])
+        else:
+            send(self.graph_opts['plot_type'])
+                
+
+class FeaturePlotter(PlotterBase, PlottingMixin):
+    
+     def get_aesthetics_args(self, row, aesthetics):
+
+        aesthetic = {}
+        aesthetic_spec = deepcopy(aesthetics)
+        default, override = (aesthetic_spec.pop(k, {}) for k in ['default', 'override'])
+
+        aesthetic.update(default)
+            
+        for category, members in aesthetic_spec.items():
+            for member, aesthetic_vals in members.items():
+                if category in row and row[category] == member:
+                    aesthetic.update(aesthetic_vals)
+
+        for combination, overrides in override.items():
+            pairs = zip(combination.split('_')[::2], combination.split('_')[1::2])
+            if all(row.get(key, val) == val for key, val in pairs):
+                aesthetic.update(overrides)
+
+        return aesthetic
+
+
+class HistogramPlotter(FeaturePlotter):
     
     def plot_hist(self, x, y, width, ax):
         ax.bar(x, y, width=width) 
 
 
-class CategoryPlotter(Plotter):
-    
-    def process_calc(self, info):
+class CategoryPlotter(FeaturePlotter):
 
-        self.bar_width = self.graph_opts.get('bar_width', .2)
-        
-        for row in info:
-            aesthetic_args = self.get_aesthetics(row)
-            position = self.find_position(row, self.active_spec)
-            bar = self.active_ax.bar(position, getattr(row['data_source'], row['attr']), 
-                                     self.bar_width, **aesthetic_args)
-    
-    # {'period_type': {'aesthetic': {'light_on': {'color': 'green'}}}}
-    
+    # @property
+    # def cat_width(self):
+    #     return self.active_spec.get('cat_width', .8)
 
-    def find_position(self, observation, division_types=None, start_position=0):
-        segment_info = self.active_spec
+    def find_position(self, observation, aesthetics, division_types=None, start_position=0):
+        segment_info = self.active_spec['divisions']
         if division_types is None:
             division_types = deque(sorted(
-                [k for k in segment_info.keys() if 'grouping' in segment_info[k]], 
+                [k for k in segment_info.keys() if 'grouping' in segment_info[k]],
                 key=lambda x: segment_info[x]['grouping']))
-        
-        current_division_type = division_types.popleft()
-        
+
+        spacing = self.get_aesthetics_args(observation, aesthetics).get('spacing', 1)
+
         mult_factor = 1
         for dt in division_types:
-            bars_width = len(segment_info[dt]['members']) * self.bar_width
-            spacing = 2 * segment_info[dt].get('spacing', self.bar_width/.5)
-            mult_factor *= bars_width + spacing
-        
+            num_members = len(segment_info[dt]['members'])
+            mult_factor *= num_members + 2 * spacing
+
+        current_division_type = division_types.popleft()
         value = observation[current_division_type]
         index = segment_info[current_division_type]['members'].index(value)
-        
         position = index * mult_factor + start_position
-        
+
         if len(division_types) == 0:
-            return position
+            return position + spacing
         else:
             return self.find_position(
-                observation, segment_info, division_types=division_types, start_position=position)
+                observation, division_types=division_types, start_position=position)
 
     def compute_outer_label_positions(inner_positions, outer_labels, num_inner_per_outer):
         """
@@ -181,74 +208,24 @@ class CategoryPlotter(Plotter):
             idx += count  # Move to the next set of positions
 
         return outer_positions
-
-
-class CategoricalScatterPlotter(CategoryPlotter):
-
-    # def plot(self, graph_opts, parent_figure=None):
-    #     calc_opts, plot_spec = graph_opts
-    #     self.initialize(calc_opts)
-    #     # TODO: you might sometimes want different segments for different axes in a section
-    #     plot_spec = {
-    #         'section': 
-    #         {   'aspect': 1,
-    #             'unit': {
-    #                 'members': self.experiment.all_units, 'dim': 1, 'attr': 'scatter'
-    #                 },
-    #             'segment': {
-    #                 'period_type': {
-    #                     'members': list(self.calc_opts['periods'].keys()),
-    #                     'grouping': 0,
-    #                     'spacing': .075,
-    #                     'aesthetic': {
-    #                         '___': {'color': 'black'},
-    #                         'prelight': {'background_color': ('white', .2)},
-    #                         'light': {'background_color': ('green', .2)},
-    #                         'tone': {'background_color': ('green', .2)}
-    #                         }}}}}
-    #     self.process_plot_spec(plot_spec, parent_figure=parent_figure)
-    #     if not self.parent_figure:
-    #         self.close_plot()
-
-    #      # section: {'data_source': {'members': ['1', '2', '3'], 'dim': 0}
-    #      #           'segment': {'period_type': {'members': ['prelight', 'light', 'tone'], 'grouping':0},
-    #      #                       'aesthetic': 'background_color'}}'
-
-    def process_calc(self, info):
+    
+    def label(self, positions):
         ax = self.active_ax
-        self.cat_width = self.active_spec.get('cat_width', .8)
-        positions = []
-        for row in info:
-            if self.active_spec_type == 'segment':
-                position = self.find_position(row)
-                positions.append(position)
-            else:
-                # do something else
-                pass
-            val = row[row['attr']]
-            jitter = np.random.rand(len(val)) * self.cat_width/2 - self.cat_width/4
-            aesthetic_args = self.get_aesthetics(row)
-            if 'background_color' in aesthetic_args:
-                background_color, alpha = aesthetic_args.pop('background_color')
-                ax.axvspan(
-                    position - self.cat_width/2, position + self.cat_width/2, 
-                    facecolor=background_color, alpha=alpha)
-            ax.scatter([position + j for j in jitter], val, **aesthetic_args)
-            for i, dim in enumerate(['x', 'y']):
+        for i, dim in enumerate(['x', 'y']):
                 if ax.index[i] == 0:
                     getattr(ax, f"set_{dim}label")(
-                        self.get_labels()[self.calc_type][i])
+                        self.get_labels()[self.calc_type][i])   
         
         tick_label_bbox = ax.get_xticklabels()[0].get_window_extent()
         bbox_in_ax = tick_label_bbox.transformed(ax.transAxes.inverted())
         tick_label_ymin = bbox_in_ax.ymin
 
-        levels = reversed(
-            sorted(self.active_spec.keys(), key=lambda k: self.active_spec[k]['grouping']))
+        divisions = self.active_spec['divisions']
+        levels = reversed(sorted(divisions.keys(), key=lambda k: divisions[k]['grouping']))
         level_adjustment = 0
         for i, level in enumerate(levels):
-            labels = self.active_spec[level]['members']
-            if 'legend' not in self.active_spec[level]:
+            labels = divisions[level]['members']
+            if 'legend' not in divisions[level]:
                 level_adjustment -= .05
             if i == 0:
                 ax.set_xticks(positions)
@@ -262,17 +239,79 @@ class CategoricalScatterPlotter(CategoryPlotter):
                     ax.text(pos, tick_label_ymin - level_adjustment, lab)
                 inner_positions = current_positions
 
-class LinePlotter(Plotter):
-    def process_calc(self, info):
+
+class CategoricalScatterPlotter(CategoryPlotter):
+
+    def process_calc(self, info, main=True, aesthetics=None):
+        self.cat_width = aesthetics.get('default', {}).get('cat_width', .8)
+        ax = self.active_ax
+        positions = []
+        for row in info:
+            if self.active_spec_type == 'segment':
+                position = self.find_position(row, aesthetics) + self.cat_width/2
+                print("in scatter plotter")
+                print(row)
+                print(position)
+                positions.append(position)
+            else:
+                # do something else
+                pass
+            scatter_vals = row['scatter'] 
+            jitter = np.random.rand(len(scatter_vals)) * self.cat_width/2 - self.cat_width/4
+            aesthetic_args = self.get_aesthetics_args(row, aesthetics)
+            marker_args = {k: v for k, v in aesthetic_args.items() if k in ['color']}
+            if 'background_color' in aesthetic_args:
+                background_color, alpha = aesthetic_args.pop('background_color')
+                ax.axvspan(
+                    position - self.cat_width/2, position + self.cat_width/2, 
+                    facecolor=background_color, alpha=alpha)
+            ax.scatter([position + j for j in jitter], scatter_vals, **marker_args)
+    
+        if main:
+            self.label(positions)
+
+       
+class LinePlotter(FeaturePlotter):
+    def process_calc(self, info, aesthetics=None, **_):
+        attr = self.active_spec['attr']
         ax = self.active_ax
         for row in info:
-            val = row[row['attr']]
-            ax.plot(np.arange(len(val)), val, **self.get_aesthetics(row))
+            val = row[attr]
+            ax.plot(np.arange(len(val)), val, **self.get_aesthetics_args(row, aesthetics))
 
 
 class WaveformPlotter(LinePlotter):
     pass
-  
+
+
+class CategoricalLinePlotter(CategoryPlotter):
+    def process_calc(self, info, aesthetics=None, **_):
+        self.cat_width = self.active_spec.get('cat_width', .8)
+        ax = self.active_ax
+        names = ['linestyles', 'colors']
+
+        for row in info:
+            position = self.find_position(row, aesthetics) + self.cat_width/2
+            print("in line plotter")
+            print(row)
+            print(position)
+            aesthetic_args = self.get_aesthetics_args(row, aesthetics)
+            divisor = aesthetic_args.pop('divisor', 4)
+            marker_args = {name: aesthetic_args[name] for name in names if name in aesthetic_args}
+            ax.hlines(row['mean'], position-self.cat_width/divisor, position+self.cat_width/divisor, 
+                      **marker_args)
+
+class BarPlotter(CategoryPlotter):
+      def process_calc(self, info):
+
+        self.cat_width = self.graph_opts.get('cat_width', .2)
+        
+        for row in info:
+            aesthetic_args = self.get_aesthetics_args(row)
+            position = self.find_position(row, self.active_spec)
+            bar = self.active_ax.bar(position, getattr(row['data_source'], row['attr']), 
+                                     self.cat_width, **aesthetic_args)
+    
 
     
 
@@ -309,7 +348,10 @@ class PeriStimulusHistogramPlotter(HistogramPlotter):
 
 
 
-    
+PLOT_TYPES = {'categorical_scatter': CategoricalScatterPlotter,
+              'line_plot': LinePlotter,
+              'waveform': WaveformPlotter,
+              'categorical_line': CategoricalLinePlotter}  
 
 
    
@@ -373,7 +415,7 @@ class PeriStimulusHistogramPlotter(HistogramPlotter):
 #         )
 #         return x_step, x_start 
 
-class PeriStimulusSubplotter(Plotter, PlottingMixin):
+class PeriStimulusSubplotter(ExecutivePlotter, PlottingMixin):
     """Constructs a subplot of a PeriStimulusPlot."""
 
     def __init__(self, plotter, data_source, graph_opts, ax, parent_type='standalone', multiplier=1):
@@ -486,7 +528,7 @@ class PeriStimulusSubplotter(Plotter, PlottingMixin):
         self.ax.fill_between(self.x, self.y - sem, self.y + sem, color='blue', alpha=0.2)
 
 
-class PiePlotter(Plotter):
+class PiePlotter(ExecutivePlotter):
     """Constructs a pie chart of up- or down-regulation of individual neurons"""
 
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
@@ -513,7 +555,7 @@ class PiePlotter(Plotter):
                 self.close_plot(f'{group.identifier}')
 
 
-class NeuronTypePlotter(Plotter):
+class NeuronTypePlotter(ExecutivePlotter):
 
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
@@ -582,7 +624,7 @@ class NeuronTypePlotter(Plotter):
         ax.tick_params(axis='both', which='major', labelsize=5, length=1.25)
 
 
-class MRLPlotter(Plotter, PlottingMixin):
+class MRLPlotter(ExecutivePlotter, PlottingMixin):
     def __init__(self, experiment, lfp=None, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, lfp=lfp, graph_opts=graph_opts, plot_type=plot_type)
 
@@ -804,7 +846,7 @@ class MRLPlotter(Plotter, PlottingMixin):
         # TODO: implement this
 
 
-class LFPPlotter(Plotter):
+class LFPPlotter(ExecutivePlotter):
     def __init__(self, experiment, graph_opts=None, plot_type='standalone'):
         super().__init__(experiment, graph_opts=graph_opts, plot_type=plot_type)
 
@@ -1022,7 +1064,7 @@ class LFPPlotter(Plotter):
         mid_index = number_of_bins // 2
 
         ms_per_bin = 1000 * bin_size
-        bar_width = ms_per_bin # width of each bar in milliseconds
+        cat_width = ms_per_bin # width of each bar in milliseconds
 
         # Adjust tick positions
         ticks = [t * ms_per_bin for t in range(0, number_of_bins + 1)]  # positions for the bin edges
@@ -1031,7 +1073,7 @@ class LFPPlotter(Plotter):
         for i, (ax, group) in enumerate(zip(axes, self.lfp.groups)):
             for period_type in data[group.identifier]:
                 # Calculate midpoints
-                mid_points = [tick + bar_width / 2 for tick in ticks[:-1]]
+                mid_points = [tick + cat_width / 2 for tick in ticks[:-1]]
 
                 # Plot the line graph with midpoints
                 ax.plot(mid_points, data[group.identifier][period_type], marker='o', linestyle='-', 
