@@ -51,13 +51,19 @@ class Period(Data, BinMethods):
         if not self._events:
             self.get_events()
         return self._events
+    
+    @property
+    def reference_override(self):
+        override = self.calc_opts.get('reference_override')
+        return override and override[0] == self.name
         
     @property
     def reference(self):
-        if self.is_relative:
+        if (self.is_relative or not self.reference_period_type) and (
+            not self.reference_override):
             return None
-        if not self.reference_period_type:
-            return None
+        if self.reference_override:
+            return getattr(self, self.calc_opts['reference_override'][1])
         else:
             return self.periods[self.reference_period_type][self.identifier]
         

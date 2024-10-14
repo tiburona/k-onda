@@ -51,7 +51,8 @@ def cache_method(method):
             return method(self, *args, **kwargs)
             
         key_list = [self.calc_type, method.__name__, self.selected_neuron_type, 
-                    self.selected_period_type]
+                    self.selected_period_type, *(arg for arg in args), 
+                    *(kwarg for kwarg in kwargs)]
         for obj in list(reversed(self.ancestors))[1:]:
             key_list.append(obj.name)
             key_list.append(obj.identifier)

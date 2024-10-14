@@ -4,7 +4,7 @@ from collections import defaultdict
 from bisect import bisect_left as bs_left, bisect_right as bs_right
 from base_data import Data
 from period_event import Period, Event
-from period_constructor import PeriodConstructorMethods
+from period_constructor import PeriodConstructor
 from spike_methods import SpikeMethods
 from math_functions import calc_rates, calc_hist, cross_correlation, correlogram
 from bins import BinMethods
@@ -70,13 +70,14 @@ class RateMethods:
         return self.refer(rates)
 
 
-class Unit(Data, PeriodConstructorMethods, SpikeMethods):
+class Unit(Data, PeriodConstructor, SpikeMethods):
 
     _name = 'unit'
     
     def __init__(self, animal, category, spike_times, cluster_id, waveform=None, experiment=None, 
                  neuron_type=None, quality=None):
         super().__init__()
+        PeriodConstructor().__init__()
         self.animal = animal
         self.category = category
         self.spike_times = np.array(spike_times)

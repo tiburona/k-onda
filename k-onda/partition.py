@@ -80,6 +80,8 @@ class Partition(PlotterBase):
                 if key in d:
                     setattr(self, f"selected_{key}", d[key])
             
+            if 'percent_change' in self.calc_opts:
+                a = 'foo'
             # Determine the list of attributes, with a fallback if none are found
             attrs = [layer['attr'] for layer in self.layers if 'attr' in layer] or [
                 self.active_spec.get('attr', 'calc')]

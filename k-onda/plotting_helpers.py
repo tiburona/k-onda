@@ -2,18 +2,25 @@ import re
 
 class PlottingMixin:
     def get_labels(self):
-        adjustment = self.calc_opts.get('adjustment')
-        if not adjustment:
-            adjustment = ''
-        Hz = '' if adjustment == 'normalized' else ' (Spikes per Second)'
+       
+        sps = '(Spikes per Second)'
+
+        adjustment = ''
+
+        for comp in ['evoked', 'percent_change']:
+            if self.calc_opts.get(comp):
+                adjustment = comp
+                adjustment = smart_title_case(adjustment.replace('_', ' '))
+                if comp == 'percent_change':
+                    sps = ''
+        
         base = self.calc_opts.get('base') if self.calc_opts.get('base') else ''
 
-        return {'psth': ('Time (s)', f'{adjustment.capitalize()} Firing Rate{Hz}'),
-                'firing_rates': ('', 'Firing Rate (Spikes per Second)'),
+        return {'psth': ('Time (s)', 'Normalized Firing Rate'),
+                'firing_rates': ('', f'{adjustment} Firing Rate {sps}'),
                 'proportion': ('Time (s)', ''f'Proportion Positive {base.capitalize() + "s"}'),
                 'autocorr': ('Lags (s)', 'Autocorrelation'),
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum'),
-                'spontaneous_firing': ('Time(s)', 'Firing Rate (Samples per Second)'),
                 'cross_correlations': ('Lags (s)', 'Cross-Correlation'),
                 'correlogram':  ('Lags (s)', 'Spikes')}
     

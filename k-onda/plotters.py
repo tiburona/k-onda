@@ -73,6 +73,7 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
             fig = self.active_fig  
         fig.delaxes(fig.axes[0])
         self.set_dir_and_filename(fig, basename, do_title=do_title)
+        plt.show()
         self.save_and_close_fig(fig, basename)
 
     def set_dir_and_filename(self, fig, basename, do_title=True):
@@ -104,6 +105,9 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         main = True
         if 'layers' in self.active_spec:
             for layer in self.active_spec['layers']:
+                if layer['attr'] == 'mean' and 'percent_change' in self.calc_opts:
+                    a = 'foo'
+                
                 main = layer.get('main', True)
                 aesthetics.update(layer.get('aesthetics', {}))
                 if 'attr' in layer:
@@ -158,7 +162,12 @@ class CategoryPlotter(FeaturePlotter):
                 [k for k in segment_info.keys() if 'grouping' in segment_info[k]],
                 key=lambda x: segment_info[x]['grouping']))
 
+        # some_factor adjusts how much space each character takes
+        labels = segment_info[division_types[0]]['members']
         spacing = self.get_aesthetics_args(observation, aesthetics).get('spacing', 1)
+        label_lengths = [len(label) for label in labels]
+        max_label_length = max(label_lengths)
+        spacing = max_label_length * spacing
 
         mult_factor = 1
         for dt in division_types:
@@ -211,10 +220,10 @@ class CategoryPlotter(FeaturePlotter):
     
     def label(self, positions):
         ax = self.active_ax
-        for i, dim in enumerate(['x', 'y']):
-                if ax.index[i] == 0:
-                    getattr(ax, f"set_{dim}label")(
-                        self.get_labels()[self.calc_type][i])   
+        for i, (dim, edge) in enumerate(zip(['x', 'y'], ['bottom', 'left'])):
+            if ax.index[i] == 0 or getattr(ax, f"{edge}_edge"):
+                getattr(ax, f"set_{dim}label")(
+                    self.get_labels()[self.calc_type][i])   
         
         tick_label_bbox = ax.get_xticklabels()[0].get_window_extent()
         bbox_in_ax = tick_label_bbox.transformed(ax.transAxes.inverted())
@@ -256,7 +265,7 @@ class CategoricalScatterPlotter(CategoryPlotter):
             else:
                 # do something else
                 pass
-            scatter_vals = row['scatter'] 
+            scatter_vals = row[self.active_spec['attr']] 
             jitter = np.random.rand(len(scatter_vals)) * self.cat_width/2 - self.cat_width/4
             aesthetic_args = self.get_aesthetics_args(row, aesthetics)
             marker_args = {k: v for k, v in aesthetic_args.items() if k in ['color']}
@@ -286,7 +295,7 @@ class WaveformPlotter(LinePlotter):
 
 class CategoricalLinePlotter(CategoryPlotter):
     def process_calc(self, info, aesthetics=None, **_):
-        self.cat_width = self.active_spec.get('cat_width', .8)
+        self.cat_width = aesthetics.get('default', {}).get('cat_width', .8)
         ax = self.active_ax
         names = ['linestyles', 'colors']
 
@@ -296,7 +305,7 @@ class CategoricalLinePlotter(CategoryPlotter):
             print(row)
             print(position)
             aesthetic_args = self.get_aesthetics_args(row, aesthetics)
-            divisor = aesthetic_args.pop('divisor', 4)
+            divisor = aesthetic_args.pop('divisor', 2)
             marker_args = {name: aesthetic_args[name] for name in names if name in aesthetic_args}
             ax.hlines(row['mean'], position-self.cat_width/divisor, position+self.cat_width/divisor, 
                       **marker_args)

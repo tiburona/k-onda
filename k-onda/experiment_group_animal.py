@@ -3,7 +3,7 @@ from collections import defaultdict
 from base_data import Data
 from lfp import LFPPeriod, LFPMethods, LFPPrepMethods
 from spike import SpikePeriod, SpikeMethods, SpikePrepMethods
-from period_constructor import PeriodConstructorMethods
+from period_constructor import PeriodConstructor
 from bins import BinMethods
 from utils import formatted_now
 
@@ -98,12 +98,13 @@ class Group(Data, SpikeMethods, LFPMethods, BinMethods):
         self.children = self.animals
 
 
-class Animal(Data, PeriodConstructorMethods, SpikePrepMethods, SpikeMethods, LFPPrepMethods, 
+class Animal(Data, PeriodConstructor, SpikePrepMethods, SpikeMethods, LFPPrepMethods, 
              LFPMethods, BinMethods):
     _name = 'animal'
 
     def __init__(self, identifier, condition, animal_info, experiment=None, neuron_types=None):
         super().__init__()
+        PeriodConstructor().__init__()
         self.identifier = identifier
         self.condition = condition
         self.animal_info = animal_info

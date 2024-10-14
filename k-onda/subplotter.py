@@ -89,12 +89,33 @@ class Subplotter(PlotterBase):
         ax.set_visible(self.ax_visibility[i, j])
         if self.aspect:
             ax.set_box_aspect(self.aspect)
-        ax.index = (i, j)
-        return ax
+        ax_wrapper = AxWrapper(ax, (i, j))
+        return ax_wrapper
     
+    def mark_edges_of_component(self, xy):
+        a = 'foo'
+        for ax in self.axes.flatten():
+            if ax.index[0] == xy[0][1] - 1: # the bottommost row
+                ax.bottom_edge = True
+            if ax.index[1] == xy[1][0]: # the leftmost column
+                ax.left_edge = True
+
     def apply_aesthetics(self, aesthetics):
         for key, val in aesthetics.get('border', {}).items():
             spine, tick, label = (val[i] in ['T', True, 'True'] for i in range(3))
             self.active_ax.spines[key].set_visible(spine)
             self.active_ax.tick_params(**{f"label{key}":label, key:tick})
+
+
+class AxWrapper:
+    def __init__(self, ax, index):
+        self.ax = ax  # Store the original axis
+        self.index = index
+        self.bottom_edge = None
+        self.left_edge = None
+
+    def __getattr__(self, name):
+        # Forward any unknown attribute access to the original ax
+        return getattr(self.ax, name)
+
 

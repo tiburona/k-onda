@@ -1,7 +1,12 @@
+from collections import defaultdict
 import numpy as np
 
 
-class PeriodConstructorMethods:
+class PeriodConstructor:
+
+    def __init__(self):
+        self.target_periods = {}
+        self.reference_periods = defaultdict(list)
 
     @property
     def earliest_period(self):
@@ -35,6 +40,11 @@ class PeriodConstructorMethods:
             for period_type in filtered_period_info:
                 periods = getattr(self, f"{self.kind_of_data}_periods")
                 periods[period_type] = function(period_type, filtered_period_info[period_type])
+            for k, v in period_info.items():
+                if v.get('reference'):
+                    self.target_periods[v] = v['reference']
+                    self.reference_periods[v['reference']].append(k)
+
 
     def construct_periods(self, period_type, period_info):
         periods = []

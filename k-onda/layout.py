@@ -32,7 +32,8 @@ class Layout(PlotterBase):
             plot_type, plot_spec, calc_opts, xy = (
                 component.get(k) for k in ['plot_type', 'plot_spec', 'calc_opts', 'gs_xy'])
             self.active_fig = self.fig.add_subfigure(self.subplotter.gs[*(slice(*d) for d in xy)])
-            # Call the plot function
+            
+            self.subplotter.mark_edges_of_component(xy)
             graph_opts = {'plot_spec': plot_spec, 'graph_dir': self.layout_spec['graph_dir'], 
                           'plot_type': plot_type}
             plotter = ExecutivePlotter(self.experiment)

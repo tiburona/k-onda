@@ -441,10 +441,10 @@ MS_26_OPTS = {
                            'layers': [
                                 {'plot_type': 'categorical_scatter', 
                                  'attr': 'scatter',
-                                 'aesthetics': {'default': {'cat_width': 2.5, 'spacing': 0.5, 'color': 'black'}}},
+                                 'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'color': 'black'}}},
                                  {'plot_type': 'categorical_line',
                                   'attr': 'mean',
-                                  'aesthetics': {'default': {'cat_width': 2.5, 'spacing': 0.5, 'colors': 'blue', 
+                                  'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'colors': 'blue', 
                                                              'linestyles': '--'}}}
                                   ],
                             'divisions': {
@@ -463,8 +463,7 @@ MS_26_OPTS = {
                         'data_source': {
                             'type': 'animal', 
                             'members': ['MS26'], 
-                            'dim': 1, 
-                            'attr': 'grandchildren_scatter'}},
+                            'dim': 1}},
                         'segment': {
                             'aesthetics': {
                                 'period_type': {
@@ -474,11 +473,11 @@ MS_26_OPTS = {
                         },
                             'layers': [
                                {'plot_type': 'categorical_scatter', 
-                                'aesthetics': {'default': {'cat_width': 2.5, 'spacing': 0.5, 'color': 'black'}},
-                                 'attr': 'scatter'}, 
+                                'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'color': 'black'}},
+                                 'attr': 'grandchildren_scatter'}, 
                                {'plot_type': 'categorical_line', 
                                 'attr': 'mean', 
-                                'aesthetics': {'default': {'cat_width': 2.5, 'spacing': 0.5, 'colors': 'blue', 
+                                'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'colors': 'blue', 
                                                            'linestyles': '--'}}}],
                             'divisions': {
                                 'period_type': {
@@ -487,6 +486,6 @@ MS_26_OPTS = {
                           }
                   }},
                   'calc_opts':{'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
-                               'bin_size': .01}}
-            ]
+                            'bin_size': .01, 'percent_change': {'level': 'unit', 'reference': 'prelight'}}}
+        ]
         }

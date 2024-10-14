@@ -154,8 +154,6 @@ class Base:
         if identifier:
             return [source for source in data_sources if source.identifier == identifier][0]
 
-
-        
     @property
     def pre_stim(self):
         return self.calc_opts.get('events', {}).get(self.selected_period_type, {}).get('pre_stim')
@@ -177,6 +175,8 @@ class Data(Base):
     def get_calc(self, calc_type=None):
         if calc_type is None:
             calc_type = self.calc_type
+        if self.calc_opts.get('percent_change'):
+            return self.percent_change
         return getattr(self, f"get_{calc_type}")()
 
     @property
@@ -292,7 +292,7 @@ class Data(Base):
         
     @property
     def mean(self):
-        return np.mean(self.calc)
+        return np.mean(self.refer(self.calc))
     
     @property
     def sem(self):
@@ -394,8 +394,7 @@ class Data(Base):
                 for child in self.children:
                     child.accumulate(method, max_depth, depth + 1, default_attr, accumulator)
 
-        return accumulator        
-    
+        return accumulator     
 
     @property
     def hierarchy(self):
@@ -438,6 +437,46 @@ class Data(Base):
 
         return descendants
     
+    def get_reference_calc(self, reference_period_type):
+        orig_period_type = self.selected_period_type
+        self.selected_period_type = reference_period_type
+        reference_calc = getattr(self, f"get_{self.calc_type}")()
+        self.selected_period_type = orig_period_type
+        return reference_calc
+
+    @property
+    def has_reference(self):
+        return hasattr(self, 'reference') and self.reference is not None
+    
+    @property
+    def percent_change(self):
+        return self.get_percent_change()
+    
+    def get_percent_change(self):
+        # {'level': 'unit', 'reference': 'prelight'}
+        percent_change = self.calc_opts.get('percent_change', {'level': 'period'})
+        level = percent_change['level']
+        # we are currently at a higher tree level than the % change ref level
+        if level not in self.hierarchy or (
+            self.hierarchy.index(self.name) < self.hierarchy.index(level)):
+            return self.get_average('get_percent_change', stop_at=level)
+        # we are currently at a lower tree level than the % change ref level
+        elif self.hierarchy.index(self.name) > self.hierarchy.index(level):
+            ref_obj = [anc for anc in self.ancestors if anc.name == level][0]
+            ref = self.get_ref(ref_obj, percent_change['reference'])
+        # we are currently at the % change ref level
+        else: 
+            ref = self.get_ref(self, percent_change['reference'])
+
+        orig = getattr(self, f"get_{self.calc_type}")()
+        return orig/np.mean(ref) * 100 - 100
+
+    def get_ref(self, obj, reference_period_type):
+        if obj.has_reference:
+            return getattr(obj.reference, f"get_{self.calc_type}")
+        else:
+            return obj.get_reference_calc(reference_period_type)
+        
     def refer(self, data, calc_type=None):
         if not calc_type:
             calc_type = self.calc_type
