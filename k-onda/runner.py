@@ -9,8 +9,6 @@ from plotters import ExecutivePlotter
 from initialize_experiment import Initializer
 
 
-
-
 class Runner(OptsValidator):
 
     def __init__(self, config_file=None):

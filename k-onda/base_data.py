@@ -370,6 +370,13 @@ class Data(Base):
     
     def concatenate(self, method=None, max_depth=-1):   
         return np.concatenate(self.accumulate(method=method, max_depth=max_depth)[max_depth])
+    
+    @property
+    def stack(self):
+        return self.get_stack()
+    
+    def get_stack(self):
+        return np.vstack([child.calc for child in self.children])
    
     @property
     def scatter(self):

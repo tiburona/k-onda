@@ -5,7 +5,6 @@ from bisect import bisect_left as bs_left, bisect_right as bs_right
 from base_data import Data
 from period_event import Period, Event
 from period_constructor import PeriodConstructor
-from spike_methods import SpikeMethods
 from math_functions import calc_rates, calc_hist, cross_correlation, correlogram
 from bins import BinMethods
 from phy_interface import PhyInterface
@@ -170,8 +169,10 @@ class SpikePeriod(Period, RateMethods):
         self.animal = self.unit.animal
         self.parent = unit
         self.private_cache = {}
-        self.start = self.onset
-        self.stop = self.onset + self.duration*self.sampling_rate
+        self.start = self.onset 
+        if self.pre_period: 
+            self.start -= self.pre_period * self.sampling_rate
+        self.stop = self.onset + self.duration * self.sampling_rate
         
     def get_events(self):
         self._events = [SpikeEvent(self, self.unit, start, i) 

@@ -56,6 +56,9 @@ class Partition(PlotterBase):
 
                 info['data_source'] = source
                 info[source.name] = source.identifier
+                if 'other_attributes' in self.active_spec:
+                    for attr in self.active_spec['other_attributes']:
+                        info['attr'] = getattr(source, attr)
             else:
                 info[divider_type] = member
 

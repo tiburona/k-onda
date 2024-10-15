@@ -25,7 +25,8 @@ class Period(Data, BinMethods):
         self.event_duration = period_info.get('event_duration')
         if target_period and hasattr(target_period, 'event_duration'):
             self.event_duration = target_period.event_duration
-        
+        self.pre_period = self.calc_opts.get('pre_period')
+        self.zero_point = self.pre_period
         if 'events' in self.calc_opts:
             self.events_settings = self.calc_opts['events'].get(
                 self.period_type, {'pre_stim': 0, 'post_stim': 1})

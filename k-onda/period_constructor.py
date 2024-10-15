@@ -58,7 +58,7 @@ class PeriodConstructor:
         )
                  
         if self.kind_of_data == 'lfp': # type: ignore
-            conversion_factor = self.lfp_sampling_rate/self.sampling_rate # type: ignore
+            conversion_factor = self.lfp_sampling_rate/self.sampling_rate 
             # For LFP, you need a subtraction for 0 indexing. For spikes, onsets are used to 
             # select time stamps, not elements of a Python iterable
             period_onsets = (np.array(period_onsets) * conversion_factor).astype(int) - 1
