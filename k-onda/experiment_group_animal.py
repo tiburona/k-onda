@@ -14,7 +14,7 @@ class Experiment(Data):
 
     def __init__(self, info):
         super().__init__()
-        self.info = info
+        self.exp_info = info
         self.identifier = info['identifier'] + formatted_now()
         self.conditions = info['conditions']
         self._sampling_rate = info.get('sampling_rate')
@@ -64,18 +64,10 @@ class Experiment(Data):
             entity.experiment = self
 
     def initialize_data(self):
-        if self.kind_of_data == 'spike':
-            for unit in self.all_units:
-                unit.spike_prep()
-        elif self.kind_of_data == 'lfp':
-            for animal in self.all_animals:
-                if not animal.include():
-                    continue
-                animal.lfp_prep()
-        elif self.kind_of_data == 'behavior':
-            pass
-        else:
-            raise ValueError("Unknown kind of data") 
+        for animal in self.all_animals:
+            if not animal.include():
+                continue
+            getattr(animal, f"{self.kind_of_data}_prep")()
 
     def validate_lfp_events(self, calc_opts):
         self.calc_opts = calc_opts

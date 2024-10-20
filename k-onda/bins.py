@@ -28,15 +28,15 @@ class TimeBin(Bin):
         if self.calc_type == 'correlation':
             ts = np.arange(-self.calc_opts['lags'], self.calc_opts['lags'] + 1) / self.sampling_rate
         else:
-            pre_stim, post_stim = [self.calc_opts['events'][self.period_type][opt] 
-                                for opt in ['pre_stim', 'post_stim']]
+            pre_event, post_event = [self.calc_opts['events'][self.period_type][opt] 
+                                for opt in ['pre_event', 'post_event']]
             bin_size = self.calc_opts.get('bin_size')
             if bin_size is None:
                 try:
                     bin_size = parent.spectrogram_bin_size
                 except AttributeError:
                     bin_size = parent.parent.spectrogram_bin_size
-            ts = np.arange(-pre_stim, post_stim, bin_size)
+            ts = np.arange(-pre_event, post_event, bin_size)
         
         # Round the timestamps to the nearest 10th of a microsecond
         ts = np.round(ts, decimals=7)
@@ -112,13 +112,9 @@ class BinMethods(TimeBinMethods, FrequencyBinMethods):
 
     @property
     def num_bins_per(self):
-        if self.parent.__class__.__name__[0:3] == 'LFP':
-            sampling_rate = self.lfp_sampling_rate
-        else:
-            sampling_rate = self.sampling_rate
-        bin_size = self.calc_opts.get('bin_size') * sampling_rate
         if not hasattr(self, 'start') and hasattr(self, 'stop'):
             return None
+        bin_size = self.calc_opts.get('bin_size', .01)
         return round((self.stop-self.start) / bin_size)
 
 

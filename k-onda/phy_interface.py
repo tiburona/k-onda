@@ -14,10 +14,9 @@ class PhyInterface:
 
     def __init__(self, path, animal):
         self.animal = animal
-        self.root = Path(path)
-        self.path = self.root / animal
+        self.path = Path(path)
         self.model = load_model(self.path / 'params.py')
-        self.cluster_dict = self.read_cluster_groups()
+        self.cluster_dict = self.read_curated_cluster_groups()
         self.spike_times = self.model.spike_times
         self.spike_clusters = np.load(self.path / 'spike_clusters.npy')
         if os.path.exists(self.path / f'{self.animal}.tsv'):
@@ -26,12 +25,16 @@ class PhyInterface:
             self.peak_electrodes_file = None
         self.assemble_cluster_dictionary()
 
-    def read_cluster_groups(self):
-        with open(self.path / 'cluster_group.tsv') as file:
-            tsv_file = csv.reader(file, delimiter='\t')
-            tsv_lines = list(tsv_file)[1:]
-        return {int(clust): {'animal': self.animal, 'group': group, 'cluster': int(clust)} for clust, group in tsv_lines
-                if group != 'noise'}
+    def read_curated_cluster_groups(self):
+        # Open the curated cluster groups file (from Phy)
+        with open(self.path / 'cluster_info.tsv') as file:
+        # Use DictReader to read the file with headers
+            tsv_file = csv.DictReader(file, delimiter='\t')
+
+            # Extract relevant fields: 'cluster_id' and 'group'
+            return {int(row['cluster_id']): {'animal': self.animal, 'group': row['group'], 
+                                                  'cluster': int(row['cluster_id'])}
+                for row in tsv_file if row['group'] != 'noise'}
 
     def assemble_cluster_dictionary(self):
         for cluster in self.cluster_dict:
@@ -42,6 +45,9 @@ class PhyInterface:
                 self.cluster_dict[cluster]['electrodes'] = [int(electrode) for electrode in row['Electrodes'].split(',')]
                 self.cluster_dict[cluster]['deflection'] = 'max' if row['Deflection'] in ['max', 'up'] else 'min'
                 self.cluster_dict[cluster]['quality'] = row['Quality']
+        else:
+            for cluster, data in self.cluster_dict.items():
+                data['electrodes'] = [self.model.clusters_channels[cluster]]
 
     def get_spike_ids_for_cluster(self, cluster_id):
         spike_ids = np.where(self.spike_clusters == cluster_id)[0]
@@ -90,6 +96,10 @@ class PhyInterface:
 
     def one_feature_view(self, id, electrodes, el_inds, pc_inds):
         return (self.get_features(id, electrodes)[:, el, pc] for el, pc in zip(el_inds, pc_inds))
+
+    def get_mean_waveforms_on_peak_electrodes(self, cluster_id):
+        electrodes = self.cluster_dict[cluster_id]['electrodes']
+        return self.get_mean_waveforms(cluster_id, electrodes)
 
     def get_mean_waveforms(self, cluster_id, electrodes):
         channels_used = self.model.get_cluster_channels(cluster_id)

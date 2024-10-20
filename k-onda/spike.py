@@ -8,6 +8,10 @@ from period_constructor import PeriodConstructor
 from math_functions import calc_rates, calc_hist, cross_correlation, correlogram
 from bins import BinMethods
 from phy_interface import PhyInterface
+from prep_methods import PrepMethods
+import os
+import h5py
+from utils import group_to_dict
 
 
 class SpikeMethods:
@@ -17,6 +21,11 @@ class SpikeMethods:
     
     def get_firing_rates(self):
         return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'))
+    
+    def get_spike_counts(self):
+        return self.get_average('get_spike_counts', stop_at=self.calc_opts.get('base', 'event'))
+    
+    
     
 class RateMethods:
 
@@ -28,28 +37,44 @@ class RateMethods:
     
     @property
     def spikes_in_seconds_from_start(self):
-        return [(spike - self.start)/self.sampling_rate 
-                for spike in self.unit.find_spikes(*self.spike_range)]
+        return [spike - self.start for spike in self.unit.find_spikes(*self.spike_range)]
     
     @property
     def spike_range(self):
         return (self.start, self.stop)
     
     def get_psth(self):
-        stop_at=self.calc_opts.get('base', 'event')
-        if self.name == stop_at:
-            return self._get_psth()
-        else:
-            return self.get_average('get_psth', stop_at=stop_at)
+        return self._get_calc('psth')
     
     def get_firing_rates(self):
+        return self._get_calc('firing_rates')
+    
+    def get_spike_counts(self):
+        return self._get_calc('spike_counts')
+    
+    def get_spike_train(self):
+        return self._get_calc('spike_train')
+        
+    def _get_calc(self, calc_type):
         stop_at=self.calc_opts.get('base', 'event')
         if self.name == stop_at:
-            return self._get_firing_rates()
+            return getattr(self, f"_get_{calc_type}")()
         else:
-            return self.get_average('get_firing_rates', stop_at=stop_at)
+            return self.get_average(f"get_{calc_type}", stop_at=stop_at)
+        
+    def _get_spike_counts(self):
+        bin_size = self.calc_opts.get('bin_size', .01)
+        if 'counts' in self.private_cache:
+            counts = self.private_cache['counts']
+        else:
+            counts = calc_hist(self.spikes, self.num_bins_per, self.spike_range)[0]
+        if self.calc_type == 'psth':
+            self.private_cache['counts'] = counts
+        return self.refer(counts)
     
-
+    def _get_spike_train(self):
+        return np.where(self._get_spike_counts() != 0, 1, 0)
+        
     def _get_psth(self):
         rates = self.get_firing_rates() 
         reference_rates = self.reference.get_firing_rates()
@@ -59,14 +84,7 @@ class RateMethods:
         return rates
 
     def _get_firing_rates(self):
-        bin_size = self.calc_opts.get('bin_size', .01)
-        if 'rates' in self.private_cache:
-            rates = self.private_cache['rates']
-        else:
-            rates = calc_rates(self.spikes, self.num_bins_per, self.spike_range, bin_size)
-        if self.calc_type == 'psth':
-            self.private_cache['rates'] = rates
-        return self.refer(rates)
+        return self._get_firing_counts()/self.calc_opts.get('bin_size', .01)
 
 
 class Unit(Data, PeriodConstructor, SpikeMethods):
@@ -103,8 +121,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
 
     @property
     def firing_rate(self):
-        return self.animal.sampling_rate * len(self.spike_times) / \
-            float(self.spike_times[-1] - self.spike_times[0])
+        return len(self.spike_times) / (float(self.spike_times[-1] - self.spike_times[0]))
 
     @property
     def unit_pairs(self):
@@ -148,7 +165,17 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
             wf = phy.get_mean_waveforms(self.cluster_id, electrodes)
             self.waveform = wf
             return wf
-
+        
+    def get_raster(self):
+        base = self.calc_opts.get('base', 'event')
+        # raster type can be spike_train for binarized data or spike_counts for gradations
+        raster_type = self.calc_opts.get('raster_type', 'spike_train')
+        depth = 1 if base == 'period' else 2
+        raster = self.get_stack(method=f"get_{raster_type}", depth=depth)
+        
+        return raster
+        
+        
 
 class UnitPair:
     pass
@@ -169,10 +196,17 @@ class SpikePeriod(Period, RateMethods):
         self.animal = self.unit.animal
         self.parent = unit
         self.private_cache = {}
-        self.start = self.onset 
-        if self.pre_period: 
-            self.start -= self.pre_period * self.sampling_rate
-        self.stop = self.onset + self.duration * self.sampling_rate
+        self._start = self.onset/self.sampling_rate 
+        self._stop = self.start + self.duration 
+        
+    @property
+    def start(self):
+        return self._start - self.pre_period
+    
+    @property
+    def stop(self):
+        return self._stop + self.post_period
+        
         
     def get_events(self):
         self._events = [SpikeEvent(self, self.unit, start, i) 
@@ -188,15 +222,15 @@ class SpikeEvent(Event, RateMethods, BinMethods):
 
     @property
     def start(self):
-        self._start - self.pre_stim*self.sampling_rate
+        self._start - self.pre_event
 
     @property
     def stop(self):
-        self._start + self.post_stim*self.sampling_rate
+        self._start + self.post_event
 
     @property
     def spike_range(self):
-        return (-self.pre_stim, self.post_stim)
+        return (-self.pre_event, self.post_event)
     
     def get_spike_counts(self):
         return calc_hist(self.spikes, self.num_bins_per, self.spike_range)
@@ -219,12 +253,66 @@ class SpikeEvent(Event, RateMethods, BinMethods):
         return correlogram(lags, bin_size, self.spikes, self.spikes, 1)
     
 
-class SpikePrepMethods:
+class SpikePrepMethods(PrepMethods):
 
+    def spike_prep(self):
+        self.unit_prep()
+        if 'periods_from_nev' in self.period_info.get('instructions', []):
+            self.period_info.update(self.get_periods_from_nev())
+        for unit in self.units['good']:
+            unit.spike_prep()
+            # if self.selected_period_type:
+            #     unit.children = unit.spike_periods[self.selected_period_type]
+            # else:
+            #     unit.children = [period for pt, periods in unit.spike_periods.items() 
+            #                      for period in periods]
+        
     def select_spike_children(self):
         if self.selected_neuron_type:
             return getattr(self, self.selected_neuron_type)
         else: 
             return self.units['good']
+
+    def get_periods_from_nev(self):
+        file_path = self.animal_info.get('nev_file_path')
+        if not file_path:
+            file_path = self.construct_path('nev')
+        periods_with_code = {k: v for k, v in self.animal_info['period_info'].items() if 'code' in v}
+
+        with h5py.File(file_path, 'r') as mat_file:
+            data = group_to_dict(mat_file['NEV'])
+            for period_type, period_dict in periods_with_code.items():
+                onsets = []
+                for i, code in enumerate(data['Data']['SerialDigitalIO']['UnparsedData'][0]):
+                    if code == period_dict['code']:
+                        onsets.append(int(data['Data']['SerialDigitalIO']['TimeStamp'][i][0]))
+                periods_with_code[period_type]['onsets'] = onsets
+        return periods_with_code
+    
+    def unit_prep(self):
+        if any(d.get('get_units_from_phy') for d in [self.animal_info, self.experiment.exp_info]):
+            
+            phy_interface = PhyInterface(self.construct_path('phy'), self)
+            cluster_dict = phy_interface.cluster_dict
+
+            for cluster, info in cluster_dict.items():
+                if info['group'] != 'noise':
+                    try:
+                        waveform = phy_interface.get_mean_waveforms_on_peak_electrodes(cluster)
+                    except ValueError as e:
+                        # Kilosort2 apparently sometimes creates a cluster with no spikes that phy
+                        # doesn't display, so you don't mark it noise
+                        if "argmax of an empty sequence" in str(e):
+                            continue
+                        else:
+                            raise
+                    waveform = phy_interface.get_mean_waveforms_on_peak_electrodes(cluster)
+                    _ = Unit(self, info['group'], info['spike_times'], cluster, waveform=waveform, 
+                             experiment=self.experiment)
+        else:
+            pass
+                   
+
+    
 
     

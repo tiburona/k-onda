@@ -149,18 +149,37 @@ class Base:
             if data_object_type in ['period', 'event']:
                 data_object_type = f"{self.kind_of_data}_{data_object_type}"
         data_sources = getattr(self.experiment, f"all_{data_object_type}s")
+        if identifier and 'all' in identifier:
+            return data_sources
         if identifiers:
             return [source for source in data_sources if source.identifier in identifiers]
         if identifier:
             return [source for source in data_sources if source.identifier == identifier][0]
 
     @property
-    def pre_stim(self):
-        return self.calc_opts.get('events', {}).get(self.selected_period_type, {}).get('pre_stim')
+    def pre_event(self):
+        return self.get_pre_post('pre', 'event')
     
     @property
-    def post_stim(self):
-        return self.calc_opts.get('events', {}).get(self.selected_period_type, {}).get('post_stim')
+    def post_event(self):
+        return self.get_pre_post('post', 'event')
+    
+    @property
+    def pre_period(self):
+        return self.get_pre_post('pre', 'period')
+    
+    @property
+    def post_period(self):
+        return self.get_pre_post('post', 'period')
+    
+    def get_pre_post(self, time, object_type):
+        return self.calc_opts.get('periods', {}).get(
+            self.selected_period_type, {}).get(f"{time}_{object_type}", 0)
+
+    
+    @property
+    def bin_size(self):
+        return self.calc_opts.get('bin_size', .01)
 
 
 class Data(Base):
@@ -375,8 +394,9 @@ class Data(Base):
     def stack(self):
         return self.get_stack()
     
-    def get_stack(self):
-        return np.vstack([child.calc for child in self.children])
+    def get_stack(self, depth=1, attr='calc', method=None, base=None):
+        return np.vstack(
+            self.accumulate(default_attr=attr, method=method, max_depth=depth, base=base)[depth])
    
     @property
     def scatter(self):
@@ -386,10 +406,12 @@ class Data(Base):
     def grandchildren_scatter(self):
         return self.accumulate(default_attr='mean', max_depth=2)[2]
     
-    def accumulate(self, method=None, max_depth=1, depth=0, default_attr=None, accumulator=None):
+    def accumulate(self, method=None, max_depth=1, depth=0, default_attr=None, accumulator=None, base=None):
         """Generalized recursive function to apply a method or default method to children."""
 
-        f = lambda x: method(x) if method else getattr(x, default_attr)
+        
+        
+        f = lambda x: getattr(x, method)() if method else getattr(x, default_attr)
         
         if accumulator is None:
             accumulator = defaultdict(list)

@@ -7,7 +7,7 @@ from runner import Runner
 TEST_PSTH_OPTS = {
     'calc_opts': {
         'kind_of_data': 'spike', 'data_type': 'psth',
-        'events': {'pretone': {'pre_stim': .05, 'post_stim': .65}, 'tone': {'pre_stim': .05, 'post_stim': .65}},
+        'events': {'pretone': {'pre_event': .05, 'post_event': .65}, 'tone': {'pre_event': .05, 'post_event': .65}},
         'bin_size': 0.01, 'adjustment': 'none', 'time_type': 'block', 'data_path': './data', 'row_type': 'event'}
 }
 
@@ -46,10 +46,10 @@ def verify_output(output_file):
         assert len(data_rows) > 0, "Output file is empty."
 
         bin_size = TEST_PSTH_OPTS['calc_opts']['bin_size']
-        pre_stim = TEST_PSTH_OPTS['calc_opts']['events']['tone']['pre_stim']
-        post_stim = TEST_PSTH_OPTS['calc_opts']['events']['tone']['post_stim']
+        pre_event = TEST_PSTH_OPTS['calc_opts']['events']['tone']['pre_event']
+        post_event = TEST_PSTH_OPTS['calc_opts']['events']['tone']['post_event']
         events_per_period = 30
-        num_bins_per_event = int((pre_stim + post_stim)/bin_size)
+        num_bins_per_event = int((pre_event + post_event)/bin_size)
         expected_len = num_animals * units_per_animal * tone_periods_per_animal * 2 * events_per_period
 
         assert len(data_rows) == expected_len, "Unexpected number of rows in data"
@@ -58,9 +58,9 @@ def verify_output(output_file):
         source_data = json.load(f)
         one_unit_data = source_data['animals'][0]['units']['good'][0]['spike_times']
         for event in range(10):
-            start = 30000 + (event - pre_stim) * sampling_rate
-            end = start + (pre_stim + post_stim) * sampling_rate
-            expected_firing_rate = len([spike for spike in one_unit_data if start <= spike < end])/(pre_stim +post_stim)
+            start = 30000 + (event - pre_event) * sampling_rate
+            end = start + (pre_event + post_event) * sampling_rate
+            expected_firing_rate = len([spike for spike in one_unit_data if start <= spike < end])/(pre_event +post_event)
             assert data_rows[event]['rate'] == expected_firing_rate, "Unexpected firing rate"
 
 

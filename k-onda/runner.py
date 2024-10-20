@@ -47,7 +47,7 @@ class Runner(OptsValidator):
         elif self.proc_name == 'make_plots':
             self.set_executors(ExecutivePlotter, 'plot')
             calc_opts = opts['calc_opts']
-            self.plot_spec = self.opts['plot_spec']
+            self.graph_opts = self.opts['graph_opts']
             opts_list = [calc_opts]
             self.run_list(opts_list)
 

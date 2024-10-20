@@ -1,5 +1,5 @@
 {
-  "calc_opts":  {"data_class": "spike", "data_type": "psth", "pre_stim": 0.05, "post_stim": 0.65, "bin_size": 0.01,
+  "calc_opts":  {"data_class": "spike", "data_type": "psth", "pre_event": 0.05, "post_event": 0.65, "bin_size": 0.01,
     "tone_events": [0, 300], "adjustment": "normalized", "time_type": "continuous", "row_type": "event",
     "levels": ["group"], "block_types": ["tone"]},
   "graph_opts": {"graph_dir": "/Users/katie/likhtik/data/graphs", "units_in_fig": 4, "tick_step": 0.1, "sem": false,

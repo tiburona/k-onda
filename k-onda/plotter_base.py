@@ -45,11 +45,11 @@ class PlotterBase(Base):
         PlotterBase._active_fig = value
 
     @property
-    def active_ax(self):
+    def active_acks(self):
         return PlotterBase._active_ax
 
-    @active_ax.setter
-    def active_ax(self, value):
+    @active_acks.setter
+    def active_acks(self, value):
         PlotterBase._active_ax = value
 
     @property

@@ -2,7 +2,6 @@ from base_data import Data
 from bins import BinMethods
 
 
-
 class Period(Data, BinMethods):
 
     _name = 'period'
@@ -25,23 +24,6 @@ class Period(Data, BinMethods):
         self.event_duration = period_info.get('event_duration')
         if target_period and hasattr(target_period, 'event_duration'):
             self.event_duration = target_period.event_duration
-        self.pre_period = self.calc_opts.get('pre_period')
-        self.zero_point = self.pre_period
-        if 'events' in self.calc_opts:
-            self.events_settings = self.calc_opts['events'].get(
-                self.period_type, {'pre_stim': 0, 'post_stim': 1})
-            self._pre_stim, self._post_stim = (self.events_settings[opt] 
-                                         for opt in ['pre_stim', 'post_stim'])
-        else:
-            self._pre_stim, self._post_stim, self.events_settings = (None, None, None)
-        
-    @property
-    def pre_stim(self):
-        return self._pre_stim
-    
-    @property
-    def post_stim(self):
-        return self._post_stim
 
     @property
     def children(self):
@@ -80,20 +62,8 @@ class Event(Data, BinMethods):
         self.parent = period
         self.parent = period
         self.period_type = self.period.period_type
-        events_settings = self.calc_opts['events'].get(self.period_type, 
-                                                       {'pre_stim': 0, 'post_stim': 1})
-        self._pre_stim, self._post_stim = (events_settings[opt] 
-                                           for opt in ['pre_stim', 'post_stim'])
-        self.duration = self.pre_stim + self.post_stim
+        self.duration = self.pre_event + self.post_event
         self.experiment = self.period.experiment
-
-    @property
-    def pre_stim(self):
-        return self._pre_stim
-    
-    @property
-    def post_stim(self):
-        return self._post_stim
 
     @property
     def reference(self):

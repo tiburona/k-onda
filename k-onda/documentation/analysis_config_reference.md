@@ -33,7 +33,7 @@ spreadsheet with PSTH values broken out by event and time bin.
 ```
 {
   "calc_opts":  {"kind_of_data": "spike", "calc_type": "psth", "bin_size": 0.01, "adjustment": "normalized", 
-  "events": {"pretone": {"pre_stim": 0, "post_stim": 1}, "tone": {"pre_stim": .05, "post_stim": .65}}, 
+  "events": {"pretone": {"pre_event": 0, "post_event": 1}, "tone": {"pre_event": .05, "post_event": .65}}, 
   "time_type": "continuous", "row_type": "event", "levels": ["group"], "block_types": {"tone": [0,1,2,3,4]}, 
   "data_path": "</path/where/csvs/are/written>}, 
   "graph_opts": {"graph_dir": "/Users/katie/likhtik/data/graphs", "units_in_fig": 4, "tick_step": 0.1, "sem": false, 
@@ -47,9 +47,9 @@ spreadsheet with PSTH values broken out by event and time bin.
 
 "events" (optional): a dictionary to specify the event structure for each period type, with period types as keys and 
 nested dictionaries as values.  The dictionaries contain three values that are strictly optional but two of which you 
-probably want to specify.  These two are "pre_stim" and "post_stim": the time in seconds before and after the onset of 
-an event you want to take data from.  A pre_stim of .05 will take 50 ms before event start.  A post-stim of .65 will 
-take 650 ms after the event.  A pre_stim of -.05 would start 50 ms after the event. The current defaults are 0 and 1 for 
+probably want to specify.  These two are "pre_event" and "post_event": the time in seconds before and after the onset of 
+an event you want to take data from.  A pre_event of .05 will take 50 ms before event start.  A post-stim of .65 will 
+take 650 ms after the event.  A pre_event of -.05 would start 50 ms after the event. The current defaults are 0 and 1 for 
 pre and post, respectively. If you would like to take data from your entire reference period, but only data from the 
 period surrounding the stimulus in your target period, you can specify the event characteristics as in the above example:
 the pretone data will be the entire period, without interruption, but the tone data will only be the .05s before and the 
@@ -61,8 +61,8 @@ indicate which events for the relevant period_type to use in the analysis.  For 
 events each, but you are only interested in the first period, you can specify "selection": [0, 30]. The default is to 
 take all events. A sample key, value pair could look like 
 ```
-"events": {"pretone": {"pre_stim": .05, "post_stim": .65, "selection": [0, 150]},
-           "tone": {"pre_stim": .05, "post_stim": .65, "selection": [0, 150]}}
+"events": {"pretone": {"pre_event": .05, "post_event": .65, "selection": [0, 150]},
+           "tone": {"pre_event": .05, "post_event": .65, "selection": [0, 150]}}
 ```
 
 "adjustment" (optional): You can extract 
@@ -131,14 +131,14 @@ rates during an individual event. You would then specify "base": "unit".  Defaul
 autocorrelation of the original time series of binned rates. 
 
 A note about events specification: if you are interested in calculating autocorrelation using data from  a longer span 
-of time than, for instance, a one-second stimulus duration, one good way to accomplish this is by setting pre_stim equal 
-to 0, post_stim equal to your period duration, and make sure to select only one event per period with the 
+of time than, for instance, a one-second stimulus duration, one good way to accomplish this is by setting pre_event equal 
+to 0, post_event equal to your period duration, and make sure to select only one event per period with the 
 "events" opt. Here is an example autocorrelation config:
 
 ```
 {"kind_of_data": "spike", "calc_type": "autocorrelation",  'bin_size': 0.01, 'max_lag': 99,
-"events": {"pretone": {"pre_stim": 0, "post_stim": 1, "selection": [0, 150, 30]}, 
-"tone": {"pre_stim": .05, "post_stim": .65}, "selection": [0, 150, 30]},  'block_types': ['tone']}
+"events": {"pretone": {"pre_event": 0, "post_event": 1, "selection": [0, 150, 30]}, 
+"tone": {"pre_event": .05, "post_event": .65}, "selection": [0, 150, 30]},  'block_types': ['tone']}
 ```
 
 "evoked": as described in the discussion of ["proportion"](#proportion)
@@ -185,7 +185,7 @@ we are interested in the raw data.  Pre-stim is 0 and post-stim is 1 because our
 analysis we are taking all the data.
 
 ```
-CROSS_CORR_OPTS = {'kind_of_data': 'spike', 'calc_type': 'cross-correlation', 'pre_stim': 0, 'post_stim': 1,
+CROSS_CORR_OPTS = {'kind_of_data': 'spike', 'calc_type': 'cross-correlation', 'pre_event': 0, 'post_event': 1,
                    'adjustment': 'none', 'bin_size': 0.001, 'levels': ['animal', 'unit_pair'], 
                    'period_types': ['pretone', 'tone'], 'unit_pairs': ['ACH,PV'], 'max_lag': .05}
                    

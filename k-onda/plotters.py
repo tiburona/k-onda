@@ -4,7 +4,7 @@ import math
 import numpy as np
 import seaborn as sns
 import pandas as pd
-from copy import deepcopy
+from copy import deepcopy, copy
 import json
 from collections import defaultdict, deque
 
@@ -216,7 +216,7 @@ class CategoryPlotter(FeaturePlotter):
         return outer_positions
     
     def label(self, positions):
-        ax = self.active_ax
+        ax = self.active_acks
         for i, (dim, edge) in enumerate(zip(['x', 'y'], ['bottom', 'left'])):
             if ax.index[i] == 0 or getattr(ax, f"{edge}_edge"):
                 getattr(ax, f"set_{dim}label")(
@@ -250,14 +250,11 @@ class CategoricalScatterPlotter(CategoryPlotter):
 
     def process_calc(self, info, main=True, aesthetics=None):
         self.cat_width = aesthetics.get('default', {}).get('cat_width', .8)
-        ax = self.active_ax
+        ax = self.active_acks
         positions = []
         for row in info:
             if self.active_spec_type == 'segment':
                 position = self.find_position(row, aesthetics) + self.cat_width/2
-                print("in scatter plotter")
-                print(row)
-                print(position)
                 positions.append(position)
             else:
                 # do something else
@@ -280,7 +277,7 @@ class CategoricalScatterPlotter(CategoryPlotter):
 class LinePlotter(FeaturePlotter):
     def process_calc(self, info, aesthetics=None, **_):
         attr = self.active_spec['attr']
-        ax = self.active_ax
+        ax = self.active_acks
         for row in info:
             val = row[attr]
             ax.plot(np.arange(len(val)), val, **self.get_aesthetics_args(row, aesthetics))
@@ -293,14 +290,11 @@ class WaveformPlotter(LinePlotter):
 class CategoricalLinePlotter(CategoryPlotter):
     def process_calc(self, info, aesthetics=None, **_):
         self.cat_width = aesthetics.get('default', {}).get('cat_width', .8)
-        ax = self.active_ax
+        ax = self.active_acks
         names = ['linestyles', 'colors']
 
         for row in info:
             position = self.find_position(row, aesthetics) + self.cat_width/2
-            print("in line plotter")
-            print(row)
-            print(position)
             aesthetic_args = self.get_aesthetics_args(row, aesthetics)
             divisor = aesthetic_args.pop('divisor', 2)
             marker_args = {name: aesthetic_args[name] for name in names if name in aesthetic_args}
@@ -315,30 +309,96 @@ class BarPlotter(CategoryPlotter):
         for row in info:
             aesthetic_args = self.get_aesthetics_args(row)
             position = self.find_position(row, self.active_spec)
-            bar = self.active_ax.bar(position, getattr(row['data_source'], row['attr']), 
+            bar = self.active_acks.bar(position, getattr(row['data_source'], row['attr']), 
                                      self.cat_width, **aesthetic_args)
 
 
 class RasterPlotter(FeaturePlotter):
+    
 
     def process_calc(self, info, aesthetics=None, **_):
-        ax = self.active_ax
+        acks = self.active_acks
         length = self
+        names = ['linestyles', 'colors']  # Moved this up as it's used earlier
+        
         for row in info:
             data = row[self.active_spec['attr']]
             aesthetic_args = self.get_aesthetics_args(row, aesthetics)
-            length = aesthetic_args.get('length', 1)
-            names = ['linestyles', 'colors']
-            for i, spiketrain in enumerate(data):
-                for spike in spiketrain:
-                    marker_args = {name: aesthetic_args[name] for name in names if name in aesthetic_args}
-                    self.ax.vlines(spike, i - length/2, i + length/2, **marker_args)
+            marker_args = {name: aesthetic_args[name] for name in names if name in aesthetic_args}
 
-        patch_start = info['data_source'].children[0].zero_point
-        patch_end = patch_start + .05
-        ax.add_patch(plt.Rectangle(
-            (patch_start, self.ax.get_ylim()[0]), patch_end, self.ax.get_ylim()[1] - self.ax.get_ylim()[0], facecolor='gray',
-            alpha=0.3))
+            # Initial data division (copying the original data)
+            data_divisions = [copy(data)]
+            
+            base = self.calc_opts.get('base', 'event') 
+            pre, post = (getattr(self, f"{opt}_{base}") for opt in ('pre', 'post'))
+            
+            # Handle data division if break_axes is present
+            if hasattr(acks, 'break_axes'):
+                ax_list = acks.ax_list
+                for dim in acks.break_axes:
+                    if dim == 1:
+                        data_divisions = [
+                            data_divisions[slice(*arg_set)] for arg_set in acks.break_axes[1]]
+                    elif dim == 0:
+                        data_divisions = [
+                            dd[:, slice(*((arg_set)/self.bin_size).astype(int))] for dd in data_divisions
+                            for arg_set in acks.break_axes[0]
+                        ]
+                x_slices = acks.break_axes[0]
+            else:
+                x_slices = [0, int(len(data[0])/self.bin_size)]
+                ax_list = [self.active_acks]
+
+            num_rows = len(data)
+            line_length = aesthetic_args.get('line_length', .9)
+            
+            for ax, data, x_slice in zip(ax_list, data_divisions, x_slices):
+                print(ax)
+                ax.set_ylim(0, num_rows)  # Set ylim based on the number of rows
+                
+                # Plot spikes on the vlines
+                for i, spiketrain in enumerate(data):
+                    for j, spike in enumerate(spiketrain):
+                        if spike:
+                            ax.vlines(j, i, i + line_length, **marker_args)
+
+                # Get the existing tick positions (in bins)
+                existing_ticks = ax.get_xticks()
+
+                # Filter the ticks to only those within the visible range of the data (i.e., corresponding to x_slice)
+                visible_ticks = [tick for tick in existing_ticks if 0 <= tick <= len(data[0])]
+
+                # Calculate the start and end time for the current x_slice (in seconds)
+                x_slice_start_time = x_slice[0] - pre  
+                x_slice_end_time = x_slice[1] - pre
+
+                # Create a time range that matches the visible ticks, from x_slice_start_time to x_slice_end_time
+                tick_range = np.linspace(x_slice_start_time, x_slice_end_time, len(visible_ticks))
+
+                # Set the x-tick positions and labels
+                ax.set_xticks(visible_ticks)  # Use only the visible ticks
+                ax.set_xticklabels([f"{label:.1f}" for label in tick_range])  # Labels in seconds
+                
+                ylim = ax.get_ylim()  # Retrieve ylim only once
+                            
+                marker = aesthetic_args.get('marker', {})
+                marker_type = marker.get('type', 'vertical_line')
+                when = marker.get('when', ('pre', 'post'))
+                
+                if marker_type == 'vertical_line':
+                    for event in when:
+                        ax.vlines(getattr(self, f"{event}_{base}")/self.bin_size, ylim[0], ylim[1], 
+                                  colors='black')
+                    
+
+                # # Add the gray rectangle patch
+                # patch_start = row['data_source'].children[0].zero_point
+                # patch_end = patch_start + 0.05
+                # ylim = ax.get_ylim()  # Retrieve ylim only once
+                # ax.add_patch(plt.Rectangle(
+                #     (patch_start, ylim[0]), patch_end, ylim[1] - ylim[0], 
+                #     facecolor='gray', alpha=0.3
+                # ))
 
 
 class PeriStimulusHistogramPlotter(HistogramPlotter):
@@ -357,10 +417,10 @@ class PeriStimulusHistogramPlotter(HistogramPlotter):
 
     def process_calc(self, data_frame):
         #self.do_stuff_like_set_title(data_frame)
-        num_bins = round((self.pre_stim + self.post_stim)/self.calc_opts['bin_size'])
-        x = np.linspace(self.pre_stim, self.post_stim, num_bins)
+        num_bins = round((self.pre_event + self.post_event)/self.calc_opts['bin_size'])
+        x = np.linspace(self.pre_event, self.post_event, num_bins)
         y = data_frame['calc'].iloc[0]
-        self.plot_hist(x, y, self.calc_opts['bin_size'], self.active_ax)
+        self.plot_hist(x, y, self.calc_opts['bin_size'], self.active_acks)
     
     def add_stimulus_patch(self):
         pass
@@ -371,7 +431,8 @@ class PeriStimulusHistogramPlotter(HistogramPlotter):
 PLOT_TYPES = {'categorical_scatter': CategoricalScatterPlotter,
               'line_plot': LinePlotter,
               'waveform': WaveformPlotter,
-              'categorical_line': CategoricalLinePlotter}  
+              'categorical_line': CategoricalLinePlotter,
+              'raster': RasterPlotter}  
 
 
    

@@ -1,5 +1,6 @@
 from collections import defaultdict
 import numpy as np
+from copy import copy
 
 
 class PeriodConstructor:
@@ -18,12 +19,7 @@ class PeriodConstructor:
     
     def select_children(self, attr):
         if self.selected_period_type:
-            children = getattr(self, attr)[self.selected_period_type]
-            if self.selected_period_type in self.calc_opts.get('periods', {}):
-                return [child for i, child in enumerate(children)
-                        if i in self.calc_opts['periods'][self.selected_period_type]]
-            else:
-                return children
+            return getattr(self, attr)[self.selected_period_type]     
         else:
             return self.get_all(attr)
 
@@ -32,9 +28,12 @@ class PeriodConstructor:
         for boo, function in zip((False, True), (self.construct_periods, 
                                                  self.construct_relative_periods)):
             try:
-                period_info = self.period_info
+                period_info = copy(self.period_info)
             except AttributeError:
-                period_info = self.animal.period_info
+                period_info = copy(self.animal.period_info)
+
+            del period_info['instructions']
+            
             filtered_period_info = {
                 k: v for k, v in period_info.items() if bool(v.get('relative')) == bool(boo)}
             for period_type in filtered_period_info:
@@ -64,9 +63,7 @@ class PeriodConstructor:
             period_onsets = (np.array(period_onsets) * conversion_factor).astype(int) - 1
             period_events = (np.array(period_events) * conversion_factor).astype(int) - 1
         event_ind = 0
-        # In this and the following method, periods are initialized with values in the sampling
-        # rate with which their onsets were recorded.  Conversion to LFP sampling rates takes place
-        # in the init function of those periods.
+        
         for i, (onset, events) in enumerate(zip(period_onsets, period_events)):
             if events:
                 period_events = np.array([
@@ -75,7 +72,7 @@ class PeriodConstructor:
             else:
                 period_events = []
             periods.append(self.period_class(self, i, period_type, period_info, onset, 
-                                             events=period_events, experiment=self.experiment)) # type: ignore
+                                             events=period_events, experiment=self.experiment)) 
         return periods
     
     def event_times_and_indices(self, period_info, period_type, period_onsets):

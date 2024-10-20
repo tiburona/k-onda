@@ -1,6 +1,6 @@
 from utils import log_directory_contents
 from runner import Runner
-from misc_data_init.opts_library import RUNNER_OPTS, VALIDATION_DATA_OPTS, MS_26_OPTS
+from misc_data_init.opts_library import CH27_OPTS, RUNNER_OPTS, VALIDATION_DATA_OPTS, MS_26_OPTS
 import pstats
 import signal
 import cProfile
@@ -14,8 +14,8 @@ def main():
 
 def run(log=True):
     #runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json')
-    runner = Runner(config_file='/Users/katie/likhtik/MS_26/init_config.json')
-    runner.run(MS_26_OPTS) 
+    runner = Runner(config_file='/Users/katie/likhtik/CH27mice/init_config.json')
+    runner.run(CH27_OPTS) 
                #prep={'method': 'validate_lfp_events', 'calc_opts': VALIDATION_DATA_OPTS})
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')

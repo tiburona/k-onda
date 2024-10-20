@@ -5,9 +5,10 @@ from math_functions import filter_60_hz, divide_by_rms, downsample
 from copy import deepcopy
 from neo.rawio import BlackrockRawIO
 import os
+from prep_methods import PrepMethods
 
 
-class LFPPrepMethods:
+class LFPPrepMethods(PrepMethods):
 
     def select_lfp_children(self):
         if self.calc_type == 'power':
@@ -43,8 +44,7 @@ class LFPPrepMethods:
     def get_lfp_from_stereotrodes(self, animal, data_to_return, file_path):
         lfp_from_stereotrodes_info = animal.animal_info['lfp_from_stereotrodes']
         nsx_num = lfp_from_stereotrodes_info['nsx_num']
-        reader = BlackrockRawIO(filename=file_path, nsx_to_load=nsx_num)
-        reader.parse_header()
+        reader = self.load_blackrock_file(file_path, nsx_to_load=nsx_num)
         for region, region_data in lfp_from_stereotrodes_info['electrodes'].items():
             electrodes = region_data if isinstance(region_data, list) else region_data[animal.identifier]
             data = np.mean([reader.nsx_datas[nsx_num][0][:, electrode] for electrode in electrodes], axis=0)
@@ -208,9 +208,9 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
 
             # get time points where the event will fall in the spectrogram in seconds
             spect_start = round(
-                (event_start - self.onset)/self.lfp_sampling_rate + true_beginning - self.pre_stim
+                (event_start - self.onset)/self.lfp_sampling_rate + true_beginning - self.pre_event
                 , 2)
-            spect_end = round(spect_start + self.pre_stim + self.post_stim, 2)
+            spect_end = round(spect_start + self.pre_event + self.post_event, 2)
             num_points = round(np.ceil((spect_end - spect_start) / bin_size - epsilon))  
             event_times = np.linspace(spect_start, spect_start + (num_points * bin_size), 
                                       num_points, endpoint=False)
