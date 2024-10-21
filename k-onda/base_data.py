@@ -48,7 +48,7 @@ class Base:
         filters = self.calc_opts.get('filter', {})
         if isinstance(filters, list):
             for filter in filters:
-                self.add_to_filter(self.parse_natural_language_filter(filter))
+                self.add_to_filters(self.parse_natural_language_filter(filter))
         else:
             for object_type in filters:
                 object_filters = self.calc_opts['filter'][object_type]

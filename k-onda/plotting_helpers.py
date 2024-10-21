@@ -19,6 +19,7 @@ class PlottingMixin:
         return {'psth': ('Time (s)', 'Normalized Firing Rate'),
                 'firing_rates': ('', f'{adjustment} Firing Rate {sps}'),
                 'proportion': ('Time (s)', ''f'Proportion Positive {base.capitalize() + "s"}'),
+                'raster': ('Time (s)', f"{self.calc_opts.get('base', 'event').capitalize()}s"),
                 'autocorr': ('Lags (s)', 'Autocorrelation'),
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum'),
                 'cross_correlations': ('Lags (s)', 'Cross-Correlation'),

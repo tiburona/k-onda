@@ -35,23 +35,28 @@ class Experiment(Data):
     
     @property
     def all_units(self):
-        return [unit for animal in self.all_animals for unit in animal.units['good']]
+        return [unit for animal in self.all_animals 
+                for unit in animal.all_units if unit.include(check_ancestors=True)]
 
     @property
     def all_spike_periods(self):
-        return [period for unit in self.all_units for period in unit.all_periods]
+        return [period for unit in self.all_units for period in unit.all_periods 
+                if period.include(check_ancestors=True)]
 
     @property
     def all_spike_events(self):
-        return [event for period in self.all_spike_periods for event in period.events]
+        return [event for period in self.all_spike_periods for event in period.events 
+                if event.include(check_ancestors=True)]
 
     @property
     def all_unit_pairs(self):
-        return [unit_pair for unit in self.all_units for unit_pair in unit.get_pairs()]
+        return [unit_pair for unit in self.all_units for unit_pair in unit.get_pairs() 
+                if unit_pair.include(check_ancestors=True)]
     
     @property
     def all_lfp_periods(self):
-        return [period for animal in self.all_animals for period in animal.get_all('lfp_periods')]
+        return [period for animal in self.all_animals for period in animal.get_all('lfp_periods') 
+                if period.include(check_ancestors=True)]
 
     def initialize_groups(self, groups):
         self.groups = groups
@@ -119,3 +124,7 @@ class Animal(Data, PeriodConstructor, SpikePrepMethods, SpikeMethods, LFPPrepMet
     @property
     def children(self):
         return getattr(self, f"select_{self.kind_of_data}_children")()
+    
+    @property
+    def all_units(self):
+        return [unit for category, units in self.units.items() for unit in units]

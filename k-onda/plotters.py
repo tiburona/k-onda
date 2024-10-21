@@ -96,10 +96,11 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
             json.dump(to_serializable(self.calc_opts), file)
         plt.close(fig)
 
-    def delegate(self, info):
+    def delegate(self, info, is_last=False):
 
         def send(plot_type):
-            PLOT_TYPES[plot_type]().process_calc(info, main=main, aesthetics=aesthetics)
+            PLOT_TYPES[plot_type]().process_calc(info, main=main, aesthetics=aesthetics, 
+                                                 is_last=is_last)
 
         aesthetics = self.active_spec.get('aesthetics', {})
         main = True
@@ -219,6 +220,7 @@ class CategoryPlotter(FeaturePlotter):
         ax = self.active_acks
         for i, (dim, edge) in enumerate(zip(['x', 'y'], ['bottom', 'left'])):
             if ax.index[i] == 0 or getattr(ax, f"{edge}_edge"):
+                # TODO: want this to be responsive to label_ax/label_component
                 getattr(ax, f"set_{dim}label")(
                     self.get_labels()[self.calc_type][i])   
         
@@ -248,7 +250,7 @@ class CategoryPlotter(FeaturePlotter):
 
 class CategoricalScatterPlotter(CategoryPlotter):
 
-    def process_calc(self, info, main=True, aesthetics=None):
+    def process_calc(self, info, main=True, aesthetics=None, is_last=False):
         self.cat_width = aesthetics.get('default', {}).get('cat_width', .8)
         ax = self.active_acks
         positions = []
@@ -316,7 +318,7 @@ class BarPlotter(CategoryPlotter):
 class RasterPlotter(FeaturePlotter):
     
 
-    def process_calc(self, info, aesthetics=None, **_):
+    def process_calc(self, info, aesthetics=None, is_last=False, **_):
         acks = self.active_acks
         length = self
         names = ['linestyles', 'colors']  # Moved this up as it's used earlier
@@ -361,6 +363,9 @@ class RasterPlotter(FeaturePlotter):
                     for j, spike in enumerate(spiketrain):
                         if spike:
                             ax.vlines(j, i, i + line_length, **marker_args)
+                            
+                manual_ticks = np.arange(0, len(data[0]) + 1, step=10)  # Adjust step size as needed
+                ax.set_xticks(manual_ticks)
 
                 # Get the existing tick positions (in bins)
                 existing_ticks = ax.get_xticks()
@@ -382,13 +387,16 @@ class RasterPlotter(FeaturePlotter):
                 ylim = ax.get_ylim()  # Retrieve ylim only once
                             
                 marker = aesthetic_args.get('marker', {})
-                marker_type = marker.get('type', 'vertical_line')
+                marker_type = marker.get('type')
                 when = marker.get('when', ('pre', 'post'))
                 
                 if marker_type == 'vertical_line':
                     for event in when:
                         ax.vlines(getattr(self, f"{event}_{base}")/self.bin_size, ylim[0], ylim[1], 
                                   colors='black')
+
+                if is_last:
+                    self.label()
                     
 
                 # # Add the gray rectangle patch
@@ -399,8 +407,53 @@ class RasterPlotter(FeaturePlotter):
                 #     (patch_start, ylim[0]), patch_end, ylim[1] - ylim[0], 
                 #     facecolor='gray', alpha=0.3
                 # ))
+                
 
+    def label(self):
+        subplotter = self.active_plotter
+        axes = subplotter.get_ax_wrappers()  # Get the actual AxWrapper objects
+        aesthetic_args = self.active_spec.get('aesthetic_args', {})
+        label_position = aesthetic_args.get('label_position', 'label_component')
 
+        if label_position == 'label_component':
+            # Annotate the frame_ax to position the labels outside the ticks
+            xlabel = subplotter.frame_ax.annotate(
+                self.get_labels()[self.calc_type][0],
+                xy=(0.5, 0),  # Center the x-label, push below the ticks
+                xycoords='axes fraction',
+                ha='center'
+            )
+
+            ylabel = subplotter.frame_ax.annotate(
+                self.get_labels()[self.calc_type][1],
+                xy=(0.025, 0.5),  # Push y-label outside the ticks
+                xycoords='axes fraction',
+                rotation=90,
+                va='center'
+            )
+
+            # Adjust the label positions based on the label size
+            self.adjust_label_position(subplotter.frame_ax, xlabel, axis='x')
+            self.adjust_label_position(subplotter.frame_ax, ylabel, axis='y')
+
+    def adjust_label_position(self, ax, label, axis='x'):
+        # Get the bounding box of the label
+        renderer = ax.figure.canvas.get_renderer()
+        bbox = label.get_window_extent(renderer=renderer)
+
+        # Get the size of the figure in pixels
+        fig_width, fig_height = ax.figure.get_size_inches() * ax.figure.dpi
+
+        if axis == 'x':
+            label_width = bbox.width / fig_width  # Normalize width in figure units
+            new_x = 0.5 #- label_width/2  # Adjust to center
+            label.set_position((new_x, label.get_position()[1]))  # Adjust the x-position
+        elif axis == 'y':
+            label_height = bbox.height / fig_height  # Normalize height in figure units
+            new_y = 0.5 #- label_height/2  # Adjust to center
+            label.set_position((label.get_position()[0], new_y))  # Adjust the y-position
+            
+                
 class PeriStimulusHistogramPlotter(HistogramPlotter):
 
     def plot(self, calc_opts, graph_opts):

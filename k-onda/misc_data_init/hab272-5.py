@@ -13,7 +13,9 @@ period_info = {
 }
 
 animals = [
-    {'identifier':'CH275', 'period_info': period_info, 'condition': 'foo'}
+    {'identifier':'CH275', 'period_info': period_info, 'condition': 'foo'},
+    {'identifier':'CH272', 'period_info': period_info, 'condition': 'foo'}
+    
 ]
 
 exp_info = {}

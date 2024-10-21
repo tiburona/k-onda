@@ -3,6 +3,8 @@ from subplotter import Subplotter, BrokenAxes, AxWrapper
 
 import numpy as np
 from copy import deepcopy
+from functools import reduce
+import operator
 
 class Partition(PlotterBase):
 
@@ -13,11 +15,14 @@ class Partition(PlotterBase):
         self.parent_plotter = parent_plotter
         self.spec = self.active_spec
         self.next = None
-        self.parent_processor = parent_processor
-
         for k in ('segment', 'section'):
             if k in self.spec:
                 self.next = {k: self.spec[k]}
+        self.parent_processor = parent_processor
+        self.assign_data_sources()
+        self.total_calls = reduce(
+            operator.mul, [len(div['members']) for div in self.spec['divisions'].values()], 1)
+        self.remaining_calls = self.total_calls
         self.layers = self.spec.get('layers', {})
         if self.parent_processor:
             self.layers.update(self.parent_processor.layers)
@@ -38,9 +43,12 @@ class Partition(PlotterBase):
             'segment': Segment,
             'subset': Subset
         }
+        
+    @property
+    def last(self):
+        return not self.remaining_calls and not self.next
 
     def start(self):
-        self.assign_data_sources()
         self.process_divider(*next(iter(self.spec['divisions'].items())), self.spec['divisions'])
 
     def assign_data_sources(self):
@@ -145,9 +153,10 @@ class Section(Partition):
             self.current_index[dim] = self.starting_index[dim] + i
 
 
-    def wrap_up(self, *_):
+    def wrap_up(self, current_divider, i):
         print("starting_index", self.starting_index)
         print("current_index", self.current_index)
+        self.remaining_calls -= 1
         self.active_acks = self.active_plotter.axes[*self.current_index]
         self.active_plotter.apply_aesthetics(self.aesthetics)
         
@@ -156,7 +165,9 @@ class Section(Partition):
             pass
         else:
             self.get_calcs()
-            self.origin_plotter.delegate([self.info_by_division.pop()])
+            if self.last:
+                print("self.last!")
+            self.origin_plotter.delegate([self.info_by_division.pop()], is_last=self.last)
 
 
 class Segment(Partition):
@@ -174,9 +185,11 @@ class Segment(Partition):
         pass
 
     def wrap_up(self, current_divider, i): 
+        self.remaining_calls -= 1
         self.get_calcs()
         if i == len(current_divider['members']) - 1:
-            self.origin_plotter.delegate(self.info_by_division)
+            self.origin_plotter.delegate(self.info_by_division, is_last=self.last)
+            
 
 
 class Subset:

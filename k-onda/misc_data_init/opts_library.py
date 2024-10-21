@@ -499,6 +499,7 @@ CH27_OPTS = {
     'graph_opts': {
         'plot_spec': {
             'section': {
+                'aesthetics': {'ax': {'border': {'top': 'FFF', 'right': 'FFF'}, 'share': ['x']}},
                 'break_axis': {0: [(0, 4), (35, 39)]},
                 'attr': 'calc',
                 'divisions': {
@@ -516,7 +517,7 @@ CH27_OPTS = {
     },
     'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'raster', 'raster_type': 'spike_train', 
                   'base': 'period', 'bin_size': .1, 
-                  'periods': {'light': {'pre_period': 2, 'post_period': 2}}}
-
+                  'periods': {'light': {'pre_period': 2, 'post_period': 2}},
+                  'filter': {'unit': {'category':  ('==', 'mua')}}}
     }
 

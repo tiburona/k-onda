@@ -34,22 +34,31 @@ class Subplotter(PlotterBase):
         self._dimensions_in_axes = dimensions
         self._dimensions_in_acks = None
         self.grid_keywords = grid_keywords
+        self.frame_ax = self.create_invisible_frame()  # Generalize the invisible frame creation
         self.gs = self.create_grid()
         self.invisible_axes = invisible_axes or []
         self._axes = None
         if first:
-            self._ax_visibility = np.array([[False]])
+            self._ax_visibility = np.array([[None]])
         else:
             self._ax_visibility = np.array(
                 [[True if (i, j) not in self.invisible_axes else False 
                   for j in range(self.dimensions_in_axes[1])] 
                   for i in range(self.dimensions_in_axes[0])])
+            self.adjust_gridspec_bounds()
+    
+        
         
     @property
     def axes(self):
         if self._axes is None:
             self._axes = self.make_all_axes()
         return self._axes
+    
+    @property
+    def ax_list(self):
+        return [a for r in self.axes for a in r]
+
     
     @property
     def dimensions_in_axes(self):
@@ -86,11 +95,58 @@ class Subplotter(PlotterBase):
         self._dimensions_in_axes = copy(dims)
 
     def create_grid(self):
-        grid_keywords = self.grid_keywords if self.grid_keywords else {}
-        return GridSpecFromSubplotSpec(
-            *self.dimensions_in_axes, 
-            subplot_spec=self.parent.gs[*self.index], 
-            **grid_keywords)
+        # Create an outer gridspec to introduce padding around the parent subplot
+        outer_gs = self.parent.gs[*self.index]
+
+        # Create padding within the outer gridspec (adjust these values)
+        padded_gs = GridSpecFromSubplotSpec(
+            1, 1,  # Single cell to hold the actual grid
+            subplot_spec=outer_gs,
+            wspace=0.5,  # Introduce horizontal space
+            hspace=0.5   # Introduce vertical space
+        )
+        
+        inner_gridspec = GridSpecFromSubplotSpec(
+            *self.dimensions_in_axes,
+            subplot_spec=padded_gs[0],  # Use the only cell in the padded grid,
+            wspace=0.1, 
+            hspace=0.2
+        )
+
+        
+        # Create the inner gridspec (actual subplot) inside the padded outer gridspec
+        return inner_gridspec
+    
+    def adjust_gridspec_bounds(self):
+        # Get the inner gridspec position and manually shrink it
+        for i, row in enumerate(self.get_ax_wrappers()):
+            for j, ax in enumerate(row):
+                pos = ax.get_position()  # Get the current position of the axis
+                # Adjust the position to make the grid take up less space
+                pos.x0 += 0.005  # Shrink from the left
+                pos.x1 -= 0.005  # Shrink from the right
+                pos.y0 += 0.005  # Shrink from the bottom
+                pos.y1 -= 0.005  # Shrink from the top
+                ax.set_position(pos)  # Apply the new position
+
+        self.fig.canvas.draw_idle()  # Update the figure
+        
+    def create_invisible_frame(self):
+        """Creates an invisible frame around the specified slice of the gridspec."""
+        # Create a GridSpecFromSubplotSpec for the invisible frame around the slice
+        gridspec_slice = self.parent.gs[*self.index]  # This selects the slice (e.g., 2x2 corner)
+
+        # Create the axis but hide all the spines and ticks
+        frame_ax = self.fig.add_subplot(gridspec_slice, frame_on=True)
+        
+        # Make spines invisible but keep the axis for labeling
+        for spine in ['top', 'bottom', 'left', 'right']:
+            frame_ax.spines[spine].set_visible(False)
+
+        # Hide ticks but keep the labels visible
+        frame_ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+        return frame_ax  # Return the axis (which will still render labels)
         
     def make_all_axes(self):
         return np.array([
@@ -99,7 +155,6 @@ class Subplotter(PlotterBase):
             ])
         
     def make_acks(self, i, j):
-        ax_list = []
         break_axes = self.active_spec.get('break_axis', {}) if not self.first else {}
 
         # Determine number of breaks in each dimension
@@ -107,16 +162,21 @@ class Subplotter(PlotterBase):
         dim1_breaks = len(break_axes.get(0, [])) or 1  # Use 1 if no breaks
 
         # Loop through break segments to create the necessary subplots
+        axes = []
         for i0 in range(dim0_breaks):
+            sub_list = []
             for j1 in range(dim1_breaks):
                 gridspec_slice = self.gs[i + i0, j + j1]
                 ax = self.fig.add_subplot(gridspec_slice)
                 ax.set_visible(self.ax_visibility[i + i0, j + j1])
                 if self.aspect:
                     ax.set_box_aspect(self.aspect)
-                ax_list.append(AxWrapper(ax, (i + i0, j + j1)))
+                sub_list.append(AxWrapper(ax, (i + i0, j + j1)))
+            axes.append(sub_list)
+            
+        ax_list = [a for r in axes for a in r]
     
-        return BrokenAxes(ax_list) if len(ax_list) > 1 else ax_list[0]
+        return BrokenAxes(axes, ax_list, (i, j)) if len(ax_list) > 1 else ax_list[0]
     
     def mark_edges_of_component(self, xy):
         for ax in self.axes.flatten():
@@ -126,16 +186,59 @@ class Subplotter(PlotterBase):
                 ax.left_edge = True
 
     def apply_aesthetics(self, aesthetics):
-        for key, val in aesthetics.get('border', {}).items():
+        for key, val in aesthetics.get('ax', {}).get('border', {}).items():
             spine, tick, label = (val[i] in ['T', True, 'True'] for i in range(3))
-            self.active_acks.spines[key].set_visible(spine)
-            self.active_acks.tick_params(**{f"label{key}":label, key:tick})
+            for ax in self.active_acks.ax_list:
+                ax.spines[key].set_visible(spine)
+                ax.tick_params(**{f"label{key}":label, key:tick})
+        self.apply_shared_axes(aesthetics)
+        
+                        
+    def apply_shared_axes(self, aesthetics):
+        share = aesthetics.get('ax', {}).get('share', [])
+        rows_of_axes = self.get_ax_wrappers()
+        columns_of_axes = list(zip(*rows_of_axes))  # Transpose to get columns
+
+        if 'y' in share:
+            for row in rows_of_axes:
+                first_ax = row[0].ax
+                for acks in row[1:]:
+                    acks.ax.sharey(first_ax)
+                    acks.ax.tick_params(labelleft=False)
+
+        for col in columns_of_axes:
+            last_ax = col[-1].ax
+            for acks in col[0:-1]:
+                acks.ax.sharex(last_ax)
+                acks.ax.tick_params(labelbottom=False)
+
+        
+                        
+           
+    def get_ax_wrappers(self):
+        """Return a 2D array of AxWrapper objects from axes, expanding BrokenAxis if necessary."""
+        ax_wrapper_grid = []
+
+        for row in self.axes:
+            ax_wrapper_row = []
+            for ax in row:
+                if isinstance(ax, BrokenAxes):
+                    # If it's a BrokenAxis, extend with its internal AxWrapper objects
+                    for broken_row in ax.axes:
+                        ax_wrapper_row.extend(broken_row)
+                else:
+                    # If it's an AxWrapper, append directly
+                    ax_wrapper_row.append(ax)
+            ax_wrapper_grid.append(ax_wrapper_row)
+
+        return ax_wrapper_grid
 
 
 class AxWrapper(PlotterBase):
 
     def __init__(self, ax, index):
-        self.ax = ax  # Store the original axis
+        self.ax = ax  # Store the original ax
+        self.ax_list = [self]
         self.index = index
         self.bottom_edge = None
         self.left_edge = None
@@ -147,12 +250,15 @@ class AxWrapper(PlotterBase):
 
 class BrokenAxes(PlotterBase):
         
-    def __init__(self, ax_list):
+    def __init__(self, axes, ax_list, index):
         self.break_axes = {
             key: [np.array(t) for t in value] 
             for key, value in self.active_spec['break_axis'].items()}
-
+        self.axes = axes
         self.ax_list = ax_list
+        self.index = index
+        self.bottom_edge = None
+        self.left_edge = None
 
         # Share axes
         for i, dim_num in zip((0, 1), ('y', 'x')):
@@ -212,10 +318,10 @@ class BrokenAxes(PlotterBase):
         ax.plot(x_vals, y_vals, transform=ax.transAxes, **kwargs)
         
         # Depending on side, adjust the second set of coordinates (diagonal line placement)
-        if side in ('right', 'left'):
-            ax.plot(x_vals, (1-d, 1+d), transform=ax.transAxes, **kwargs)  # Second y for vertical sides
-        elif side in ('top', 'bottom'):
-            ax.plot((-d, +d), (1-d, 1+d), transform=ax.transAxes, **kwargs)  # Second x for horizontal sides
+        # if side in ('right', 'left'):
+        #     ax.plot(x_vals, (1-d, 1+d), transform=ax.transAxes, **kwargs)  # Second y for vertical sides
+        # elif side in ('top', 'bottom'):
+        #     ax.plot((-d, +d), (1-d, 1+d), transform=ax.transAxes, **kwargs)  # Second x for horizontal sides
                         
                 
                 

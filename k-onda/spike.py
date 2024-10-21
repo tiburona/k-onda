@@ -63,6 +63,8 @@ class RateMethods:
             return self.get_average(f"get_{calc_type}", stop_at=stop_at)
         
     def _get_spike_counts(self):
+        if self.unit.category == 'mua':
+            a = 'foo'
         bin_size = self.calc_opts.get('bin_size', .01)
         if 'counts' in self.private_cache:
             counts = self.private_cache['counts']
@@ -259,7 +261,7 @@ class SpikePrepMethods(PrepMethods):
         self.unit_prep()
         if 'periods_from_nev' in self.period_info.get('instructions', []):
             self.period_info.update(self.get_periods_from_nev())
-        for unit in self.units['good']:
+        for unit in [unit for category, units in self.units.items() for unit in units]:
             unit.spike_prep()
             # if self.selected_period_type:
             #     unit.children = unit.spike_periods[self.selected_period_type]
