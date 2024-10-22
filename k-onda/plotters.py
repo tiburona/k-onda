@@ -120,7 +120,7 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
 
 class FeaturePlotter(PlotterBase, PlottingMixin):
     
-     def get_aesthetics_args(self, row, aesthetics):
+    def get_aesthetics_args(self, row, aesthetics):
 
         aesthetic = {}
         aesthetic_spec = deepcopy(aesthetics)
@@ -139,12 +139,43 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
                 aesthetic.update(overrides)
 
         return aesthetic
-
+    
+    def handle_broken_axes(self, data):
+    # Initial data division (copying the original data)
+        data_divisions = np.array([copy(data)])
+        acks = self.active_acks
+        
+        # Handle data division if break_axes is present
+        if hasattr(acks, 'break_axes'):
+            ax_list = acks.ax_list
+            for dim in acks.break_axes:
+                if dim == 1:
+                    data_divisions = [
+                        data_divisions[slice(*arg_set)] for arg_set in acks.break_axes[1]]
+                elif dim == 0:
+                    data_divisions = [
+                        # Check if dd is 1D and reshape it if needed
+                        dd[:, self.get_data_slice(arg_set)] 
+                        if dd.ndim > 1 else dd.reshape(1, -1)[:, self.get_data_slice(arg_set)]
+                        for dd in data_divisions
+                        for arg_set in acks.break_axes[0]
+                ]
+            x_slices = acks.break_axes[0]
+        else:
+            x_slices = [0, int(len(data[0])/self.bin_size)]
+            ax_list = [self.active_acks]
+        
+        return data_divisions, ax_list, x_slices
+    
+    def get_data_slice(self, arg_set):
+        """Return a slice object for the given arg_set and bin_size."""
+        return slice(*((arg_set) / self.bin_size).astype(int))
+    
 
 class HistogramPlotter(FeaturePlotter):
     
-    def plot_hist(self, x, y, width, ax):
-        ax.bar(x, y, width=width) 
+    def plot_hist(self, x, y, width, acks):
+        acks.ax.bar(x, y, width=width) 
 
 
 class CategoryPlotter(FeaturePlotter):
@@ -313,93 +344,69 @@ class BarPlotter(CategoryPlotter):
             position = self.find_position(row, self.active_spec)
             bar = self.active_acks.bar(position, getattr(row['data_source'], row['attr']), 
                                      self.cat_width, **aesthetic_args)
+            
 
-
-class RasterPlotter(FeaturePlotter):
+class PeriStimulusPlotter(FeaturePlotter):
     
-
+    def __init__(self ):
+        self.base = self.calc_opts.get('base', 'event') 
+        self.pre, self.post = (getattr(self, f"{opt}_{self.base}") for opt in ('pre', 'post'))
+        self.marker_names = []
+        
     def process_calc(self, info, aesthetics=None, is_last=False, **_):
+        
         acks = self.active_acks
-        length = self
-        names = ['linestyles', 'colors']  # Moved this up as it's used earlier
         
         for row in info:
             data = row[self.active_spec['attr']]
             aesthetic_args = self.get_aesthetics_args(row, aesthetics)
-            marker_args = {name: aesthetic_args[name] for name in names if name in aesthetic_args}
-
-            # Initial data division (copying the original data)
-            data_divisions = [copy(data)]
-            
-            base = self.calc_opts.get('base', 'event') 
-            pre, post = (getattr(self, f"{opt}_{base}") for opt in ('pre', 'post'))
-            
-            # Handle data division if break_axes is present
-            if hasattr(acks, 'break_axes'):
-                ax_list = acks.ax_list
-                for dim in acks.break_axes:
-                    if dim == 1:
-                        data_divisions = [
-                            data_divisions[slice(*arg_set)] for arg_set in acks.break_axes[1]]
-                    elif dim == 0:
-                        data_divisions = [
-                            dd[:, slice(*((arg_set)/self.bin_size).astype(int))] for dd in data_divisions
-                            for arg_set in acks.break_axes[0]
-                        ]
-                x_slices = acks.break_axes[0]
-            else:
-                x_slices = [0, int(len(data[0])/self.bin_size)]
-                ax_list = [self.active_acks]
-
+            marker_args = {name: aesthetic_args[name] 
+                           for name in self.marker_names if name in aesthetic_args}
+            data_divisions, ax_list, x_slices = self.handle_broken_axes(data)
             num_rows = len(data)
-            line_length = aesthetic_args.get('line_length', .9)
             
             for ax, data, x_slice in zip(ax_list, data_divisions, x_slices):
-                print(ax)
-                ax.set_ylim(0, num_rows)  # Set ylim based on the number of rows
-                
-                # Plot spikes on the vlines
-                for i, spiketrain in enumerate(data):
-                    for j, spike in enumerate(spiketrain):
-                        if spike:
-                            ax.vlines(j, i, i + line_length, **marker_args)
-                            
-                manual_ticks = np.arange(0, len(data[0]) + 1, step=10)  # Adjust step size as needed
-                ax.set_xticks(manual_ticks)
-
-                # Get the existing tick positions (in bins)
-                existing_ticks = ax.get_xticks()
-
-                # Filter the ticks to only those within the visible range of the data (i.e., corresponding to x_slice)
-                visible_ticks = [tick for tick in existing_ticks if 0 <= tick <= len(data[0])]
-
-                # Calculate the start and end time for the current x_slice (in seconds)
-                x_slice_start_time = x_slice[0] - pre  
-                x_slice_end_time = x_slice[1] - pre
-
-                # Create a time range that matches the visible ticks, from x_slice_start_time to x_slice_end_time
-                tick_range = np.linspace(x_slice_start_time, x_slice_end_time, len(visible_ticks))
-
-                # Set the x-tick positions and labels
-                ax.set_xticks(visible_ticks)  # Use only the visible ticks
-                ax.set_xticklabels([f"{label:.1f}" for label in tick_range])  # Labels in seconds
-                
-                ylim = ax.get_ylim()  # Retrieve ylim only once
-                            
-                marker = aesthetic_args.get('marker', {})
-                marker_type = marker.get('type')
-                when = marker.get('when', ('pre', 'post'))
-                
-                if marker_type == 'vertical_line':
-                    for event in when:
-                        ax.vlines(getattr(self, f"{event}_{base}")/self.bin_size, ylim[0], ylim[1], 
-                                  colors='black')
-
+                self.plot_row(ax, data, aesthetic_args, marker_args)
+                self.set_x_ticks(ax, data, x_slice)
+                self.place_marker(ax, aesthetic_args)
                 if is_last:
-                    self.label()
-                    
+                    self.label()   
+                
+    def set_x_ticks(self, ax, data, x_slice):
+        
+        manual_ticks = np.arange(0, len(data[0]) + 1, step=10)  # Adjust step size as needed
+        ax.set_xticks(manual_ticks)
 
-                # # Add the gray rectangle patch
+        # Get the existing tick positions (in bins)
+        existing_ticks = ax.get_xticks()
+
+        # Filter the ticks to only those within the visible range of the data (i.e., corresponding to x_slice)
+        visible_ticks = [tick for tick in existing_ticks if 0 <= tick <= len(data[0])]
+
+        # Calculate the start and end time for the current x_slice (in seconds)
+        x_slice_start_time = x_slice[0] - self.pre  
+        x_slice_end_time = x_slice[1] - self.pre
+
+        # Create a time range that matches the visible ticks, from x_slice_start_time to x_slice_end_time
+        tick_range = np.linspace(x_slice_start_time, x_slice_end_time, len(visible_ticks))
+
+        # Set the x-tick positions and labels
+        ax.set_xticks(visible_ticks)  # Use only the visible ticks
+        ax.set_xticklabels([f"{label:.1f}" for label in tick_range])  # Labels in seconds
+        
+    def place_marker(self, ax, aesthetic_args):
+        marker = aesthetic_args.get('marker', {})
+        marker_type = marker.get('type')
+        when = marker.get('when', ('pre', 'post'))
+        ylim = ax.get_ylim()  # Retrieve ylim only once
+
+        
+        if marker_type == 'vertical_line':
+            for event in when:
+                ax.vlines(getattr(self, f"{event}_{base}")/self.bin_size, ylim[0], ylim[1], 
+                            colors='black')
+                
+         # # Add the gray rectangle patch
                 # patch_start = row['data_source'].children[0].zero_point
                 # patch_end = patch_start + 0.05
                 # ylim = ax.get_ylim()  # Retrieve ylim only once
@@ -408,7 +415,6 @@ class RasterPlotter(FeaturePlotter):
                 #     facecolor='gray', alpha=0.3
                 # ))
                 
-
     def label(self):
         subplotter = self.active_plotter
         axes = subplotter.get_ax_wrappers()  # Get the actual AxWrapper objects
@@ -435,7 +441,8 @@ class RasterPlotter(FeaturePlotter):
             # Adjust the label positions based on the label size
             self.adjust_label_position(subplotter.frame_ax, xlabel, axis='x')
             self.adjust_label_position(subplotter.frame_ax, ylabel, axis='y')
-
+            
+    
     def adjust_label_position(self, ax, label, axis='x'):
         # Get the bounding box of the label
         renderer = ax.figure.canvas.get_renderer()
@@ -452,40 +459,40 @@ class RasterPlotter(FeaturePlotter):
             label_height = bbox.height / fig_height  # Normalize height in figure units
             new_y = 0.5 #- label_height/2  # Adjust to center
             label.set_position((label.get_position()[0], new_y))  # Adjust the y-position
-            
                 
-class PeriStimulusHistogramPlotter(HistogramPlotter):
 
-    def plot(self, calc_opts, graph_opts):
-        self.initialize(calc_opts)
-        if not graph_opts.get('plot_spec'):
-            plot_spec = (
-                'section', 
-                {'neuron_type': {'dim': 0, 'members': self.experiment.neuron_types},
-                 'data_source': {'dim': 1, 'members': self.experiment.all_groups},
-                 'period_type': {'members': list(self.calc_opts['periods'].keys())}}
-                 )
-        self.process_plot_spec(plot_spec)
-        self.close_plot()
-
-    def process_calc(self, data_frame):
-        #self.do_stuff_like_set_title(data_frame)
-        num_bins = round((self.pre_event + self.post_event)/self.calc_opts['bin_size'])
-        x = np.linspace(self.pre_event, self.post_event, num_bins)
-        y = data_frame['calc'].iloc[0]
-        self.plot_hist(x, y, self.calc_opts['bin_size'], self.active_acks)
+class RasterPlotter(PeriStimulusPlotter):
     
-    def add_stimulus_patch(self):
-        pass
-
-
+    def process_calc(self, *args, **kwargs):
+        self.marker_names = ['linestyles', 'colors']
+        super().process_calc(*args, **kwargs)
+                
+    def plot_row(self, ax, data, aesthetic_args, marker_args):
+        ax.set_ylim(0, len(data))  # Set ylim based on the number of rows
+                
+        # Plot spikes on the vlines
+        for i, spiketrain in enumerate(data):
+            for j, spike in enumerate(spiketrain):
+                if spike:
+                    ax.vlines(j, i, i + line_length, **marker_args)
+    
+                
+class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
+        
+    def plot_row(self, ax, data, aesthetic_args, marker_args):
+        data = data[0]
+        x = list(range(0, len(data)))
+        y = data
+        self.plot_hist(x, y, self.calc_opts['bin_size'], ax)
+        
 
 
 PLOT_TYPES = {'categorical_scatter': CategoricalScatterPlotter,
               'line_plot': LinePlotter,
               'waveform': WaveformPlotter,
               'categorical_line': CategoricalLinePlotter,
-              'raster': RasterPlotter}  
+              'raster': RasterPlotter,
+              'psth': PeriStimulusHistogramPlotter}  
 
 
    

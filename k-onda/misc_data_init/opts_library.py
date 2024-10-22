@@ -513,11 +513,43 @@ CH27_OPTS = {
                     }
             }}},
         'graph_dir': '/Users/katie/likhtik/CH_27mice',
-        'plot_type': 'raster'
+        'plot_type': 'psth'
     },
-    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'raster', 'raster_type': 'spike_train', 
-                  'base': 'period', 'bin_size': .1, 
+    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'raster_type': 'spike_train', 
+                  'base': 'period', 'bin_size': .4, 
                   'periods': {'light': {'pre_period': 2, 'post_period': 2}},
-                  'filter': {'unit': {'category':  ('==', 'mua')}}}
+                  'filter': {'unit': {'category':  ('==', 'good')}}}
     }
+
+CH27_FIGURE_OPTS = {
+    
+    'graph_dir': '/Users/katie/likhtik/CH27',
+    'procedure': 'make_figure',
+    'layout_spec' : {
+    'layout': 'row',
+    'components': [
+        {   
+            'layout': 'row',  
+            
+        },
+        {
+            'layout': 'column',  # Second component is a row of mua units, as above, but no waveform
+            'components': [
+                {},  # First plot in the left column
+                {}   # Second plot in the right column
+            ]
+        },
+        {
+            'layout': 'column',
+            'components': [
+                {},
+                {}
+            ]
+            
+        }
+    ]
+}
+    
+    
+}
 

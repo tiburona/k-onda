@@ -46,3 +46,10 @@ class Layout(PlotterBase):
             
 
 
+# what is a component?
+# it can have a single constituent calc_opts or a series of them
+# if it has a series of them how is that defined?
+# what information do we need?
+# a gridspec, and the relationship of the calc opts to rows and cols
+# basically a component should be a list of calc opts, and if there's more than one,
+# an optional   

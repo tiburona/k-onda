@@ -45,7 +45,9 @@ class Subplotter(PlotterBase):
                 [[True if (i, j) not in self.invisible_axes else False 
                   for j in range(self.dimensions_in_axes[1])] 
                   for i in range(self.dimensions_in_axes[0])])
-            self.adjust_gridspec_bounds()
+            self.adjust_gridspec_bounds() # TODO: I need a version of this that works with the frame ax
+            # and both should take arguments, effectively giving both the frame and the data independently
+            # operable left, right, top, and bottom parameters
     
     @property
     def axes(self):
@@ -77,7 +79,6 @@ class Subplotter(PlotterBase):
     def ax_visibility(self, visibility):
         self._ax_visibility = visibility
 
-    
     def calculate_my_dimensions(self):
         dims = [1, 1]
         if self.first:
@@ -91,8 +92,6 @@ class Subplotter(PlotterBase):
         for i, breaks in self.active_spec.get('break_axis', {}).items():
             dims[int(not i)] *= len(breaks)
         self._dimensions_in_axes = copy(dims)
-
-    
 
     def create_frame_grid(self):
         """Create a 1x1 gridspec for the invisible frame to surround the data."""
@@ -246,19 +245,16 @@ class BrokenAxes(PlotterBase):
         self.fig = fig
         self.aspect = aspect
 
-        # Create a new GridSpec for the broken axes
         dim0_breaks = len(self.break_axes.get(1, [])) or 1
         dim1_breaks = len(self.break_axes.get(0, [])) or 1
 
         self.gs = GridSpecFromSubplotSpec(
             dim0_breaks, dim1_breaks, 
-            subplot_spec=parent_gridspec[self.index],  # Use parent GridSpec
+            subplot_spec=parent_gridspec[self.index],  
         )
 
-        # Create the subplots for each broken segment
         self.axes, self.ax_list = self._create_subplots()
 
-        # Share axes and hide spines
         self._share_axes_and_hide_spines()
 
     def _create_subplots(self):

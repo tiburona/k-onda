@@ -58,7 +58,6 @@ class Partition(PlotterBase):
                     source for source in getattr(self.experiment, divider['members']) 
                     if source.include()]
             
-
     def process_divider(self, divider_type, current_divider, divisions, info=None):
         
         info = info or {}

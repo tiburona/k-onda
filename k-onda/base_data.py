@@ -213,6 +213,14 @@ class Data(Base):
         return self.include() and self in self.parent.children
     
     @property
+    def has_children(self):
+        return len(self.children)
+    
+    @property
+    def has_grandchildren(self):
+        return any([child.has_children for child in self.children])
+    
+    @property
     def parent_identifier(self):
         try:
             return self.parent.identifier
@@ -387,7 +395,7 @@ class Data(Base):
     def concatenation(self):
         return self.concatenate()
     
-    def concatenate(self, method=None, max_depth=-1):   
+    def concatenate(self, method=None, max_depth=1):   
         return np.concatenate(self.accumulate(method=method, max_depth=max_depth)[max_depth])
     
     @property

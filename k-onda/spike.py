@@ -81,12 +81,12 @@ class RateMethods:
         rates = self.get_firing_rates() 
         reference_rates = self.reference.get_firing_rates()
         rates -= reference_rates
-        rates /= self.unit.get_firing_std_dev(period_types=self.period_type,)  # same as dividing unit psth by std dev 
+        rates /= self.unit.get_firing_std_dev()  # same as dividing unit psth by std dev 
         self.private_cache = {}
         return rates
 
     def _get_firing_rates(self):
-        return self._get_firing_counts()/self.calc_opts.get('bin_size', .01)
+        return self._get_spike_counts()/self.calc_opts.get('bin_size', .01)
 
 
 class Unit(Data, PeriodConstructor, SpikeMethods):
@@ -148,7 +148,8 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         return [event.spikes for period in self.children for event in period.children]
 
     def get_firing_std_dev(self):
-        return np.std([self.concatenate(method='get_firing_rates', level=-2)])
+        depth = 2 if self.has_grandchildren else 1
+        return np.std([self.concatenate(method='get_firing_rates', max_depth=depth)[depth]])
 
     def get_cross_correlations(self, axis=0):
         return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
@@ -213,8 +214,8 @@ class SpikePeriod(Period, RateMethods):
     def get_events(self):
         self._events = [SpikeEvent(self, self.unit, start, i) 
                         for i, start in enumerate(self.event_starts)]
-
-
+        
+        
 class SpikeEvent(Event, RateMethods, BinMethods):
     def __init__(self, period, unit, start,  index):
         super().__init__(period, index)

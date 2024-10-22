@@ -48,7 +48,12 @@ class Period(Data, BinMethods):
         if self.reference_override:
             return getattr(self, self.calc_opts['reference_override'][1])
         else:
-            return self.periods[self.reference_period_type][self.identifier]
+            period_attr = f"{self.kind_of_data}_periods"
+            if hasattr(self, period_attr):
+                periods = getattr(self, period_attr)
+            else:
+                periods = getattr(self.parent, period_attr)
+            return periods[self.reference_period_type][self.identifier]
         
 
 class Event(Data, BinMethods):
