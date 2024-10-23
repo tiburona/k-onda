@@ -1,0 +1,19 @@
+{
+    // Enable code folding
+    "editor.folding": true,
+    "editor.foldingStrategy": "auto",
+
+    // Python linting settings
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.linting.pylintArgs": [
+        "--disable=C0111"  // Example: disabling the missing docstring warning
+    ],
+
+    // Enable IntelliSense (error checking, undefined variables)
+    "python.analysis.diagnosticMode": "openFilesOnly",
+
+    // Optional: You can also include settings for formatting and other Python behaviors.
+    "python.formatting.provider": "black", // Example: using Black formatter
+    "python.formatting.blackArgs": ["--line-length", "88"]
+}

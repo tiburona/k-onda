@@ -5,7 +5,7 @@ from runner import Runner
 
 
 TEST_PSTH_OPTS = {
-    'calc_opts': {
+    'calc_spec': {
         'kind_of_data': 'spike', 'data_type': 'psth',
         'events': {'pretone': {'pre_event': .05, 'post_event': .65}, 'tone': {'pre_event': .05, 'post_event': .65}},
         'bin_size': 0.01, 'adjustment': 'none', 'time_type': 'block', 'data_path': './data', 'row_type': 'event'}
@@ -45,9 +45,9 @@ def verify_output(output_file):
         # Example assertion: Check if the file is not empty
         assert len(data_rows) > 0, "Output file is empty."
 
-        bin_size = TEST_PSTH_OPTS['calc_opts']['bin_size']
-        pre_event = TEST_PSTH_OPTS['calc_opts']['events']['tone']['pre_event']
-        post_event = TEST_PSTH_OPTS['calc_opts']['events']['tone']['post_event']
+        bin_size = TEST_PSTH_OPTS['calc_spec']['bin_size']
+        pre_event = TEST_PSTH_OPTS['calc_spec']['events']['tone']['pre_event']
+        post_event = TEST_PSTH_OPTS['calc_spec']['events']['tone']['post_event']
         events_per_period = 30
         num_bins_per_event = int((pre_event + post_event)/bin_size)
         expected_len = num_animals * units_per_animal * tone_periods_per_animal * 2 * events_per_period

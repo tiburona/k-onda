@@ -11,7 +11,7 @@ from math_functions import sem
 
 class Base:
 
-    _calc_opts = {}
+    _calc_spec = {}
     _cache = defaultdict(dict)
     _filter = {}
     _selected_period_type = ''
@@ -19,13 +19,13 @@ class Base:
     original_periods = None
 
     @property
-    def calc_opts(self):
-        return Base._calc_opts  
+    def calc_spec(self):
+        return Base._calc_spec  
     
-    @calc_opts.setter
-    def calc_opts(self, value):
-        Base._calc_opts = value
-        self.set_filter_from_calc_opts()
+    @calc_spec.setter
+    def calc_spec(self, value):
+        Base._calc_spec = value
+        self.set_filter_from_calc_spec()
         Base._cache = defaultdict(dict)
 
     @property
@@ -43,18 +43,18 @@ class Base:
     def filter(self, filter):
         Base._filter = filter
 
-    def set_filter_from_calc_opts(self):
+    def set_filter_from_calc_spec(self):
         self.filter = defaultdict(lambda: defaultdict(tuple))
-        filters = self.calc_opts.get('filter', {})
+        filters = self.calc_spec.get('filter', {})
         if isinstance(filters, list):
             for filter in filters:
                 self.add_to_filters(self.parse_natural_language_filter(filter))
         else:
             for object_type in filters:
-                object_filters = self.calc_opts['filter'][object_type]
+                object_filters = self.calc_spec['filter'][object_type]
                 for property in object_filters:
                     self.filter[object_type][property] = object_filters[property]   
-            if self.calc_opts.get('validate_events'):
+            if self.calc_spec.get('validate_events'):
                 self.filter['event']['is_valid'] = ('==', True)
 
     def add_to_filters(self, obj_name, attr, operator, target_val):
@@ -78,15 +78,15 @@ class Base:
     
     @property
     def kind_of_data(self):
-        return self.calc_opts.get('kind_of_data')
+        return self.calc_spec.get('kind_of_data')
 
     @property
     def calc_type(self):
-        return self.calc_opts['calc_type']
+        return self.calc_spec['calc_type']
 
     @calc_type.setter
     def calc_type(self, calc_type):
-        self.calc_opts['calc_type'] = calc_type
+        self.calc_spec['calc_type'] = calc_type
 
     @property
     def selected_neuron_type(self):
@@ -106,35 +106,35 @@ class Base:
 
     @property
     def selected_period_group(self):
-        return tuple(self.calc_opts['periods'][self.selected_period_type])
+        return tuple(self.calc_spec['periods'][self.selected_period_type])
     
     @selected_period_group.setter
     def selected_period_group(self, period_group):
-        self.calc_opts['periods'][self.selected_period_type] = period_group
+        self.calc_spec['periods'][self.selected_period_type] = period_group
     
     @property
     def current_frequency_band(self):
-        return self.calc_opts['frequency_band']
+        return self.calc_spec['frequency_band']
 
     @current_frequency_band.setter
     def current_frequency_band(self, frequency_band):
-        self.calc_opts['frequency_band'] = frequency_band
+        self.calc_spec['frequency_band'] = frequency_band
 
     @property
     def current_brain_region(self):
-        return self.calc_opts.get('brain_region')
+        return self.calc_spec.get('brain_region')
     
     @current_brain_region.setter
     def current_brain_region(self, brain_region):
-        self.calc_opts['brain_region'] = brain_region
+        self.calc_spec['brain_region'] = brain_region
 
     @property
     def current_region_set(self):
-        return self.calc_opts.get('region_set')
+        return self.calc_spec.get('region_set')
 
     @current_region_set.setter
     def current_region_set(self, region_set):
-        self.calc_opts['region_set'] = region_set
+        self.calc_spec['region_set'] = region_set
 
     @property
     def freq_range(self):
@@ -145,7 +145,7 @@ class Base:
         
     def get_data_sources(self, data_object_type=None, identifiers=None, identifier=None):
         if data_object_type is None:
-            data_object_type = self.calc_opts['base']
+            data_object_type = self.calc_spec['base']
             if data_object_type in ['period', 'event']:
                 data_object_type = f"{self.kind_of_data}_{data_object_type}"
         data_sources = getattr(self.experiment, f"all_{data_object_type}s")
@@ -173,13 +173,13 @@ class Base:
         return self.get_pre_post('post', 'period')
     
     def get_pre_post(self, time, object_type):
-        return self.calc_opts.get('periods', {}).get(
+        return self.calc_spec.get('periods', {}).get(
             self.selected_period_type, {}).get(f"{time}_{object_type}", 0)
 
     
     @property
     def bin_size(self):
-        return self.calc_opts.get('bin_size', .01)
+        return self.calc_spec.get('bin_size', .01)
 
 
 class Data(Base):
@@ -194,7 +194,7 @@ class Data(Base):
     def get_calc(self, calc_type=None):
         if calc_type is None:
             calc_type = self.calc_type
-        if self.calc_opts.get('percent_change'):
+        if self.calc_spec.get('percent_change'):
             return self.percent_change
         return getattr(self, f"get_{calc_type}")()
 
@@ -204,7 +204,7 @@ class Data(Base):
     
     def fetch_opts(self, list_of_opts=None):
         if list_of_opts is not None:
-            return (self.calc_opts.get(opt) for opt in list_of_opts)
+            return (self.calc_spec.get(opt) for opt in list_of_opts)
         
     def include(self, check_ancestors=False):
         return self.select(self.filter, check_ancestors=check_ancestors)
@@ -341,8 +341,8 @@ class Data(Base):
         around firing rate over time.
         """
 
-        if self.calc_opts.get('sem_level'):
-            sem_children = self.get_descendants(stop_at=self.calc_opts.get('sem_level'))
+        if self.calc_spec.get('sem_level'):
+            sem_children = self.get_descendants(stop_at=self.calc_spec.get('sem_level'))
         else:
             sem_children = self.children
 
@@ -376,7 +376,7 @@ class Data(Base):
             
     def get_median(self, stop_at=None, extend_by=None):
         if not stop_at:
-            stop_at = self.calc_opts.get('stop_at')
+            stop_at = self.calc_spec.get('stop_at')
         vals_to_summarize = self.get_descendants(stop_at=stop_at)
         vals_to_summarize = self.extend_into_bins(vals_to_summarize, extend_by)
         return np.median([obj.calc for obj in vals_to_summarize])
@@ -491,7 +491,7 @@ class Data(Base):
     
     def get_percent_change(self):
         # {'level': 'unit', 'reference': 'prelight'}
-        percent_change = self.calc_opts.get('percent_change', {'level': 'period'})
+        percent_change = self.calc_spec.get('percent_change', {'level': 'period'})
         level = percent_change['level']
         # we are currently at a higher tree level than the % change ref level
         if level not in self.hierarchy or (
@@ -517,7 +517,7 @@ class Data(Base):
     def refer(self, data, calc_type=None):
         if not calc_type:
             calc_type = self.calc_type
-        if (self.calc_opts.get('evoked') 
+        if (self.calc_spec.get('evoked') 
             and hasattr(self, 'reference')
             and self.reference is not None):
             return data - self.reference.get_data(calc_type)
@@ -525,14 +525,14 @@ class Data(Base):
             return data
         
     def load(self, calc_name, other_identifiers):
-        store = self.calc_opts.get('store', 'pkl')
-        d = os.path.join(self.calc_opts['data_path'], self.kind_of_data)
+        store = self.calc_spec.get('store', 'pkl')
+        d = os.path.join(self.calc_spec['data_path'], self.kind_of_data)
         store_dir = os.path.join(d, f"{calc_name}_{store}s")
         for p in [d, store_dir]:
             if not os.path.exists(p):
                 os.mkdir(p)
         store_path = os.path.join(store_dir, '_'.join(other_identifiers) + f".{store}")
-        if os.path.exists(store_path) and not self.calc_opts.get('force_recalc'):
+        if os.path.exists(store_path) and not self.calc_spec.get('force_recalc'):
             with open(store_path, 'rb') as f:
                 if store == 'pkl':
                     return_val = pickle.load(f)
@@ -543,7 +543,7 @@ class Data(Base):
             return False, None, store_path
 
     def save(self, result, store_path):
-        store = self.calc_opts.get('store', 'pkl')
+        store = self.calc_spec.get('store', 'pkl')
         mode = 'wb' if store == 'pkl' else 'w'
         with open(store_path, mode) as f:
             if store == 'pkl':

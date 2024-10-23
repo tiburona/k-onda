@@ -17,13 +17,13 @@ from utils import group_to_dict
 class SpikeMethods:
 
     def get_psth(self):
-        return self.get_average('get_psth', stop_at=self.calc_opts.get('base', 'event'))
+        return self.get_average('get_psth', stop_at=self.calc_spec.get('base', 'event'))
     
     def get_firing_rates(self):
-        return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'))
+        return self.get_average('get_firing_rates', stop_at=self.calc_spec.get('base', 'event'))
     
     def get_spike_counts(self):
-        return self.get_average('get_spike_counts', stop_at=self.calc_opts.get('base', 'event'))
+        return self.get_average('get_spike_counts', stop_at=self.calc_spec.get('base', 'event'))
     
     
     
@@ -56,7 +56,7 @@ class RateMethods:
         return self._get_calc('spike_train')
         
     def _get_calc(self, calc_type):
-        stop_at=self.calc_opts.get('base', 'event')
+        stop_at=self.calc_spec.get('base', 'event')
         if self.name == stop_at:
             return getattr(self, f"_get_{calc_type}")()
         else:
@@ -65,7 +65,7 @@ class RateMethods:
     def _get_spike_counts(self):
         if self.unit.category == 'mua':
             a = 'foo'
-        bin_size = self.calc_opts.get('bin_size', .01)
+        bin_size = self.calc_spec.get('bin_size', .01)
         if 'counts' in self.private_cache:
             counts = self.private_cache['counts']
         else:
@@ -86,7 +86,7 @@ class RateMethods:
         return rates
 
     def _get_firing_rates(self):
-        return self._get_spike_counts()/self.calc_opts.get('bin_size', .01)
+        return self._get_spike_counts()/self.calc_spec.get('bin_size', .01)
 
 
 class Unit(Data, PeriodConstructor, SpikeMethods):
@@ -128,7 +128,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
     @property
     def unit_pairs(self):
         all_unit_pairs = self.get_pairs()
-        pairs_to_select = self.calc_opts.get('unit_pair')
+        pairs_to_select = self.calc_spec.get('unit_pair')
         if pairs_to_select is None:
             return all_unit_pairs
         else:
@@ -152,27 +152,27 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         return np.std([self.concatenate(method='get_firing_rates', max_depth=depth)[depth]])
 
     def get_cross_correlations(self, axis=0):
-        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
+        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_spec.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
 
     def get_correlogram(self, axis=0):
-        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
+        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.calc_spec.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
     
     def get_waveform(self):
         if self.waveform is not None:
             return self.waveform
         else:
-            phy = PhyInterface(self.calc_opts['data_path'], self.parent.identifier)
+            phy = PhyInterface(self.calc_spec['data_path'], self.parent.identifier)
             electrodes = phy.cluster_dict[self.cluster_id]['electrodes']
             wf = phy.get_mean_waveforms(self.cluster_id, electrodes)
             self.waveform = wf
             return wf
         
     def get_raster(self):
-        base = self.calc_opts.get('base', 'event')
+        base = self.calc_spec.get('base', 'event')
         # raster type can be spike_train for binarized data or spike_counts for gradations
-        raster_type = self.calc_opts.get('raster_type', 'spike_train')
+        raster_type = self.calc_spec.get('raster_type', 'spike_train')
         depth = 1 if base == 'period' else 2
         raster = self.get_stack(method=f"get_{raster_type}", depth=depth)
         
@@ -241,17 +241,17 @@ class SpikeEvent(Event, RateMethods, BinMethods):
     def get_cross_correlations(self, pair=None):
         other = pair.periods[self.period_type][self.period.identifier].events[self.identifier]
         cross_corr = cross_correlation(self.get_unadjusted_rates(), other.get_unadjusted_rates(), mode='full')
-        boundary = round(self.calc_opts['max_lag'] / self.calc_opts['bin_size'])
+        boundary = round(self.calc_spec['max_lag'] / self.calc_spec['bin_size'])
         midpoint = cross_corr.size // 2
         return cross_corr[midpoint - boundary:midpoint + boundary + 1]
 
     def get_correlogram(self, pair=None, num_pairs=None):
-        max_lag, bin_size = (self.calc_opts[opt] for opt in ['max_lag', 'bin_size'])
+        max_lag, bin_size = (self.calc_spec[opt] for opt in ['max_lag', 'bin_size'])
         lags = round(max_lag/bin_size)
         return correlogram(lags, bin_size, self.spikes, pair.spikes, num_pairs)
 
     def get_autocorrelogram(self):
-        max_lag, bin_size = (self.calc_opts[opt] for opt in ['max_lag', 'bin_size'])
+        max_lag, bin_size = (self.calc_spec[opt] for opt in ['max_lag', 'bin_size'])
         lags = round(max_lag / bin_size)
         return correlogram(lags, bin_size, self.spikes, self.spikes, 1)
     

@@ -6,21 +6,21 @@ limited to a list or a tuple.
 
 ## Plots
 
-If you are plotting, your config must be a dictionary.  It must include the key "calc_opts", which must have as its 
-value the calc_opts dictionary.  It must also include the key "graph_opts". The calc_opts dictionary must include the 
+If you are plotting, your config must be a dictionary.  It must include the key "calc_spec", which must have as its 
+value the calc_spec dictionary.  It must also include the key "graph_opts". The calc_spec dictionary must include the 
 key "calc_type" -- for instance, "psth", "mrl", etc.  This is the type of calculation you are doing.  For right now it 
 must also include the key "kind_of_data" ("spike", "lfp", or "behavior").
 
 ## Spreadsheets
 
-The config can be either a dictionary of the form `{"calc_opts": {"calc_type": "<calc_type>", ...}}` or a list of 
-calc_opts dictionaries (`[{"calc_type": "<calc_type>", ...}, {"calc_type": "<calc_type>", ...}...]`). A list of 
+The config can be either a dictionary of the form `{"calc_spec": {"calc_type": "<calc_type>", ...}}` or a list of 
+calc_spec dictionaries (`[{"calc_type": "<calc_type>", ...}, {"calc_type": "<calc_type>", ...}...]`). A list of 
 dictionaries will include multiple types of data one spreadsheet. As described above, these 
-"calc_opts" dictionaries must have the kind_of_data and calc_type specified.
+"calc_spec" dictionaries must have the kind_of_data and calc_type specified.
 
 ## Multiple analyses
 
-To learn more about configuration for analyses that need to iterate over multiple versions of `calc_opts`, click 
+To learn more about configuration for analyses that need to iterate over multiple versions of `calc_spec`, click 
 [here](#configuring-more-than-one-type-of-calculation).
 
 # Spike Analyses #
@@ -32,11 +32,11 @@ spreadsheet with PSTH values broken out by event and time bin.
 
 ```
 {
-  "calc_opts":  {"kind_of_data": "spike", "calc_type": "psth", "bin_size": 0.01, "adjustment": "normalized", 
+  "calc_spec":  {"kind_of_data": "spike", "calc_type": "psth", "bin_size": 0.01, "adjustment": "normalized", 
   "events": {"pretone": {"pre_event": 0, "post_event": 1}, "tone": {"pre_event": .05, "post_event": .65}}, 
   "time_type": "continuous", "row_type": "event", "levels": ["group"], "block_types": {"tone": [0,1,2,3,4]}, 
   "data_path": "</path/where/csvs/are/written>}, 
-  "graph_opts": {"graph_dir": "/Users/katie/likhtik/data/graphs", "units_in_fig": 4, "tick_step": 0.1, "sem": false, 
+  "graph_opts": {"plot_dir": "/Users/katie/likhtik/data/graphs", "units_in_fig": 4, "tick_step": 0.1, "sem": false, 
   "footer": true, "equal_y_scales": true, "group_colors": {"control": "#76BD4E", "stressed": "#F2A354"}}
 }
 ```
@@ -298,7 +298,7 @@ configuration dictionary, and when `brain_region` is 'bla', assign `BLA_THETA_PO
 
 Any time you plot you must also supply the graph_opts dictionary in the configuration.  Its keys are as follows:
 
-"graph_dir": a string, the directory to which to write the graph
+"plot_dir": a string, the directory to which to write the graph
 
 "tick_step": a number, the distance between 
 
@@ -339,7 +339,7 @@ average waveform of a cluster or the position of the cluster spikes in PCA.
 
 "cluster_ids": which cluster
 
-{'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4,
+{'plot_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4,
                        'tick_step': .1, 'sem': False, 'footer': False, 'equal_y_scales': True,
                        'group_colors': {'control': '#9F9FA3', 'arch': '#32B44A'}, 
                        'neuron_type_colors': {'PV': '#5679C7', 'ACH': '#C75B56'}, 'animal_id': 'CH272',

@@ -85,8 +85,8 @@ class PeriodConstructor:
             num_events = len([event for events_list in period_events for event in
                             events_list])  # all the events for this period type
 
-            if self.calc_opts.get('events', {}).get(period_type, {}).get('selection') is not None:
-                events = slice(*self.calc_opts['events'][period_type]['selection'])
+            if self.calc_spec.get('events', {}).get(period_type, {}).get('selection') is not None:
+                events = slice(*self.calc_spec['events'][period_type]['selection'])
             else:
                 events = slice(0, num_events) # default is to take all events
             # indices of the events used in this data analysis
@@ -113,7 +113,7 @@ class PeriodConstructor:
                 duration = period_info.get('duration')
             # if self is animal this is an lfp period
             if self.name == 'animal':  # type: ignore
-                shift -= sum(self.calc_opts['lfp_padding']) # type: ignore
+                shift -= sum(self.calc_spec['lfp_padding']) # type: ignore
             shift_in_samples = shift * sampling_rate
             onset = paired_period.onset + shift_in_samples
             event_starts = []

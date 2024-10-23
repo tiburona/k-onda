@@ -23,23 +23,23 @@ class Stats(Base):
         self.opts_dicts = []
         self.name_suffix = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(6))
 
-    def set_attributes(self, calc_opts):
-        self.calc_opts = calc_opts
+    def set_attributes(self, calc_spec):
+        self.calc_spec = calc_spec
         if self.kind_of_data == 'lfp':
             fb = self.current_frequency_band
             if not isinstance(self.current_frequency_band, str):
                 translation_table = str.maketrans({k: '_' for k in '[](),'})
                 fb = str(list(fb)).translate(translation_table)
             if any([s in self.calc_type for s in ['coherence', 'correlation', 'phase', 'granger']]):
-                self.data_col = f"{self.calc_opts['region_set']}_{fb}_{self.calc_type}"
+                self.data_col = f"{self.calc_spec['region_set']}_{fb}_{self.calc_type}"
             else:
                 self.data_col = f"{self.current_brain_region}_{fb}_{self.calc_type}"
         else:
             self.data_col = 'rate' if self.calc_type == 'psth' else self.calc_type
 
-    def make_df(self, calc_opts):
-        self.set_attributes(calc_opts)
-        self.opts_dicts.append(deepcopy(self.calc_opts))
+    def make_df(self, calc_spec):
+        self.set_attributes(calc_spec)
+        self.opts_dicts.append(deepcopy(self.calc_spec))
         name = self.set_df_name()
         df = pd.DataFrame(self.get_rows())
         vs = ['unit_num', 'animal', 'category', 'group', 'frequency']
@@ -119,7 +119,7 @@ class Stats(Base):
         include the data column, source identifiers, ancestor identifiers, and any other specified attributes.
 
         """
-        level = self.calc_opts['row_type']
+        level = self.calc_spec['row_type']
         
         other_attributes = ['period_type']
         
@@ -132,7 +132,7 @@ class Stats(Base):
             if any([w in self.calc_type for w in ['coherence', 'correlation', 'phase', 'granger']]):
                 other_attributes.append('period_id')
             else:
-                if self.calc_opts['time_type'] == 'continuous' and self.calc_opts.get('power_deviation'):
+                if self.calc_spec['time_type'] == 'continuous' and self.calc_spec.get('power_deviation'):
                     other_attributes.append('power_deviation')
         else:
             other_attributes += ['category', 'neuron_type', 'quality']
@@ -163,9 +163,9 @@ class Stats(Base):
         Notes:
         - The function first determines the relevant data sources based on the specified `level` and the object's
           `kind_of_data` attribute.
-        - If the `frequency_type` in `calc_opts` is set to 'continuous', the function further breaks down the sources
+        - If the `frequency_type` in `calc_spec` is set to 'continuous', the function further breaks down the sources
           based on frequency bins.
-        - Similarly, if the `time_type` in `calc_opts` is set to 'continuous', the sources are further broken down based
+        - Similarly, if the `time_type` in `calc_spec` is set to 'continuous', the sources are further broken down based
           on time bins.
         - The final list of sources is filtered based on the provided `inclusion_criteria`.
         - For each source, a row dictionary is constructed containing the data, source identifiers, ancestor
@@ -182,18 +182,18 @@ class Stats(Base):
 
         sources = [source for source in getattr(experiment, f'all_{level}s') if source.is_valid]
 
-        if self.calc_opts.get('frequency_type') == 'continuous':
+        if self.calc_spec.get('frequency_type') == 'continuous':
             other_attributes.append('frequency')
             sources = [frequency_bin for source in sources for frequency_bin in source.frequency_bins]
-        if self.calc_opts.get('time_type') == 'continuous':
+        if self.calc_spec.get('time_type') == 'continuous':
             other_attributes.append('time')
             sources = [time_bin for source in sources for time_bin in source.time_bins]
 
         for source in sources:
 
-            if self.calc_opts.get('aggregator') == 'sum':
+            if self.calc_spec.get('aggregator') == 'sum':
                 row_dict = {self.data_col: source.sum_data}
-            elif self.calc_opts.get('aggregator') == 'none':
+            elif self.calc_spec.get('aggregator') == 'none':
                 if isinstance(source.data, dict):
                     row_dict = {f"{self.data_col}_{key}": val for key, val in source.data.items()}
                 else:
@@ -219,12 +219,12 @@ class Stats(Base):
         """
         Creates a spreadsheet (CSV file) from a specified DataFrame stored within the object.
 
-        This function constructs the filename based on various attributes and options set in the objects `calc_opts`. If
+        This function constructs the filename based on various attributes and options set in the objects `calc_spec`. If
         the file already exists and `force_recalc` is set to False, the function will not overwrite the existing file.
 
         Parameters:
         - path (str, optional): Directory path where the spreadsheet should be saved. If not provided, it defaults to
-          the `data_path` attribute from the object's `calc_opts`.
+          the `data_path` attribute from the object's `calc_spec`.
         - filename (str, optional): Name of the CSV file.  Will be generated automatically if absent.
         - force_recalc (bool, optional): If set to True, the function will overwrite an existing file with the same
           name. Defaults to True.
@@ -236,10 +236,10 @@ class Stats(Base):
         if len(self.dfs):
             df_name = self.merge_dfs_animal_by_animal()
         else:
-            self.make_df(self.calc_opts)
+            self.make_df(self.calc_spec)
             df_name = self.calc_type
         if path is None:
-            path = self.calc_opts['data_path']
+            path = self.calc_spec['data_path']
         path = os.path.join(path, self.calc_type)
         if not os.path.exists(path):
             os.mkdir(path)
@@ -276,7 +276,7 @@ class Stats(Base):
 
         r_script = self.write_spike_post_hoc_r_script()
 
-        self.script_path = os.path.join(self.calc_opts['data_path'], self.calc_type, 'post_hoc', self.calc_type +
+        self.script_path = os.path.join(self.calc_spec['data_path'], self.calc_type, 'post_hoc', self.calc_type +
                                         '_r_script.r')
         with open(self.script_path, 'w') as f:
             f.write(r_script)
@@ -294,17 +294,17 @@ class Stats(Base):
             }
         }
          
-        error_suffix = error_suff_dict[self.calc_opts['post_hoc_type']][self.calc_opts['row_type']]
+        error_suffix = error_suff_dict[self.calc_spec['post_hoc_type']][self.calc_spec['row_type']]
 
-        if self.calc_opts.get('post_hoc_bin_size', 1) > 1:
-            if self.calc_opts['post_hoc_type'] == 'poisson':
+        if self.calc_spec.get('post_hoc_bin_size', 1) > 1:
+            if self.calc_spec['post_hoc_type'] == 'poisson':
                 error_suffix += '(1|animal:unit:period:time_bin)'
             else:
                 error_suffix += '/time_bin' 
 
-        post_hoc_bin_size = self.calc_opts.get('post_hoc_bin_size', 1)
+        post_hoc_bin_size = self.calc_spec.get('post_hoc_bin_size', 1)
         
-        if self.calc_opts.get('period_type_regressor'):
+        if self.calc_spec.get('period_type_regressor'):
             pt_regressor_str = '* period_type'
             within_nt_p_row = 4
             interaction_p_row = 8
@@ -314,7 +314,7 @@ class Stats(Base):
             interaction_p_row = 4
 
 
-        if self.calc_opts['post_hoc_type'] == 'beta':
+        if self.calc_spec['post_hoc_type'] == 'beta':
             model_formula = f'glmmTMB(formula = {self.data_col} ~ group {pt_regressor_str} + (1|animal{error_suffix}), ' \
                             f'family = beta_family(link = "logit"), data = data)'
             interaction_model_formula = f'glmmTMB(formula = {self.data_col} ~ group * neuron_type {pt_regressor_str} + ' \
@@ -324,13 +324,13 @@ class Stats(Base):
             interaction_p_val_index = f'coefficients$cond[{interaction_p_row}, 4]'
             zero_adjustment_line = f'df$"{self.data_col}"[df$"{self.data_col}" == 0] ' \
                                    f'<- df$"{self.data_col}"[df$"{self.data_col}" == 0] + 1e-6'
-        elif self.calc_opts['post_hoc_type'] == 'lmer':
+        elif self.calc_spec['post_hoc_type'] == 'lmer':
             model_formula = f'lmer({self.data_col} ~ group {pt_regressor_str} + (1|animal{error_suffix}), data = data)'
             interaction_model_xormula = f'lmer({self.data_col} ~ group * neuron_type {pt_regressor_str} + (1|animal{error_suffix}), data = sub_df)'
             p_val_index = f'coefficients[{within_nt_p_row}, 5]'
             interaction_p_val_index = f'coefficients[{interaction_p_row}, 5]'
             zero_adjustment_line = ''
-        elif self.calc_opts['post_hoc_type'] == 'poisson':
+        elif self.calc_spec['post_hoc_type'] == 'poisson':
             model_formula = f'glmmTMB({self.data_col} ~ group {pt_regressor_str} + (1|animal:unit) + (1|animal:unit:period), ' \
             'ziformula = ~ 1, family = poisson(link = "log"), data = data)'
             interaction_model_formula = f'glmmTMB({self.data_col} ~ group * neuron_type {pt_regressor_str}  + (1|animal{error_suffix}, data = sub_df)' 
@@ -341,7 +341,7 @@ class Stats(Base):
             raise ValueError('Unknown post hoc type')
 
         select_period_type_line = ''
-        if self.experiment.hierarchy[self.calc_opts['row_type']] >  3 and not self.calc_opts.get('period_type_regressor'):
+        if self.experiment.hierarchy[self.calc_spec['row_type']] >  3 and not self.calc_spec.get('period_type_regressor'):
             select_period_type_line = "df <- df[df$period_type == 'tone', ]"  # TODO make this not specific to tone
 
         return fr'''
@@ -412,16 +412,16 @@ class Stats(Base):
                 '''
 
     def get_post_hoc_results(self, force_recalc=True):
-        post_hoc_path = os.path.join(self.calc_opts['data_path'], self.calc_type, 'post_hoc')
+        post_hoc_path = os.path.join(self.calc_spec['data_path'], self.calc_type, 'post_hoc')
         if not os.path.exists(post_hoc_path):
             os.mkdir(post_hoc_path)
-        adjustment = self.calc_opts.get('adjustment')
-        changes_to_calc_opts = []
-        if self.calc_opts.get('period_type_regressor'):
-            changes_to_calc_opts.append((['adjustment'], 'none'))
-        if self.calc_opts.get('post_hoc_type') == 'poisson':
-            changes_to_calc_opts.append((['calc_type'], 'spike_counts'))
-        self.update_calc_opts(changes_to_calc_opts)
+        adjustment = self.calc_spec.get('adjustment')
+        changes_to_calc_spec = []
+        if self.calc_spec.get('period_type_regressor'):
+            changes_to_calc_spec.append((['adjustment'], 'none'))
+        if self.calc_spec.get('post_hoc_type') == 'poisson':
+            changes_to_calc_spec.append((['calc_type'], 'spike_counts'))
+        self.update_calc_spec(changes_to_calc_spec)
         self.make_spreadsheet(path=post_hoc_path)
         self.results_path = os.path.join(post_hoc_path, 'r_post_hoc_results.csv')
         if not os.path.exists(self.results_path) or force_recalc:
@@ -433,8 +433,8 @@ class Stats(Base):
             print("STDOUT:", result.stdout)
             print("STDERR:", result.stderr)
         results = pd.read_csv(self.results_path)
-        if self.calc_opts.get('period_type_regressor'):
-            self.update_calc_opts([(['adjustment'], adjustment)])
+        if self.calc_spec.get('period_type_regressor'):
+            self.update_calc_spec([(['adjustment'], adjustment)])
         return getattr(self, f"construct_{self.kind_of_data}_post_hoc_results")(results)
 
     def construct_spike_post_hoc_results(self, results):

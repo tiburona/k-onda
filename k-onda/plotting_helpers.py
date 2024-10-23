@@ -8,18 +8,18 @@ class PlottingMixin:
         adjustment = ''
 
         for comp in ['evoked', 'percent_change']:
-            if self.calc_opts.get(comp):
+            if self.calc_spec.get(comp):
                 adjustment = comp
                 adjustment = smart_title_case(adjustment.replace('_', ' '))
                 if comp == 'percent_change':
                     sps = ''
         
-        base = self.calc_opts.get('base') if self.calc_opts.get('base') else ''
+        base = self.calc_spec.get('base') if self.calc_spec.get('base') else ''
 
         return {'psth': ('Time (s)', 'Normalized Firing Rate'),
                 'firing_rates': ('', f'{adjustment} Firing Rate {sps}'),
                 'proportion': ('Time (s)', ''f'Proportion Positive {base.capitalize() + "s"}'),
-                'raster': ('Time (s)', f"{self.calc_opts.get('base', 'event').capitalize()}s"),
+                'raster': ('Time (s)', f"{self.calc_spec.get('base', 'event').capitalize()}s"),
                 'autocorr': ('Lags (s)', 'Autocorrelation'),
                 'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum'),
                 'cross_correlations': ('Lags (s)', 'Cross-Correlation'),

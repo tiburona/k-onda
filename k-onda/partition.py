@@ -1,24 +1,54 @@
 from plotter_base import PlotterBase
-from subplotter import Subplotter, BrokenAxes, AxWrapper
+from subplotter import CellArray, BrokenAxes, AxWrapper
 
 import numpy as np
 from copy import deepcopy
 from functools import reduce
 import operator
 
-class Partition(PlotterBase):
+
+class PlotProcessor(PlotterBase):
+    
+    def __init__(self, origin_plotter, parent_cell_array=None, 
+                 parent_processor = None, info=None):
+        self.origin_plotter = origin_plotter
+        self.parent_plotter = parent_cell_array
+        self.spec = self.active_spec
+        self.parent_processor = parent_processor
+        self.aesthetics = self.spec.get('aesthetics', {})
+        if self.parent_processor:
+            self.aesthetics.update(self.parent_processor.aesthetics)
+        if 'calc_spec' in self.spec:
+            self.calc_spec = self.spec['calc_spec']
+            
+        if self.active_fig == None:
+            self.fig = self.origin_plotter.make_fig()
+            self.parent_cell_array = self.active_cell_array
+        else:
+            self.fig = self.active_fig
+        
+        self.processor_classes = {
+            'split': Splitter,
+            'segment': Segmenter,
+            'subset': Subsetter,
+            'section': Splitter, 
+            'arrange': Arranger
+        }
+
+
+class Partitioner(PlotProcessor):
 
     def __init__(self, origin_plotter, parent_plotter=None, 
                  parent_processor = None, info=None):
-        super().__init__()
-        self.origin_plotter = origin_plotter
-        self.parent_plotter = parent_plotter
-        self.spec = self.active_spec
+        super().__init__(origin_plotter, 
+                         parent_plotter, 
+                         parent_processor=parent_processor,
+                         info=info)
+        
         self.next = None
-        for k in ('segment', 'section'):
+        for k in ('segment', 'split'):
             if k in self.spec:
                 self.next = {k: self.spec[k]}
-        self.parent_processor = parent_processor
         self.assign_data_sources()
         self.total_calls = reduce(
             operator.mul, [len(div['members']) for div in self.spec['divisions'].values()], 1)
@@ -26,23 +56,9 @@ class Partition(PlotterBase):
         self.layers = self.spec.get('layers', {})
         if self.parent_processor:
             self.layers.update(self.parent_processor.layers)
-        self.aesthetics = self.spec.get('aesthetics', {})
-        if self.parent_processor:
-            self.aesthetics.update(self.parent_processor.aesthetics)
-
-        if self.active_fig == None:
-            self.fig = self.origin_plotter.make_fig()
-            self.parent_plotter = self.active_plotter
-        else:
-            self.fig = self.active_fig
         self.inherited_info = info if info else {}
         self.info_by_division = []
-        self.info_by_attr = {}
-        self.processor_classes = {
-            'section': Section,
-            'segment': Segment,
-            'subset': Subset
-        }
+        self.info_by_attr = {}       
         
     @property
     def last(self):
@@ -64,9 +80,9 @@ class Partition(PlotterBase):
         
         for i, member in enumerate(current_divider['members']):
             
-            if divider_type == 'data_type':
-                info['data_source'] = source
-                info[source.name] = source.identifier
+            if divider_type == 'data_source':
+                info['data_source'] = member
+                info[member.name] = member.identifier
                
             else:
                 info[divider_type] = member
@@ -87,7 +103,7 @@ class Partition(PlotterBase):
                 if self.next:
                     self.active_spec_type, self.active_spec = list(self.next.items())[0]
                     processor = self.processor_classes[self.active_spec_type](
-                        self.origin_plotter, self.active_plotter, info=updated_info)
+                        self.origin_plotter, self.active_cell_array, info=updated_info)
                     processor.start()
 
     def get_calcs(self):
@@ -102,38 +118,46 @@ class Partition(PlotterBase):
                 self.active_spec.get('attr', 'calc')]
            
             d.update({attr: getattr(d['data_source'], attr) for attr in attrs})
+            
 
-class Section(Partition):
+class Sectioner(Partitioner):
+    
+    def __init__(self, origin_plotter, parent_plotter=None, 
+                 parent_processor = None, info=None, index=None):
+        super().__init__(origin_plotter, parent_plotter, parent_processor, info)
+        self.components = self.spec['arrange']['members']
+        self.gs_args = self.spec['gs_args']
+        
+        self.active_cell_array = CellArray(
+            self.active_cell_array, self.current_index, self.spec, aspect=self.aspect)
+        
+    def wrap_up(self, current_divider, i):
+        print("starting_index", self.starting_index)
+        print("current_index", self.current_index)
+        self.remaining_calls -= 1
+        self.active_cell_array.apply_aesthetics(self.aesthetics)
+        
+        for i, row in enumerate(self.components):
+            for j, component in row:
+                self.origin_plotter.plot(component['calc_spec'], component['graph_opts'], 
+                               parent=self.active_cell_array)
+                 
+                
+
+class Splitter(Partitioner):
     def __init__(self, origin_plotter, parent_plotter=None,
                   index=None, parent_processor=None):
         super().__init__(origin_plotter, parent_plotter=parent_plotter, 
-                         parent_processor=parent_processor)
-        
-        self.set_members()
-        # index should refer to a starting point in the parent gridspec
-        self.gs_xy = self.spec.pop('gs_xy', None) 
-        if index:
-            self.starting_index = index
-        elif self.gs_xy:
-            self.starting_index = [dim[0] for dim in self.gs_xy]
-        else:
-            self.starting_index = [0, 0]
+                         parent_processor=parent_processor, index=index)
+         
+        self.starting_index = index if index else [0, 0]
         self.current_index = deepcopy(self.starting_index)
 
         self.aspect = self.aesthetics.get('aspect')
-
-        if not self.is_layout:
-            self.active_plotter = Subplotter(
-                self.active_plotter, self.current_index, self.spec, aspect=self.aspect)
+        
+        self.active_cell_array = CellArray(
+            self.active_cell_array, self.current_index, self.spec, aspect=self.aspect)
             
-    def set_members(self):
-        data_source_spec = self.spec['divisions'].get('data_source', {})
-        if type(data_source_spec.get('members')) in [int, str]:
-            members = self.get_data_sources(
-                **{k: data_source_spec[v] 
-                   for k, v in zip(['identifier', 'data_object_type'], ['members', 'type'])})
-            data_source_spec['members'] = members
-
 
     # @property 
     # def dimensions_of_subplot(self):
@@ -156,8 +180,8 @@ class Section(Partition):
         print("starting_index", self.starting_index)
         print("current_index", self.current_index)
         self.remaining_calls -= 1
-        self.active_acks = self.active_plotter.axes[*self.current_index]
-        self.active_plotter.apply_aesthetics(self.aesthetics)
+        self.active_cell = self.active_plotter.axes[*self.current_index]
+        self.active_cell_array.apply_aesthetics(self.aesthetics)
         
         if self.next:
             # do next thing
@@ -169,7 +193,7 @@ class Section(Partition):
             self.origin_plotter.delegate([self.info_by_division.pop()], is_last=self.last)
 
 
-class Segment(Partition):
+class Segmenter(Partitioner):
     def __init__(self, origin_plotter, parent_plotter, info=None,
                  parent_processor=None):
           super().__init__(origin_plotter, parent_plotter, info=info,
@@ -191,7 +215,29 @@ class Segment(Partition):
             
 
 
-class Subset:
+class Subsetter:
     pass
+
+
+class Arranger(PlotProcessor):
+    
+    def __init__(self, origin_plotter, parent_plotter=None, 
+                 parent_processor = None, info=None, index=None):
+        super().__init__(origin_plotter, 
+                         parent_plotter, 
+                         parent_processor=parent_processor,
+                         info=info)
+        self.members = self.spec['members']
+        self.starting_index = index if index else [0, 0]
+        self.active_cell_array = CellArray(self.active_cell_array, self.starting_index, 
+                                           spec=self.active_spec)
+        
+    def start(self):
+        for member in self.members:
+            self.origin_plotter.process_plot_spec(member['plot_spec'], 
+                                                  index=member['index'])
+
+
+
 
 

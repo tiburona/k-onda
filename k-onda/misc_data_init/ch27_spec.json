@@ -1,0 +1,11 @@
+{
+    "procedure": "plot",
+    "plot_dir": "/Users/katie/likhtik/CH27mice",
+    "components": {
+        "gs_args": {"dims": [3, 1]},
+        "members": [{
+            "index": [0, 0]
+        }]
+    }
+
+}

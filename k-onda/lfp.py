@@ -65,14 +65,14 @@ class LFPPrepMethods(PrepMethods):
 
         for brain_region in raw_lfp:
             data = raw_lfp[brain_region]/4
-            filter = self.calc_opts.get('remove_noise', 'filtfilt')
+            filter = self.calc_spec.get('remove_noise', 'filtfilt')
             if filter == 'filtfilt':
                 filtered = filter_60_hz(data, self.lfp_sampling_rate)
             elif filter == 'spectrum_estimation':
                 ids = [self.identifier, brain_region]
                 saved_calc_exists, filtered, pickle_path = self.load('filter', ids)
                 if not saved_calc_exists:
-                    ml = MatlabInterface(self.calc_opts['matlab_configuration'])
+                    ml = MatlabInterface(self.calc_spec['matlab_configuration'])
                     filtered = ml.filter(data)
                     self.save(filtered, pickle_path)
                 filtered = np.squeeze(np.array(filtered))
@@ -94,7 +94,7 @@ class LFPPrepMethods(PrepMethods):
         def validate_event(event, standard):
             for frequency in event.frequency_bins: 
                 for time_bin in frequency.time_bins:
-                    if time_bin.data > self.calc_opts.get('threshold', 20) * standard:
+                    if time_bin.data > self.calc_spec.get('threshold', 20) * standard:
                         print(f"{region} {self.identifier} {event.period_type} "
                         f"{event.period.identifier} {event.identifier} invalid!")
                         return False
@@ -114,7 +114,7 @@ class LFPPrepMethods(PrepMethods):
 class LFPMethods:
  
     def get_power(self):
-        return self.get_average('get_power', stop_at=self.calc_opts.get('base', 'event'))
+        return self.get_average('get_power', stop_at=self.calc_spec.get('base', 'event'))
     
 
 class LFPDataSelector:
@@ -162,7 +162,7 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
                          target_period=target_period, is_relative=is_relative, events=events)
         self.animal = animal
         self.parent = animal
-        padding = self.calc_opts['lfp_padding']
+        padding = self.calc_spec['lfp_padding']
         start_pad, end_pad = np.round(np.array(padding) * self.lfp_sampling_rate).astype(int)
         self.duration_in_samples = round(self.duration * self.lfp_sampling_rate)
         self.start = round(self.onset)
@@ -232,15 +232,15 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         return data
     
     def calc_cross_spectrogram(self):
-        power_arg_set = self.calc_opts['power_arg_set']
-        arg_set = [[self.animal.identifier, self.calc_opts['brain_region']], 
+        power_arg_set = self.calc_spec['power_arg_set']
+        arg_set = [[self.animal.identifier, self.calc_spec['brain_region']], 
                        [str(arg) for arg in power_arg_set], 
                        [self.period_type, str(self.identifier)], 
-                       ['padding'], [str(pad) for pad in [self.calc_opts['lfp_padding']]]]
+                       ['padding'], [str(pad) for pad in [self.calc_spec['lfp_padding']]]]
         pickle_args = [item for sublist in arg_set for item in sublist]
         saved_calc_exists, result, pickle_path = self.load('spectrogram', pickle_args)
         if not saved_calc_exists:
-            ml = MatlabInterface(self.calc_opts['matlab_configuration'])
+            ml = MatlabInterface(self.calc_spec['matlab_configuration'])
             result = ml.mtcsg(self.padded_data, *power_arg_set)
             self.save(result, pickle_path)
         return [np.array(arr) for arr in result]

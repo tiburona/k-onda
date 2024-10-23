@@ -28,6 +28,7 @@ class Experiment(Data):
             'lfp': LFPPeriod,
             'spike': SpikePeriod
         }
+        self.is_initialized = []
 
     @property
     def ancestors(self):
@@ -57,6 +58,10 @@ class Experiment(Data):
     def all_lfp_periods(self):
         return [period for animal in self.all_animals for period in animal.get_all('lfp_periods') 
                 if period.include(check_ancestors=True)]
+        
+    @property
+    def data_is_initialized(self):
+        return self.kind_of_data in self.is_initialized
 
     def initialize_groups(self, groups):
         self.groups = groups
@@ -73,9 +78,10 @@ class Experiment(Data):
             if not animal.include():
                 continue
             getattr(animal, f"{self.kind_of_data}_prep")()
+        self.is_initialized.append(self.kind_of_data)
 
-    def validate_lfp_events(self, calc_opts):
-        self.calc_opts = calc_opts
+    def validate_lfp_events(self, calc_spec):
+        self.calc_spec = calc_spec
         self.initialize_data()
         for animal in self.all_animals:
             animal.validate_events()

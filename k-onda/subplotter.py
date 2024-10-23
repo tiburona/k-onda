@@ -15,83 +15,79 @@ class Figurer(PlotterBase):
         self.fig = plt.figure(constrained_layout=True)
         self.active_fig = self.fig
         self.gs = GridSpec(1, 1, figure=self.fig)
-        self.subplotter = Subplotter(self, [0, 0], first=True)
-        self.active_plotter = self.subplotter
-        self.active_ax = self.active_plotter.axes[0, 0]
+        self.cell_array = CellArray(self, [0, 0], first=True, spec=self.active_spec)
+        self.active_cell_array = self.cell_array
+        self.active_cell = self.active_cell_array.cells[0, 0]
         return self.active_fig
     
 
-class Subplotter(PlotterBase):
+class CellArray(PlotterBase):
 
     def __init__(self, parent, index, spec=None, first=False, aspect=None, dimensions=None, 
                  grid_keywords=None, invisible_axes=None):
         self.fig = self.active_fig
         self.parent = parent
         self.index = index
-        self.spec = spec
+        self.spec = spec or self.active_spec
         self.first = first
         self.aspect = aspect
-        self._dimensions_in_axes = dimensions
-        self._dimensions_in_acks = None
+        self._dimensions = dimensions
         self.grid_keywords = grid_keywords
         self.frame_ax = self.create_invisible_frame()  # Generalize the invisible frame creation
         self.gs = self.create_grid()  # Create the gridspec for the actual data
         self.invisible_axes = invisible_axes or []
-        self._axes = None
+        self._cells = None
         if first:
-            self._ax_visibility = np.array([[None]])
+            self._cell_visibility = np.array([[None]])
         else:
-            self._ax_visibility = np.array(
+            self._cell_visibility = np.array(
                 [[True if (i, j) not in self.invisible_axes else False 
-                  for j in range(self.dimensions_in_axes[1])] 
-                  for i in range(self.dimensions_in_axes[0])])
+                  for j in range(self.dimensions[1])] 
+                  for i in range(self.dimensions[0])])
             self.adjust_gridspec_bounds() # TODO: I need a version of this that works with the frame ax
             # and both should take arguments, effectively giving both the frame and the data independently
             # operable left, right, top, and bottom parameters
     
     @property
-    def axes(self):
-        if self._axes is None:
-            self._axes = self.make_all_axes()
-        return self._axes
+    def cells(self):
+        if self._cells is None:
+            self._cells = self.make_all_cells()
+        return self._cells
     
     @property
-    def ax_list(self):
-        return [a for r in self.axes for a in r]
-    
+    def one_d_cell_list(self):
+        return [a for r in self.cells for a in r]
+   
     @property
-    def dimensions_in_axes(self):
-        if self._dimensions_in_axes is None:
+    def dimensions(self):
+        if self._dimensions is None:
             self.calculate_my_dimensions()
-        return self._dimensions_in_axes
+        return self._dimensions
     
     @property
-    def dimensions_in_acks(self):
-        if self._dimensions_in_acks is None:
-            self.calculate_my_dimensions()
-        return self._dimensions_in_acks
+    def cell_visibility(self):
+        return self._cell_visibility
     
-    @property
-    def ax_visibility(self):
-        return self._ax_visibility
-    
-    @ax_visibility.setter
-    def ax_visibility(self, visibility):
-        self._ax_visibility = visibility
+    @cell_visibility.setter
+    def cell_visibility(self, visibility):
+        self._cell_visibility = visibility
 
     def calculate_my_dimensions(self):
-        dims = [1, 1]
+        
         if self.first:
-            self._dimensions_in_axes = dims
-            self._dimensions_in_acks = dims
+            self._dimensions_in_axes = [1, 1]
+            self._dimensions = [1, 1]
             return
+        
+        if self.spec.get('gs_args', {}).get('dims'):
+            self._dimensions = self.spec['gs_args']['dims']
+            return
+        
+        dims = [1, 1]
         for division in self.spec['divisions'].values():
             if 'dim' in division:
                 dims[division['dim']] = len(division['members'])
-        self._dimensions_in_acks = copy(dims)
-        for i, breaks in self.active_spec.get('break_axis', {}).items():
-            dims[int(not i)] *= len(breaks)
-        self._dimensions_in_axes = copy(dims)
+        self._dimensions = copy(dims)
 
     def create_frame_grid(self):
         """Create a 1x1 gridspec for the invisible frame to surround the data."""
@@ -107,7 +103,7 @@ class Subplotter(PlotterBase):
 
         # Create the gridspec for the data inside the invisible frame
         data_gridspec = GridSpecFromSubplotSpec(
-            *self.dimensions_in_acks,  # The number of rows and columns for the actual data
+            *self.dimensions,  # The number of rows and columns for the actual data
             subplot_spec=frame_gridspec[0]  # Use the only cell in the frame for the data
         )
 
@@ -143,13 +139,18 @@ class Subplotter(PlotterBase):
 
         return frame_ax  # Return the axis (which will still render labels)
         
-    def make_all_axes(self):
+    def make_all_cells(self):
         return np.array([
-            [self.make_acks(i, j) for j in range(self.dimensions_in_acks[1])] 
-            for i in range(self.dimensions_in_acks[0])
+            [self.make_cell(i, j) for j in range(self.dimensions[1])] 
+            for i in range(self.dimensions[0])
         ])
         
-    def make_acks(self, i, j):
+    def make_cell(self, i, j):
+        
+        if self.active_spec_type == 'section':
+            cell_array = CellArray(self.active_cell_array, [i, j], self.active_spec)
+            return cell_array
+        
         break_axes = self.active_spec.get('break_axis', {}) if not self.first else {}
 
         # Check if there are any breaks
@@ -164,13 +165,13 @@ class Subplotter(PlotterBase):
         else:
             gridspec_slice = self.gs[i, j]
             ax = self.fig.add_subplot(gridspec_slice)
-            ax.set_visible(self.ax_visibility[i, j])
+            ax.set_visible(self.cell_visibility[i, j])
             if self.aspect:
                 ax.set_box_aspect(self.aspect)
             return AxWrapper(ax, (i, j))
     
     def mark_edges_of_component(self, xy):
-        for ax in self.axes.flatten():
+        for ax in self.cells.flatten():
             if ax.index[0] == xy[0][1] - 1: # the bottommost row
                 ax.bottom_edge = True
             if ax.index[1] == xy[1][0]: # the leftmost column
@@ -179,7 +180,7 @@ class Subplotter(PlotterBase):
     def apply_aesthetics(self, aesthetics):
         for key, val in aesthetics.get('ax', {}).get('border', {}).items():
             spine, tick, label = (val[i] in ['T', True, 'True'] for i in range(3))
-            for ax in self.active_acks.ax_list:
+            for ax in self.active_cell.ax_list:
                 ax.spines[key].set_visible(spine)
                 ax.tick_params(**{f"label{key}":label, key:tick})
         self.apply_shared_axes(aesthetics)
@@ -206,7 +207,7 @@ class Subplotter(PlotterBase):
         """Return a 2D array of AxWrapper objects from axes, expanding BrokenAxis if necessary."""
         ax_wrapper_grid = []
 
-        for row in self.axes:
+        for row in self.cells:
             ax_wrapper_row = []
             for ax in row:
                 if isinstance(ax, BrokenAxes):

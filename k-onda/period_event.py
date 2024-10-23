@@ -37,7 +37,7 @@ class Period(Data, BinMethods):
     
     @property
     def reference_override(self):
-        override = self.calc_opts.get('reference_override')
+        override = self.calc_spec.get('reference_override')
         return override and override[0] == self.name
         
     @property
@@ -46,7 +46,7 @@ class Period(Data, BinMethods):
             not self.reference_override):
             return None
         if self.reference_override:
-            return getattr(self, self.calc_opts['reference_override'][1])
+            return getattr(self, self.calc_spec['reference_override'][1])
         else:
             period_attr = f"{self.kind_of_data}_periods"
             if hasattr(self, period_attr):

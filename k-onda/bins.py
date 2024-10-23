@@ -26,11 +26,11 @@ class TimeBin(Bin):
         super().__init__(index, val, parent, parent_data) 
 
         if self.calc_type == 'correlation':
-            ts = np.arange(-self.calc_opts['lags'], self.calc_opts['lags'] + 1) / self.sampling_rate
+            ts = np.arange(-self.calc_spec['lags'], self.calc_spec['lags'] + 1) / self.sampling_rate
         else:
-            pre_event, post_event = [self.calc_opts['events'][self.period_type][opt] 
+            pre_event, post_event = [self.calc_spec['events'][self.period_type][opt] 
                                 for opt in ['pre_event', 'post_event']]
-            bin_size = self.calc_opts.get('bin_size')
+            bin_size = self.calc_spec.get('bin_size')
             if bin_size is None:
                 try:
                     bin_size = parent.spectrogram_bin_size
@@ -114,7 +114,7 @@ class BinMethods(TimeBinMethods, FrequencyBinMethods):
     def num_bins_per(self):
         if not hasattr(self, 'start') and hasattr(self, 'stop'):
             return None
-        bin_size = self.calc_opts.get('bin_size', .01)
+        bin_size = self.calc_spec.get('bin_size', .01)
         return round((self.stop-self.start) / bin_size)
 
 

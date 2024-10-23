@@ -20,11 +20,11 @@ SPREADSHEET_OPTS = {'kind_of_data': 'spike', 'data_path': '/Users/katie/likhtik/
 
 
 
-GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'tick_step': 0.1, 'sem': False,
+GRAPH_OPTS = {'plot_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'tick_step': 0.1, 'sem': False,
               'footer': True, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'},
               'force_recalc': False}
 
-ROSE_PLOT_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'sem': False,
+ROSE_PLOT_OPTS = {'plot_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'sem': False,
               'footer': False, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'},
               'force_recalc': False, 'superimpose': False}
 
@@ -52,7 +52,7 @@ CAROLINA_OPTS = {'kind_of_data': 'spike', 'data_path': '/Users/katie/likhtik/CH_
                  'period_types': ['pretone', 'tone']}
 
 
-CAROLINA_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4,
+CAROLINA_GRAPH_OPTS = {'plot_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4,
                        'tick_step': .1, 'sem': False, 'footer': False, 'equal_y_scales': True,
                        'group_colors': {'control': '#9F9FA3', 'arch': '#32B44A'}, 'force_recalc': False,
                        'neuron_type_colors': {'PV': '#5679C7', 'ACH': '#C75B56'}, 'animal_id': 'CH272',
@@ -72,7 +72,7 @@ SPONTANEOUS_OPTS = {'kind_of_data': 'spike', 'data_path': '/Users/katie/likhtik/
                     'spontaneous': 120}
 
 
-SPONTANEOUS_GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4, 'tick_step': 100,
+SPONTANEOUS_GRAPH_OPTS = {'plot_dir': '/Users/katie/likhtik/CH_for_katie_less_conservative/graphs', 'units_in_fig': 4, 'tick_step': 100,
                           'sem': False, 'footer': False, 'equal_y_scales': True,
                           'group_colors': {'control': '#9F9FA3', 'arch': '#32B44A'}, 'force_recalc': False,
                           'neuron_type_colors': {'PV': '#5679C7', 'ACH': '#C75B56'}}
@@ -107,7 +107,7 @@ HPC_MRL_ANIMALS = list(set(HPC_THETA_POWER_ANIMALS) & set(STANDARD_ANIMALS))
 PL_MRL_ANIMALS = list(set(PFC_THETA_POWER_ANIMALS) & set(STANDARD_ANIMALS))
 BLA_MRL_ANIMALS = list(set(BLA_THETA_POWER_ANIMALS) & set(STANDARD_ANIMALS))
 
-GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
+GRAPH_OPTS = {'plot_dir': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL', 'units_in_fig': 4, 'tick_step': 0.1,
               'sem': False, 'footer': True, 'equal_y_scales': True, 'equal_color_scales': 'within_data_source',
               'group_colors': {'control': '#6C4675', 'defeat': '#F2A354'}, 'period_colors':
                   {'pretone': '#E75480', 'tone': '#76BD4E'}, 'period_order': ['pretone', 'tone']
@@ -353,7 +353,7 @@ COUNT_OPTS = {'kind_of_data': 'spike', 'data_type': 'spike_counts', 'bin_size': 
 
 
 CAROLINA_GRAPH_OPTS = {
-    'graph_dir': '/Users/katie/likhtik/CH_EXT', 'units_in_fig': 4, 'tick_step': 0.1, 
+    'plot_dir': '/Users/katie/likhtik/CH_EXT', 'units_in_fig': 4, 'tick_step': 0.1, 
     'sem': False, 'footer': True, 'equal_y_scales': True, 'equal_color_scales': 'within_group', 
     'colors': {
         'period_type pretone period_group 0': '#000000',
@@ -395,10 +395,10 @@ BLA_HPC_COHERENCE_RUNNER_OPTS = {'data_opts': BLA_HPC_COHERENCE_OPTS, 'graph_opt
 
 SPREADSHEET_OPTS = [BLA_PL_COHERENCE_OPTS, HPC_PL_COHERENCE_OPTS, BLA_HPC_COHERENCE_OPTS]
 
-RUNNER_OPTS = {'calc_opts': PSTH_OPTS, 'graph_opts': GRAPH_OPTS}
+RUNNER_OPTS = {'calc_spec': PSTH_OPTS, 'graph_opts': GRAPH_OPTS}
 
 MS_26_OPTS = {
-            'graph_dir': '/Users/katie/likhtik/MS_26',
+            'plot_dir': '/Users/katie/likhtik/MS_26',
             'procedure': 'make_figure',
             'dimensions': (2, 4),
             'grid_args': {'height_ratios': (1, 2)},
@@ -420,7 +420,7 @@ MS_26_OPTS = {
                              'members': ['1', '2', '3'], 
                              'dim': 1}}
                  }},
-                 'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'waveform', 'base': 'period',
+                 'calc_spec': {'kind_of_data': 'spike', 'calc_type': 'waveform', 'base': 'period',
                                'data_path': '/Users/katie/likhtik/MS_26'}},
                 {'plot_type':'categorical_scatter',
                  'gs_xy': [(1, 2), (0, 3)],
@@ -452,7 +452,7 @@ MS_26_OPTS = {
                                     'members': ['prelight', 'light', 'tone'], 
                                     'grouping': 0  
                         }}}}},
-                   'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
+                   'calc_spec': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
                                  'bin_size': .01}},
                 {'plot_type':'categorical_scatter',
                  'gs_xy': [(1, 2), (3, 4)],
@@ -485,12 +485,12 @@ MS_26_OPTS = {
                                     'grouping': 0}}
                           }
                   }},
-                  'calc_opts':{'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
+                  'calc_spec':{'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
                             'bin_size': .01, 'percent_change': {'level': 'unit', 'reference': 'prelight'}}}
         ]
         }
 
-#    graph_opts = {'plot_spec': plot_spec, 'graph_dir': self.layout_spec['graph_dir'], 
+#    graph_opts = {'plot_spec': plot_spec, 'plot_dir': self.layout_spec['plot_dir'], 
 #                           'plot_type': plot_type}
 
 CH27_OPTS = {
@@ -512,44 +512,158 @@ CH27_OPTS = {
                         'members': ['light']
                     }
             }}},
-        'graph_dir': '/Users/katie/likhtik/CH_27mice',
+        'plot_dir': '/Users/katie/likhtik/CH_27mice',
         'plot_type': 'psth'
     },
-    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'raster_type': 'spike_train', 
+    'calc_spec': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'raster_type': 'spike_train', 
                   'base': 'period', 'bin_size': .4, 
                   'periods': {'light': {'pre_period': 2, 'post_period': 2}},
                   'filter': {'unit': {'category':  ('==', 'good')}}}
     }
 
-CH27_FIGURE_OPTS = {
-    
-    'graph_dir': '/Users/katie/likhtik/CH27',
-    'procedure': 'make_figure',
-    'layout_spec' : {
-    'layout': 'row',
-    'components': [
-        {   
-            'layout': 'row',  
-            
-        },
-        {
-            'layout': 'column',  # Second component is a row of mua units, as above, but no waveform
-            'components': [
-                {},  # First plot in the left column
-                {}   # Second plot in the right column
-            ]
-        },
-        {
-            'layout': 'column',
-            'components': [
-                {},
-                {}
-            ]
-            
-        }
-    ]
-}
-    
-    
-}
 
+
+
+CH27_FIGURE_OPTS = {
+
+    'procedure': 'plot',
+    'plot_dir': '/Users/katie/likhtik/CH27mice',
+    'arrange': {
+        'gs_args': {'dims': (3, 1)}, # can also include optional args to gridspecfromsubplotspec
+        'members': [{
+            'index': (0, 0),
+            'plot_spec': 
+            {'section': {
+            'divisions': {
+                'data_source': {
+                    'type': 'unit',
+                    'members': 'all_units',
+                    'dim': 0
+                }},
+            'arrange': {
+                'gs_args': {'dims': (1, 3)},
+                'members': [
+                {'index': (0, 0), 
+                 'plot_type': 'raster',
+                 'split': {'divisions': {'members': {'period_type': ['light']}}},
+                 'attr': 'calc',
+                 'calc_spec': {
+                     'kind_of_data': 'spike', 
+                     'calc_type': 'raster', 
+                     'raster_type': 'spike_train', 
+                     'base': 'period', 
+                     'bin_size': .1, 
+                     'periods': {'light': {'pre_period': 2, 'post_period': 2}},
+                     'filter': {'unit': {'category':  ('==', 'good')}}},
+                 'aesthetics': {'ax': {'border': {'top': 'FFF', 'right': 'FFF'}}},
+                 'break_axis': {0: [(0, 4), (35, 39)]}}, 
+                {'index': (0, 1),
+                 'plot_type': 'waveform',
+                 'calc_spec': {
+                     'kind_of_data': 'spike',
+                     'calc_type': 'waveform',
+                     'filter': {'unit': {'category':  ('==', 'good')}}
+                     },
+                 'aesthetics': {'ax': {'border': {'top': 'FFF', 'right': 'FFF'}}}
+                 }, 
+                {'index': (0, 2),
+                 'plot_type': 'categorical_scatter',
+                 'attr': 'scatter', 
+                 'calc_spec': {
+                     'kind_of_data': 'spike',
+                     'calc_type': 'firing_rate',
+                     'base': 'period',
+                     'bin_size': .1,
+                     'filter': {'unit': {'category':  ('==', 'good')}}
+                     },
+                 'aesthetics': {'ax': {'border': {'top': 'FFF', 'right': 'FFF'}}},
+                 'segment': {
+                     'divisions': {
+                         'period_type': {'members': ['prelight', 'light'], 'grouping': 0}}
+                 }}]}
+            }}},
+            {'plot_spec': 
+            {'section': {
+            'divisions': {
+                'data_source': {
+                    'type': 'unit',
+                    'members': 'all_units',
+                    'dim': 0
+                }},
+            'arrange': {
+                'gs_args': {'dims': (1, 3)}, 
+                'members': [
+                {'index': (0, 0),
+                 'plot_type': 'raster',
+                 'calc_spec':  {
+                     'kind_of_data': 'spike', 
+                     'calc_type': 'raster', 
+                     'raster_type': 'spike_train', 
+                     'base': 'period', 
+                     'bin_size': .1, 
+                     'periods': {'light': {'pre_period': 2, 'post_period': 2}},
+                     'filter': {'unit': {'category':  ('==', 'mua')}}},
+                 }, 
+                {'index': (0, 1)}, 
+                {'index': (0, 2),
+                 'plot_type': 'categorical_scatter',
+                 'calc_spec':  {
+                     'kind_of_data': 'spike', 
+                     'calc_type': 'raster', 
+                     'raster_type': 'spike_train', 
+                     'base': 'period', 
+                     'bin_size': .1, 
+                     'periods': {'light': {'pre_period': 2, 'post_period': 2}},
+                     'filter': {'unit': {'category':  ('==', 'mua')}}},
+                 'segment': {
+                     'divisions': {
+                         'period_type': {'members': ['prelight', 'light'], 'grouping': 0}}
+                 }
+                 }] }   
+        }   
+        }},
+        {'index': (2, 0),
+        'components': {
+            'gs_args': {'dims': (1, 2)},
+            'members': [
+                {'index': (0, 0),
+                 'plot_type': 'psth',
+                 'section': {
+                     'attr': 'scatter',
+                     'divisions': {
+                         'data_source': {'members': 'all_groups'},
+                         'period_type': {'members': ['light']}}},
+                 'calc_spec': {
+                     'kind_of_data': 'spike',
+                     'calc_type': 'firing_rates',
+                     'base': 'period',
+                     'bin_size': .1,
+                     'periods': {'light': {'pre_period': 2, 'post_period': 2}}},
+                 'aesthetics': {'ax': {'border': {'top': 'FFF', 'right': 'FFF'}}},
+                 'break_axis': {0: [(0, 4), (35, 39)]}}
+                ,
+                {'index': (0, 1), 
+                 'plot_type': 'categorical_scatter', 
+                 'section': {
+                     'attr': 'grandchildren_scatter',
+                     'divisions': {
+                         'data_source': {'members': 'all_groups', 'dim': 0},
+                         'segment': {
+                             'divisions': {
+                                 'period_type': {'members': ['prelight', 'light']}
+                             } }
+                     }},
+                     'calc_spec': {
+                         'kind_of_data': 'spike',
+                         'calc_type': 'firing_rates',
+                         'base': 'period',
+                         'bin_size': .1
+                     },
+                     'aesthetics': {'ax': {'border': {'top': 'FFF', 'right': 'FFF'}}}
+                     }]}}]}}
+        
+                
+        
+       
+        
+        

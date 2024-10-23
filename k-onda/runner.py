@@ -21,41 +21,41 @@ class Runner(OptsValidator):
         self.executing_method = None
         self.loop_lists = {}
         self.follow_up_method = None
-        self.calc_opts = None
-        self.graph_opts = None
+        self.calc_spec = None
+        self.graph_spec = None
         self.proc_name = None
-        self.current_calc_opts = None
+        self.current_calc_spec = None
         self.preparatory_method = None
 
-    def load_analysis_config(self, opts):
-        if isinstance(opts, str):
+    def load_analysis_config(self, spec):
+        if isinstance(spec, str):
             try:
-                with open(opts, 'r', encoding='utf-8') as file:
+                with open(spec, 'r', encoding='utf-8') as file:
                     data = file.read()
-                    opts = json.loads(data)
+                    spec = json.loads(data)
             except FileNotFoundError:
-                raise Exception(f"File not found: {opts}")
+                raise Exception(f"File not found: {spec}")
             except json.JSONDecodeError:
-                raise Exception(f"Error decoding JSON from the file: {opts}")
-        self.opts = opts
+                raise Exception(f"Error decoding JSON from the file: {spec}")
+        self.spec = spec
 
-    def run_main(self, opts):
-        if self.proc_name == 'make_figure':
-            self.set_executors(Layout, 'make_figure')
-            self.executing_method(opts)
+    def run_main(self, spec):
         
-        elif self.proc_name == 'make_plots':
+        if self.proc_name == 'plot':
             self.set_executors(ExecutivePlotter, 'plot')
-            calc_opts = opts['calc_opts']
-            self.graph_opts = self.opts['graph_opts']
-            opts_list = [calc_opts]
-            self.run_list(opts_list)
+            calc_spec = spec.get('calc_spec')
+            if calc_spec is None:
+                self.executing_method(spec)
+            elif isinstance(calc_spec, list):
+                self.run_list(calc_spec)
+            else:
+                self.run_list([calc_spec])
 
-        elif self.proc_name == 'make_csv':
+        elif self.proc_name == 'csv':
             self.set_executors(Stats, 'make_df')
             self.follow_up_method = 'make_csv'
-            opts_list = opts if isinstance(self.opts, list) else [opts]
-            self.run_list(opts_list)
+            spec_list = spec if isinstance(self.spec, list) else [spec]
+            self.run_list(spec_list)
 
         else:
             raise ValueError("Unknown proc name")
@@ -69,24 +69,24 @@ class Runner(OptsValidator):
         self.executing_method = getattr(self.executing_instance, method)
 
     def get_loop_lists(self):
-        for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
+        for spec_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
                              'neuron_qualities', 'inclusion_rules', 'region_sets']:
-            opt_list = self.current_calc_opts.get(opt_list_key)
-            if opt_list is not None:
-                self.loop_lists[opt_list_key] = opt_list
+            spec_list = self.current_calc_spec.get(spec_list_key)
+            if spec_list is not None:
+                self.loop_lists[spec_list_key] = spec_list
 
     def iterate_loop_lists(self, remaining_loop_lists, current_index=0):
         if current_index >= len(remaining_loop_lists):
             self.execute()
             return
-        opt_list_key, opt_list = remaining_loop_lists[current_index]
-        for opt in opt_list:
-            key = opt_list_key[:-1] if opt_list_key != 'neuron_qualities' else 'neuron_quality'
-            self.current_calc_opts[key] = opt
+        spec_list_key, spec_list = remaining_loop_lists[current_index]
+        for spec in spec_list:
+            key = spec_list_key[:-1] if spec_list_key != 'neuron_qualities' else 'neuron_quality'
+            self.current_calc_spec[key] = spec
             self.iterate_loop_lists(remaining_loop_lists, current_index + 1)
 
     def apply_rules(self):
-        rules = self.current_calc_opts['rules']
+        rules = self.current_calc_spec['rules']
         if isinstance(rules, dict):
             for rule in rules:
                 self.assign_per_rule(*self.parse_natural_language_rule(rule))
@@ -98,10 +98,10 @@ class Runner(OptsValidator):
                         self.assign_per_rule(trigger_k, trigger_v, target_k, target_v)
     
     def assign_per_rule(self, trigger_k, trigger_v, target_k, target_v):
-        if trigger_k not in self.current_calc_opts:
-            raise ValueError(f"Key '{trigger_k}' not found in calc_opts")
-        if self.current_calc_opts[trigger_k] == trigger_v:
-            self.current_calc_opts[target_k] = target_v
+        if trigger_k not in self.current_calc_spec:
+            raise ValueError(f"Key '{trigger_k}' not found in calc_spec")
+        if self.current_calc_spec[trigger_k] == trigger_v:
+            self.current_calc_spec[target_k] = target_v
 
     def parse_natural_language_rule(self, rule):
         # assuming rule is a tuple like ('if brain_region is bla', frequency_band is', 'theta')
@@ -114,13 +114,13 @@ class Runner(OptsValidator):
         return trigger_key, trigger_val, target_key, target_val
 
     def execute(self):
-        if self.current_calc_opts.get('rules'):
+        if self.current_calc_spec.get('rules'):
             self.apply_rules()
-        print(f"executing {self.executing_method} with options {self.current_calc_opts}")
-        if self.graph_opts is not None:
-            self.executing_method(self.current_calc_opts, self.graph_opts)
+        print(f"executing {self.executing_method} with options {self.current_calc_spec}")
+        if self.graph_spec is not None:
+            self.executing_method(self.current_calc_spec, self.graph_spec)
         else:
-            self.executing_method(self.current_calc_opts)
+            self.executing_method(self.current_calc_spec)
 
     def prep(self, prep):
         self.validate_and_load(prep)
@@ -128,26 +128,26 @@ class Runner(OptsValidator):
         self.run_list()
         self.loop_lists = {}
 
-    def run_list(self, opts_list):
+    def run_list(self, spec_list):
 
-        for opts in opts_list:
-            self.current_calc_opts = opts
+        for spec in spec_list:
+            self.current_calc_spec = spec
             self.get_loop_lists()
             if self.loop_lists:
                 self.iterate_loop_lists(list(self.loop_lists.items()))
             else:
                 self.execute()
 
-    def validate_and_load(self, opts):
-        self.validate_opts(opts)
-        self.proc_name = opts['procedure']
-        self.load_analysis_config(opts)
+    def validate_and_load(self, spec):
+        self.validate_opts(spec)
+        self.proc_name = spec['procedure']
+        self.load_analysis_config(spec)
 
-    def run(self, opts, *args, prep=None, **kwargs):
+    def run(self, spec, *args, prep=None, **kwargs):
         
         if prep:
             self.prep()
-        self.validate_and_load(opts)
-        self.run_main(opts)
+        self.validate_and_load(spec)
+        self.run_main(spec)
         if self.follow_up_method is not None:
             self.follow_up_method(*args, **kwargs)

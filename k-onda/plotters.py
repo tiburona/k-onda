@@ -23,8 +23,8 @@ from base_data import Base
 from stats import Stats
 from phy_interface import PhyInterface
 from plotter_base import PlotterBase
-from partition import Section, Segment, Subset
-from subplotter import Figurer
+from partition import Splitter, Segmenter, Subsetter, Sectioner, Arranger
+from subplotter import Figurer, CellArray
 
 
 
@@ -36,30 +36,47 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
     def __init__(self, experiment, graph_opts=None):
         self.experiment = experiment
         self.graph_opts = graph_opts
+        self.plot_dir = './'
         
-    def initialize(self, calc_opts, graph_opts):
+        
+    def initialize(self, plot_spec):
         """Both initializes values on self and sets values for the context."""
-        self.calc_opts = calc_opts  
-        self.graph_opts = graph_opts
-        self.experiment.initialize_data()
+        self.plot_spec = plot_spec
+        self.plot_dir = plot_spec.get('plot_dir') or self.plot_dir
+       
 
-    def plot(self, calc_opts, graph_opts, parent_figure=None, index=None):
-        self.initialize(calc_opts, graph_opts)
-        plot_spec = graph_opts['plot_spec']
-        self.parent_figure = parent_figure
+    def plot(self, plot_spec, parent=None, index=None):
+        self.initialize(plot_spec)
+        self.parent = parent         
         self.process_plot_spec(plot_spec, index=index)
-        if not self.parent_figure:
+        if not self.parent:
             self.close_plot()
 
     def process_plot_spec(self, plot_spec, index=None):
 
         processor_classes = {
-            'section': Section,
-            'segment': Segment,
-            'subset': Subset
+            'arrange': Arranger,
+            'subset': Subsetter,
+            'section': Sectioner,
+            'split': Splitter,
+            'segment': Segmenter
         }
-
-        self.active_spec_type, self.active_spec = list(plot_spec.items())[0]
+        
+        processor_keys = list(processor_classes.keys()) 
+        
+        if 'calc_opts' in plot_spec:
+            self.calc_opts = plot_spec['calc_opts']
+            if not self.experiment.data_is_initialized:
+                self.experiment.initialize_data()
+        if 'plot_dir' in plot_spec:
+            self.plot_dir = plot_spec['plot_dir']
+            
+        processor_spec = {k: v for k, v in plot_spec.items() if k in processor_keys}
+        self.active_spec_type, self.active_spec = list(processor_spec.items())[0]
+        
+        if 'plot_type' in self.active_spec:
+            self.active_plot_type = self.active_spec['plot_type']
+         
         processor = processor_classes[self.active_spec_type](self, index=index)
         processor.start()
 
@@ -85,7 +102,7 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         self.fname = f"{'_'.join(tags)}.png"
 
     def save_and_close_fig(self, fig, basename):
-        dirs = [self.graph_opts['graph_dir'], self.calc_type]
+        dirs = [self.plot_dir, self.calc_type]
         path = os.path.join(*dirs)
         os.makedirs(path, exist_ok=True)
         fname = basename if basename else self.calc_type
@@ -93,14 +110,14 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         opts_filename = fname.replace('png', 'txt')
 
         with open(os.path.join(path, opts_filename), 'w') as file:
-            json.dump(to_serializable(self.calc_opts), file)
+            json.dump(to_serializable(self.calc_spec), file)
         plt.close(fig)
 
     def delegate(self, info, is_last=False):
 
-        def send(plot_type):
-            PLOT_TYPES[plot_type]().process_calc(info, main=main, aesthetics=aesthetics, 
-                                                 is_last=is_last)
+        def send():
+            PLOT_TYPES[self.active_plot_type]().process_calc(
+                info, main=main, aesthetics=aesthetics, is_last=is_last)
 
         aesthetics = self.active_spec.get('aesthetics', {})
         main = True
@@ -111,11 +128,10 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
                 if 'attr' in layer:
                     self.active_spec['attr'] = layer['attr']
                 if 'plot_type' in layer:
-                    send(layer['plot_type'])
-                else:
-                    send(self.graph_opts['plot_type'])
+                    self.active_plot_type = layer['plot_type']
+                send()
         else:
-            send(self.graph_opts['plot_type'])
+            send()
                 
 
 class FeaturePlotter(PlotterBase, PlottingMixin):
@@ -143,7 +159,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
     def handle_broken_axes(self, data):
     # Initial data division (copying the original data)
         data_divisions = np.array([copy(data)])
-        acks = self.active_acks
+        acks = self.active_cell
         
         # Handle data division if break_axes is present
         if hasattr(acks, 'break_axes'):
@@ -163,7 +179,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
             x_slices = acks.break_axes[0]
         else:
             x_slices = [0, int(len(data[0])/self.bin_size)]
-            ax_list = [self.active_acks]
+            ax_list = [self.active_cell]
         
         return data_divisions, ax_list, x_slices
     
@@ -248,7 +264,7 @@ class CategoryPlotter(FeaturePlotter):
         return outer_positions
     
     def label(self, positions):
-        ax = self.active_acks
+        ax = self.active_cell
         for i, (dim, edge) in enumerate(zip(['x', 'y'], ['bottom', 'left'])):
             if ax.index[i] == 0 or getattr(ax, f"{edge}_edge"):
                 # TODO: want this to be responsive to label_ax/label_component
@@ -283,7 +299,7 @@ class CategoricalScatterPlotter(CategoryPlotter):
 
     def process_calc(self, info, main=True, aesthetics=None, is_last=False):
         self.cat_width = aesthetics.get('default', {}).get('cat_width', .8)
-        ax = self.active_acks
+        ax = self.active_cell
         positions = []
         for row in info:
             if self.active_spec_type == 'segment':
@@ -310,7 +326,7 @@ class CategoricalScatterPlotter(CategoryPlotter):
 class LinePlotter(FeaturePlotter):
     def process_calc(self, info, aesthetics=None, **_):
         attr = self.active_spec['attr']
-        ax = self.active_acks
+        ax = self.active_cell
         for row in info:
             val = row[attr]
             ax.plot(np.arange(len(val)), val, **self.get_aesthetics_args(row, aesthetics))
@@ -323,7 +339,7 @@ class WaveformPlotter(LinePlotter):
 class CategoricalLinePlotter(CategoryPlotter):
     def process_calc(self, info, aesthetics=None, **_):
         self.cat_width = aesthetics.get('default', {}).get('cat_width', .8)
-        ax = self.active_acks
+        ax = self.active_cell
         names = ['linestyles', 'colors']
 
         for row in info:
@@ -342,20 +358,20 @@ class BarPlotter(CategoryPlotter):
         for row in info:
             aesthetic_args = self.get_aesthetics_args(row)
             position = self.find_position(row, self.active_spec)
-            bar = self.active_acks.bar(position, getattr(row['data_source'], row['attr']), 
+            bar = self.active_cell.bar(position, getattr(row['data_source'], row['attr']), 
                                      self.cat_width, **aesthetic_args)
             
 
 class PeriStimulusPlotter(FeaturePlotter):
     
     def __init__(self ):
-        self.base = self.calc_opts.get('base', 'event') 
+        self.base = self.calc_spec.get('base', 'event') 
         self.pre, self.post = (getattr(self, f"{opt}_{self.base}") for opt in ('pre', 'post'))
         self.marker_names = []
         
     def process_calc(self, info, aesthetics=None, is_last=False, **_):
         
-        acks = self.active_acks
+        acks = self.active_cell
         
         for row in info:
             data = row[self.active_spec['attr']]
@@ -416,7 +432,7 @@ class PeriStimulusPlotter(FeaturePlotter):
                 # ))
                 
     def label(self):
-        subplotter = self.active_plotter
+        subplotter = self.active_cell_array
         axes = subplotter.get_ax_wrappers()  # Get the actual AxWrapper objects
         aesthetic_args = self.active_spec.get('aesthetic_args', {})
         label_position = aesthetic_args.get('label_position', 'label_component')
@@ -483,7 +499,7 @@ class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
         data = data[0]
         x = list(range(0, len(data)))
         y = data
-        self.plot_hist(x, y, self.calc_opts['bin_size'], ax)
+        self.plot_hist(x, y, self.calc_spec['bin_size'], ax)
         
 
 

@@ -123,8 +123,8 @@ class Figure(ExecutivePlotter):
         self.scatterplot = GridSpecFromSubplotSpec(3, 3, subplot_spec=overlay_ax.get_subplotspec(), wspace=1, hspace=1)
         ax1 = self.get_subplot_ax(self.scatterplot[:2, 1:])
         units = self.experiment.all_units
-        if self.calc_opts.get('neuron_quality'):
-            units = [unit for unit in units if unit.quality in self.calc_opts['neuron_quality']]
+        if self.calc_spec.get('neuron_quality'):
+            units = [unit for unit in units if unit.quality in self.calc_spec['neuron_quality']]
         x = [unit.fwhm_microseconds for unit in units]
         y = [unit.firing_rate for unit in units]
         colors = [self.graph_opts['neuron_type_colors'][unit.neuron_type] for unit in units]
@@ -156,20 +156,20 @@ class Figure(ExecutivePlotter):
         getattr(ax, f"set_{count_axis}label")('Count', fontsize=7)
         return ax
 
-    def results_row(self, calc_opts, group_stat_opts, grid_position):
+    def results_row(self, calc_spec, group_stat_opts, grid_position):
         letters = [('(d)', '(e)'), ('(f)', '(g)')]
         self.rows.append(GridSpecFromSubplotSpec(1, 2, subplot_spec=self.grid[grid_position], width_ratios=[5, 3],
                                                  hspace=.4))
-        ps_plotter = self.initialize_plotter(PeriStimulusPlotter, calc_opts, FIGURE_1_OPTS, 2, 2, 0,
+        ps_plotter = self.initialize_plotter(PeriStimulusPlotter, calc_spec, FIGURE_1_OPTS, 2, 2, 0,
                                              letters[grid_position-1][0])
         ps_plotter.plot_groups_data()
         stats_plotter = self.initialize_plotter(GroupStatsPlotter, group_stat_opts, FIGURE_1_OPTS, 2, 1, 1,
                                                 letters[grid_position-1][1])
         stats_plotter.plot_group_stats_data()
 
-    def initialize_plotter(self, plotter_class, calc_opts, graph_opts, rows, cols, position_in_row, letter):
+    def initialize_plotter(self, plotter_class, calc_spec, graph_opts, rows, cols, position_in_row, letter):
         plotter = plotter_class(self.experiment, graph_opts=graph_opts, plot_type='gridspec_subplot')
-        plotter.calc_opts = calc_opts
+        plotter.calc_spec = calc_spec
         gridspec = GridSpecFromSubplotSpec(rows, cols, subplot_spec=self.rows[-1][position_in_row], hspace=0.9)
         invisible_ax = self.get_subplot_ax(self.rows[-1][position_in_row], invisible=True)
         invisible_ax.annotate(letter, xycoords="axes fraction", xy=self.graph_opts['annot_coords'])
