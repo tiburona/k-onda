@@ -493,6 +493,38 @@ MS_26_OPTS = {
 #    graph_opts = {'plot_spec': plot_spec, 'graph_dir': self.layout_spec['graph_dir'], 
 #                           'plot_type': plot_type}
 
+percent_change_plot = {
+    'graph_dir': '/Users/katie/likhtik/CH27',
+    'plot_spec': {
+            'section': {
+                'aesthetics': {'border': {'top': 'FFF', 'right': 'FFF'}},
+                'divisions': {
+                'data_source': {
+                    'type': 'group', 
+                    'members': 'all_groups', 
+                    'dim': 1}},
+                'segment': {
+                    'aesthetics': {
+                        'period_type': {
+                            'prelight': {'background_color': ('white', .2)},
+                            'light': {'background_color': ('green', .2)}}
+                },
+                    'layers': [
+                        {'plot_type': 'categorical_scatter', 
+                        'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'color': 'black'}},
+                            'attr': 'greatgrandchildren_scatter'}, 
+                        {'plot_type': 'categorical_line', 
+                        'attr': 'mean', 
+                        'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'colors': 'blue', 
+                                                    'linestyles': '--'}}}],
+                    'divisions': {
+                        'period_type': {
+                            'members': ['prelight', 'light'], 
+                            'grouping': 0}}
+                    }
+            }}
+}
+
 CH27_OPTS = {
     
     'procedure': 'make_plots',
@@ -500,12 +532,12 @@ CH27_OPTS = {
         'plot_spec': {
             'section': {
                 'aesthetics': {'ax': {'border': {'top': 'FFF', 'right': 'FFF'}, 'share': ['x']}},
-                'break_axis': {0: [(0, 4), (35, 39)]},
-                'attr': 'calc',
+                'break_axis': {0: [(0, 20), (35, 55)]},
+                'attr': 'grandchildren_stack',
                 'divisions': {
                     'data_source': {
-                        'type': 'unit',
-                        'members': 'all_units',
+                        'type': 'group',
+                        'members': 'all_groups',
                         'dim': 0
                     },
                     'period_type': {
@@ -513,13 +545,51 @@ CH27_OPTS = {
                     }
             }}},
         'graph_dir': '/Users/katie/likhtik/CH_27mice',
+        'plot_type': 'raster'
+    },
+    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'raster', 'raster_type': 'spike_train', 
+                  'base': 'period', 'bin_size': .5, 
+                  'periods': {'light': {'period_pre_post': (10, 10)}},
+                  'filter': {'period': {'identifier': ('==', 0)}}}
+                  }
+    
+
+CH27_PERCENT_CHANGE_OPTS = {
+    'procedure': 'make_plots',
+    'graph_opts': percent_change_plot,
+    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
+                    'bin_size': .01, 'percent_change': {'level': 'unit', 'reference': 'prelight'},
+                     'filter': {'unit': {'category':  ('==', 'good')}}}
+}
+
+CH27_GROUP_PSTH_OPTS = {
+    
+    'procedure': 'make_plots',
+    'graph_opts': {
+        'plot_spec': {
+            'section': {
+                'aesthetics': {'ax': {'border': {'top': 'FFF', 'right': 'FFF'}, 'share': ['x']}},
+                'break_axis': {0: [(0, 20), (45, 55)]},
+                'attr': 'calc',
+                'divisions': {
+                    'data_source': {
+                        'type': 'group',
+                        'members': 'all_groups',
+                        'dim': 0
+                    },
+                    'period_type': {
+                        'members': ['light']
+                    }
+            }}},
+            'graph_dir': '/Users/katie/likhtik/CH_27mice',
         'plot_type': 'psth'
     },
     'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'raster_type': 'spike_train', 
-                  'base': 'period', 'bin_size': .4, 
-                  'periods': {'light': {'pre_period': 2, 'post_period': 2}},
-                  'filter': {'unit': {'category':  ('==', 'good')}}}
+                  'base': 'period', 'bin_size': .5, 
+                  'periods': {'light': {'pre_period': 10, 'post_period': 10}},
+                   'filter': {'unit': {'category':  ('==', 'good')}}}
     }
+
 
 CH27_FIGURE_OPTS = {
     

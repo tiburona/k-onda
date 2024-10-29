@@ -179,7 +179,11 @@ class Subplotter(PlotterBase):
     def apply_aesthetics(self, aesthetics):
         for key, val in aesthetics.get('ax', {}).get('border', {}).items():
             spine, tick, label = (val[i] in ['T', True, 'True'] for i in range(3))
-            for ax in self.active_acks.ax_list:
+            for i, ax in enumerate(self.active_acks.ax_list):
+                break_axis = list(self.active_spec.get('break_axis', {}).keys())
+                if 0 in break_axis and i > 0: # TODO fix this kludge
+                    if key == 'left':
+                        continue
                 ax.spines[key].set_visible(spine)
                 ax.tick_params(**{f"label{key}":label, key:tick})
         self.apply_shared_axes(aesthetics)
@@ -229,10 +233,13 @@ class AxWrapper(PlotterBase):
         self.index = index
         self.bottom_edge = None
         self.left_edge = None
+        
 
     def __getattr__(self, name):
         # Forward any unknown attribute access to the original ax
         return getattr(self.ax, name)
+    
+
     
 
 class BrokenAxes(PlotterBase):

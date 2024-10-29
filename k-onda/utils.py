@@ -180,3 +180,24 @@ def group_to_dict(group):
         else:
             result[key] = item
     return result
+
+
+class AlwaysLast:
+    def __lt__(self, other):
+        return False
+    def __gt__(self, other):
+        return True
+
+always_last = AlwaysLast()
+
+
+def safe_get(d, keys, default=None):
+    current = d
+    for key in keys[:-1]:  # Traverse all but the last key
+        if key not in current or not isinstance(current[key], dict):
+            current[key] = {}  # Create an empty dictionary if the key is missing or not a dict
+        current = current[key]
+    
+    # Try to get the last key's value; if not present, set it to default
+    return current.get(keys[-1], default)
+

@@ -5,7 +5,7 @@ import pickle
 import json
 import os
 
-from utils import cache_method
+from utils import cache_method, always_last
 from math_functions import sem
 
 
@@ -158,23 +158,23 @@ class Base:
 
     @property
     def pre_event(self):
-        return self.get_pre_post('pre', 'event')
+        return self.get_pre_post(0, 'event')
     
     @property
     def post_event(self):
-        return self.get_pre_post('post', 'event')
+        return self.get_pre_post(1, 'event')
     
     @property
     def pre_period(self):
-        return self.get_pre_post('pre', 'period')
+        return self.get_pre_post(0, 'period')
     
     @property
     def post_period(self):
-        return self.get_pre_post('post', 'period')
+        return self.get_pre_post(1, 'period')
     
     def get_pre_post(self, time, object_type):
         return self.calc_opts.get('periods', {}).get(
-            self.selected_period_type, {}).get(f"{time}_{object_type}", 0)
+            self.selected_period_type, {}).get(f'{object_type}_pre_post', (0, 0))[time]
 
     
     @property
@@ -206,11 +206,18 @@ class Data(Base):
         if list_of_opts is not None:
             return (self.calc_opts.get(opt) for opt in list_of_opts)
         
-    def include(self, check_ancestors=False):
+    def include(self, check_ancestors=True):
         return self.select(self.filter, check_ancestors=check_ancestors)
     
     def active(self):
         return self.include() and self in self.parent.children
+    
+    @property
+    def included_children(self):
+        if hasattr(self, 'children'):
+            return [child for child in self.children if child.include()]
+        else:
+            return None
     
     @property
     def has_children(self):
@@ -278,6 +285,10 @@ class Data(Base):
         Returns:
         float or np.array: The mean of the data values from the object's descendants.
         """
+
+        if self.identifier == '1' and self.name == 'unit' and self.animal.identifier == 'CH272' and self.category=='good':
+            a = 'foo'
+
         if not self.include():
             return float('nan')
                    
@@ -403,35 +414,55 @@ class Data(Base):
         return self.get_stack()
     
     def get_stack(self, depth=1, attr='calc', method=None, base=None):
-        return np.vstack(
-            self.accumulate(default_attr=attr, method=method, max_depth=depth, base=base)[depth])
+           
+        f = lambda x: (
+            getattr(x, method)() if method else getattr(x, attr)
+            ) if hasattr(x, method if method else attr) else None
+        
+        sources = self.sort_accumulated(self.accumulate(max_depth=depth))[depth]
+        results = [f(source) for source in sources]
+        return np.vstack(results)
+    
+    def sort_accumulated(self, accumulated, depth='all'):
+        sort_by = self.calc_opts.get('sort_by')
+        if sort_by:
+            attr = sort_by[0]
+            for level, obj_list in accumulated.items():
+                if depth in [level, 'all']:
+                    accumulated[level] = sorted(
+                        obj_list, key=lambda obj: getattr(obj, attr, always_last))
+                    if sort_by[1] == 'descending':
+                        accumulated[level].reverse()
+        return accumulated
+
+    @property
+    def grandchildren_stack(self):
+        return self.get_stack(depth=2)
    
     @property
     def scatter(self):
-        return self.accumulate(default_attr='mean', max_depth=1)[1]
+        return [child.mean for child in self.included_children]
     
     @property
     def grandchildren_scatter(self):
-        return self.accumulate(default_attr='mean', max_depth=2)[2]
+        return [gchild.mean for gchild in self.accumulate(max_depth=2)[2]]
     
-    def accumulate(self, method=None, max_depth=1, depth=0, default_attr=None, accumulator=None, base=None):
-        """Generalized recursive function to apply a method or default method to children."""
-
-        
-        
-        f = lambda x: getattr(x, method)() if method else getattr(x, default_attr)
+    @property
+    def greatgrandchildren_scatter(self):
+        return [ggchild.mean for ggchild in self.accumulate(max_depth=3)[3]]
+    
+    def accumulate(self, max_depth=1, depth=0, accumulator=None):
         
         if accumulator is None:
             accumulator = defaultdict(list)
+        
+        accumulator[depth].append(self)
 
-        if depth == max_depth:
-            accumulator[depth].append(f(self))
-        else:
-            if hasattr(self, 'children'):  
-                for child in self.children:
-                    child.accumulate(method, max_depth, depth + 1, default_attr, accumulator)
-
-        return accumulator     
+        if depth != max_depth and self.included_children:
+            for child in self.included_children:
+                child.accumulate( max_depth, depth + 1, accumulator)
+        
+        return accumulator
 
     @property
     def hierarchy(self):
@@ -487,10 +518,15 @@ class Data(Base):
     
     @property
     def percent_change(self):
+        if np.mean(self.get_percent_change()) > 400:
+            a = 'foo'
         return self.get_percent_change()
     
     def get_percent_change(self):
         # {'level': 'unit', 'reference': 'prelight'}
+        if self.name == 'period' and self.unit.animal.identifier == 'CH272' and self.unit.identifier == '1':
+            a = 'foo'
+        
         percent_change = self.calc_opts.get('percent_change', {'level': 'period'})
         level = percent_change['level']
         # we are currently at a higher tree level than the % change ref level
@@ -504,9 +540,19 @@ class Data(Base):
         # we are currently at the % change ref level
         else: 
             ref = self.get_ref(self, percent_change['reference'])
+        if self.name == 'period':
+            print("animal is ", self.unit.animal.identifier)
+            print("unit is ", self.unit, " ", self.unit.identifier)
+            print("unit category is ", self.unit.category)
+            print("selected period type is", self.selected_period_type)
+            print('identifier is ', self.identifier)
 
         orig = getattr(self, f"get_{self.calc_type}")()
-        return orig/np.mean(ref) * 100 - 100
+        to_return = orig/np.mean(ref) * 100 - 100
+        if self.name == 'period':
+            print("percent change is ", np.mean(to_return))
+        
+        return to_return
 
     def get_ref(self, obj, reference_period_type):
         if obj.has_reference:

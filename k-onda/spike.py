@@ -63,9 +63,6 @@ class RateMethods:
             return self.get_average(f"get_{calc_type}", stop_at=stop_at)
         
     def _get_spike_counts(self):
-        if self.unit.category == 'mua':
-            a = 'foo'
-        bin_size = self.calc_opts.get('bin_size', .01)
         if 'counts' in self.private_cache:
             counts = self.private_cache['counts']
         else:
@@ -106,7 +103,8 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         self.neuron_type = neuron_type
         self.quality = quality
         self.animal.units[category].append(self)
-        self.identifier = str(self.animal.units[category].index(self) + 1)
+        self.identifier = '_'.join([self.animal.identifier, self.category, 
+                                    str(self.animal.units[category].index(self) + 1)])
         self.spike_periods = defaultdict(list)
         self.parent = animal
         self.kind_of_data_to_period_type = {
@@ -200,7 +198,7 @@ class SpikePeriod(Period, RateMethods):
         self.parent = unit
         self.private_cache = {}
         self._start = self.onset/self.sampling_rate 
-        self._stop = self.start + self.duration 
+        self._stop = self._start + self.duration 
         
     @property
     def start(self):
@@ -274,7 +272,7 @@ class SpikePrepMethods(PrepMethods):
         if self.selected_neuron_type:
             return getattr(self, self.selected_neuron_type)
         else: 
-            return self.units['good']
+            return [unit for units in self.units.values() for unit in units]
 
     def get_periods_from_nev(self):
         file_path = self.animal_info.get('nev_file_path')
@@ -299,7 +297,7 @@ class SpikePrepMethods(PrepMethods):
             cluster_dict = phy_interface.cluster_dict
 
             for cluster, info in cluster_dict.items():
-                if info['group'] != 'noise':
+                if info['group'] in ['good', 'mua']:
                     try:
                         waveform = phy_interface.get_mean_waveforms_on_peak_electrodes(cluster)
                     except ValueError as e:

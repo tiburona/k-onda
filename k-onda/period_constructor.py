@@ -97,7 +97,7 @@ class PeriodConstructor:
     def construct_relative_periods(self, period_type, period_info):
 
         periods = []
-        target_periods = getattr(self, f"{self.kind_of_data}_periods") # type: ignore
+        target_periods = getattr(self, f"{self.kind_of_data}_periods") 
         paired_periods = target_periods[period_info['target']]
         exceptions = period_info.get('exceptions') 
 

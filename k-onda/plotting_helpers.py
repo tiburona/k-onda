@@ -1,7 +1,7 @@
 import re
 
 class PlottingMixin:
-    def get_labels(self):
+    def get_default_labels(self):
        
         sps = '(Spikes per Second)'
 
@@ -10,20 +10,30 @@ class PlottingMixin:
         for comp in ['evoked', 'percent_change']:
             if self.calc_opts.get(comp):
                 adjustment = comp
-                adjustment = smart_title_case(adjustment.replace('_', ' '))
+                if adjustment == 'percent_change':
+                    adjustment += ' in'
+                adjustment = adjustment.replace('_', ' ')
                 if comp == 'percent_change':
                     sps = ''
         
         base = self.calc_opts.get('base') if self.calc_opts.get('base') else ''
 
-        return {'psth': ('Time (s)', 'Normalized Firing Rate'),
-                'firing_rates': ('', f'{adjustment} Firing Rate {sps}'),
-                'proportion': ('Time (s)', ''f'Proportion Positive {base.capitalize() + "s"}'),
-                'raster': ('Time (s)', f"{self.calc_opts.get('base', 'event').capitalize()}s"),
-                'autocorr': ('Lags (s)', 'Autocorrelation'),
-                'spectrum': ('Frequencies (Hz)', 'One-Sided Spectrum'),
-                'cross_correlations': ('Lags (s)', 'Cross-Correlation'),
-                'correlogram':  ('Lags (s)', 'Spikes')}
+        label_dict = {'psth': ['Time (s)', 'Normalized Firing Rate'],
+              'firing_rates': ['', f'{adjustment} Firing Rate {sps}'],
+              'proportion': ['Time (s)', f'Proportion Positive {base.capitalize() + "s"}'],
+              'raster': ['Time (s)', f"{self.calc_opts.get('base', 'event').capitalize()}s"],
+              'autocorr': ['Lags (s)', 'Autocorrelation'],
+              'spectrum': ['Frequencies (Hz)', 'One-Sided Spectrum'],
+              'cross_correlations': ['Lags (s)', 'Cross-Correlation'],
+              'correlogram':  ['Lags (s)', 'Spikes'],
+              'waveform': ['', '']}
+
+        
+        for vals in label_dict.values():
+            for i, label in enumerate(vals):
+                vals[i] = smart_title_case(label) 
+
+        return label_dict
     
       
     @staticmethod
@@ -111,7 +121,7 @@ class PlottingMixin:
 
 def smart_title_case(s):
     lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 'as', 'but', 'or',
-                       'nor', 'is'}
+                       'nor', 'is', 'in'}
     acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl', 'il', 'bf'}
     words = [w for w in re.split(r'([_\W]+)', s) if w not in  ['_', ' ']]
     title_words = []
@@ -131,6 +141,32 @@ def smart_title_case(s):
 def ac_str(s):
     for (old, new) in [('pd', 'Pandas'), ('np', 'NumPy'), ('ml', 'Matlab')]:
         s = s.replace(old, new)
+
+def format_label(label, data_source):
+    parts = []  # This will hold the parts of the title
+
+    # Helper function to check if an element is iterable (and not a string)
+    def is_iterable(elem):
+        try:
+            iter(elem)
+        except TypeError:
+            return False
+        return not isinstance(elem, str)  # Exclude strings, as they're iterable in Python
+    
+
+    # Iterate through the elements of the title
+    for elem in label:
+        obj = data_source
+        if is_iterable(elem):  # If the element is a list or tuple, get attributes progressively
+            for attr in elem[:-1]:
+                obj = getattr(obj, attr)
+            parts.append(getattr(obj, elem[-1]))  # Append the final value as a string
+        else:
+            parts.append(elem)
+
+    # Capitalize each part and join with spaces
+    formatted_title = " ".join(smart_title_case(part) for part in parts)
+    return formatted_title
 
 
 
