@@ -5,14 +5,23 @@ from neo.rawio import BlackrockRawIO
 from copy import deepcopy
 import csv
 from scipy.signal import firwin, lfilter
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+from collections import defaultdict
+from utils import save, load
+from phy_interface import PhyInterface
+import h5py
 
 
 from experiment_group_animal import Experiment, Group, Animal
 from spike import Unit
 from behavior import Behavior
+from utils import group_to_dict
+from prep_methods import PrepMethods
 
 
-class Initializer:
+class Initializer(PrepMethods):
 
     def __init__(self, config):
         if type(config) == dict:
@@ -39,9 +48,6 @@ class Initializer:
     def init_experiment(self):
         self.experiment = Experiment(self.exp_info)
         self.animals = [self.init_animal(animal_info) for animal_info in self.animals_info]
-        for animal, animal_info in zip(self.animals, self.animals_info):
-            if 'units' in animal_info:
-                self.init_units(animal_info['units'], animal)
         self.groups = [
             Group(name=condition, 
                   animals=[animal for animal in self.animals if animal.condition == condition],
@@ -53,21 +59,27 @@ class Initializer:
     def init_animal(self, animal_info):  
         animal = Animal(animal_info['identifier'], animal_info['condition'], animal_info=animal_info,
                         neuron_types=self.neuron_types, experiment=self.experiment)
+        if 'periods_from_nev' in animal.period_info.get('instructions', []):
+            animal.period_info.update(self.get_periods_from_nev(animal))
         return animal
+        
+                
+    def get_periods_from_nev(self, animal):
+        file_path = animal.animal_info.get('nev_file_path')
+        if not file_path:
+            file_path = animal.construct_path('nev')
+        periods_with_code = {k: v for k, v in animal.animal_info['period_info'].items() if 'code' in v}
 
-    def init_units(self, units_info, animal):
-        for category in [cat for cat in ['good', 'MUA'] if cat in units_info]:
-            for unit_info in units_info[category]:
-                unit = Unit(animal, category, unit_info['spike_times'], unit_info['cluster'], 
-                            waveform=unit_info.get('mean_waveform'), experiment=self.experiment)
-                if category == 'good':
-                    unit.neuron_type = unit_info.get('neuron_type')
-                    unit.quality = unit_info.get('quality')
-                    if unit.waveform:
-                        unit.fwhm_microseconds = unit_info.get('fwhm') * 1000000
-                    else:
-                        unit.fwhm_microseconds = None
-                    getattr(animal, unit.neuron_type).append(unit)
+        with h5py.File(file_path, 'r') as mat_file:
+            data = group_to_dict(mat_file['NEV'])
+            for period_type, period_dict in periods_with_code.items():
+                onsets = []
+                for i, code in enumerate(data['Data']['SerialDigitalIO']['UnparsedData'][0]):
+                    if code == period_dict['code']:
+                        onsets.append(int(data['Data']['SerialDigitalIO']['TimeStamp'][i][0]))
+                periods_with_code[period_type]['onsets'] = onsets
+        return periods_with_code
+    
 
     def init_behavior_experiment(self):
         data_source = self.exp_info['behavior_data']

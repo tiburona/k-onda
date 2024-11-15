@@ -4,6 +4,8 @@ import os
 import shutil
 from datetime import datetime
 import h5py
+import json
+import pickle
 
 
 DEBUG_MODE = 0
@@ -201,3 +203,37 @@ def safe_get(d, keys, default=None):
     # Try to get the last key's value; if not present, set it to default
     return current.get(keys[-1], default)
 
+
+def load(store_path, store_type, force_recalc=False):
+        if os.path.exists(store_path) and not force_recalc:
+            with open(store_path, 'rb') as f:
+                if store_type == 'pkl':
+                    return_val = pickle.load(f)
+                else:
+                    return_val = json.load(f)
+                return True, return_val, store_path
+        else:
+            return False, None, store_path
+
+
+def save(result, store_path, store_type):
+    mode = 'wb' if store_type == 'pkl' else 'w'
+    os.makedirs(os.path.dirname(store_path), exist_ok=True)
+    with open(store_path, mode) as f:
+        if store_type == 'pkl':
+            return pickle.dump(result, f)
+        else:
+            result_str = json.dumps([arr.tolist() for arr in result])
+            f.write(result_str)
+
+
+operations = {
+            '==': lambda a, b: a == b,
+            '<': lambda a, b: a < b,
+            '>': lambda a, b: a > b,
+            '<=': lambda a, b: a <= b,
+            '>=': lambda a, b: a >= b,
+            'in': lambda a, b: a in b,
+            '!=': lambda a, b: a != b,
+            'not in': lambda a, b: a not in b
+        }

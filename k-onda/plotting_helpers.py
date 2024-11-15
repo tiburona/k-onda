@@ -119,14 +119,16 @@ class PlottingMixin:
         return best_match
 
 
+
 def smart_title_case(s):
     lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 'as', 'but', 'or',
-                       'nor', 'is', 'in'}
-    acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl', 'il', 'bf'}
-    words = [w for w in re.split(r'([_\W]+)', s) if w not in  ['_', ' ']]
+                       'nor', 'is'}
+    acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl', 'il', 'bf', 'mua'}
+    tokens = re.findall(r'\b\w+\b|[^\w\s]', s)  # Find words and punctuation separately
     title_words = []
-    for i, word in enumerate(words):
-        if word.lower() in lowercase_words and i != 0 and i != len(words) - 1:
+
+    for i, word in enumerate(tokens):
+        if word.lower() in lowercase_words and i != 0 and i != len(tokens) - 1:
             title_words.append(word.lower())
         elif word.lower() in acronyms:
             title_words.append(word.upper())
@@ -134,8 +136,15 @@ def smart_title_case(s):
             title_words.append(word.capitalize())
         else:
             title_words.append(word)
-    title = ' '.join(title_words)
+
+    # Join words carefully to avoid adding spaces before parentheses
+    title = ''
+    for i in range(len(title_words)):
+        if i > 0 and title_words[i] not in {')', ',', '.', '!', '?', ':'} and title_words[i - 1] not in {'(', '-', '/'}:
+            title += ' '
+        title += title_words[i]
     return title
+
 
 
 def ac_str(s):

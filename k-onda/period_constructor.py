@@ -56,7 +56,7 @@ class PeriodConstructor:
             period_info, period_type, period_onsets
         )
                  
-        if self.kind_of_data == 'lfp': # type: ignore
+        if self.kind_of_data == 'lfp': 
             conversion_factor = self.lfp_sampling_rate/self.sampling_rate 
             # For LFP, you need a subtraction for 0 indexing. For spikes, onsets are used to 
             # select time stamps, not elements of a Python iterable
@@ -65,10 +65,10 @@ class PeriodConstructor:
         event_ind = 0
         
         for i, (onset, events) in enumerate(zip(period_onsets, period_events)):
-            if events:
+            if len(events):
                 period_events = np.array([
                     ev for j, ev in enumerate(events) if event_ind + j in selected_event_indices])
-                event_ind += len(period_info['events'][i])
+                event_ind += len(events)
             else:
                 period_events = []
             periods.append(self.period_class(self, i, period_type, period_info, onset, 
@@ -76,23 +76,64 @@ class PeriodConstructor:
         return periods
     
     def event_times_and_indices(self, period_info, period_type, period_onsets):
-        if not period_info.get('events'):
+        events = period_info.get('events')
+        if not events:
             return [[] for _ in period_onsets], None
+        elif isinstance(events, dict):
+            period_events = self.read_events_dict(events, period_onsets)   
         else:
             # the time stamps of things that happen within the period   
             period_events = period_info['events'] 
 
-            num_events = len([event for events_list in period_events for event in
-                            events_list])  # all the events for this period type
+        num_events = len([event for events_list in period_events for event in events_list])  # all the events for this period type
 
-            if self.calc_opts.get('events', {}).get(period_type, {}).get('selection') is not None:
-                events = slice(*self.calc_opts['events'][period_type]['selection'])
+        if self.calc_opts.get('events', {}).get(period_type, {}).get('selection') is not None:
+            events = slice(*self.calc_opts['events'][period_type]['selection'])
+        else:
+            events = slice(0, num_events) # default is to take all events
+        # indices of the events used in this data analysis
+        selected_event_indices = list(range(num_events))[events]  
+
+        return period_events, selected_event_indices
+        
+    def read_events_dict(self, events, period_onsets):
+        # events is a dictionary like: {'start': 'period_onset', 'pattern': {'range_args': [30]}, 'unit': 'second',
+        # 'event_times': []}
+        # start can be 'period_onset' or a number indicating a position in the recording.  Default 0
+        # if pattern exists, and is an iterable, that is a list of start times, or if it is a dictionary and
+        # contains the key 'range_args', those are arguments that will give the start times when passed to the range
+        # function
+        # unit: 'second' or 'samples'.  Default 'second'.
+        # if there is no pattern, then there must be a list of iterables with the start times
+        # output is a list of lists of event times in seconds, counted from the beginning of the recording
+
+        events_to_return = []
+        unit = events.get('unit', 'second')
+        start = events.get('start', 0)
+        pattern = events.get('pattern')
+        event_times = events.get('event_times', [])
+
+        if isinstance(pattern, dict) and pattern.get('range_args'):
+            pattern = list(range(*pattern['range_args']))
+
+        for period_onset in period_onsets:
+
+            events_list = np.array(pattern if pattern else event_times)
+            
+            if unit == 'second':
+                events_list *= self.sampling_rate
+
+            if start == 'period_onset':
+                start_time = period_onset
             else:
-                events = slice(0, num_events) # default is to take all events
-            # indices of the events used in this data analysis
-            selected_event_indices = list(range(num_events))[events]  
+                start_time = start if unit == 'sample' else start * self.sampling_rate
 
-            return period_events, selected_event_indices
+            events_list += start_time
+
+            events_to_return.append(events_list)
+
+        return events_to_return
+   
 
     def construct_relative_periods(self, period_type, period_info):
 

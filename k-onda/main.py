@@ -1,6 +1,6 @@
 from utils import log_directory_contents
 from runner import Runner
-from misc_data_init.opts_library import  RUNNER_OPTS, VALIDATION_DATA_OPTS, MS_26_OPTS
+from misc_data_init.opts_library import  RUNNER_OPTS, VALIDATION_DATA_OPTS, GROUP_PSTH_OPTS
 from misc_data_init.CH27_plot_specs import *
 import pstats
 import signal
@@ -14,13 +14,13 @@ def main():
 
 
 def run(log=True):
-    #runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json')
-    runner = Runner(config_file='/Users/katie/likhtik/CH27mice/init_config.json')
+    runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json')
+    #runner = Runner(config_file='/Users/katie/likhtik/CH27mice/init_config.json')
     # for spec in [UNITS_WAVEFORM_PLOTS, CH27_GROUP_PSTH_OPTS, CH27_UNITS_RASTER_OPTS, 
     #              CH27_UNITS_PERCENT_CHANGE_OPTS, CH27_PERCENT_CHANGE_OPTS]:
     #     runner.run(spec)
 
-    runner.run(CH27_UNITS_RASTER_OPTS)
+    runner.run(GROUP_PSTH_OPTS)
  
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')
@@ -80,10 +80,4 @@ def memory_profile_run():
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
 

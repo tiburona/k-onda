@@ -5,7 +5,7 @@ import pickle
 import json
 import os
 
-from utils import cache_method, always_last
+from utils import cache_method, always_last, operations
 from math_functions import sem
 
 
@@ -180,6 +180,34 @@ class Base:
     @property
     def bin_size(self):
         return self.calc_opts.get('bin_size', .01)
+    
+    def load(self, calc_name, other_identifiers):
+        store = self.calc_opts.get('store', 'pkl')
+        d = os.path.join(self.calc_opts['data_path'], self.kind_of_data)
+        store_dir = os.path.join(d, f"{calc_name}_{store}s")
+        for p in [d, store_dir]:
+            if not os.path.exists(p):
+                os.mkdir(p)
+        store_path = os.path.join(store_dir, '_'.join(other_identifiers) + f".{store}")
+        if os.path.exists(store_path) and not self.calc_opts.get('force_recalc'):
+            with open(store_path, 'rb') as f:
+                if store == 'pkl':
+                    return_val = pickle.load(f)
+                else:
+                    return_val = json.load(f)
+                return True, return_val, store_path
+        else:
+            return False, None, store_path
+
+    def save(self, result, store_path):
+        store = self.calc_opts.get('store', 'pkl')
+        mode = 'wb' if store == 'pkl' else 'w'
+        with open(store_path, mode) as f:
+            if store == 'pkl':
+                return pickle.dump(result, f)
+            else:
+                result_str = json.dumps([arr.tolist() for arr in result])
+                f.write(result_str)
 
 
 class Data(Base):
@@ -240,18 +268,11 @@ class Data(Base):
             return self.ancestors[-3].identifier
         except IndexError:
             return None
+        
+    def get_child_by_identifier(self, id):
+        return [child for child in self.children if child.identifier == id][0]
             
     def select(self, filters, check_ancestors=False):
-        operations = {
-            '==': lambda a, b: a == b,
-            '<': lambda a, b: a < b,
-            '>': lambda a, b: a > b,
-            '<=': lambda a, b: a <= b,
-            '>=': lambda a, b: a >= b,
-            'in': lambda a, b: a in b,
-            '!=': lambda a, b: a != b,
-            'not in': lambda a, b: a not in b
-        }
 
         if not check_ancestors and self.name not in filters:
             return True
@@ -285,9 +306,6 @@ class Data(Base):
         Returns:
         float or np.array: The mean of the data values from the object's descendants.
         """
-
-        if self.identifier == '1' and self.name == 'unit' and self.animal.identifier == 'CH272' and self.category=='good':
-            a = 'foo'
 
         if not self.include():
             return float('nan')
@@ -522,11 +540,7 @@ class Data(Base):
             a = 'foo'
         return self.get_percent_change()
     
-    def get_percent_change(self):
-        # {'level': 'unit', 'reference': 'prelight'}
-        if self.name == 'period' and self.unit.animal.identifier == 'CH272' and self.unit.identifier == '1':
-            a = 'foo'
-        
+    def get_percent_change(self):  
         percent_change = self.calc_opts.get('percent_change', {'level': 'period'})
         level = percent_change['level']
         # we are currently at a higher tree level than the % change ref level
@@ -570,30 +584,4 @@ class Data(Base):
         else:
             return data
         
-    def load(self, calc_name, other_identifiers):
-        store = self.calc_opts.get('store', 'pkl')
-        d = os.path.join(self.calc_opts['data_path'], self.kind_of_data)
-        store_dir = os.path.join(d, f"{calc_name}_{store}s")
-        for p in [d, store_dir]:
-            if not os.path.exists(p):
-                os.mkdir(p)
-        store_path = os.path.join(store_dir, '_'.join(other_identifiers) + f".{store}")
-        if os.path.exists(store_path) and not self.calc_opts.get('force_recalc'):
-            with open(store_path, 'rb') as f:
-                if store == 'pkl':
-                    return_val = pickle.load(f)
-                else:
-                    return_val = json.load(f)
-                return True, return_val, store_path
-        else:
-            return False, None, store_path
-
-    def save(self, result, store_path):
-        store = self.calc_opts.get('store', 'pkl')
-        mode = 'wb' if store == 'pkl' else 'w'
-        with open(store_path, mode) as f:
-            if store == 'pkl':
-                return pickle.dump(result, f)
-            else:
-                result_str = json.dumps([arr.tolist() for arr in result])
-                f.write(result_str)
+  

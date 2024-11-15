@@ -136,7 +136,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
                     aesthetic.update(aesthetic_vals)
 
         for combination, overrides in override.items():
-            pairs = zip(combination.split('_')[::2], combination.split('_')[1::2])
+            pairs = zip(combination.split('.')[::2], combination.split('.')[1::2])
             if all(row.get(key, val) == val for key, val in pairs):
                 aesthetic.update(overrides)
 

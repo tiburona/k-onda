@@ -56,7 +56,7 @@ CH27_PERCENT_CHANGE_OPTS = {
 
 units_percent_change_plots = {
     'graph_dir': '/Users/katie/likhtik/CH27',
-    'fname': 'units_percent_change_plots',
+    'fname': 'units_firing_rate_plots',
     'plot_spec': {
             'section': {
                 'aesthetics': {
@@ -97,7 +97,7 @@ CH27_UNITS_PERCENT_CHANGE_OPTS = {
     'procedure': 'make_plots',
     'graph_opts': units_percent_change_plots,
     'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
-                    'bin_size': .01, 'percent_change': {'level': 'unit', 'reference': 'prelight'},
+                    'bin_size': .01,
                      'filter': {'unit': {'category':  ('==', 'good')}}}
                     
 }
@@ -150,7 +150,7 @@ CH27_UNITS_RASTER_OPTS = {
 group_psth_plots = {
     'graph_dir':  '/Users/katie/likhtik/CH27',
     'plot_type': 'psth',
-    'fname': 'group_psth_only_good',
+    'fname': 'group_psth_good_and_mua',
     'plot_spec': {
             'section': {
                 'aesthetics': {
@@ -179,8 +179,7 @@ CH27_GROUP_PSTH_OPTS = {
     'graph_opts': group_psth_plots,
     'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'raster_type': 'spike_train', 
                   'base': 'period', 'bin_size': .5, 
-                  'periods': {'light': {'period_pre_post': (10, 10)}},
-                   'filter': {'unit': {'category':  ('==', 'good')}}}
+                  'periods': {'light': {'period_pre_post': (10, 10)}}}
     }
 
 

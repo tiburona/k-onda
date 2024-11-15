@@ -2,7 +2,15 @@
 import numpy as np
 from collections import defaultdict
 from bisect import bisect_left as bs_left, bisect_right as bs_right
-from base_data import Data
+from neo.rawio import BlackrockRawIO
+
+import matplotlib.pyplot as plt
+plt.ioff() 
+
+from collections import defaultdict
+from utils import save, load
+from phy_interface import PhyInterface
+from base_data import Data, Base
 from period_event import Period, Event
 from period_constructor import PeriodConstructor
 from math_functions import calc_rates, calc_hist, cross_correlation, correlogram
@@ -91,7 +99,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
     _name = 'unit'
     
     def __init__(self, animal, category, spike_times, cluster_id, waveform=None, experiment=None, 
-                 neuron_type=None, quality=None):
+                 neuron_type=None, quality=None, firing_rate=None, fwhm_seconds=None):
         super().__init__()
         PeriodConstructor().__init__()
         self.animal = animal
@@ -102,6 +110,9 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         self.experiment = experiment
         self.neuron_type = neuron_type
         self.quality = quality
+        self.firing_rate = firing_rate
+        self.fwhm_seconds = fwhm_seconds
+        self.fwhm_microseconds = fwhm_seconds * 1e6 if fwhm_seconds else None
         self.animal.units[category].append(self)
         self.identifier = '_'.join([self.animal.identifier, self.category, 
                                     str(self.animal.units[category].index(self) + 1)])
@@ -118,10 +129,6 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
     @property
     def all_periods(self):
         return [period for key in self.spike_periods for period in self.spike_periods[key]]
-
-    @property
-    def firing_rate(self):
-        return len(self.spike_times) / (float(self.spike_times[-1] - self.spike_times[0]))
 
     @property
     def unit_pairs(self):
@@ -257,11 +264,10 @@ class SpikeEvent(Event, RateMethods, BinMethods):
 class SpikePrepMethods(PrepMethods):
 
     def spike_prep(self):
-        self.unit_prep()
-        if 'periods_from_nev' in self.period_info.get('instructions', []):
-            self.period_info.update(self.get_periods_from_nev())
-        for unit in [unit for category, units in self.units.items() for unit in units]:
+        self.units_prep()
+        for unit in [unit for _, units in self.units.items() for unit in units]:
             unit.spike_prep()
+
             # if self.selected_period_type:
             #     unit.children = unit.spike_periods[self.selected_period_type]
             # else:
@@ -270,50 +276,110 @@ class SpikePrepMethods(PrepMethods):
         
     def select_spike_children(self):
         if self.selected_neuron_type:
-            return getattr(self, self.selected_neuron_type)
+            return self.neurons[self.selected_neuron_type]
         else: 
             return [unit for units in self.units.values() for unit in units]
+        
+    def units_prep(self):
+        units_info = self.animal_info.get('units', {})
+        if 'get_units_from_phy' in units_info.get('instructions', []):
+            self.get_units_from_phy()
 
-    def get_periods_from_nev(self):
-        file_path = self.animal_info.get('nev_file_path')
-        if not file_path:
-            file_path = self.construct_path('nev')
-        periods_with_code = {k: v for k, v in self.animal_info['period_info'].items() if 'code' in v}
+        for category in [cat for cat in ['good', 'MUA'] if cat in units_info]:
+            for unit_info in units_info[category]:
+                unit_kwargs = {kw: unit_info[kw] for kw in ['waveform', 'neuron_type', 'quality', 'firing_rate', 'fwhm_seconds']}
+                unit = Unit(self, category, unit_info['spike_times'], unit_info['cluster'], 
+                            experiment=self.experiment, **unit_kwargs)
+                if unit.neuron_type:
+                    getattr(self, unit.neuron_type).append(unit)
 
-        with h5py.File(file_path, 'r') as mat_file:
-            data = group_to_dict(mat_file['NEV'])
-            for period_type, period_dict in periods_with_code.items():
-                onsets = []
-                for i, code in enumerate(data['Data']['SerialDigitalIO']['UnparsedData'][0]):
-                    if code == period_dict['code']:
-                        onsets.append(int(data['Data']['SerialDigitalIO']['TimeStamp'][i][0]))
-                periods_with_code[period_type]['onsets'] = onsets
-        return periods_with_code
-    
-    def unit_prep(self):
-        if any(d.get('get_units_from_phy') for d in [self.animal_info, self.experiment.exp_info]):
-            
-            phy_interface = PhyInterface(self.construct_path('phy'), self)
+    def get_units_from_phy(self):
+        saved_calc_exists, units, pickle_path = load(
+            os.path.join(self.construct_path('dest'), 'units_from_phy.pkl'), 'pkl'
+        )
+        
+        if saved_calc_exists:
+            for unit in units:
+                Unit(self, unit['group'], unit['spike_times'], unit['cluster'], 
+                    waveform=unit['waveform'], experiment=self.experiment, 
+                    firing_rate=unit['firing_rate'], fwhm_seconds=unit['fwhm_seconds'])
+        else:
+            phy_path = self.construct_path('phy')
+            phy_interface = PhyInterface(phy_path, self)
             cluster_dict = phy_interface.cluster_dict
+            units = []
 
             for cluster, info in cluster_dict.items():
                 if info['group'] in ['good', 'mua']:
                     try:
                         waveform = phy_interface.get_mean_waveforms_on_peak_electrodes(cluster)
                     except ValueError as e:
-                        # Kilosort2 apparently sometimes creates a cluster with no spikes that phy
-                        # doesn't display, so you don't mark it noise
                         if "argmax of an empty sequence" in str(e):
                             continue
                         else:
                             raise
-                    waveform = phy_interface.get_mean_waveforms_on_peak_electrodes(cluster)
-                    _ = Unit(self, info['group'], info['spike_times'], cluster, waveform=waveform, 
-                             experiment=self.experiment)
-        else:
-            pass
-                   
+                    
+                    # Check if deflection is up or down at the center
+                    center_value = waveform[100]
+                    surrounding_mean = np.mean(np.concatenate((waveform[0:50], waveform[-50:])))
+                    threshold = (np.max(waveform[70:130]) + np.min(waveform[70:130])) / 2
 
-    
+                    if center_value > surrounding_mean:  # Upward deflection
+                        above_threshold = waveform >= threshold
+                    else:  # Downward deflection
+                        above_threshold = waveform <= threshold
 
-    
+                    # Find transitions (crossings)
+                    transitions = np.diff(above_threshold.astype(int))
+
+                    # Last False -> True transition before center (rising edge)
+                    before_center = np.where(transitions[:101] == 1)[0]
+                    start = before_center[-1] if len(before_center) > 0 else 70  # fallback start
+
+                    # First True -> False transition after center (falling edge)
+                    after_center = np.where(transitions[100:] == -1)[0] + 100
+                    end = after_center[0] if len(after_center) > 0 else 130  # fallback end
+
+                    # Calculate FWHM in samples and time
+                    FWHM_samples = end - start
+                    FWHM_seconds = FWHM_samples / self.sampling_rate
+
+                    # Plot waveform and mark FWHM
+                    plt.figure(figsize=(10, 5))
+                    plt.plot(waveform, label="Waveform")
+                    
+                    # Horizontal line for half maximum level
+                    plt.axhline(y=threshold, color='r', linestyle='--', label="Half Maximum")
+
+                    # Mark FWHM region
+                    plt.axvspan(start, end, color='orange', alpha=0.3, label="FWHM Range")
+                    
+                    plt.xlabel("Sample Index")
+                    plt.ylabel("Amplitude")
+                    plt.title(f"Waveform with FWHM for Animal {self.identifier} Cluster {cluster}")
+                    plt.legend()
+                    plt.savefig(os.path.join(phy_path, f"{self.identifier}_{cluster}_waveform.png"))
+                    
+                    # Firing rate calculation
+                    spike_times = np.array(info['spike_times'])
+                    spike_times_for_fr = spike_times[spike_times > 30]
+                    firing_rate = len(spike_times_for_fr) / (spike_times_for_fr[-1] - spike_times_for_fr[0])
+
+                    # Create unit and add attributes
+                    unit = Unit(self, info['group'], info['spike_times'], cluster,
+                                waveform=waveform, experiment=self.experiment, firing_rate=firing_rate, 
+                                fwhm_seconds=FWHM_seconds)
+
+                    # Append to units list
+                    units.append(info | {'waveform': waveform, 'firing_rate': firing_rate, 'fwhm_seconds': FWHM_seconds})
+            
+            save(units, pickle_path, 'pkl')
+
+
+
+
+            
+
+
+            
+                

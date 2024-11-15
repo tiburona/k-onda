@@ -52,11 +52,18 @@ class Partition(PlotterBase):
         self.process_divider(*next(iter(self.spec['divisions'].items())), self.spec['divisions'])
 
     def assign_data_sources(self):
-        for divider_type, divider in self.spec['divisions'].items():
-            if divider_type == 'data_source' and 'all' in divider['members']:
-                divider['members'] = [
-                    source for source in getattr(self.experiment, divider['members']) 
+        divider = self.spec['divisions'].get('data_source', {})
+
+        if 'all' in divider.get('members', []):
+            divider['members'] = [
+                source for source in getattr(self.experiment, divider['members']) 
                     if source.include()]
+           
+        else:
+            members = self.get_data_sources(
+                **{k: divider[v] 
+                   for k, v in zip(['identifiers', 'data_object_type'], ['members', 'type'])})
+            divider['members'] = members
             
     def process_divider(self, divider_type, current_divider, divisions, info=None):
         
@@ -109,7 +116,6 @@ class Section(Partition):
         super().__init__(origin_plotter, parent_plotter=parent_plotter, 
                          parent_processor=parent_processor)
         
-        self.set_members()
         # index should refer to a starting point in the parent gridspec
         self.gs_xy = self.spec.pop('gs_xy', None) 
         if index:
@@ -126,15 +132,6 @@ class Section(Partition):
             self.active_plotter = Subplotter(
                 self.active_plotter, self.current_index, self.spec, aspect=self.aspect)
             
-    def set_members(self):
-        data_source_spec = self.spec['divisions'].get('data_source', {})
-        if type(data_source_spec.get('members')) in [int, str]:
-            members = self.get_data_sources(
-                **{k: data_source_spec[v] 
-                   for k, v in zip(['identifier', 'data_object_type'], ['members', 'type'])})
-            data_source_spec['members'] = members
-
-
     # @property 
     # def dimensions_of_subplot(self):
     #     dims = [1, 1]

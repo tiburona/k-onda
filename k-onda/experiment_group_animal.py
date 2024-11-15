@@ -4,30 +4,36 @@ from base_data import Data
 from lfp import LFPPeriod, LFPMethods, LFPPrepMethods
 from spike import SpikePeriod, SpikeMethods, SpikePrepMethods
 from period_constructor import PeriodConstructor
+from neuron_classifier import NeuronClassifier
 from bins import BinMethods
 from utils import formatted_now
 
 
-class Experiment(Data):
+class Experiment(Data, SpikePrepMethods):
 
     _name = 'experiment'
 
     def __init__(self, info):
         super().__init__()
         self.exp_info = info
-        self.identifier = info['identifier'] + formatted_now()
+        self.identifier = info['identifier'] 
+        self.now = formatted_now
         self.conditions = info['conditions']
         self._sampling_rate = info.get('sampling_rate')
         self._lfp_sampling_rate = info.get('lfp_sampling_rate')
         self.stimulus_duration = info.get('stimulus_duration')
+        self.experiment = self
         self.groups = None
         self.all_groups = None
+        self.all_animals = []
+        self.neuron_classifier = NeuronClassifier(self)
         self.children = self.groups
         self._ancestors = [self]
         self.kind_of_data_to_period_type = {
             'lfp': LFPPeriod,
             'spike': SpikePeriod
         }
+        self.state = {}
 
     @property
     def ancestors(self):
@@ -69,10 +75,13 @@ class Experiment(Data):
             entity.experiment = self
 
     def initialize_data(self):
+        
         for animal in self.all_animals:
             if not animal.include():
                 continue
             getattr(animal, f"{self.kind_of_data}_prep")()
+        if self.kind_of_data == 'spike':
+            self.neuron_classifier.classify()
 
     def validate_lfp_events(self, calc_opts):
         self.calc_opts = calc_opts
@@ -106,6 +115,7 @@ class Animal(Data, PeriodConstructor, SpikePrepMethods, SpikeMethods, LFPPrepMet
         self.condition = condition
         self.animal_info = animal_info
         self.experiment = experiment
+        self.experiment.all_animals.append(self)
         self.group = None
         self.period_info = animal_info['period_info'] if 'period_info' in animal_info is not None else {}
         if neuron_types is not None:
@@ -113,6 +123,7 @@ class Animal(Data, PeriodConstructor, SpikePrepMethods, SpikeMethods, LFPPrepMet
                 setattr(self, nt, [])
         self._processed_lfp = {}
         self.units = defaultdict(list)
+        self.neurons = defaultdict(list)
         self.lfp_periods = defaultdict(list)
         self.mrl_calculators = defaultdict(list)
         self.granger_calculators = defaultdict(list)
@@ -127,4 +138,4 @@ class Animal(Data, PeriodConstructor, SpikePrepMethods, SpikeMethods, LFPPrepMet
     
     @property
     def all_units(self):
-        return [unit for category, units in self.units.items() for unit in units]
+        return [unit for _, units in self.units.items() for unit in units]
