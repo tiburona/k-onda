@@ -411,7 +411,7 @@ group_psth_plots = {
                                 'indicator': {'type': 'patch', 'when': (0, .05)},
                                'label': {
                                    'ax': {'title': ['group', 'neuron_type']},
-                                   'component': {'axis': ('Time (s)', 'Normalized Firing Rate',)}}},
+                                   'component': {'axis': ('Time (s)', 'Proportion of Pips Upregulated',)}}},
                     'override': {'group.control': {'marker': {'color': {'purple'}}}, 
                                  'group.defeat': {'marker': {'color': {'orange'}}}           
                     }},
@@ -436,7 +436,7 @@ GROUP_PSTH_OPTS = {
     
     'procedure': 'make_plots',
     'graph_opts': group_psth_plots,
-    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'psth',  
+    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'proportion',  
                   'base': 'event', 'bin_size': .01, 
                    'periods': {'tone': {'event_pre_post': (.05, .65)}},
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',

@@ -33,6 +33,8 @@ class SpikeMethods:
     def get_spike_counts(self):
         return self.get_average('get_spike_counts', stop_at=self.calc_opts.get('base', 'event'))
     
+    def get_proportion(self):
+        return self.get_average('get_proportion', stop_at=self.calc_opts.get('base', 'event'))
     
     
 class RateMethods:
@@ -63,6 +65,9 @@ class RateMethods:
     
     def get_spike_train(self):
         return self._get_calc('spike_train')
+    
+    def get_proportion(self):
+        return self._get_calc('proportion')
         
     def _get_calc(self, calc_type):
         stop_at=self.calc_opts.get('base', 'event')
@@ -93,6 +98,9 @@ class RateMethods:
 
     def _get_firing_rates(self):
         return self._get_spike_counts()/self.calc_opts.get('bin_size', .01)
+
+    def _get_proportion(self):
+        return [1 if rate > 0 else 0 for rate in self.get_psth()]
 
 
 class Unit(Data, PeriodConstructor, SpikeMethods):
