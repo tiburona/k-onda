@@ -424,22 +424,26 @@ class Data(Base):
     def concatenation(self):
         return self.concatenate()
     
-    def concatenate(self, method=None, max_depth=1):   
-        return np.concatenate(self.accumulate(method=method, max_depth=max_depth)[max_depth])
+    def concatenate(self, depth=1, attr='calc', method=None):
+        return self.apply_fun_to_accumulated_data(
+            np.concatenate, depth=depth, attr=attr, method=method)
     
     @property
     def stack(self):
         return self.get_stack()
     
-    def get_stack(self, depth=1, attr='calc', method=None, base=None):
-           
+    def get_stack(self, depth=1, attr='calc', method=None):
+        return self.apply_fun_to_accumulated_data(
+            np.vstack, depth=depth, attr=attr, method=method)
+
+    def apply_fun_to_accumulated_data(self, fun, depth=1, attr='calc', method=None):
         f = lambda x: (
             getattr(x, method)() if method else getattr(x, attr)
             ) if hasattr(x, method if method else attr) else None
         
         sources = self.sort_accumulated(self.accumulate(max_depth=depth))[depth]
         results = [f(source) for source in sources]
-        return np.vstack(results)
+        return fun(results)
     
     def sort_accumulated(self, accumulated, depth='all'):
         sort_by = self.calc_opts.get('sort_by')
@@ -478,7 +482,7 @@ class Data(Base):
 
         if depth != max_depth and self.included_children:
             for child in self.included_children:
-                child.accumulate( max_depth, depth + 1, accumulator)
+                child.accumulate(max_depth, depth + 1, accumulator)
         
         return accumulator
 

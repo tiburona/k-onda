@@ -67,8 +67,8 @@ mice_with_alt_code = ['IG171', 'IG172', 'IG173', 'IG174', 'IG175', 'IG176', 'IG1
 
 
 period_info = {
-    'pretone': {'relative': True, 'target': 'light', 'shift': -30, 'duration': 30},
-    'tone': {'relative': False, 'reference_period_type': 'pretone', 
+    'pretone': {'relative': True, 'target': 'tone', 'shift': -30, 'duration': 30},
+    'tone': {'relative': False, 'reference_period_type': 'pretone', 'event_duration': 1, 
              'duration': 30, 'events': {'start': 'period_onset', 'pattern': {'range_args': [30]}}}
 }
 
@@ -103,8 +103,8 @@ exp_info['categorize_neurons'] = {
     'neuron_colors': ['blue', 'red'],
     'characteristics': ['fwhm_microseconds', 'firing_rate'],
     'sort_on': 'fwhm_microseconds', 
-    'plot': ['fwhm_microseconds', 'firing_rate'],
-    'cutoffs': [('fwhm_microseconds', '>', 300, 'PN')]}
+    'plot': ['fwhm_microseconds', 'firing_rate']}
+    #'cutoffs': [('fwhm_microseconds', '>', 300, 'PN')]}
 
 
 with open(os.path.join(root, 'init_config.json'), 'w', encoding='utf-8') as file:

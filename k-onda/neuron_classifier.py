@@ -151,9 +151,9 @@ class NeuronClassifier:
 
         # Box plots for each characteristic on the right
         for i, characteristic in enumerate(self.characteristics):
-            box_data = [orig_data[np.array(self.labels) == j][:, i] 
-                        if orig_data.shape[1] > 1 else orig_data[np.array(self.labels) == j]
-                        for j in range(len(self.neuron_types))]
+            box_data = [orig_data[np.array(self.labels) == nt][:, i] 
+                        if orig_data.shape[1] > 1 else orig_data[np.array(self.labels) == nt]
+                        for nt in self.neuron_types]
             
             # Create box plot with specified colors for each neuron type
             box_plot = axes[i + 1].boxplot(box_data, vert=True, patch_artist=True)

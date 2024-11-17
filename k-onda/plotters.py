@@ -136,7 +136,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
                     aesthetic.update(aesthetic_vals)
 
         for combination, overrides in override.items():
-            pairs = zip(combination.split('.')[::2], combination.split('.')[1::2])
+            pairs = list(zip(combination.split('.')[::2], combination.split('.')[1::2]))
             if all(row.get(key, val) == val for key, val in pairs):
                 aesthetic.update(overrides)
 
@@ -167,7 +167,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
             x_slices = acks.break_axes[0]
         else:
             length = len(data[0]) if data.ndim > 1 else len(data)
-            x_slices = [(0, int(length*self.bin_size))]
+            x_slices = [(0, length*self.bin_size)]
             ax_list = [self.active_acks]
         
         return data_divisions, ax_list, x_slices
@@ -185,7 +185,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
 
         for position in label:
             if position == 'component' and is_last:
-                axis_labels, title = self.get_labels(label['component'], row['data_source'])
+                axis_labels, title = self.get_labels(label['component'], row)
                 xy = label['component'].get('xy', [(0.5, 0), (0.025, 0.5)])
                 for text, coords, axis, dim in zip(axis_labels, xy, ['ha', 'va'], ['x', 'y']):
                     rotation = 90 if dim == 'y' else 0  
@@ -204,12 +204,13 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
                     subplotter.frame_ax.set_title(title)
 
             elif position == 'ax':
-                axis_labels, title = self.get_labels(label['ax'], row['data_source'])
+                axis_labels, title = self.get_labels(label['ax'], row)
                 ax.set_title(title)
                 ax.set_xlabel(axis_labels[0])
                 ax.set_ylabel(axis_labels[1])
 
-    def get_labels(self, lab_info, data_source):
+    def get_labels(self, lab_info, row):
+        lab_info.update(self.active_spec['aesthetics'].get('label', {}))
         axis = lab_info.get('axis', '')
         if axis: 
             if axis == 'default':
@@ -221,7 +222,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
            
         title = lab_info.get('title', '')
         if title:
-            title = format_label(lab_info['title'], data_source)
+            title = format_label(lab_info['title'], row)
         return axis_labels, title
     
     def adjust_label_position(self, ax, label, axis='x'):
@@ -431,22 +432,29 @@ class PeriStimulusPlotter(FeaturePlotter):
     def process_calc(self, info, aesthetics=None, is_last=False, **_):
                 
         for row in info:
-            data = row[self.active_spec['attr']]
+            attr = self.active_spec.get('attr', 'calc')
+            data = row[attr]
             aesthetic_args = self.get_aesthetic_args(row, aesthetics)
             data_divisions, ax_list, x_slices = self.handle_broken_axes(data)
             
             for i, (ax, data, x_slice) in enumerate(zip(ax_list, data_divisions, x_slices)):
                 self.plot_row(ax, data, row, i, aesthetic_args, data_source=row['data_source'])
-                self.set_x_ticks(ax, data, x_slice)
+                #self.set_x_ticks(ax, data, x_slice)
                 self.place_marker(ax, aesthetic_args)
-                if is_last:
-                    self.label(row, ax, is_last)   
+                self.label(row, ax, is_last)   
                 
     def set_x_ticks(self, ax, data, x_slice):
 
         length = len(data[0]) if data.ndim > 1 else len(data)
+
+        nearest_power_of_ten = 10 ** np.floor(np.log10(self.pre + self.post))
+        rounded_step = nearest_power_of_ten 
+        if 0 < self.pre < rounded_step:
+            beginning = 0
+        else:
+            beginning = -self.pre
         
-        manual_ticks = np.arange(0, length + 1, step=10)  # Adjust step size as needed
+        manual_ticks = np.arange(beginning, self.post, step=rounded_step) 
         ax.set_xticks(manual_ticks)
 
         # Get the existing tick positions (in bins)
@@ -464,7 +472,7 @@ class PeriStimulusPlotter(FeaturePlotter):
 
         # Set the x-tick positions and labels
         ax.set_xticks(visible_ticks)  # Use only the visible ticks
-        ax.set_xticklabels([f"{label:.1f}" for label in tick_range])  # Labels in seconds
+        ax.set_xticklabels([f"{label:.2f}" for label in tick_range])  # Labels in seconds
         
     def place_marker(self, ax, aesthetic_args):
         marker = aesthetic_args.get('marker', {})
@@ -524,7 +532,7 @@ class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
     def plot_row(self, ax, data, row, slice_no, aesthetic_args, **_):
         if data.ndim > 1:
             data = data[0]
-        x = list(range(0, len(data)))
+        x = np.linspace(-self.pre, self.post, len(data)+1)[:-1]
         y = data
         self.plot_hist(x, y, self.calc_opts['bin_size'], ax, aesthetic_args)
         

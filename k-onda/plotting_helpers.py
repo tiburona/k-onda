@@ -151,7 +151,7 @@ def ac_str(s):
     for (old, new) in [('pd', 'Pandas'), ('np', 'NumPy'), ('ml', 'Matlab')]:
         s = s.replace(old, new)
 
-def format_label(label, data_source):
+def format_label(label, row):
     parts = []  # This will hold the parts of the title
 
     # Helper function to check if an element is iterable (and not a string)
@@ -162,14 +162,16 @@ def format_label(label, data_source):
             return False
         return not isinstance(elem, str)  # Exclude strings, as they're iterable in Python
     
-
     # Iterate through the elements of the title
     for elem in label:
-        obj = data_source
-        if is_iterable(elem):  # If the element is a list or tuple, get attributes progressively
-            for attr in elem[:-1]:
-                obj = getattr(obj, attr)
-            parts.append(getattr(obj, elem[-1]))  # Append the final value as a string
+        if elem in row:
+            parts.append(row[elem])
+        elif is_iterable(elem):
+            if is_iterable(elem):  # If the element is a list or tuple, get attributes progressively
+                obj = row['data_source']
+                for attr in elem[:-1]:
+                    obj = getattr(obj, attr)
+                parts.append(getattr(obj, elem[-1]))  # Append the final value as a string
         else:
             parts.append(elem)
 

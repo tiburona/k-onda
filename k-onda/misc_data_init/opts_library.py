@@ -408,9 +408,12 @@ group_psth_plots = {
                     'ax': {'border': {'top': 'FFF', 'right': 'FFF'}, 'share': ['x', 'y']},
                     'default': 
                                {'marker': {'color': 'black'},
-                               'label': {'component': {'axis': ('Time (s)', 'Firing Rate (Spikes per Second)',)}}},
-                    'override': {'group.control': 'purple', 'group.defeat': 'orange'}           
-                    },
+                               'label': {
+                                   'ax': {'title': ['group', 'neuron_type']},
+                                   'component': {'axis': ('Time (s)', 'Normalized Firing Rate',)}}},
+                    'override': {'group.control': {'marker': {'color': {'purple'}}}, 
+                                 'group.defeat': {'marker': {'color': {'orange'}}}           
+                    }},
                 'divisions': {
                     'data_source': {
                         'type': 'group',
@@ -432,8 +435,9 @@ GROUP_PSTH_OPTS = {
     
     'procedure': 'make_plots',
     'graph_opts': group_psth_plots,
-    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'raster_type': 'spike_train', 
-                  'base': 'period', 'bin_size': .5, 
+    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'psth',  
+                  'base': 'event', 'bin_size': .01, 
+                   'periods': {'tone': {'event_pre_post': (.05, .65)}},
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
                   'filter': {'animal': {'identifier': ('in', STANDARD_ANIMALS)}}
     }

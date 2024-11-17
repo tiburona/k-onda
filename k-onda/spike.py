@@ -45,7 +45,8 @@ class RateMethods:
     
     @property
     def spikes_in_seconds_from_start(self):
-        return [spike - self.start for spike in self.unit.find_spikes(*self.spike_range)]
+        return [spike - self.start 
+                for spike in self.unit.find_spikes(*self.spike_range)]
     
     @property
     def spike_range(self):
@@ -154,7 +155,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
 
     def get_firing_std_dev(self):
         depth = 2 if self.has_grandchildren else 1
-        return np.std([self.concatenate(method='get_firing_rates', max_depth=depth)[depth]])
+        return np.std([self.concatenate(method='get_firing_rates', depth=depth)])
 
     def get_cross_correlations(self, axis=0):
         return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
@@ -222,23 +223,23 @@ class SpikePeriod(Period, RateMethods):
         
         
 class SpikeEvent(Event, RateMethods, BinMethods):
-    def __init__(self, period, unit, start,  index):
+    def __init__(self, period, unit, onset,  index):
         super().__init__(period, index)
         self.unit = unit
         self.private_cache = {}
-        self._start = start
+        self._start = onset/self.sampling_rate
 
     @property
     def start(self):
-        self._start - self.pre_event
+       return self._start - self.pre_event
 
     @property
     def stop(self):
-        self._start + self.post_event
+        return self._start + self.post_event
 
     @property
     def spike_range(self):
-        return (-self.pre_event, self.post_event)
+        return (self.start, self.stop)
     
     def get_spike_counts(self):
         return calc_hist(self.spikes, self.num_bins_per, self.spike_range)

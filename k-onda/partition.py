@@ -71,12 +71,7 @@ class Partition(PlotterBase):
         
         for i, member in enumerate(current_divider['members']):
             
-            if divider_type == 'data_type':
-                info['data_source'] = source
-                info[source.name] = source.identifier
-               
-            else:
-                info[divider_type] = member
+            info[divider_type] = member
                 
             self.set_dims(current_divider, i)
             
@@ -109,6 +104,7 @@ class Partition(PlotterBase):
                 self.active_spec.get('attr', 'calc')]
            
             d.update({attr: getattr(d['data_source'], attr) for attr in attrs})
+            d.update({d['data_source'].name: d['data_source'].identifier})
 
 class Section(Partition):
     def __init__(self, origin_plotter, parent_plotter=None,
@@ -131,17 +127,6 @@ class Section(Partition):
         if not self.is_layout:
             self.active_plotter = Subplotter(
                 self.active_plotter, self.current_index, self.spec, aspect=self.aspect)
-            
-    # @property 
-    # def dimensions_of_subplot(self):
-    #     dims = [1, 1]
-    #     for division in self.spec.values():
-    #         if 'dim' in division:
-    #             length = len(division['members'])
-    #             # if division['dim'] in (self.active_spec.get('break_axes') or {}):
-    #             #     length *= len(self.active_spec['break_axes'][division['dim']])
-    #             dims[division['dim']] = len(division['members'])
-    #     return dims
 
     def set_dims(self, current_divider, i):
         if 'dim' in current_divider:
