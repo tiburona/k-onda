@@ -408,6 +408,7 @@ group_psth_plots = {
                     'ax': {'border': {'top': 'FFF', 'right': 'FFF'}, 'share': ['x', 'y']},
                     'default': 
                                {'marker': {'color': 'black'},
+                                'indicator': {'type': 'patch', 'when': (0, .05)},
                                'label': {
                                    'ax': {'title': ['group', 'neuron_type']},
                                    'component': {'axis': ('Time (s)', 'Normalized Firing Rate',)}}},

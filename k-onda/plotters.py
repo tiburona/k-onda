@@ -14,6 +14,7 @@ from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.patches import Patch
 import matplotlib.ticker as ticker
 from matplotlib.font_manager import FontProperties
+import matplotlib.transforms as transforms
 
 
 
@@ -440,7 +441,7 @@ class PeriStimulusPlotter(FeaturePlotter):
             for i, (ax, data, x_slice) in enumerate(zip(ax_list, data_divisions, x_slices)):
                 self.plot_row(ax, data, row, i, aesthetic_args, data_source=row['data_source'])
                 #self.set_x_ticks(ax, data, x_slice)
-                self.place_marker(ax, aesthetic_args)
+                self.place_indicator(ax, aesthetic_args)
                 self.label(row, ax, is_last)   
                 
     def set_x_ticks(self, ax, data, x_slice):
@@ -473,27 +474,28 @@ class PeriStimulusPlotter(FeaturePlotter):
         # Set the x-tick positions and labels
         ax.set_xticks(visible_ticks)  # Use only the visible ticks
         ax.set_xticklabels([f"{label:.2f}" for label in tick_range])  # Labels in seconds
-        
-    def place_marker(self, ax, aesthetic_args):
-        marker = aesthetic_args.get('marker', {})
-        marker_type = marker.get('type')
-        when = marker.get('when', ('pre', 'post'))
-        ylim = ax.get_ylim()  # Retrieve ylim only once
+            
 
-        
-        if marker_type == 'vertical_line':
-            for event in when:
-                ax.vlines(getattr(self, f"{event}_{base}")/self.bin_size, ylim[0], ylim[1], 
-                            colors='black')
-                
-         # # Add the gray rectangle patch
-                # patch_start = row['data_source'].children[0].zero_point
-                # patch_end = patch_start + 0.05
-                # ylim = ax.get_ylim()  # Retrieve ylim only once
-                # ax.add_patch(plt.Rectangle(
-                #     (patch_start, ylim[0]), patch_end, ylim[1] - ylim[0], 
-                #     facecolor='gray', alpha=0.3
-                # ))
+    def place_indicator(self, ax, aesthetic_args):
+        indicator = aesthetic_args.get('indicator', {})
+        if not indicator:
+            return
+        indicator_type = indicator.get('type')
+        when = indicator['when']
+
+        if indicator_type == 'patch':
+            if len(when) == 2:
+                width = when[1] - when[0]
+                # Create a transformation: x in data coords, y in axes coords
+                transform = transforms.blended_transform_factory(ax.transData, ax.transAxes)
+                ax.add_patch(plt.Rectangle(
+                    (when[0], 0), width, 1,
+                    facecolor='gray', alpha=0.3,
+                    transform=transform  # Apply the transformation
+                ))
+
+
+
                 
             
     
