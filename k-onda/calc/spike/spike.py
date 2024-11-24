@@ -2,24 +2,22 @@
 import numpy as np
 from collections import defaultdict
 from bisect import bisect_left as bs_left, bisect_right as bs_right
-from neo.rawio import BlackrockRawIO
 
 import matplotlib.pyplot as plt
-plt.ioff() 
+
 
 from collections import defaultdict
-from utils import save, load
-from phy_interface import PhyInterface
-from base_data import Data, Base
-from period_event import Period, Event
-from period_constructor import PeriodConstructor
-from math_functions import calc_rates, calc_hist, cross_correlation, correlogram
-from bins import BinMethods
-from phy_interface import PhyInterface
-from prep_methods import PrepMethods
+from utils.utils import save, load
+from interfaces.phy_interface import PhyInterface
+from data.data import Data
+from data.period_event import Period, Event
+from data.period_constructor import PeriodConstructor
+from utils.math_functions import calc_hist, cross_correlation, correlogram
+from data.bins import BinMethods
+from interfaces.phy_interface import PhyInterface
+from data.prep_methods import PrepMethods
 import os
-import h5py
-from utils import group_to_dict
+
 
 
 class SpikeMethods:
@@ -40,15 +38,17 @@ class SpikeMethods:
 class RateMethods:
 
     # Methods shared by SpikePeriod and SpikeEvent
-    
+
     @property
     def spikes(self):
-        return [spike for spike in self.unit.find_spikes(*self.spike_range)]
+        if self._spikes is None:
+            self._spikes = self.unit.find_spikes(*self.spike_range)
+        return self._spikes
+
     
     @property
     def spikes_in_seconds_from_start(self):
-        return [spike - self.start 
-                for spike in self.unit.find_spikes(*self.spike_range)]
+        return self.unit.find_spikes(*self.spike_range) - self.start
     
     @property
     def spike_range(self):
@@ -83,7 +83,7 @@ class RateMethods:
             counts = calc_hist(self.spikes, self.num_bins_per, self.spike_range)[0]
         if self.calc_type == 'psth':
             self.private_cache['counts'] = counts
-        return self.refer(counts)
+        return counts
     
     def _get_spike_train(self):
         return np.where(self._get_spike_counts() != 0, 1, 0)
@@ -126,6 +126,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         self.identifier = '_'.join([self.animal.identifier, self.category, 
                                     str(self.animal.units[category].index(self) + 1)])
         self.spike_periods = defaultdict(list)
+        self.mrl_calculators = defaultdict(list)
         self.parent = animal
         self.kind_of_data_to_period_type = {
             'spike': SpikePeriod
@@ -133,7 +134,10 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
 
     @property
     def children(self):
-        return self.select_children('spike_periods')
+        if self.kind_of_data == 'mrl':
+            return self.select_children('mrl_calculators')   
+        else:
+            return self.select_children('spike_periods')
         
     @property
     def all_periods(self):
@@ -191,6 +195,9 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         raster = self.get_stack(method=f"get_{raster_type}", depth=depth)
         
         return raster
+    
+    def get_mrl(self):
+        return self.get_average('get_mrl', stop_at='mrl_calculator')
         
         
 
@@ -215,6 +222,7 @@ class SpikePeriod(Period, RateMethods):
         self.private_cache = {}
         self._start = self.onset/self.sampling_rate 
         self._stop = self._start + self.duration 
+        self._spikes = None
         
     @property
     def start(self):
@@ -236,6 +244,7 @@ class SpikeEvent(Event, RateMethods, BinMethods):
         self.unit = unit
         self.private_cache = {}
         self._start = onset/self.sampling_rate
+        self._spikes = None
 
     @property
     def start(self):

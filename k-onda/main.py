@@ -1,7 +1,7 @@
-from utils import log_directory_contents
-from runner import Runner
-from misc_data_init.opts_library import  RUNNER_OPTS, VALIDATION_DATA_OPTS, GROUP_PSTH_OPTS
-from misc_data_init.CH27_plot_specs import *
+from utils.utils import log_directory_contents
+from run.runner import Runner
+from run.misc_data_init.opts_library import  RUNNER_OPTS, VALIDATION_DATA_OPTS, GROUP_PSTH_OPTS, MRL_OPTS
+from run.misc_data_init.CH27_plot_specs import *
 import pstats
 import signal
 import cProfile
@@ -20,7 +20,7 @@ def run(log=True):
     #              CH27_UNITS_PERCENT_CHANGE_OPTS, CH27_PERCENT_CHANGE_OPTS]:
     #     runner.run(spec)
 
-    runner.run(GROUP_PSTH_OPTS)
+    runner.run(MRL_OPTS)
  
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')

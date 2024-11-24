@@ -1,32 +1,18 @@
-from multiprocessing.dummy.connection import families
 import os
-import math
 import numpy as np
-import seaborn as sns
-import pandas as pd
 from copy import deepcopy, copy
 import json
-from collections import defaultdict, deque
+
 
 import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-from matplotlib.patches import Patch
-import matplotlib.ticker as ticker
 from matplotlib.font_manager import FontProperties
 import matplotlib.transforms as transforms
 
-
-
-from math_functions import get_positive_frequencies, get_spectrum_fenceposts, nearest_power_of_10
-from plotting_helpers import smart_title_case, PlottingMixin, format_label
-from utils import to_serializable, safe_get
-from base_data import Base
-from stats import Stats
-from phy_interface import PhyInterface
-from plotter_base import PlotterBase
-from partition import Section, Segment, Subset
-from subplotter import Figurer
+from plotting.plotting_helpers import smart_title_case, PlottingMixin, format_label
+from utils.utils import to_serializable, safe_get, recursive_update
+from plotting.plotter_base import PlotterBase
+from plotting.partition import Section, Segment, Subset
+from plotting.subplotter import Figurer
 
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial'] 
@@ -102,17 +88,18 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
     def delegate(self, info, is_last=False):
 
         def send(plot_type):
-            PLOT_TYPES[plot_type]().process_calc(info, main=main, aesthetics=aesthetics, 
-                                                 is_last=is_last)
+            PLOT_TYPES[plot_type]().process_calc(info, aesthetics=aesthetics, is_last=is_last)
 
         aesthetics = self.active_spec.get('aesthetics', {})
-        main = True
         if 'layers' in self.active_spec:
-            for layer in self.active_spec['layers']:                
-                main = layer.get('main', True)
-                aesthetics.update(layer.get('aesthetics', {}))
+            for i, layer in enumerate(self.active_spec['layers']):
+                if i == len(self.active_spec['layers']):
+                    self.active_spec['main'] = True  
+                layer_aesthetics = deepcopy(aesthetics)
+                aesthetics = recursive_update(layer_aesthetics, layer.get('aesthetics', {}))           
                 if 'attr' in layer:
-                    self.active_spec['attr'] = layer['attr']
+                    for row in info:
+                        row['attr'] = layer['attr']
                 if 'plot_type' in layer:
                     send(layer['plot_type'])
                 else:
@@ -127,19 +114,21 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
 
         aesthetic = {}
         aesthetic_spec = deepcopy(aesthetics)
-        default, override = (aesthetic_spec.pop(k, {}) for k in ['default', 'override'])
+        default, override, invariant = (aesthetic_spec.pop(k, {}) for k in ['default', 'override', 'invariant'])
 
         aesthetic.update(default)
             
         for category, members in aesthetic_spec.items():
             for member, aesthetic_vals in members.items():
                 if category in row and row[category] == member:
-                    aesthetic.update(aesthetic_vals)
+                    recursive_update(aesthetic, aesthetic_vals)
 
         for combination, overrides in override.items():
             pairs = list(zip(combination.split('.')[::2], combination.split('.')[1::2]))
             if all(row.get(key, val) == val for key, val in pairs):
                 aesthetic.update(overrides)
+
+        aesthetic = recursive_update(aesthetic, invariant)
 
         return aesthetic
     
@@ -177,17 +166,16 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
         """Return a slice object for the given arg_set and bin_size."""
         return slice(*((arg_set) / self.bin_size).astype(int))
     
-    def label(self, row, ax, is_last):
+    def label(self, row, ax, aesthetics, is_last):
         # label is a dictionary like {'component': {'axis_label': (), 'title': ''}, 'ax': {}}
         subplotter = self.active_plotter
-        aesthetic_args = self.get_aesthetic_args(row, self.active_spec.get('aesthetics'))
-        label = aesthetic_args.get('label', {})
-        font_properties = FontProperties(aesthetic_args.get('font_properties', {}))
+        label_properties = aesthetics.get('label', {})
+        font_properties = FontProperties(aesthetics.get('font_properties', {}))
 
-        for position in label:
+        for position in label_properties:
             if position == 'component' and is_last:
-                axis_labels, title = self.get_labels(label['component'], row)
-                xy = label['component'].get('xy', [(0.5, 0), (0.025, 0.5)])
+                axis_labels, title = self.get_labels(label_properties['component'], row)
+                xy = label_properties['component'].get('xy', [(0.5, 0), (0.025, 0.5)])
                 for text, coords, axis, dim in zip(axis_labels, xy, ['ha', 'va'], ['x', 'y']):
                     rotation = 90 if dim == 'y' else 0  
                     kwargs = {
@@ -205,7 +193,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
                     subplotter.frame_ax.set_title(title)
 
             elif position == 'ax':
-                axis_labels, title = self.get_labels(label['ax'], row)
+                axis_labels, title = self.get_labels(label_properties['ax'], row)
                 ax.set_title(title)
                 ax.set_xlabel(axis_labels[0])
                 ax.set_ylabel(axis_labels[1])
@@ -250,138 +238,6 @@ class HistogramPlotter(FeaturePlotter):
         acks.ax.bar(x, y, width=width, **aesthetic_args.get('marker', {})) 
 
 
-class CategoryPlotter(FeaturePlotter):
-
-    # @property
-    # def cat_width(self):
-    #     return self.active_spec.get('cat_width', .8)
-
-    def find_position(self, observation, aesthetics, division_types=None, start_position=0):
-        segment_info = self.active_spec['divisions']
-        if division_types is None:
-            division_types = deque(sorted(
-                [k for k in segment_info.keys() if 'grouping' in segment_info[k]],
-                key=lambda x: segment_info[x]['grouping']))
-
-        # some_factor adjusts how much space each character takes
-        labels = segment_info[division_types[0]]['members']
-        spacing = self.get_aesthetic_args(observation, aesthetics).get('spacing', 1)
-        label_lengths = [len(label) for label in labels]
-        max_label_length = max(label_lengths)
-        spacing = max_label_length * spacing
-
-        mult_factor = 1
-        for dt in division_types:
-            num_members = len(segment_info[dt]['members'])
-            mult_factor *= num_members + 2 * spacing
-
-        current_division_type = division_types.popleft()
-        value = observation[current_division_type]
-        index = segment_info[current_division_type]['members'].index(value)
-        position = index * mult_factor + start_position
-
-        if len(division_types) == 0:
-            return position + spacing
-        else:
-            return self.find_position(
-                observation, division_types=division_types, start_position=position)
-
-    def compute_outer_label_positions(inner_positions, outer_labels, num_inner_per_outer):
-        """
-        Compute positions and labels for the outer grouping level.
-
-        Parameters:
-        - inner_positions (list of float): Positions of the inner level ticks.
-        - outer_labels (list of str): Labels for the outer grouping level.
-        - num_inner_per_outer (int or list of int): Number of inner positions per outer group.
-            If an integer, it's assumed the same for all outer groups.
-            If a list, it should have the same length as outer_labels.
-
-        Returns:
-        - outer_positions (list of float): Computed positions for outer group labels.
-        - outer_labels (list of str): Labels for the outer grouping level.
-        """
-        outer_positions = []
-        idx = 0  # Index to track position in inner_positions
-
-        if isinstance(num_inner_per_outer, int):
-            num_inner_per_outer = [num_inner_per_outer] * len(outer_labels)
-        elif len(num_inner_per_outer) != len(outer_labels):
-            raise ValueError("Length of num_inner_per_outer must match length of outer_labels.")
-
-        for count in num_inner_per_outer:
-            # Get the positions corresponding to the current outer group
-            group_positions = inner_positions[idx:idx + count]
-            # Compute the midpoint of these positions
-            group_midpoint = sum(group_positions) / len(group_positions)
-            outer_positions.append(group_midpoint)
-            idx += count  # Move to the next set of positions
-
-        return outer_positions
-    
-    def category_label(self, positions):
-        ax = self.active_acks
-        for i, (dim, edge) in enumerate(zip(['x', 'y'], ['bottom', 'left'])):
-            if ax.index[i] == 0 or getattr(ax, f"{edge}_edge"):
-                # TODO: want this to be responsive to label_ax/label_component
-                getattr(ax, f"set_{dim}label")(
-                    self.get_default_labels()[self.calc_type][i])   
-        
-        tick_label_bbox = ax.get_xticklabels()[0].get_window_extent()
-        bbox_in_ax = tick_label_bbox.transformed(ax.transAxes.inverted())
-        tick_label_ymin = bbox_in_ax.ymin
-
-        divisions = self.active_spec['divisions']
-        levels = reversed(sorted(divisions.keys(), key=lambda k: divisions[k]['grouping']))
-        level_adjustment = 0
-        for i, level in enumerate(levels):
-            labels = divisions[level]['members']
-            if 'legend' not in divisions[level]:
-                level_adjustment -= .05
-            if i == 0:
-                ax.set_xticks(positions)
-                ax.set_xticklabels(labels)
-                inner_positions = ax.get_xticks
-            else:
-                num_inner_per_outer = int(len(labels)/self.active_spec[levels[i-1]]['members'])
-                current_positions = self.compute_outer_label_positions(
-                    inner_positions, labels, num_inner_per_outer)
-                for lab, pos in zip(labels, current_positions):
-                    ax.text(pos, tick_label_ymin - level_adjustment, lab)
-                inner_positions = current_positions
-
-
-class CategoricalScatterPlotter(CategoryPlotter):
-
-    def process_calc(self, info, main=True, aesthetics=None, is_last=False):
-        self.cat_width = aesthetics.get('default', {}).get('cat_width', .8)
-        ax = self.active_acks
-        positions = []
-        for row in info:
-            if self.active_spec_type == 'segment':
-                position = self.find_position(row, aesthetics) + self.cat_width/2
-                positions.append(position)
-            else:
-                # do something else
-                pass
-            scatter_vals = row[self.active_spec['attr']] 
-            jitter = np.random.rand(len(scatter_vals)) * self.cat_width/2 - self.cat_width/4
-            aesthetic_args = self.get_aesthetic_args(row, aesthetics)
-            marker_args = aesthetic_args.get('marker', {})
-            if 'background_color' in aesthetic_args:
-                background_color, alpha = aesthetic_args.pop('background_color')
-                ax.axvspan(
-                    position - self.cat_width/2, position + self.cat_width/2, 
-                    facecolor=background_color, alpha=alpha)
-            ax.scatter([position + j for j in jitter], scatter_vals, **marker_args)
-            self.label(row, ax, is_last)
-    
-        if main:
-            self.category_label(positions)
-        
-        
-
-       
 class LinePlotter(FeaturePlotter):
     def process_calc(self, info, aesthetics=None, **_):
         attr = self.active_spec.get('attr', 'calc')
@@ -395,33 +251,132 @@ class LinePlotter(FeaturePlotter):
 class WaveformPlotter(LinePlotter):
     def process_calc(self, info, aesthetics=None, is_last=False, **_):
         super().process_calc(info, aesthetics=aesthetics)
-        self.label(info[0], self.active_acks, is_last)
+        self.label(info[0], self.active_acks, is_last)  
 
 
-class CategoricalLinePlotter(CategoryPlotter):
-    def process_calc(self, info, aesthetics=None, **_):
-        self.cat_width = aesthetics.get('default', {}).get('cat_width', .8)
+class CategoryPlotter(FeaturePlotter):
+    
+    def transform_divisions(self, divisions):
+         
+        new_divisions = {}
+         
+        for key in divisions.keys():
+            if key == 'data_source':
+                new_divisions[divisions['data_source']['type']] = divisions['data_source']
+            else:
+                new_divisions[key] = divisions[key]
+
+        return new_divisions
+    
+    def assign_positions(self, divisions, base_position=0, level_names=None, prefix_labels=()):
+        
+        if level_names is None:
+            level_names = list(divisions.keys())
+
+        if not level_names:
+            # Base case: no more divisions
+            return {}
+
+        division = level_names[0]
+        remaining_levels = level_names[1:]
+
+        division_info = divisions[division]
+        spacing = division_info.get('spacing', 2)  # Get 'spacing' from division_info
+        members = division_info['members']
+
+        label_to_pos = {}
+        position = base_position
+
+        for member in members:
+            current_label = prefix_labels + (member,)
+
+            if remaining_levels:
+                # Recursively assign positions for subcategories
+                sub_positions = self.assign_positions(
+                    divisions,
+                    base_position=position,
+                    level_names=remaining_levels,
+                    prefix_labels=current_label
+                )
+                label_to_pos.update(sub_positions)
+
+                # Update position after processing subcategories
+                if sub_positions:
+                    last_pos = max(sub_positions.values())
+                    position = last_pos + spacing
+                else:
+                    # No subcategories, increment position by spacing
+                    position += spacing
+            else:
+                # Base case: assign position to the composite label
+                label_to_pos[current_label] = position
+                position += spacing
+
+        return label_to_pos
+        
+    def process_calc(self, info, aesthetics=None, is_last=False):
+        transformed_divisions = self.active_spec['divisions']
+        self.label_to_pos = self.assign_positions(transformed_divisions)
         ax = self.active_acks
 
         for row in info:
-            position = self.find_position(row, aesthetics) + self.cat_width/2
+            composite_label = tuple(row.get(division) for division in transformed_divisions.keys())
+            position = self.label_to_pos[composite_label]
+
             aesthetic_args = self.get_aesthetic_args(row, aesthetics)
-            divisor = aesthetic_args.pop('divisor', 2)
+            self.cat_width = aesthetic_args.get('cat_width', 1)
             marker_args = aesthetic_args.get('marker', {})
-            ax.hlines(row['mean'], position-self.cat_width/divisor, position+self.cat_width/divisor, 
-                      **marker_args)
 
-class BarPlotter(CategoryPlotter):
-      def process_calc(self, info):
+            self.plot_markers(position, composite_label, row, marker_args, aesthetic_args=aesthetic_args)
+            self.label(row, ax, aesthetic_args, is_last)
 
-        self.cat_width = self.graph_opts.get('cat_width', .2)
+        # Set x-ticks and labels
+        positions = list(self.label_to_pos.values())
+        labels = [smart_title_case(' '.join(label)) for label in self.label_to_pos.keys()]
+        ax.set_xticks(positions)
+        ax.set_xticklabels(labels)
+
+class CategoricalScatterPlotter(CategoryPlotter):
+
+    def plot_markers(self, position, _, row, marker_args, aesthetic_args=None):
+        scatter_vals = row[row['attr']]
+        ax = self.active_acks
+        # Generate horizontal jitter
+        jitter_strength = aesthetic_args.get('max_jitter', self.cat_width/6)
+        jitter = np.random.uniform(-jitter_strength, jitter_strength, size=len(scatter_vals))
+        x_positions = position + jitter
+        # Plot with jittered positions
+        ax.scatter(x_positions, scatter_vals, **marker_args)
+        # Retrieve positions and bar width
+        cat_width = self.cat_width
+        if 'background_color' in aesthetic_args:
+            background_color, alpha = aesthetic_args.pop('background_color')
+            ax.axvspan(
+                position - cat_width / 2,
+                position + cat_width / 2,
+                facecolor=background_color, alpha=alpha)
+    
+
+class CategoricalLinePlotter(CategoryPlotter):
+
+    def plot_markers(self, position, _, row, marker_args, aesthetic_args=None):
+        ax = self.active_acks
+        bar_width = self.cat_width
+        divisor = aesthetic_args.get('divisor', 2)
+        width = bar_width / divisor
+        ax.hlines(
+            row['mean'],
+            position - width / 2,
+            position + width / 2,
+            **marker_args)
+
         
-        for row in info:
-            aesthetic_args = self.get_aesthetic_args(row)
-            position = self.find_position(row, self.active_spec)
-            bar = self.active_acks.bar(position, getattr(row['data_source'], row['attr']), 
-                                     self.cat_width, **aesthetic_args)
-            
+class BarPlotter(CategoryPlotter):
+   
+    def plot_markers(self, position, _, row, marker_args, aesthetic_args=None):
+        a = 'foo'
+        self.active_acks.bar(position, row[row['attr']], **marker_args)
+        
 
 class PeriStimulusPlotter(FeaturePlotter):
     
@@ -442,7 +397,7 @@ class PeriStimulusPlotter(FeaturePlotter):
                 self.plot_row(ax, data, row, i, aesthetic_args, data_source=row['data_source'])
                 #self.set_x_ticks(ax, data, x_slice)
                 self.place_indicator(ax, aesthetic_args)
-                self.label(row, ax, is_last)   
+                self.label(row, ax, aesthetic_args, is_last)   
                 
     def set_x_ticks(self, ax, data, x_slice):
 
@@ -493,13 +448,6 @@ class PeriStimulusPlotter(FeaturePlotter):
                     facecolor='gray', alpha=0.3,
                     transform=transform  # Apply the transformation
                 ))
-
-
-
-                
-            
-    
-
                 
 
 class RasterPlotter(PeriStimulusPlotter):
@@ -539,16 +487,10 @@ class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
         self.plot_hist(x, y, self.calc_opts['bin_size'], ax, aesthetic_args)
         
 
-
 PLOT_TYPES = {'categorical_scatter': CategoricalScatterPlotter,
               'line_plot': LinePlotter,
+              'bar_plot': BarPlotter,
               'waveform': WaveformPlotter,
               'categorical_line': CategoricalLinePlotter,
               'raster': RasterPlotter,
               'psth': PeriStimulusHistogramPlotter}  
-
-
-   
-
-
-

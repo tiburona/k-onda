@@ -411,7 +411,7 @@ group_psth_plots = {
                                 'indicator': {'type': 'patch', 'when': (0, .05)},
                                'label': {
                                    'ax': {'title': ['group', 'neuron_type']},
-                                   'component': {'axis': ('Time (s)', 'Proportion of Pips Upregulated',)}}},
+                                   'component': {'axis': ('Time (s)', 'Normalized Firing Rate',)}}},
                     'override': {'group.control': {'marker': {'color': {'purple'}}}, 
                                  'group.defeat': {'marker': {'color': {'orange'}}}           
                     }},
@@ -436,9 +436,65 @@ GROUP_PSTH_OPTS = {
     
     'procedure': 'make_plots',
     'graph_opts': group_psth_plots,
-    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'proportion',  
+    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'psth',  
                   'base': 'event', 'bin_size': .01, 
                    'periods': {'tone': {'event_pre_post': (.05, .65)}},
+                  'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
+                  'filter': {'animal': {'identifier': ('in', STANDARD_ANIMALS)}}
+    }
+}
+
+
+mrl_plot = {
+    'graph_dir': '/Users/katie/likhtik/CH27',
+    'fname': 'bla_theta_2_MRL',
+    'plot_spec': {
+        'section': {
+            'aesthetics': {
+                'default': {'border': {'top': 'FFF', 'right': 'FFF'}}
+                },
+            'divisions': {
+            'neuron_type': {
+                'members': ['IN', 'PN'], 
+                'dim': 0}},
+            'segment': {
+                'aesthetics': {'default': {'cat_width': 1.5, 
+                                           'label': {'component': {'axis': ('', 'MRL')},
+                                                     'ax': {'title': ['neuron_type']}}}},
+                'layers': [
+                    {'plot_type': 'bar_plot', 
+                    'aesthetics': {'group': {'defeat': {'marker': {'color': 'orange'}},
+                                             'control': {'marker': {'color': 'purple'}}},
+                                   'period_type': {'tone': {'marker': {'hatch': '/'}}}},
+                    'attr': 'calc'},
+                    {'plot_type': 'categorical_scatter', 
+                    'attr': 'grandchildren_scatter', 
+                    'aesthetics': {'invariant': {'marker': {'color': 'gray'}}},
+                    }, 
+                    {'plot_type': 'categorical_scatter',
+                     'aesthetics': {'invariant': {'marker': {'color': 'black'}}},
+                     'attr': 'scatter'}],
+                'divisions': {
+                    'data_source': {
+                        'type': 'group',
+                        'members': ['defeat', 'control'],
+                        'spacing': 1.5},
+                    'period_type': {
+                        'members': ['pretone', 'tone'],
+                        'spacing': 1
+                    }}
+                }
+        }}
+}
+
+MRL_OPTS = {
+    
+    'procedure': 'make_plots',
+    'graph_opts': mrl_plot,
+    'calc_opts': {'kind_of_data': 'mrl', 'calc_type': 'mrl',  
+                  'base': 'event', 'frequency_band': 'theta_2', 'brain_region': 'pl',
+                   'periods': {'tone': {'event_pre_post': (0, 1)}, 'pretone': {'event_pre_post': (0, 1)}}, 
+                   'lfp_padding': [0, 0],
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
                   'filter': {'animal': {'identifier': ('in', STANDARD_ANIMALS)}}
     }

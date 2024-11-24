@@ -1,213 +1,10 @@
 import numpy as np
-from copy import deepcopy
 from collections import defaultdict
-import pickle
-import json
-import os
-
-from utils import cache_method, always_last, operations
-from math_functions import sem
 
 
-class Base:
-
-    _calc_opts = {}
-    _cache = defaultdict(dict)
-    _filter = {}
-    _selected_period_type = ''
-    _selected_neuron_type = ''
-    original_periods = None
-
-    @property
-    def calc_opts(self):
-        return Base._calc_opts  
-    
-    @calc_opts.setter
-    def calc_opts(self, value):
-        Base._calc_opts = value
-        self.set_filter_from_calc_opts()
-        Base._cache = defaultdict(dict)
-
-    @property
-    def cache(self):
-        return Base._cache
-    
-    def clear_cache(self):
-        Base._cache = defaultdict(dict)
-
-    @property
-    def filter(self):
-        return Base._filter
-    
-    @filter.setter
-    def filter(self, filter):
-        Base._filter = filter
-
-    def set_filter_from_calc_opts(self):
-        self.filter = defaultdict(lambda: defaultdict(tuple))
-        filters = self.calc_opts.get('filter', {})
-        if isinstance(filters, list):
-            for filter in filters:
-                self.add_to_filters(self.parse_natural_language_filter(filter))
-        else:
-            for object_type in filters:
-                object_filters = self.calc_opts['filter'][object_type]
-                for property in object_filters:
-                    self.filter[object_type][property] = object_filters[property]   
-            if self.calc_opts.get('validate_events'):
-                self.filter['event']['is_valid'] = ('==', True)
-
-    def add_to_filters(self, obj_name, attr, operator, target_val):
-         self.filter[obj_name][attr] = (operator, target_val)
-
-    def del_from_filters(self, obj_name, attr):
-        del self.filter[obj_name][attr]
-    
-    @staticmethod
-    def parse_natural_language_filter(filter):
-        # natural language filter should be a tubple like:
-        # ex1: ('for animals, identifier must be in', ['animal1', 'animal2'])
-        # ex2L ('for units, quality must be !=', '3')] 
-        condition, target_val = filter
-        split_condition = condition.split(' ')
-        obj_name = split_condition[1][:-2]
-        attr = split_condition[3]
-        be_index = condition.find('be')
-        operator = condition[be_index + 3:]
-        return obj_name, attr, operator, target_val
-    
-    @property
-    def kind_of_data(self):
-        return self.calc_opts.get('kind_of_data')
-
-    @property
-    def calc_type(self):
-        return self.calc_opts['calc_type']
-
-    @calc_type.setter
-    def calc_type(self, calc_type):
-        self.calc_opts['calc_type'] = calc_type
-
-    @property
-    def selected_neuron_type(self):
-        return Base._selected_neuron_type
-
-    @selected_neuron_type.setter
-    def selected_neuron_type(self, neuron_type):
-        Base._selected_neuron_type = neuron_type
-
-    @property
-    def selected_period_type(self):
-        return Base._selected_period_type
-        
-    @selected_period_type.setter
-    def selected_period_type(self, period_type):
-        Base._selected_period_type = period_type
-
-    @property
-    def selected_period_group(self):
-        return tuple(self.calc_opts['periods'][self.selected_period_type])
-    
-    @selected_period_group.setter
-    def selected_period_group(self, period_group):
-        self.calc_opts['periods'][self.selected_period_type] = period_group
-    
-    @property
-    def current_frequency_band(self):
-        return self.calc_opts['frequency_band']
-
-    @current_frequency_band.setter
-    def current_frequency_band(self, frequency_band):
-        self.calc_opts['frequency_band'] = frequency_band
-
-    @property
-    def current_brain_region(self):
-        return self.calc_opts.get('brain_region')
-    
-    @current_brain_region.setter
-    def current_brain_region(self, brain_region):
-        self.calc_opts['brain_region'] = brain_region
-
-    @property
-    def current_region_set(self):
-        return self.calc_opts.get('region_set')
-
-    @current_region_set.setter
-    def current_region_set(self, region_set):
-        self.calc_opts['region_set'] = region_set
-
-    @property
-    def freq_range(self):
-        if isinstance(self.current_frequency_band, type('str')):
-            return self.experiment.info['frequency_bands'][self.current_frequency_band]
-        else:
-            return self.current_frequency_band
-        
-    def get_data_sources(self, data_object_type=None, identifiers=None, identifier=None):
-        if data_object_type is None:
-            data_object_type = self.calc_opts['base']
-            if data_object_type in ['period', 'event']:
-                data_object_type = f"{self.kind_of_data}_{data_object_type}"
-        data_sources = getattr(self.experiment, f"all_{data_object_type}s")
-        if identifier and 'all' in identifier:
-            return data_sources
-        if identifiers:
-            return [source for source in data_sources if source.identifier in identifiers]
-        if identifier:
-            return [source for source in data_sources if source.identifier == identifier][0]
-
-    @property
-    def pre_event(self):
-        return self.get_pre_post(0, 'event')
-    
-    @property
-    def post_event(self):
-        return self.get_pre_post(1, 'event')
-    
-    @property
-    def pre_period(self):
-        return self.get_pre_post(0, 'period')
-    
-    @property
-    def post_period(self):
-        return self.get_pre_post(1, 'period')
-    
-    def get_pre_post(self, time, object_type):
-        return self.calc_opts.get('periods', {}).get(
-            self.selected_period_type, {}).get(f'{object_type}_pre_post', (0, 0))[time]
-
-    
-    @property
-    def bin_size(self):
-        return self.calc_opts.get('bin_size', .01)
-    
-    def load(self, calc_name, other_identifiers):
-        store = self.calc_opts.get('store', 'pkl')
-        d = os.path.join(self.calc_opts['data_path'], self.kind_of_data)
-        store_dir = os.path.join(d, f"{calc_name}_{store}s")
-        for p in [d, store_dir]:
-            if not os.path.exists(p):
-                os.mkdir(p)
-        store_path = os.path.join(store_dir, '_'.join(other_identifiers) + f".{store}")
-        if os.path.exists(store_path) and not self.calc_opts.get('force_recalc'):
-            with open(store_path, 'rb') as f:
-                if store == 'pkl':
-                    return_val = pickle.load(f)
-                else:
-                    return_val = json.load(f)
-                return True, return_val, store_path
-        else:
-            return False, None, store_path
-
-    def save(self, result, store_path):
-        store = self.calc_opts.get('store', 'pkl')
-        mode = 'wb' if store == 'pkl' else 'w'
-        with open(store_path, mode) as f:
-            if store == 'pkl':
-                return pickle.dump(result, f)
-            else:
-                result_str = json.dumps([arr.tolist() for arr in result])
-                f.write(result_str)
+from base.base import Base
+from utils.utils import cache_method, always_last, operations
+from utils.math_functions import sem
 
 
 class Data(Base):
@@ -222,9 +19,13 @@ class Data(Base):
     def get_calc(self, calc_type=None):
         if calc_type is None:
             calc_type = self.calc_type
+            self.calc_mode = 'normal'  # the other cases set calc_mode later
+            return getattr(self, f"get_{calc_type}")()
         if self.calc_opts.get('percent_change'):
             return self.percent_change
-        return getattr(self, f"get_{calc_type}")()
+        elif self.calc_opts.get('evoked'):
+            return self.evoked
+        
 
     @property
     def calc(self):
@@ -348,7 +149,7 @@ class Data(Base):
         
     @property
     def mean(self):
-        return np.mean(self.refer(self.calc))
+        return np.mean(self.calc)
     
     @property
     def sem(self):
@@ -526,13 +327,6 @@ class Data(Base):
                 child.get_descendants(descendants=descendants)
 
         return descendants
-    
-    def get_reference_calc(self, reference_period_type):
-        orig_period_type = self.selected_period_type
-        self.selected_period_type = reference_period_type
-        reference_calc = getattr(self, f"get_{self.calc_type}")()
-        self.selected_period_type = orig_period_type
-        return reference_calc
 
     @property
     def has_reference(self):
@@ -540,37 +334,39 @@ class Data(Base):
     
     @property
     def percent_change(self):
-        if np.mean(self.get_percent_change()) > 400:
-            a = 'foo'
         return self.get_percent_change()
     
-    def get_percent_change(self):  
-        percent_change = self.calc_opts.get('percent_change', {'level': 'period'})
-        level = percent_change['level']
-        # we are currently at a higher tree level than the % change ref level
+    @property
+    def evoked(self):
+        return self.get_evoked()
+    
+    def get_evoked(self):
+        fun = lambda orig, ref: orig - ref
+        return self.get_comparison_calc('evoked', fun)
+
+    def get_percent_change(self):
+        fun = lambda orig, ref: orig/np.mean(ref) * 100 - 100
+        return self.get_comparison_calc('percent_change', fun)
+
+    def get_comparison_calc(self, comparison, fun):
+        # This complexity is solving problems like "we'd like to get see a value
+        # for a period with a reference of its own parent unit without triggering
+        # infinite recursion"
+        self.calc_mode = comparison
+        comparison_dict = self.calc_opts.get(comparison, {'level': 'period'})
+        level = comparison_dict['level']
         if level not in self.hierarchy or (
             self.hierarchy.index(self.name) < self.hierarchy.index(level)):
-            return self.get_average('get_percent_change', stop_at=level)
+            return self.get_average(f'get_{comparison}', stop_at=level)
         # we are currently at a lower tree level than the % change ref level
         elif self.hierarchy.index(self.name) > self.hierarchy.index(level):
             ref_obj = [anc for anc in self.ancestors if anc.name == level][0]
-            ref = self.get_ref(ref_obj, percent_change['reference'])
+            ref = self.get_ref(ref_obj, comparison_dict['reference'])
         # we are currently at the % change ref level
         else: 
-            ref = self.get_ref(self, percent_change['reference'])
-        if self.name == 'period':
-            print("animal is ", self.unit.animal.identifier)
-            print("unit is ", self.unit, " ", self.unit.identifier)
-            print("unit category is ", self.unit.category)
-            print("selected period type is", self.selected_period_type)
-            print('identifier is ', self.identifier)
-
+            ref = self.get_ref(self, comparison_dict['reference'])
         orig = getattr(self, f"get_{self.calc_type}")()
-        to_return = orig/np.mean(ref) * 100 - 100
-        if self.name == 'period':
-            print("percent change is ", np.mean(to_return))
-        
-        return to_return
+        return fun(orig, ref)
 
     def get_ref(self, obj, reference_period_type):
         if obj.has_reference:
@@ -578,14 +374,12 @@ class Data(Base):
         else:
             return obj.get_reference_calc(reference_period_type)
         
-    def refer(self, data, calc_type=None):
-        if not calc_type:
-            calc_type = self.calc_type
-        if (self.calc_opts.get('evoked') 
-            and hasattr(self, 'reference')
-            and self.reference is not None):
-            return data - self.reference.get_data(calc_type)
-        else:
-            return data
+    def get_reference_calc(self, reference_period_type):
+        orig_period_type = self.selected_period_type
+        self.selected_period_type = reference_period_type
+        reference_calc = getattr(self, f"get_{self.calc_type}")()
+        self.selected_period_type = orig_period_type
+        return reference_calc
+        
         
   

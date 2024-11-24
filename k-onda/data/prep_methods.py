@@ -1,7 +1,7 @@
 from copy import deepcopy
 import os
 from neo.rawio import BlackrockRawIO
-from matlab_interface import MatlabInterface
+from interfaces.matlab_interface import MatlabInterface
 
 
 class PrepMethods:

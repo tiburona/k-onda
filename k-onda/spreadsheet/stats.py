@@ -5,7 +5,7 @@ import os
 from copy import deepcopy
 import random
 import string
-from base_data import Base
+from data.data import Base
 from functools import reduce
 
 

@@ -1,7 +1,6 @@
-from plotter_base import PlotterBase
-from subplotter import Subplotter, BrokenAxes, AxWrapper
+from plotting.plotter_base import PlotterBase
+from plotting.subplotter import Subplotter
 
-import numpy as np
 from copy import deepcopy
 from functools import reduce
 import operator
@@ -52,26 +51,22 @@ class Partition(PlotterBase):
         self.process_divider(*next(iter(self.spec['divisions'].items())), self.spec['divisions'])
 
     def assign_data_sources(self):
-        divider = self.spec['divisions'].get('data_source', {})
-
+        divider = self.spec['divisions'].get('data_source')
+        if not divider:
+            return
         if 'all' in divider.get('members', []):
-            divider['members'] = [
-                source for source in getattr(self.experiment, divider['members']) 
-                    if source.include()]
-           
-        else:
-            members = self.get_data_sources(
-                **{k: divider[v] 
-                   for k, v in zip(['identifiers', 'data_object_type'], ['members', 'type'])})
-            divider['members'] = members
+            divider['data_sources'] = [s.identifier for s in getattr(self.experiment, divider['members'][0])]
             
     def process_divider(self, divider_type, current_divider, divisions, info=None):
-        
+
         info = info or {}
         
         for i, member in enumerate(current_divider['members']):
-            
+
+           
             info[divider_type] = member
+            if divider_type == 'data_source':
+                info['data_object_type'] = current_divider['type']
                 
             self.set_dims(current_divider, i)
             
@@ -93,18 +88,23 @@ class Partition(PlotterBase):
                     processor.start()
 
     def get_calcs(self):
+        print("get calcs is called")
+        print(self.info_by_division)
         for d in self.info_by_division:
             # Set selected attributes if applicable
             for key in ['neuron_type', 'period_type', 'period_group']:
                 if key in d:
                     setattr(self, f"selected_{key}", d[key])
+
+            data_source = self.get_data_sources(data_object_type = d['data_object_type'], 
+                                                identifier=d['data_source'])
             
             # Determine the list of attributes, with a fallback if none are found
             attrs = [layer['attr'] for layer in self.layers if 'attr' in layer] or [
                 self.active_spec.get('attr', 'calc')]
            
-            d.update({attr: getattr(d['data_source'], attr) for attr in attrs})
-            d.update({d['data_source'].name: d['data_source'].identifier})
+            d.update({attr: getattr(data_source, attr) for attr in attrs})
+            d.update({data_source.name: data_source.identifier})
 
 class Section(Partition):
     def __init__(self, origin_plotter, parent_plotter=None,
@@ -133,10 +133,10 @@ class Section(Partition):
             dim = current_divider['dim']
             self.current_index[dim] = self.starting_index[dim] + i
 
-
     def wrap_up(self, current_divider, i):
         print("starting_index", self.starting_index)
         print("current_index", self.current_index)
+        print("in section wrap up", self.info_by_division)
         self.remaining_calls -= 1
         self.active_acks = self.active_plotter.axes[*self.current_index]
         self.active_plotter.apply_aesthetics(self.aesthetics)

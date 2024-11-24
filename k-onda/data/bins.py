@@ -1,7 +1,7 @@
 from copy import copy
 import numpy as np
 
-from base_data import Data
+from data.data import Data
     
 
 class Bin(Data):

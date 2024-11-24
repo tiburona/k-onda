@@ -1,12 +1,13 @@
 from collections import defaultdict
 
-from base_data import Data
-from lfp import LFPPeriod, LFPMethods, LFPPrepMethods
-from spike import SpikePeriod, SpikeMethods, SpikePrepMethods
-from period_constructor import PeriodConstructor
-from neuron_classifier import NeuronClassifier
-from bins import BinMethods
-from utils import formatted_now
+from data.data import Data
+from calc.lfp.lfp import LFPPeriod, LFPMethods, LFPPrepMethods
+from calc.spike.spike import SpikePeriod, SpikeMethods, SpikePrepMethods
+from calc.mrl.mrl import MRLPrepMethods, MRLMethods
+from data.period_constructor import PeriodConstructor
+from calc.spike.neuron_classifier import NeuronClassifier
+from data.bins import BinMethods
+from utils.utils import formatted_now
 
 
 class Experiment(Data, SpikePrepMethods):
@@ -75,14 +76,29 @@ class Experiment(Data, SpikePrepMethods):
             entity.experiment = self
 
     def initialize_data(self):
-        
+        getattr(self, f"{self.kind_of_data}_prep")()
+
+    def spike_prep(self):
+        self.prep_animals()
+        self.neuron_classifier.classify()
+    
+    def lfp_prep(self):
+        self.prep_animals()
+
+    def mrl_prep(self):
+        self.calc_opts['kind_of_data'] = 'spike'
+        self.spike_prep()
+        self.calc_opts['kind_of_data'] = 'lfp'
+        self.lfp_prep()
+        self.calc_opts['kind_of_data'] = 'mrl'
+        self.prep_animals()
+
+    def prep_animals(self):
         for animal in self.all_animals:
             if not animal.include():
                 continue
             getattr(animal, f"{self.kind_of_data}_prep")()
-        if self.kind_of_data == 'spike':
-            self.neuron_classifier.classify()
-
+          
     def validate_lfp_events(self, calc_opts):
         self.calc_opts = calc_opts
         self.initialize_data()
@@ -90,7 +106,7 @@ class Experiment(Data, SpikePrepMethods):
             animal.validate_events()
         
 
-class Group(Data, SpikeMethods, LFPMethods, BinMethods):
+class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
     _name = 'group'
 
     def __init__(self, name, animals=None, experiment=None):
@@ -104,8 +120,7 @@ class Group(Data, SpikeMethods, LFPMethods, BinMethods):
         self.children = self.animals
 
 
-class Animal(Data, PeriodConstructor, SpikePrepMethods, SpikeMethods, LFPPrepMethods, 
-             LFPMethods, BinMethods):
+class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, MRLMethods, BinMethods):
     _name = 'animal'
 
     def __init__(self, identifier, condition, animal_info, experiment=None, neuron_types=None):
@@ -125,7 +140,7 @@ class Animal(Data, PeriodConstructor, SpikePrepMethods, SpikeMethods, LFPPrepMet
         self.units = defaultdict(list)
         self.neurons = defaultdict(list)
         self.lfp_periods = defaultdict(list)
-        self.mrl_calculators = defaultdict(list)
+        self.mrl_calculators = defaultdict(lambda: defaultdict(list))
         self.granger_calculators = defaultdict(list)
         self.coherence_calculators = defaultdict(list)
         self.correlation_calculators = defaultdict(list)

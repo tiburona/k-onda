@@ -1,5 +1,5 @@
-from base_data import Data
-from bins import BinMethods
+from data.data import Data
+from data.bins import BinMethods
 
 
 class Period(Data, BinMethods):

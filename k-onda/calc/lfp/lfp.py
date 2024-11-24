@@ -1,33 +1,23 @@
-from period_event import Period, Event
+from data.period_event import Period, Event
 import numpy as np
-from matlab_interface import MatlabInterface
-from math_functions import filter_60_hz, divide_by_rms, downsample
+from interfaces.matlab_interface import MatlabInterface
+from utils.math_functions import filter_60_hz, divide_by_rms, downsample
 from copy import deepcopy
 from neo.rawio import BlackrockRawIO
 import os
-from prep_methods import PrepMethods
+from data.prep_methods import PrepMethods
 
 
 class LFPPrepMethods(PrepMethods):
 
     def select_lfp_children(self):
-        if self.calc_type == 'power':
-            attr = 'lfp_periods'
-        else:
-            attr = f"{self.calc_type}_calculators"
-        return self.select_children(attr)
+        return self.select_children('lfp_periods')
 
     def lfp_prep(self):
         self.prepare_periods()
-        if self.calc_type != 'power':
-            getattr(self, f"prepare_{self.calc_type}_calculators")()
 
     def get_raw_lfp(self):
-        path_constructor = deepcopy(self.experiment.info['lfp_path_constructor'])
-        if path_constructor[-1] == 'identifier':
-            path_constructor[-1] = self.identifier
-        file_path = os.path.join(self.experiment.info['lfp_root'], self.identifier, 
-                                 *path_constructor)
+        file_path = self.construct_path('lfp')
         try:
             reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
         except OSError:
@@ -48,8 +38,8 @@ class LFPPrepMethods(PrepMethods):
         for region, region_data in lfp_from_stereotrodes_info['electrodes'].items():
             electrodes = region_data if isinstance(region_data, list) else region_data[animal.identifier]
             data = np.mean([reader.nsx_datas[nsx_num][0][:, electrode] for electrode in electrodes], axis=0)
-            downsampled_data = downsample(data, self.experiment.info['sampling_rate'], 
-                                          self.experiment.info['lfp_sampling_rate'])
+            downsampled_data = downsample(data, self.experiment.exp_info['sampling_rate'], 
+                                          self.experiment.exp_info['lfp_sampling_rate'])
             data_to_return[region] = downsampled_data
         return data_to_return
 
@@ -264,4 +254,4 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
     def get_power(self):
         return self.refer(np.array(self.sliced_spectrogram)[:, self.mask])
     
-    
+

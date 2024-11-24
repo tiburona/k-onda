@@ -1,9 +1,8 @@
-from ast import Sub
-from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
-from plotter_base import PlotterBase
-from plotters import Figurer, ExecutivePlotter
-from subplotter import Subplotter, Figurer
+
+from plotting.plotter_base import PlotterBase
+from plotting.plotters import Figurer, ExecutivePlotter
+from plotting.subplotter import Subplotter, Figurer
 
 
 

@@ -3,7 +3,7 @@ from sklearn.preprocessing import StandardScaler
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
-from utils import operations
+from utils.utils import operations
 
 
 class NeuronClassifier:
@@ -34,21 +34,17 @@ class NeuronClassifier:
     def classify(self):
         saved_calc_exists, categorized_neurons, pickle_path = self.experiment.load(
             self.experiment.construct_path('dest'), 'pkl')
-        if saved_calc_exists:
-            self.apply_categorization(categorized_neurons)
-        else:
-            self.categorize_neurons(pickle_path)
-        for animal in self.experiment.all_animals:
-            for unit in animal.all_units:
-                if getattr(unit, 'neuron_type'):
-                    animal.neurons[unit.neuron_type].append(unit)
+        if not saved_calc_exists:
+            categorized_neurons = self.categorize_neurons(pickle_path)
+        self.apply_categorization(categorized_neurons)
 
     def apply_categorization(self, categorized_neurons):
         for animal_id, neurons in categorized_neurons.items():
             animal = self.experiment.get_data_sources('animal', identifier=animal_id)
-            for neuron, neuron_type in neurons.items():
-                unit = animal.get_child_by_identifier(neuron)
+            for unit in animal.units['good']:
+                neuron_type = neurons[unit.identifier]
                 unit.neuron_type = neuron_type
+                animal.neurons[neuron_type].append(unit)
         self.experiment.state['categorized_neurons'] = True
    
     def get_input_to_kmeans(self, characteristic):
@@ -90,9 +86,14 @@ class NeuronClassifier:
         if self.kmeans:
             self.X_original, self.labels = self.run_kmeans()
 
-        # Assign neuron types based on k-means results and apply cutoffs
-        for unit, label in zip(self.units, self.labels):
-            unit.neuron_type = label
+            # Assign neuron types based on k-means results and apply cutoffs
+            for unit, label in zip(self.units, self.labels):
+                unit.neuron_type = label
+
+        else:
+            _, self.X_original = zip(*[self.get_input_to_kmeans(char) 
+                                     for char in self.characteristics])
+            self.labels = [None for _ in self.units]
 
         done = False
 

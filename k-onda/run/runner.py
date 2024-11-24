@@ -2,11 +2,11 @@ import json
 import os
 
 
-from opts_validator import OptsValidator
-from stats import Stats
-from layout import Layout
-from plotters import ExecutivePlotter
-from initialize_experiment import Initializer
+from run.opts_validator import OptsValidator
+from spreadsheet.stats import Stats
+from plotting.layout import Layout
+from plotting.plotters import ExecutivePlotter
+from run.initialize_experiment import Initializer
 
 
 class Runner(OptsValidator):

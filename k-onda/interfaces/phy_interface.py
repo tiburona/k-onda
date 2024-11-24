@@ -33,7 +33,7 @@ class PhyInterface:
             tsv_file = csv.DictReader(file, delimiter='\t')
 
             # Extract relevant fields: 'cluster_id' and 'group'
-            return {int(row['cluster_id']): {'animal': self.animal, 'group': row['group'], 
+            return {int(row['cluster_id']): {'animal': self.animal.identifier, 'group': row['group'], 
                                                   'cluster': int(row['cluster_id'])}
                 for row in tsv_file if row['group'] != 'noise'}
 

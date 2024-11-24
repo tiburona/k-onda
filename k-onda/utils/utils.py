@@ -226,6 +226,19 @@ def save(result, store_path, store_type):
             result_str = json.dumps([arr.tolist() for arr in result])
             f.write(result_str)
 
+    
+def recursive_update(d1, d2):
+    """
+    Recursively update dictionary d1 with values from dictionary d2.
+    If a key in d1 and d2 has a dictionary as a value, merge them recursively.
+    """
+    for key, value in d2.items():
+        if isinstance(value, dict) and key in d1 and isinstance(d1[key], dict):
+            recursive_update(d1[key], value)  # Recursively update inner dictionary
+        else:
+            d1[key] = value  # Overwrite or add new key-value pair
+    return d1
+
 
 operations = {
             '==': lambda a, b: a == b,

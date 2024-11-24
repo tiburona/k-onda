@@ -1,24 +1,14 @@
-import os
 import json
-import numpy as np
-from neo.rawio import BlackrockRawIO
-from copy import deepcopy
+
 import csv
 from scipy.signal import firwin, lfilter
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
-from collections import defaultdict
-from utils import save, load
-from phy_interface import PhyInterface
 import h5py
 
 
-from experiment_group_animal import Experiment, Group, Animal
-from spike import Unit
-from behavior import Behavior
-from utils import group_to_dict
-from prep_methods import PrepMethods
+from data.experiment_group_animal import Experiment, Group, Animal
+from calc.behavior.behavior import Behavior
+from utils.utils import group_to_dict
+from data.prep_methods import PrepMethods
 
 
 class Initializer(PrepMethods):

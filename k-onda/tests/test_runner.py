@@ -1,7 +1,7 @@
 import os
 import csv
 import json
-from runner import Runner
+from run.runner import Runner
 
 
 TEST_PSTH_OPTS = {

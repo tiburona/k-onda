@@ -86,6 +86,11 @@ exp_info = {}
 exp_info['animals'] = animal_info_list
 exp_info['conditions'] = ['control', 'defeat']
 exp_info['sampling_rate'] = 30000
+exp_info['lfp_sampling_rate'] = 2000
+exp_info['frequency_bands'] = {
+    'theta_1': (0, 4),
+    'theta_2': (8, 12)
+}
 exp_info['identifier'] = 'IG_SAFETY_RECALL'
 exp_info['path_constructors'] = {
     'nev' : 
@@ -93,8 +98,10 @@ exp_info['path_constructors'] = {
     'phy': 
         {'template': '/Volumes/SanDisk/single_cell_data_ks_22/{identifier}', 'fields': ['identifier']},
     'dest':
-        {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/{identifier}', 'fields': ['identifier']}   
-        }
+        {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/{identifier}', 'fields': ['identifier']},
+    'lfp': 
+        {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/{identifier}/{identifier}', 'fields': ['identifier']}  
+}
 
     
 exp_info['categorize_neurons'] = {
@@ -103,8 +110,8 @@ exp_info['categorize_neurons'] = {
     'neuron_colors': ['blue', 'red'],
     'characteristics': ['fwhm_microseconds', 'firing_rate'],
     'sort_on': 'fwhm_microseconds', 
-    'plot': ['fwhm_microseconds', 'firing_rate']}
-    #'cutoffs': [('fwhm_microseconds', '>', 300, 'PN')]}
+    'plot': ['fwhm_microseconds', 'firing_rate'],
+    'cutoffs': [('fwhm_microseconds', '>', 300, 'PN'), ('fwhm_microseconds', '<=', 300, 'IN')]}
 
 
 with open(os.path.join(root, 'init_config.json'), 'w', encoding='utf-8') as file:

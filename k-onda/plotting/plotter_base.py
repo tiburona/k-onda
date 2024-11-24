@@ -1,4 +1,4 @@
-from base_data import Base
+from base.base import Base
 
 class PlotterBase(Base):
     _experiment = None

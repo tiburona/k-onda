@@ -9,7 +9,7 @@ from scipy.spatial.distance import mahalanobis
 
 
 from phy_interface import PhyInterface
-from math_functions import get_fwhm
+from utils.math_functions import get_fwhm
 
 ROOT_DIR = r"D:\back_up_lenovo\data\Single_Cell_Data_No_Uv_Diff_Scale"
 STANDARD_ANIMALS = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG156', 'IG158', 'IG177', 'IG179']

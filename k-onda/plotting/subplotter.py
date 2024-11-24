@@ -1,8 +1,9 @@
 import numpy as np
-from plotter_base import PlotterBase
+from plotting.plotter_base import PlotterBase
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from copy import copy
+from utils.utils import safe_get
 
 
 class Figurer(PlotterBase):
@@ -177,7 +178,7 @@ class Subplotter(PlotterBase):
                 ax.left_edge = True
 
     def apply_aesthetics(self, aesthetics):
-        for key, val in aesthetics.get('ax', {}).get('border', {}).items():
+        for key, val in safe_get(aesthetics, ['default', 'border'], default={}).items():
             spine, tick, label = (val[i] in ['T', True, 'True'] for i in range(3))
             for i, ax in enumerate(self.active_acks.ax_list):
                 break_axis = list(self.active_spec.get('break_axis', {}).keys())
