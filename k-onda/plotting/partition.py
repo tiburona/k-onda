@@ -88,8 +88,6 @@ class Partition(PlotterBase):
                     processor.start()
 
     def get_calcs(self):
-        print("get calcs is called")
-        print(self.info_by_division)
         for d in self.info_by_division:
             # Set selected attributes if applicable
             for key in ['neuron_type', 'period_type', 'period_group']:
@@ -134,20 +132,14 @@ class Section(Partition):
             self.current_index[dim] = self.starting_index[dim] + i
 
     def wrap_up(self, current_divider, i):
-        print("starting_index", self.starting_index)
-        print("current_index", self.current_index)
-        print("in section wrap up", self.info_by_division)
         self.remaining_calls -= 1
         self.active_acks = self.active_plotter.axes[*self.current_index]
         self.active_plotter.apply_aesthetics(self.aesthetics)
-        
-        if self.next:
-            # do next thing
-            pass
-        else:
+        self.origin_plotter.label(self.info_by_division[-1], self.active_acks, self.aesthetics, 
+                                  self.remaining_calls)
+
+        if not self.next:
             self.get_calcs()
-            if self.last:
-                print("self.last!")
             self.origin_plotter.delegate([self.info_by_division.pop()], is_last=self.last)
 
 
@@ -168,7 +160,8 @@ class Segment(Partition):
     def wrap_up(self, current_divider, i): 
         self.remaining_calls -= 1
         self.get_calcs()
-        if i == len(current_divider['members']) - 1:
+        if self.last:
+        #if i == len(current_divider['members']) - 1:
             self.origin_plotter.delegate(self.info_by_division, is_last=self.last)
             
 

@@ -447,20 +447,20 @@ GROUP_PSTH_OPTS = {
 
 mrl_plot = {
     'graph_dir': '/Users/katie/likhtik/CH27',
-    'fname': 'bla_theta_2_MRL',
+    'fname': 'pl_theta_1_MRL',
     'plot_spec': {
         'section': {
             'aesthetics': {
-                'default': {'border': {'top': 'FFF', 'right': 'FFF'}}
+                'default': {'border': {'top': 'FFF', 'right': 'FFF'}},
+                'label': {'component': {'axis': ('', 'MRL')}, 
+                          'ax': {'title': ['neuron_type']}}
                 },
             'divisions': {
             'neuron_type': {
                 'members': ['IN', 'PN'], 
                 'dim': 0}},
             'segment': {
-                'aesthetics': {'default': {'cat_width': 1.5, 
-                                           'label': {'component': {'axis': ('', 'MRL')},
-                                                     'ax': {'title': ['neuron_type']}}}},
+                'aesthetics': {'default': {'cat_width': 1.5}},
                 'layers': [
                     {'plot_type': 'bar_plot', 
                     'aesthetics': {'group': {'defeat': {'marker': {'color': 'orange'}},
@@ -492,7 +492,7 @@ MRL_OPTS = {
     'procedure': 'make_plots',
     'graph_opts': mrl_plot,
     'calc_opts': {'kind_of_data': 'mrl', 'calc_type': 'mrl',  
-                  'base': 'event', 'frequency_band': 'theta_2', 'brain_region': 'pl',
+                  'base': 'event', 'frequency_band': 'theta_1', 'brain_region': 'pl',
                    'periods': {'tone': {'event_pre_post': (0, 1)}, 'pretone': {'event_pre_post': (0, 1)}}, 
                    'lfp_padding': [0, 0],
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',

@@ -1,6 +1,8 @@
 from base.base import Base
+from plotting.label import LabelMethods
 
-class PlotterBase(Base):
+
+class PlotterBase(Base, LabelMethods):
     _experiment = None
     _origin_plotter = None
     _active_plotter = None

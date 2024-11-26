@@ -146,10 +146,10 @@ def smart_title_case(s):
     return title
 
 
-
 def ac_str(s):
     for (old, new) in [('pd', 'Pandas'), ('np', 'NumPy'), ('ml', 'Matlab')]:
         s = s.replace(old, new)
+
 
 def format_label(label, row):
     parts = []  # This will hold the parts of the title
@@ -178,7 +178,4 @@ def format_label(label, row):
     # Capitalize each part and join with spaces
     formatted_title = " ".join(smart_title_case(part) for part in parts)
     return formatted_title
-
-
-
 
