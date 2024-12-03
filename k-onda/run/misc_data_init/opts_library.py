@@ -417,7 +417,7 @@ GROUP_PSTH_OPTS = {
     'graph_opts': group_psth_plots,
     'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'psth',  
                   'base': 'event', 'bin_size': .01, 
-                   'periods': {'tone': {'event_pre_post': (.05, .65)}},
+                   'periods': {'tone': {'event_pre_post': (.05, .65)}, 'pretone':  {'event_pre_post': (.05, .65)}},
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
                   'filter': {'animal': {'identifier': ('in', STANDARD_ANIMALS)}}
     }
@@ -465,20 +465,21 @@ mrl_plot = {
         }}
 }
 
+
 MRL_OPTS = {
     
     'procedure': 'make_plots',
     'graph_opts': mrl_plot,
     'calc_opts': {'kind_of_data': 'mrl', 'calc_type': 'mrl', 'validate_events': True, 
-                  'base': 'event', 'frequency_bands': ['theta_1', 'theta_2'], 'brain_regions': ['bla', 'pl'],
+                  'base': 'event', 'frequency_bands': ['theta_1', 'theta_2'], 'brain_regions': ['pl', 'bla'],
                    'periods': {'tone': {'event_pre_post': (0, 1)}, 'pretone': {'event_pre_post': (0, 1)}}, 
                    'lfp_padding': [0, 0],
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
                    'rules': {
         'brain_region': 
-        {'pl': [('filter', {'animal': {'identifier': ('in', PFC_THETA_POWER_ANIMALS)}})],
-         'bla': [('filter', {'animal': {'identifier': ('in', BLA_THETA_POWER_ANIMALS)}})], 
-         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_THETA_POWER_ANIMALS)}})]
+        {'pl': [('filter', {'animal': {'identifier': ('in', PL_MRL_ANIMALS)}})],
+         'bla': [('filter', {'animal': {'identifier': ('in', BLA_MRL_ANIMALS)}})], 
+         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_MRL_ANIMALS)}})]
                                }}}
     }
 
@@ -489,15 +490,15 @@ MRL_CSV_OPTS = {
     'procedure': 'make_csv',
     'sheet_opts': {'fname': 'mrl'},
      'calc_opts': {'kind_of_data': 'mrl', 'calc_type': 'mrl', 'validate_events': True, 
-                  'base': 'event', 'frequency_bands': ['theta_1', 'theta_2'], 'brain_regions': ['bla', 'pl'],
+                  'base': 'event', 'frequency_bands': ['theta_1', 'theta_2'], 'brain_regions': ['pl', 'bla'],
                    'periods': {'tone': {'event_pre_post': (0, 1)}, 'pretone': {'event_pre_post': (0, 1)}}, 
                    'lfp_padding': [0, 0], 'row_type': 'mrl_calculator',
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
                   'rules': {
         'brain_region': 
-        {'pl': [('filter', {'animal': {'identifier': ('in', PFC_THETA_POWER_ANIMALS)}})],
-         'bla': [('filter', {'animal': {'identifier': ('in', BLA_THETA_POWER_ANIMALS)}})], 
-         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_THETA_POWER_ANIMALS)}})]
+        {'pl': [('filter', {'animal': {'identifier': ('in', PL_MRL_ANIMALS)}})],
+         'bla': [('filter', {'animal': {'identifier': ('in', BLA_MRL_ANIMALS)}})], 
+         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_MRL_ANIMALS)}})]
                                }}}
     }
 

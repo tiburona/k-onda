@@ -41,6 +41,8 @@ class Base:
         Base._filter = filter
 
     def set_filter_from_calc_opts(self):
+        if self.kind_of_data == 'mrl':
+             a = 'foo'
         self.filter = defaultdict(lambda: defaultdict(tuple))
         filters = self.calc_opts.get('filter', {})
         if isinstance(filters, list):

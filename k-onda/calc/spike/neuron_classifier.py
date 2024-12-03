@@ -32,6 +32,8 @@ class NeuronClassifier:
         return [unit for unit in self.experiment.all_units if unit.category == 'good']
 
     def classify(self):
+
+        #TODO: add check to make sure all neurons are classified
         saved_calc_exists, categorized_neurons, pickle_path = self.experiment.load(
             self.experiment.construct_path('spike'), ['classified_neurons'])
         if not saved_calc_exists:

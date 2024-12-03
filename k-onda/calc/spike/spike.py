@@ -303,6 +303,8 @@ class SpikePrepMethods(PrepMethods):
         
     def units_prep(self):
         units_info = self.animal_info.get('units', {})
+        if self.identifier == 'IG177':
+            a = 'foo'
         if 'get_units_from_phy' in units_info.get('instructions', []):
             self.get_units_from_phy()
 
