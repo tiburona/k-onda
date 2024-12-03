@@ -97,8 +97,8 @@ exp_info['path_constructors'] = {
         {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/{identifier}/{identifier}.mat', 'fields': ['identifier']},
     'phy': 
         {'template': '/Volumes/SanDisk/single_cell_data_ks_22/{identifier}', 'fields': ['identifier']},
-    'dest':
-        {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/{identifier}', 'fields': ['identifier']},
+    'spike':
+        {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/spike/{identifier}', 'fields': ['identifier']},
     'lfp': 
         {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/{identifier}/{identifier}', 'fields': ['identifier']}  
 }

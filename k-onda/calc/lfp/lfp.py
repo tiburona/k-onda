@@ -14,7 +14,16 @@ class LFPPrepMethods(PrepMethods):
         return self.select_children('lfp_periods')
 
     def lfp_prep(self):
+        self.prep_data()
         self.prepare_periods()
+    
+    def prep_data(self):
+        data_label = f"{self.current_brain_region}_lfp"
+        if data_label in self.initialized:
+            return
+        else:
+            self.process_lfp()
+            self.initialized.append(data_label)
 
     def get_raw_lfp(self):
         file_path = self.construct_path('lfp')
@@ -71,7 +80,9 @@ class LFPPrepMethods(PrepMethods):
             normed = divide_by_rms(filtered)
             self._processed_lfp[brain_region] = normed
 
-    def validate_events(self): 
+    def validate_events(self):
+        if self.identifier == 'IG154':
+            a = 'foo'
         if not self.include():
             return 
         region = self.current_brain_region
@@ -84,7 +95,7 @@ class LFPPrepMethods(PrepMethods):
         def validate_event(event, standard):
             for frequency in event.frequency_bins: 
                 for time_bin in frequency.time_bins:
-                    if time_bin.data > self.calc_opts.get('threshold', 20) * standard:
+                    if time_bin.calc > self.calc_opts.get('threshold', 20) * standard:
                         print(f"{region} {self.identifier} {event.period_type} "
                         f"{event.period.identifier} {event.identifier} invalid!")
                         return False
@@ -139,9 +150,8 @@ class EventValidator:
     
     def get_event_validity(self, region):
         period = self if self.name == 'period' else self.period
-        ev = period.animal.group.experiment.event_validation
-        validity = ev[region][period.animal.identifier]
-        return {i: valid for i, valid in enumerate(validity[self.period_type][period.identifier])}
+        ev = period.animal.lfp_event_validity[region]
+        return {i: valid for i, valid in enumerate(ev[self.period_type][period.identifier])}
 
 
 class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
@@ -160,6 +170,8 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         self.pad_start = self.start - start_pad
         self.pad_stop = self.stop + end_pad
         self._spectrogram = None
+        self.brain_region = self.current_brain_region
+        self.frequency_band = self.current_frequency_band
         
     @property
     def padded_data(self):
@@ -252,6 +264,6 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
             self.period.identifier][self.identifier]
     
     def get_power(self):
-        return self.refer(np.array(self.sliced_spectrogram)[:, self.mask])
+        return np.array(self.sliced_spectrogram)[:, self.mask]
     
 

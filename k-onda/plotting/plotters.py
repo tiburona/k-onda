@@ -65,7 +65,11 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         self.save_and_close_fig(fig, basename)
 
     def set_dir_and_filename(self, fig, basename, do_title=True):
-        tags = [basename] if basename else [self.calc_type]
+        if self.graph_opts.get('fname'):
+            tags = [self.graph_opts['fname']]
+        else:
+            tags = [comp for comp in [self.current_brain_region, self.current_frequency_band]] + [
+            basename if basename else self.calc_type]
         self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         if do_title:
             bbox = fig.axes[0].get_position()
@@ -76,13 +80,16 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         dirs = [self.graph_opts['graph_dir'], self.calc_type]
         path = os.path.join(*dirs)
         os.makedirs(path, exist_ok=True)
-        fname = basename if basename else self.calc_type
-        fig.savefig(os.path.join(path, fname), bbox_inches='tight', dpi=300)
-        opts_filename = fname.replace('png', 'txt')
+       
+        fig.savefig(os.path.join(path, self.fname), bbox_inches='tight', dpi=300)
+        opts_filename = self.fname.replace('png', 'txt')
 
         with open(os.path.join(path, opts_filename), 'w') as file:
             json.dump(to_serializable(self.calc_opts), file)
+        print(print(hex(id(fig))))
         plt.close(fig)
+        self.active_fig = None
+        a = 'foo'
 
     def delegate(self, info, is_last=False):
 
@@ -251,7 +258,7 @@ class CategoryPlotter(FeaturePlotter):
         return label_to_pos
         
     def process_calc(self, info, aesthetics=None, is_last=False):
-        transformed_divisions = self.active_spec['divisions']
+        transformed_divisions = deepcopy(self.active_spec['divisions'])
         self.label_to_pos = self.assign_positions(transformed_divisions)
         ax = self.active_acks
 

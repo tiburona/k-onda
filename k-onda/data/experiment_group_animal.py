@@ -35,6 +35,7 @@ class Experiment(Data, SpikePrepMethods):
             'spike': SpikePeriod
         }
         self.state = {}
+        self.initialized = []
 
     @property
     def ancestors(self):
@@ -64,6 +65,11 @@ class Experiment(Data, SpikePrepMethods):
     def all_lfp_periods(self):
         return [period for animal in self.all_animals for period in animal.get_all('lfp_periods') 
                 if period.include(check_ancestors=True)]
+    
+    @property
+    def all_mrl_calculators(self):
+        return [mrl_calc for unit in self.all_units for mrl_calc in unit.get_all('mrl_calculators') 
+                if mrl_calc.include(check_ancestors=True)]
 
     def initialize_groups(self, groups):
         self.groups = groups
@@ -80,8 +86,11 @@ class Experiment(Data, SpikePrepMethods):
 
     def spike_prep(self):
         self.prep_animals()
+        if 'neurons' in self.initialized:
+            return
         self.neuron_classifier.classify()
-    
+        self.initialized.append('neurons')
+        
     def lfp_prep(self):
         self.prep_animals()
 
@@ -117,6 +126,7 @@ class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
         self.parent = experiment
         for animal in self.animals:
             animal.parent = self
+            animal.group = self
         self.children = self.animals
 
 
@@ -146,6 +156,7 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, 
         self.correlation_calculators = defaultdict(list)
         self.phase_relationship_calculators = defaultdict(list)
         self.lfp_event_validity = defaultdict(dict)
+        self.initialized = []
 
     @property
     def children(self):

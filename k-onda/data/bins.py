@@ -28,15 +28,13 @@ class TimeBin(Bin):
         if self.calc_type == 'correlation':
             ts = np.arange(-self.calc_opts['lags'], self.calc_opts['lags'] + 1) / self.sampling_rate
         else:
-            pre_event, post_event = [self.calc_opts['events'][self.period_type][opt] 
-                                for opt in ['pre_event', 'post_event']]
             bin_size = self.calc_opts.get('bin_size')
             if bin_size is None:
                 try:
                     bin_size = parent.spectrogram_bin_size
                 except AttributeError:
                     bin_size = parent.parent.spectrogram_bin_size
-            ts = np.arange(-pre_event, post_event, bin_size)
+            ts = np.arange(-self.pre_event, self.post_event, bin_size)
         
         # Round the timestamps to the nearest 10th of a microsecond
         ts = np.round(ts, decimals=7)
@@ -47,7 +45,7 @@ class TimeBin(Bin):
 class TimeBinMethods:
          
     def get_time_bins(self, data):
-        if data.shape > 2 and all(dim > 1 for dim in data.shape):
+        if data.ndim > 1 and all(dim > 1 for dim in data.shape):
             return [TimeBin(i, slice_, self, data) for i, slice_ in enumerate(data[..., -1])]
         return [TimeBin(i, data_point, self, data) for i, data_point in enumerate(data)]
 

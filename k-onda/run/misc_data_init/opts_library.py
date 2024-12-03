@@ -225,28 +225,7 @@ BLA_HPC_INCLUSION = {'animal': [['identifier', 'in', list(set(BLA_THETA_POWER_AN
                                                          & set(HPC_THETA_POWER_ANIMALS))]]}
 
 
-VALIDATION_DATA_OPTS = {
-    'kind_of_data': 'lfp',
-    'calc_type': 'power',
-    'brain_regions': ['pl', 'hpc', 'bla'],
-    'power_arg_set': (2048, 2000, 1000, 980, 2), 
-    'bin_size': .01, 
-    'lfp_padding': [1, 1],
-    'lost_signal': [.75, .75],
-    'matlab_configuration': MATLAB_CONFIG,
-    'frequency_band': (0, 8),
-    'threshold': 20,
-     'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
-    'events': {
-                'pretone': {'pre_event': 0, 'post_event': 1}, 
-                'tone': {'pre_event': 0, 'post_event': 1}},
-    'rules': {
-        'brain_region': 
-        {'pl': [('filter', {'animal': {'identifier': ('in', PFC_THETA_POWER_ANIMALS)}})],
-         'bla': [('filter', {'animal': {'identifier': ('in', BLA_THETA_POWER_ANIMALS)}})], 
-         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_THETA_POWER_ANIMALS)}})]
-                               }}
-    }
+
 
 # BLA_PL_INCLUSION = {'animal': [['identifier', 'in', ['IG160', 'IG163', 'IG179']]]}
 
@@ -446,8 +425,7 @@ GROUP_PSTH_OPTS = {
 
 
 mrl_plot = {
-    'graph_dir': '/Users/katie/likhtik/CH27',
-    'fname': 'pl_theta_1_MRL',
+    'graph_dir': '/Users/katie/likhtik/IG_INED_Safety_Recall',
     'plot_spec': {
         'section': {
             'aesthetics': {
@@ -491,11 +469,62 @@ MRL_OPTS = {
     
     'procedure': 'make_plots',
     'graph_opts': mrl_plot,
-    'calc_opts': {'kind_of_data': 'mrl', 'calc_type': 'mrl',  
-                  'base': 'event', 'frequency_band': 'theta_1', 'brain_region': 'pl',
+    'calc_opts': {'kind_of_data': 'mrl', 'calc_type': 'mrl', 'validate_events': True, 
+                  'base': 'event', 'frequency_bands': ['theta_1', 'theta_2'], 'brain_regions': ['bla', 'pl'],
                    'periods': {'tone': {'event_pre_post': (0, 1)}, 'pretone': {'event_pre_post': (0, 1)}}, 
                    'lfp_padding': [0, 0],
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
-                  'filter': {'animal': {'identifier': ('in', STANDARD_ANIMALS)}}
+                   'rules': {
+        'brain_region': 
+        {'pl': [('filter', {'animal': {'identifier': ('in', PFC_THETA_POWER_ANIMALS)}})],
+         'bla': [('filter', {'animal': {'identifier': ('in', BLA_THETA_POWER_ANIMALS)}})], 
+         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_THETA_POWER_ANIMALS)}})]
+                               }}}
     }
+
+
+
+MRL_CSV_OPTS = {
+    
+    'procedure': 'make_csv',
+    'sheet_opts': {'fname': 'mrl'},
+     'calc_opts': {'kind_of_data': 'mrl', 'calc_type': 'mrl', 'validate_events': True, 
+                  'base': 'event', 'frequency_bands': ['theta_1', 'theta_2'], 'brain_regions': ['bla', 'pl'],
+                   'periods': {'tone': {'event_pre_post': (0, 1)}, 'pretone': {'event_pre_post': (0, 1)}}, 
+                   'lfp_padding': [0, 0], 'row_type': 'mrl_calculator',
+                  'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
+                  'rules': {
+        'brain_region': 
+        {'pl': [('filter', {'animal': {'identifier': ('in', PFC_THETA_POWER_ANIMALS)}})],
+         'bla': [('filter', {'animal': {'identifier': ('in', BLA_THETA_POWER_ANIMALS)}})], 
+         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_THETA_POWER_ANIMALS)}})]
+                               }}}
+    }
+
+
+VALIDATION_DATA_OPTS = {
+    'kind_of_data': 'lfp',
+    'calc_type': 'power',
+    'brain_regions': ['pl', 'hpc', 'bla'],
+    'power_arg_set': (2048, 2000, 1000, 980, 2), 
+    'bin_size': .01, 
+    'lfp_padding': [1, 1],
+    'lost_signal': [.75, .75],
+    'matlab_configuration': MATLAB_CONFIG,
+    'frequency_band': (0, 8),
+    'threshold': 20,
+     'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
+    'periods': {'tone': {'event_pre_post': (0, 1)}, 'pretone': {'event_pre_post': (0, 1)}},
+    'rules': {
+        'brain_region': 
+        {'pl': [('filter', {'animal': {'identifier': ('in', PFC_THETA_POWER_ANIMALS)}})],
+         'bla': [('filter', {'animal': {'identifier': ('in', BLA_THETA_POWER_ANIMALS)}})], 
+         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_THETA_POWER_ANIMALS)}})]
+                               }}
+    }
+
+MRL_PREP_OPTS = {
+    'procedure': 'validate_lfp_events',
+    'calc_opts': VALIDATION_DATA_OPTS
 }
+

@@ -6,6 +6,9 @@ from base.base import Base
 from utils.utils import cache_method, always_last, operations
 from utils.math_functions import sem
 
+# TODO a lot of methods in here need to deal with dictionaries for the granger case,
+# like sem, mean, etc.
+
 
 class Data(Base):
 

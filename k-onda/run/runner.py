@@ -23,6 +23,7 @@ class Runner(OptsValidator):
         self.follow_up_method = None
         self.calc_opts = None
         self.graph_opts = None
+        self.sheet_opts = None
         self.proc_name = None
         self.current_calc_opts = None
         self.preparatory_method = None
@@ -46,14 +47,19 @@ class Runner(OptsValidator):
         
         elif self.proc_name == 'make_plots':
             self.set_executors(ExecutivePlotter, 'plot')
-            calc_opts = opts['calc_opts']
             self.graph_opts = self.opts['graph_opts']
-            opts_list = [calc_opts]
+            opts_list = [opts['calc_opts']]
             self.run_list(opts_list)
 
         elif self.proc_name == 'make_csv':
+            self.sheet_opts = self.opts['sheet_opts']
             self.set_executors(Stats, 'make_df')
             self.follow_up_method = 'make_csv'
+            opts_list = [opts['calc_opts']]
+            self.run_list(opts_list)
+
+        elif self.proc_name == 'validate_lfp_events':
+            self.set_executors(self.experiment, 'validate_lfp_events')
             opts_list = opts if isinstance(self.opts, list) else [opts]
             self.run_list(opts_list)
 
@@ -87,7 +93,7 @@ class Runner(OptsValidator):
 
     def apply_rules(self):
         rules = self.current_calc_opts['rules']
-        if isinstance(rules, dict):
+        if not isinstance(rules, dict):
             for rule in rules:
                 self.assign_per_rule(*self.parse_natural_language_rule(rule))
         else:          
@@ -119,13 +125,15 @@ class Runner(OptsValidator):
         print(f"executing {self.executing_method} with options {self.current_calc_opts}")
         if self.graph_opts is not None:
             self.executing_method(self.current_calc_opts, self.graph_opts)
+        elif self.sheet_opts is not None:
+            self.executing_method(self.current_calc_opts, self.sheet_opts)
         else:
             self.executing_method(self.current_calc_opts)
 
     def prep(self, prep):
         self.validate_and_load(prep)
         self.executing_method = getattr(self.experiment, self.proc_name)
-        self.run_list()
+        self.run_list([prep['calc_opts']])
         self.loop_lists = {}
 
     def run_list(self, opts_list):
@@ -146,8 +154,9 @@ class Runner(OptsValidator):
     def run(self, opts, *args, prep=None, **kwargs):
         
         if prep:
-            self.prep()
+            self.prep(prep)
         self.validate_and_load(opts)
         self.run_main(opts)
         if self.follow_up_method is not None:
-            self.follow_up_method(*args, **kwargs)
+            follow_up_method = getattr(self.executing_instance, self.follow_up_method)
+            follow_up_method(*args, **kwargs)

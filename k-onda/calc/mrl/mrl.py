@@ -28,6 +28,9 @@ class MRLCalculator(Data, EventValidator):
         self.spike_period = self.unit.spike_periods[self.period_type][self.period.identifier]
         self.experiment = self.period.experiment
         self._spikes = None
+        self._weights = None
+        self.brain_region = self.current_brain_region
+        self.frequency_band = self.current_frequency_band
         
 
     @property
@@ -37,6 +40,12 @@ class MRLCalculator(Data, EventValidator):
             start = self.spike_period.start * self.lfp_sampling_rate
             self._spikes = (spikes * self.lfp_sampling_rate - start).astype(int)
         return self._spikes
+
+    @property
+    def weights(self):
+        if self._weights is None:
+            self._weights = self.get_weights()
+        return self._weights
 
            
     @property
@@ -50,10 +59,10 @@ class MRLCalculator(Data, EventValidator):
                 if calc.identifier == self.identifier][0]
     
     def validator(self):
-        if self.calc_mode == 'evoked':
-            return self.num_events > 4 and self.equivalent_calculator.num_events > 4
+        if self.calc_opts.get('evoked'):
+            return np.nansum(self.weights) > 4 and np.nansum(self.equivalent_calculator.weights) > 4
         else:
-            return self.num_events > 4
+            return np.nansum(self.weights) > 4
         
     def translate_spikes_to_lfp_events(self, spikes):
         pre_stim = self.pre_event * self.lfp_sampling_rate
@@ -98,7 +107,7 @@ class MRLCalculator(Data, EventValidator):
             return angle % (2 * np.pi)
 
         phases = self.get_phases().T
-        weights = self.get_weights()
+        weights = self.weights
 
         # Apply the function to every element
         vfunc = np.vectorize(adjust_angle)
@@ -116,6 +125,8 @@ class MRLCalculator(Data, EventValidator):
         return adjusted_phases
     
     def get_mrl(self):
+        if not self.validator():
+            return np.nan
         w = self.get_weights()
         alpha = self.get_phases()
         dim = int(not isinstance(self.current_frequency_band, type('str')))
@@ -142,9 +153,10 @@ class MRLPrepMethods(SpikePrepMethods, LFPPrepMethods):
 
     def prepare_mrl_calculators(self):
         for unit in self.units['good']:
-            for period_type, periods in self.lfp_periods.items():
-                for period in periods: 
-                    unit.mrl_calculators[period_type].append(MRLCalculator(unit, period=period))
+            unit.mrl_calculators = {
+                period_type: [MRLCalculator(unit, period=period) for period in periods] 
+                for period_type, periods in self.lfp_periods.items()}
+         
 
     def select_mrl_children(self):
         return self.select_spike_children()

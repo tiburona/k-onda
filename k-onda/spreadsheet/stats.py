@@ -15,7 +15,7 @@ class Stats(Base):
         self.experiment = experiment
         self.lfp = lfp
         self.behavior = behavior
-        self.dfs = {}
+        self.dfs = []
         self.data_col = None
         self.spreadsheet_fname = None
         self.results_path = None
@@ -23,9 +23,15 @@ class Stats(Base):
         self.opts_dicts = []
         self.name_suffix = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(6))
 
-    def set_attributes(self, calc_opts):
-        self.calc_opts = calc_opts
-        if self.kind_of_data == 'lfp':
+    def initialize(self, calc_opts, sheet_opts):
+        """Both initializes values on self and sets values for the context."""
+        self.calc_opts = calc_opts  
+        self.sheet_opts = sheet_opts
+        self.experiment.initialize_data()
+        self.set_attributes()
+
+    def set_attributes(self):
+        if self.kind_of_data in ['lfp', 'mrl']:
             fb = self.current_frequency_band
             if not isinstance(self.current_frequency_band, str):
                 translation_table = str.maketrans({k: '_' for k in '[](),'})
@@ -37,40 +43,28 @@ class Stats(Base):
         else:
             self.data_col = 'rate' if self.calc_type == 'psth' else self.calc_type
 
-    def make_df(self, calc_opts):
-        self.set_attributes(calc_opts)
+    def make_df(self, calc_opts, sheet_opts):
+        self.initialize(calc_opts, sheet_opts)
         self.opts_dicts.append(deepcopy(self.calc_opts))
-        name = self.set_df_name()
         df = pd.DataFrame(self.get_rows())
         vs = ['unit_num', 'animal', 'category', 'group', 'frequency']
         for var in vs:
             if var in df:
                 df[var] = df[var].astype('category')
-        if name in self.dfs:
-            name += '_2'
-        self.dfs[name] = df
-
-    def set_df_name(self):
-        name = self.calc_type
-        if 'lfp' in self.kind_of_data:
-            name += f"_{self.current_brain_region}_{self.current_frequency_band}"
-        return name
+        self.dfs.append(df)
 
     def merge_dfs_animal_by_animal(self):
 
-
-        df_items = list(self.dfs.items())
-        names, dfs = zip(*df_items)
-
         # Extract unique animals across all data frames
-        unique_animals = pd.concat([df['animal'] for df in dfs if 'animal' in df.columns]).unique()
+        unique_animals = pd.concat([df['animal'] for df in self.dfs if 'animal' in df.columns]).unique()
 
         # List to hold merged data for each animal
         merged_data_per_animal = []
 
         for animal in unique_animals:
             # Filter DataFrames for the current animal, remove 'animal' column
-            dfs_per_animal = [df[df['animal'] == animal].copy().drop(columns=['animal']) for df in dfs if animal in df['animal'].values]
+            dfs_per_animal = [df[df['animal'] == animal].copy().drop(columns=['animal']) 
+                              for df in self.dfs if animal in df['animal'].values]
 
             # Adjust DataFrames to prioritize 'time' over 'time_bin'
             for df in dfs_per_animal:
@@ -97,11 +91,8 @@ class Stats(Base):
         final_merged_df = pd.concat(merged_data_per_animal, ignore_index=True)
 
         # Store or return the final merged DataFrame
-        new_df_name = '_'.join([name for name, _ in df_items])
-        self.dfs[new_df_name] = final_merged_df
-        return new_df_name
-
-
+        self.dfs.append(final_merged_df)
+        return final_merged_df
 
     def get_rows(self):
         """
@@ -124,9 +115,6 @@ class Stats(Base):
         other_attributes = ['period_type']
         
         if 'lfp' in self.kind_of_data:
-            if self.calc_type in ['mrl']:
-                level = 'mrl_calculator'
-                other_attributes += ['frequency', 'fb', 'neuron_type', 'neuron_quality']  # TODO: figure out what fb should be changed to post refactor
             if level == 'granger_segment':
                 other_attributes.append('length')
             if any([w in self.calc_type for w in ['coherence', 'correlation', 'phase', 'granger']]):
@@ -134,6 +122,9 @@ class Stats(Base):
             else:
                 if self.calc_opts['time_type'] == 'continuous' and self.calc_opts.get('power_deviation'):
                     other_attributes.append('power_deviation')
+        elif 'mrl' in self.kind_of_data:
+            level = 'mrl_calculator'
+            other_attributes += ['frequency', 'neuron_type', 'neuron_quality']  
         else:
             other_attributes += ['category', 'neuron_type', 'quality']
 
@@ -180,7 +171,7 @@ class Stats(Base):
         else:
             experiment = self.experiment
 
-        sources = [source for source in getattr(experiment, f'all_{level}s') if source.is_valid]
+        sources = [source for source in getattr(experiment, f'all_{level}s') if source.include()]
 
         if self.calc_opts.get('frequency_type') == 'continuous':
             other_attributes.append('frequency')
@@ -189,28 +180,22 @@ class Stats(Base):
             other_attributes.append('time')
             sources = [time_bin for source in sources for time_bin in source.time_bins]
 
+        attr = self.calc_opts.get('attr', 'mean')
+
         for source in sources:
 
-            if self.calc_opts.get('aggregator') == 'sum':
-                row_dict = {self.data_col: source.sum_data}
-            elif self.calc_opts.get('aggregator') == 'none':
-                if isinstance(source.data, dict):
-                    row_dict = {f"{self.data_col}_{key}": val for key, val in source.data.items()}
-                else:
-                    row_dict = {self.data_col: source.data}
+            result = getattr(source, attr)
+            if isinstance(result, dict):
+                row_dict = {f"{self.data_col}_{key}": val for key, val in result.items()}
             else:
-                row_dict = {self.data_col: source.mean_data}
+                row_dict = {self.data_col: result}
             
             for src in source.ancestors:
                 row_dict[src.name] = src.identifier
-                for attr in other_attributes:
-                    val = getattr(src, attr) if hasattr(src, attr) else None
+                for other_attr in other_attributes:
+                    val = getattr(src, other_attr, None) 
                     if val is not None:
-                        if attr == 'power_deviation':
-                            attr = f"{self.lfp.brain_region}_{self.current_frequency_band}_{attr}"
-                        elif attr == 'period_id':
-                            attr = 'period'
-                        row_dict[attr] = val
+                        row_dict[other_attr] = val
             rows.append(row_dict)
 
         return rows
@@ -234,42 +219,43 @@ class Stats(Base):
            of the object.
         """
         if len(self.dfs):
-            df_name = self.merge_dfs_animal_by_animal()
+            self.merge_dfs_animal_by_animal()
         else:
             self.make_df(self.calc_opts)
-            df_name = self.calc_type
         if path is None:
             path = self.calc_opts['data_path']
         path = os.path.join(path, self.calc_type)
         if not os.path.exists(path):
             os.mkdir(path)
         if filename is None:
-            filename = df_name
+            filename = self.sheet_opts.get('fname', self.calc_type)
         self.spreadsheet_fname = os.path.join(path, filename + '.csv')
         if os.path.exists(self.spreadsheet_fname) and not force_recalc:
             return
         try:
             with open(self.spreadsheet_fname, 'w', newline='') as f:
-                self.write_csv(f, df_name)
+                self.write_csv(f)
         except OSError:  # automatically generated name is too long
             self.spreadsheet_fname = self.spreadsheet_fname[0:75] + self.name_suffix
             self.spreadsheet_fname += self.name_suffix
             self.spreadsheet_fname += '.csv'
             with open(self.spreadsheet_fname, 'w', newline='') as f:
-                self.write_csv(f, df_name)
+                self.write_csv(f)
 
 
-    def write_csv(self, f, df_name):
+    def write_csv(self, f, df=None):
+        if df is None:
+            df = self.dfs[-1]
         for opts_dict in self.opts_dicts:
             line = ', '.join([f"{str(key).replace(',', '_')}: {str(value).replace(',', '_')}" for key, value in
                               opts_dict.items()])
             f.write(f"# {line}\n")
             f.write("\n")
 
-        header = list(self.dfs[df_name].columns)
+        header = list(df.columns)
         writer = csv.DictWriter(f, fieldnames=header)
         writer.writeheader()
-        for index, row in self.dfs[df_name].iterrows():
+        for index, row in df.iterrows():
             writer.writerow(row.to_dict())
 
     def write_post_hoc_r_script(self):

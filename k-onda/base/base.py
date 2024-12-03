@@ -168,7 +168,7 @@ class Base:
     @property
     def post_event(self):
         return self.get_pre_post(1, 'event')
-    
+
     @property
     def pre_period(self):
         return self.get_pre_post(0, 'period')
@@ -177,9 +177,10 @@ class Base:
     def post_period(self):
         return self.get_pre_post(1, 'period')
     
-    def get_pre_post(self, time, object_type):
-        return self.calc_opts.get('periods', {}).get(
-            self.selected_period_type, {}).get(f'{object_type}_pre_post', (0, 0))[time]
+    def get_pre_post(self, time, obj_type):
+        pt = self.period_type if hasattr(self, 'period_type') else self.selected_period_type
+        return self.calc_opts.get('periods', {}).get(pt, {}).get(
+            f'{obj_type}_pre_post', (0, 0))[time]
 
     
     @property

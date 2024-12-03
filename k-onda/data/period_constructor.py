@@ -16,6 +16,7 @@ class PeriodConstructor:
     
     def get_all(self, attr):
         return [item for sublist in getattr(self, attr).values() for item in sublist]
+
     
     def select_children(self, attr):
         if self.selected_period_type:

@@ -282,6 +282,9 @@ class SpikeEvent(Event, RateMethods, BinMethods):
 class SpikePrepMethods(PrepMethods):
 
     def spike_prep(self):
+        if 'spike' in self.initialized:
+            return
+        self.initialized.append('spike')
         self.units_prep()
         for unit in [unit for _, units in self.units.items() for unit in units]:
             unit.spike_prep()
@@ -313,7 +316,7 @@ class SpikePrepMethods(PrepMethods):
 
     def get_units_from_phy(self):
         saved_calc_exists, units, pickle_path = load(
-            os.path.join(self.construct_path('dest'), 'units_from_phy.pkl'), 'pkl'
+            os.path.join(self.construct_path('spike'), 'units_from_phy.pkl'), 'pkl'
         )
         
         if saved_calc_exists:

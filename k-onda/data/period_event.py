@@ -65,7 +65,6 @@ class Event(Data, BinMethods):
         self.period = period
         self.identifier = index
         self.parent = period
-        self.parent = period
         self.period_type = self.period.period_type
         self.duration = self.pre_event + self.post_event
         self.experiment = self.period.experiment
