@@ -41,13 +41,15 @@ class NeuronClassifier:
         self.apply_categorization(categorized_neurons)
 
     def apply_categorization(self, categorized_neurons):
-        for animal_id, neurons in categorized_neurons.items():
-            animal = self.experiment.get_data_sources('animal', identifier=animal_id)
+        for animal in [animal for animal in self.experiment.all_animals if animal.include()]:
+            if 'neurons' in animal.initialized:
+                continue
+            neurons = categorized_neurons[animal.identifier]
             for unit in animal.units['good']:
                 neuron_type = neurons[unit.identifier]
                 unit.neuron_type = neuron_type
                 animal.neurons[neuron_type].append(unit)
-        self.experiment.state['categorized_neurons'] = True
+            animal.initialized.append('neurons')
    
     def get_input_to_kmeans(self, characteristic):
         scaler = StandardScaler()

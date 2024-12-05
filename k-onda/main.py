@@ -19,8 +19,8 @@ def run(log=True):
     # for spec in [UNITS_WAVEFORM_PLOTS, CH27_GROUP_PSTH_OPTS, CH27_UNITS_RASTER_OPTS, 
     #              CH27_UNITS_PERCENT_CHANGE_OPTS, CH27_PERCENT_CHANGE_OPTS]:
     #     runner.run(spec)
-
-    runner.run(MRL_CSV_OPTS, prep=MRL_PREP_OPTS)
+    # runner.run(GROUP_PSTH_OPTS)
+    runner.run(MRL_OPTS, prep=MRL_PREP_OPTS)
  
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')

@@ -282,6 +282,8 @@ class SpikeEvent(Event, RateMethods, BinMethods):
 class SpikePrepMethods(PrepMethods):
 
     def spike_prep(self):
+        if self.identifier == 'IG178':
+            a = 'foo'
         if 'spike' in self.initialized:
             return
         self.initialized.append('spike')
