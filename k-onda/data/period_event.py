@@ -1,8 +1,13 @@
 from data.data import Data
 from data.bins import BinMethods
 
+class TimeLineMethods:
+      
+    def get_universal_res_onset(self):
+        return self.onset/self.sampling_rate/self.finest_res
+       
 
-class Period(Data, BinMethods):
+class Period(Data, BinMethods, TimeLineMethods):
 
     _name = 'period'
 
@@ -24,6 +29,10 @@ class Period(Data, BinMethods):
         self.event_duration = period_info.get('event_duration')
         if target_period and hasattr(target_period, 'event_duration'):
             self.event_duration = target_period.event_duration
+        self._start = self.onset/self.sampling_rate 
+        self._stop = self._start + self.duration
+        self.universal_res_onset = self.get_universal_res_onset()
+        self.duration_in_universal_res = self.duration/self.finest_res 
 
     @property
     def children(self):
@@ -32,8 +41,7 @@ class Period(Data, BinMethods):
     @property
     def events(self):
         if not self._events:
-            self.get_events()
-        return self._events
+            return self._events
     
     @property
     def reference_override(self):
@@ -56,7 +64,7 @@ class Period(Data, BinMethods):
             return periods[self.reference_period_type][self.identifier]
         
 
-class Event(Data, BinMethods):
+class Event(Data, BinMethods, TimeLineMethods):
 
     _name = 'event'
 

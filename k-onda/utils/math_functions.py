@@ -341,6 +341,7 @@ def regularize_angles(x):
     regularize = np.vectorize(lambda x: np.arctan2(np.sin(x), np.cos(x)))
     return regularize(x)
 
+
 def nearest_power_of_10(value):
     if value == 0:
         return 0
@@ -348,6 +349,26 @@ def nearest_power_of_10(value):
     rounded_log10 = round(log10_value)
     result = 10 ** rounded_log10
     return result if value > 0 else -result
+
+
+def get_round_decimals(value):
+    # If value is less than 1, rely on string representation to find fractional digits
+    if value < 1:
+        s = f"{value:.15g}"
+        if '.' in s:
+            whole, frac = s.split('.')
+            frac = frac.rstrip('0')
+            decimals = len(frac)
+        else:
+            decimals = 0
+    else:
+        # For values >= 1, use log10 to determine negative rounding places
+        # e.g. value=20 -> floor(log10(20))=1 -> decimals=-1 (round to tens)
+        # e.g. value=300 -> floor(log10(300))=2 -> decimals=-2 (round to hundreds)
+        magnitude = math.floor(math.log10(value))
+        decimals = -magnitude
+
+    return decimals
 
 
 

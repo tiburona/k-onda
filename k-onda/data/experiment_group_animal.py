@@ -150,12 +150,13 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, 
             for nt in neuron_types:
                 setattr(self, nt, [])
         self._processed_lfp = {}
+        self._imported_behavior = {}
         self.units = defaultdict(list)
         self.neurons = defaultdict(list)
         self.lfp_periods = defaultdict(list)
         self.mrl_calculators = defaultdict(lambda: defaultdict(list))
         self.granger_calculators = defaultdict(list)
-        self.coherence_calculators = defaultdict(list)
+        self.codherence_calculators = defaultdict(list)
         self.correlation_calculators = defaultdict(list)
         self.phase_relationship_calculators = defaultdict(list)
         self.lfp_event_validity = defaultdict(dict)

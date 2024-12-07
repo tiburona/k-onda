@@ -2,6 +2,8 @@ from collections import defaultdict
 import pickle
 import json
 import os
+import importlib
+from utils.math_functions import get_round_decimals
 
 
 class Base:
@@ -41,8 +43,6 @@ class Base:
         Base._filter = filter
 
     def set_filter_from_calc_opts(self):
-        if self.kind_of_data == 'mrl':
-             a = 'foo'
         self.filter = defaultdict(lambda: defaultdict(tuple))
         filters = self.calc_opts.get('filter', {})
         if isinstance(filters, list):
@@ -150,6 +150,14 @@ class Base:
         else:
             return self.current_frequency_band
         
+    @property
+    def finest_res(self):
+        return self.calc_opts.get('finest_res', .01)
+    
+    @property
+    def round_to(self):
+        return get_round_decimals(self.finest_res)
+        
     def get_data_sources(self, data_object_type=None, identifiers=None, identifier=None):
         if data_object_type is None:
             data_object_type = self.calc_opts['base']
@@ -216,3 +224,15 @@ class Base:
             else:
                 result_str = json.dumps([arr.tolist() for arr in result])
                 f.write(result_str)
+
+    def load_user_module(file_path):
+        # Extract a module name from the file path (e.g., "user_plugin")
+        module_name = os.path.splitext(os.path.basename(file_path))[0]
+
+        spec = importlib.util.spec_from_file_location(module_name, file_path)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        else:
+            raise ImportError(f"Could not load module from {file_path}")

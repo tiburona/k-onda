@@ -44,8 +44,7 @@ class RateMethods:
         if self._spikes is None:
             self._spikes = self.unit.find_spikes(*self.spike_range)
         return self._spikes
-
-    
+ 
     @property
     def spikes_in_seconds_from_start(self):
         return self.unit.find_spikes(*self.spike_range) - self.start
@@ -224,6 +223,7 @@ class SpikePeriod(Period, RateMethods):
         self._stop = self._start + self.duration 
         self._spikes = None
         
+        
     @property
     def start(self):
         return self._start - self.pre_period
@@ -236,6 +236,8 @@ class SpikePeriod(Period, RateMethods):
     def get_events(self):
         self._events = [SpikeEvent(self, self.unit, start, i) 
                         for i, start in enumerate(self.event_starts)]
+
+  
         
         
 class SpikeEvent(Event, RateMethods, BinMethods):
@@ -243,6 +245,7 @@ class SpikeEvent(Event, RateMethods, BinMethods):
         super().__init__(period, index)
         self.unit = unit
         self.private_cache = {}
+        self.onset = onset
         self._start = onset/self.sampling_rate
         self._spikes = None
 
@@ -282,8 +285,6 @@ class SpikeEvent(Event, RateMethods, BinMethods):
 class SpikePrepMethods(PrepMethods):
 
     def spike_prep(self):
-        if self.identifier == 'IG178':
-            a = 'foo'
         if 'spike' in self.initialized:
             return
         self.initialized.append('spike')
@@ -305,8 +306,6 @@ class SpikePrepMethods(PrepMethods):
         
     def units_prep(self):
         units_info = self.animal_info.get('units', {})
-        if self.identifier == 'IG177':
-            a = 'foo'
         if 'get_units_from_phy' in units_info.get('instructions', []):
             self.get_units_from_phy()
 

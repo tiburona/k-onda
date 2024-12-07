@@ -221,7 +221,7 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
             # a binary mask that is True when a time bin in the spectrogram belongs to this event
             mask = (np.abs(time_bins[:, None] - event_times) <= epsilon).any(axis=1)
 
-            events.append(LFPEvent(i, event_times, mask, self))
+            events.append(LFPEvent(i, event_times, event_start, mask, self))
         
         self._events = events
         return events
@@ -250,9 +250,10 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
 
 class LFPEvent(Event, LFPMethods, LFPDataSelector):
 
-    def __init__(self, identifier, event_times, mask, period):
+    def __init__(self, identifier, event_times, onset, mask, period):
         super().__init__(period, identifier)
         self.event_times = event_times
+        self.onset = onset
         self.mask = mask
         self.animal = period.animal
         self.period_type = self.parent.period_type

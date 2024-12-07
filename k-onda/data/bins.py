@@ -41,6 +41,9 @@ class TimeBin(Bin):
 
         self.time = ts[self.identifier] 
 
+        # TODO add in the actual resampling here
+        self.resampled_time_point = round(self.time/self.parent.finest_res, self.parent.round_to)
+
 
 class TimeBinMethods:
          
@@ -52,6 +55,7 @@ class TimeBinMethods:
     @property
     def time_bins(self):
         return self.get_time_bins(self.calc)
+    
     
 
 class FrequencyBin(Bin, TimeBinMethods):
