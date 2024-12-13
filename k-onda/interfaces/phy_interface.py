@@ -111,8 +111,6 @@ class PhyInterface:
         return self.get_mean_waveforms(cluster_id, electrodes)
 
     def get_mean_waveforms(self, cluster_id, electrodes):
-        if self.animal.identifier == 'IG177' and cluster_id == 12:
-            a = 'foo'
         channels_used = self.model.get_cluster_channels(cluster_id)
         indices = np.where(np.isin(channels_used, electrodes))[0]
         waveforms = self.model.get_cluster_spike_waveforms(cluster_id)

@@ -2,9 +2,7 @@ from data.period_event import Period, Event
 import numpy as np
 from interfaces.matlab_interface import MatlabInterface
 from utils.math_functions import filter_60_hz, divide_by_rms, downsample
-from copy import deepcopy
 from neo.rawio import BlackrockRawIO
-import os
 from data.prep_methods import PrepMethods
 
 
@@ -81,8 +79,6 @@ class LFPPrepMethods(PrepMethods):
             self._processed_lfp[brain_region] = normed
 
     def validate_events(self):
-        if self.identifier == 'IG154':
-            a = 'foo'
         if not self.include():
             return 
         region = self.current_brain_region
@@ -164,11 +160,15 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         self.parent = animal
         padding = self.calc_opts['lfp_padding']
         start_pad, end_pad = np.round(np.array(padding) * self.lfp_sampling_rate).astype(int)
-        self.duration_in_samples = round(self.duration * self.lfp_sampling_rate)
-        self.start = round(self.onset)
-        self.stop = self.start + self.duration_in_samples
-        self.pad_start = self.start - start_pad
-        self.pad_stop = self.stop + end_pad
+        self.duration_in_lfp_samples = round(self.duration * self.lfp_sampling_rate)
+        conversion_factor = self.lfp_sampling_rate/self.sampling_rate 
+        # For LFP, you need a subtraction for 0 indexing. 
+        self.onset_in_lfp_samples = int(self.onset * conversion_factor) - 1
+        period_events = (np.array(period_events) * conversion_factor).astype(int) - 1
+        self.start_in_lfp_samples = self.onset_in_lfp_samples
+        self.stop_in_lfp_samples = self.start_in_lfp_samples + self.duration_in_lfp_samples
+        self.pad_start = self.start_in_lfp_samples - start_pad
+        self.pad_stop = self.stop_in_lfp_samples + end_pad
         self._spectrogram = None
         self.brain_region = self.current_brain_region
         self.frequency_band = self.current_frequency_band
@@ -180,7 +180,8 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         
     @property
     def unpadded_data(self):
-        return self.get_data_from_animal_dict(self.animal.processed_lfp, self.start, self.stop)
+        return self.get_data_from_animal_dict(
+            self.animal.processed_lfp, self.start_in_lfp_samples, self.stop_in_lfp_samples)
     
     def get_data_from_animal_dict(self, data_source, start, stop):
         if self.current_brain_region:
@@ -210,7 +211,7 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
 
             # get time points where the event will fall in the spectrogram in seconds
             spect_start = round(
-                (event_start - self.onset)/self.lfp_sampling_rate + true_beginning - self.pre_event
+                (event_start - self.lfp_onset)/self.lfp_sampling_rate + true_beginning - self.pre_event
                 , 2)
             spect_end = round(spect_start + self.pre_event + self.post_event, 2)
             num_points = round(np.ceil((spect_end - spect_start) / bin_size - epsilon))  
@@ -251,9 +252,8 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
 class LFPEvent(Event, LFPMethods, LFPDataSelector):
 
     def __init__(self, identifier, event_times, onset, mask, period):
-        super().__init__(period, identifier)
+        super().__init__(period, onset, identifier)
         self.event_times = event_times
-        self.onset = onset
         self.mask = mask
         self.animal = period.animal
         self.period_type = self.parent.period_type

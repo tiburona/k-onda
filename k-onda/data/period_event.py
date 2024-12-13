@@ -1,10 +1,20 @@
 from data.data import Data
 from data.bins import BinMethods
+import numpy as np
+
 
 class TimeLineMethods:
       
     def get_universal_res_onset(self):
         return self.onset/self.sampling_rate/self.finest_res
+    
+    @property
+    def universal_res_start(self):
+        return int(self.start/self.finest_res)
+    
+    @property
+    def universal_res_stop(self):  # TODO make sure this is handles the right edge properly
+        return np.ceil(self.stop/self.finest_res)
        
 
 class Period(Data, BinMethods, TimeLineMethods):
@@ -37,11 +47,20 @@ class Period(Data, BinMethods, TimeLineMethods):
     @property
     def children(self):
         return self.events
+    
+    @property
+    def start(self):
+        return self._start - self.pre_period
+    
+    @property
+    def stop(self):
+        return self._stop + self.post_period
        
     @property
     def events(self):
         if not self._events:
-            return self._events
+            return self.get_events()
+        return self._events
     
     @property
     def reference_override(self):
@@ -68,14 +87,26 @@ class Event(Data, BinMethods, TimeLineMethods):
 
     _name = 'event'
 
-    def __init__(self, period, index):
+    def __init__(self, period, onset, index):
         super().__init__()
         self.period = period
+        self.onset = onset
+        self._start = onset/self.sampling_rate
         self.identifier = index
         self.parent = period
         self.period_type = self.period.period_type
         self.duration = self.pre_event + self.post_event
         self.experiment = self.period.experiment
+        self.universal_res_onset = self.get_universal_res_onset()
+
+
+    @property
+    def start(self):
+        return self._start - self.pre_event
+    
+    @property
+    def stop(self):
+        return self._start + self.post_event
 
     @property
     def reference(self):

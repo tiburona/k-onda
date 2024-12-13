@@ -1,0 +1,8 @@
+h5py==3.11.0
+matplotlib==3.8.4
+neo==0.13.0
+numpy==2.2.0
+pandas==2.2.3
+phylib==2.4.3
+scikit_learn==1.4.2
+scipy==1.14.1

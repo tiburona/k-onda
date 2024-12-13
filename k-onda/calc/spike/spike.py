@@ -1,4 +1,5 @@
 
+import os
 import numpy as np
 from collections import defaultdict
 from bisect import bisect_left as bs_left, bisect_right as bs_right
@@ -16,7 +17,7 @@ from utils.math_functions import calc_hist, cross_correlation, correlogram
 from data.bins import BinMethods
 from interfaces.phy_interface import PhyInterface
 from data.prep_methods import PrepMethods
-import os
+
 
 
 
@@ -54,26 +55,19 @@ class RateMethods:
         return (self.start, self.stop)
     
     def get_psth(self):
-        return self._get_calc('psth')
+        return self.resolve_calc_fun('psth')
     
     def get_firing_rates(self):
-        return self._get_calc('firing_rates')
+        return self.resolve_calc_fun('firing_rates')
     
     def get_spike_counts(self):
-        return self._get_calc('spike_counts')
+        return self.resolve_calc_fun('spike_counts')
     
     def get_spike_train(self):
-        return self._get_calc('spike_train')
+        return self.resolve_calc_fun('spike_train')
     
     def get_proportion(self):
-        return self._get_calc('proportion')
-        
-    def _get_calc(self, calc_type):
-        stop_at=self.calc_opts.get('base', 'event')
-        if self.name == stop_at:
-            return getattr(self, f"_get_{calc_type}")()
-        else:
-            return self.get_average(f"get_{calc_type}", stop_at=stop_at)
+        return self.resolve_calc_fun('proportion')
         
     def _get_spike_counts(self):
         if 'counts' in self.private_cache:
@@ -219,18 +213,7 @@ class SpikePeriod(Period, RateMethods):
         self.animal = self.unit.animal
         self.parent = unit
         self.private_cache = {}
-        self._start = self.onset/self.sampling_rate 
-        self._stop = self._start + self.duration 
         self._spikes = None
-        
-        
-    @property
-    def start(self):
-        return self._start - self.pre_period
-    
-    @property
-    def stop(self):
-        return self._stop + self.post_period
         
         
     def get_events(self):
@@ -242,11 +225,9 @@ class SpikePeriod(Period, RateMethods):
         
 class SpikeEvent(Event, RateMethods, BinMethods):
     def __init__(self, period, unit, onset,  index):
-        super().__init__(period, index)
+        super().__init__(period, onset, index)
         self.unit = unit
         self.private_cache = {}
-        self.onset = onset
-        self._start = onset/self.sampling_rate
         self._spikes = None
 
     @property
@@ -291,12 +272,6 @@ class SpikePrepMethods(PrepMethods):
         self.units_prep()
         for unit in [unit for _, units in self.units.items() for unit in units]:
             unit.spike_prep()
-
-            # if self.selected_period_type:
-            #     unit.children = unit.spike_periods[self.selected_period_type]
-            # else:
-            #     unit.children = [period for pt, periods in unit.spike_periods.items() 
-            #                      for period in periods]
         
     def select_spike_children(self):
         if self.selected_neuron_type:

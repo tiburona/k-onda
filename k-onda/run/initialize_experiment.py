@@ -6,7 +6,6 @@ import h5py
 
 
 from data.experiment_group_animal import Experiment, Group, Animal
-from calc.behavior.behavior import Behavior
 from utils.utils import group_to_dict
 from data.prep_methods import PrepMethods
 

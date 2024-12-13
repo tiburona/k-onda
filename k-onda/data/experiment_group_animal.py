@@ -150,7 +150,7 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, 
             for nt in neuron_types:
                 setattr(self, nt, [])
         self._processed_lfp = {}
-        self._imported_behavior = {}
+        self._processed_behavior = {}
         self.units = defaultdict(list)
         self.neurons = defaultdict(list)
         self.lfp_periods = defaultdict(list)

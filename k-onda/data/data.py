@@ -29,7 +29,13 @@ class Data(Base):
         elif self.calc_opts.get('evoked'):
             return self.evoked
         
-
+    def resolve_calc_fun(self, calc_type):
+        stop_at=self.calc_opts.get('base', 'event')
+        if self.name == stop_at:
+            return getattr(self, f"_get_{calc_type}")()
+        else:
+            return self.get_average(f"get_{calc_type}", stop_at=stop_at)
+    
     @property
     def calc(self):
         return self.get_calc()

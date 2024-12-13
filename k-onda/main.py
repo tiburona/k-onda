@@ -14,13 +14,12 @@ def main():
 
 
 def run(log=True):
-    runner = Runner(config_file='/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json')
-    #runner = Runner(config_file='/Users/katie/likhtik/CH27mice/init_config.json')
-    # for spec in [UNITS_WAVEFORM_PLOTS, CH27_GROUP_PSTH_OPTS, CH27_UNITS_RASTER_OPTS, 
-    #              CH27_UNITS_PERCENT_CHANGE_OPTS, CH27_PERCENT_CHANGE_OPTS]:
-    #     runner.run(spec)
-    # runner.run(GROUP_PSTH_OPTS)
-    runner.run(MRL_OPTS, prep=MRL_PREP_OPTS)
+    # config_file = '/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json'
+    config_file = ('/Users/katie/likhtik/likhtik_scripts/spike_data_processing/' 
+                   'documentation/tutorials/psth/data/init_config.json')
+    runner = Runner(config_file=config_file)
+
+    runner.run(GROUP_PSTH_OPTS)
  
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')
