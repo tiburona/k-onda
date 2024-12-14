@@ -41,6 +41,7 @@ class Stats(Base):
         self.set_attributes(calc_opts)
         self.opts_dicts.append(deepcopy(self.calc_opts))
         name = self.set_df_name()
+        self.experiment.initialize_data()
         df = pd.DataFrame(self.get_rows())
         vs = ['unit_num', 'animal', 'category', 'group', 'frequency']
         for var in vs:
@@ -180,7 +181,7 @@ class Stats(Base):
         else:
             experiment = self.experiment
 
-        sources = [source for source in getattr(experiment, f'all_{level}s') if source.is_valid]
+        sources = [source for source in getattr(experiment, f'all_{level}s')]
 
         if self.calc_opts.get('frequency_type') == 'continuous':
             other_attributes.append('frequency')
@@ -199,7 +200,7 @@ class Stats(Base):
                 else:
                     row_dict = {self.data_col: source.data}
             else:
-                row_dict = {self.data_col: source.mean_data}
+                row_dict = {self.data_col: source.mean}
             
             for src in source.ancestors:
                 row_dict[src.name] = src.identifier

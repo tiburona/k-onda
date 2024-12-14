@@ -20,7 +20,8 @@ def run(log=True):
     #              CH27_UNITS_PERCENT_CHANGE_OPTS, CH27_PERCENT_CHANGE_OPTS]:
     #     runner.run(spec)
 
-    runner.run(CH27_UNITS_RASTER_OPTS)
+    # runner.run(CSV_OPTS)
+    runner.run(ANIMAL_PERCENT_CHANGE_OPTS)
  
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')

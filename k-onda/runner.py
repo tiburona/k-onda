@@ -54,7 +54,8 @@ class Runner(OptsValidator):
         elif self.proc_name == 'make_csv':
             self.set_executors(Stats, 'make_df')
             self.follow_up_method = 'make_csv'
-            opts_list = opts if isinstance(self.opts, list) else [opts]
+            calc_opts = opts['calc_opts']
+            opts_list = calc_opts if isinstance(calc_opts, list) else [calc_opts]
             self.run_list(opts_list)
 
         else:
@@ -150,4 +151,5 @@ class Runner(OptsValidator):
         self.validate_and_load(opts)
         self.run_main(opts)
         if self.follow_up_method is not None:
-            self.follow_up_method(*args, **kwargs)
+            getattr(self.executing_instance, self.follow_up_method)(*args, **kwargs)
+            

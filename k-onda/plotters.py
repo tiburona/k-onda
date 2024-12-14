@@ -109,6 +109,8 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         if 'layers' in self.active_spec:
             for layer in self.active_spec['layers']:                
                 main = layer.get('main', True)
+                if 'calc_opts' in layer:
+                    self.calc_opts = layer['calc_opts']
                 aesthetics.update(layer.get('aesthetics', {}))
                 if 'attr' in layer:
                     self.active_spec['attr'] = layer['attr']
@@ -262,9 +264,15 @@ class CategoryPlotter(FeaturePlotter):
                 key=lambda x: segment_info[x]['grouping']))
 
         # some_factor adjusts how much space each character takes
-        labels = segment_info[division_types[0]]['members']
-        spacing = self.get_aesthetic_args(observation, aesthetics).get('spacing', 1)
+        if division_types[0] == 'data_source':
+            labels = [m.identifier for m in segment_info[division_types[0]]['members']]
+        else:
+            labels = segment_info[division_types[0]]['members']
+        
         label_lengths = [len(label) for label in labels]
+     
+        spacing = self.get_aesthetic_args(observation, aesthetics).get('spacing', 1)
+        
         max_label_length = max(label_lengths)
         spacing = max_label_length * spacing
 
@@ -330,10 +338,13 @@ class CategoryPlotter(FeaturePlotter):
         tick_label_ymin = bbox_in_ax.ymin
 
         divisions = self.active_spec['divisions']
+
         levels = reversed(sorted(divisions.keys(), key=lambda k: divisions[k]['grouping']))
         level_adjustment = 0
         for i, level in enumerate(levels):
             labels = divisions[level]['members']
+            if not isinstance(labels[0], str):
+                labels = [lab.identifier for lab in labels]
             if 'legend' not in divisions[level]:
                 level_adjustment -= .05
             if i == 0:
