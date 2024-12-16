@@ -89,30 +89,27 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         print(print(hex(id(fig))))
         plt.close(fig)
         self.active_fig = None
-        a = 'foo'
 
     def delegate(self, info, is_last=False):
 
         def send(plot_type):
-            PLOT_TYPES[plot_type]().process_calc(info, aesthetics=aesthetics, is_last=is_last)
+            PLOT_TYPES[plot_type]().process_calc(selected_info, aesthetics=aesthetics, is_last=is_last)
 
-        aesthetics = self.active_spec.get('aesthetics', {})
+        base_aesthetics = self.active_spec.get('aesthetics', {})
         if 'layers' in self.active_spec:
             for i, layer in enumerate(self.active_spec['layers']):
-                if layer['attr'] == 'scatter':
-                    a = 'foo'
                 if i == len(self.active_spec['layers']):
-                    self.active_spec['main'] = True  
-                layer_aesthetics = deepcopy(aesthetics)
+                    self.active_spec['main'] = True 
+                selected_info = [row for row in info if row['layer'] == i]
+                layer_aesthetics = deepcopy(base_aesthetics)
                 aesthetics = recursive_update(layer_aesthetics, layer.get('aesthetics', {}))           
-                if 'attr' in layer:
-                    for row in info:
-                        row['attr'] = layer['attr']
                 if 'plot_type' in layer:
                     send(layer['plot_type'])
                 else:
                     send(self.graph_opts['plot_type'])
         else:
+            selected_info = info
+            aesthetics = base_aesthetics
             send(self.graph_opts['plot_type'])
                 
 

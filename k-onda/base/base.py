@@ -45,6 +45,8 @@ class Base:
     def set_filter_from_calc_opts(self):
         self.filter = defaultdict(lambda: defaultdict(tuple))
         filters = self.calc_opts.get('filter', {})
+        if not filters:
+            return
         if isinstance(filters, list):
             for filter in filters:
                 self.add_to_filters(self.parse_natural_language_filter(filter))

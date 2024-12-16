@@ -212,3 +212,54 @@ UNITS_WAVEFORM_PLOTS = {
                   'base': 'unit',
                    'filter': {'unit': {'category':  ('==', 'good')}}}
     }
+
+
+new_percent_change_plot = {
+    'graph_dir': '/Users/katie/likhtik/CH27',
+    'fname': 'new_group_percent_change_plot_diff_colors',
+    'plot_spec': {
+            'section': {
+                'aesthetics': {
+                    'ax': {'border': {'top': 'FFF', 'right': 'FFF'}},
+                    'default': {'label': {'ax': {'axis': ('', 'Percent Change in Firing Rates')}}}
+                    },
+                'divisions': {
+                'data_source': {
+                    'type': 'group', 
+                    'members': 'all_groups', 
+                    'dim': 1}},
+                'segment': {
+                    'aesthetics': {
+                        'period_type': {
+                            'prelight': {'background_color': ('white', .2)},
+                            'light': {'background_color': ('green', .2)}}
+                },
+                    'layers': [
+                        {'plot_type': 'categorical_scatter', 
+                        'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'marker': {'color': 'black'}}},
+                        'attr': 'greatgrandchildren_scatter',
+                        'calc_opts': {'filter': {'unit': {'category':  ('==', 'good')}}}},
+                        {'plot_type': 'categorical_scatter', 
+                        'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'marker': {'facecolor': 'white', 'edgecolor': 'black'}}},
+                        'attr': 'greatgrandchildren_scatter',
+                        'calc_opts': {'filter': {'unit': {'category':  ('==', 'mua')}}}}, 
+                        {'plot_type': 'categorical_line', 
+                        'attr': 'mean', 
+                        'calc_opts': {'filter': None},
+                        'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'marker': {'colors': 'blue', 
+                                                    'linestyles': '--'}}}}],
+                    'divisions': {
+                        'period_type': {
+                            'members': ['light']}}
+                    }
+            }}
+}
+
+
+NEW_CH27_PERCENT_CHANGE_OPTS = {
+    'procedure': 'make_plots',
+    'graph_opts': new_percent_change_plot,
+    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'base': 'period',
+                    'bin_size': .01, 'percent_change': {'level': 'unit', 'reference': 'prelight'},
+                    'data_path': '/Users/katie/likhtik/CH27mice'}
+}

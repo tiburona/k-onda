@@ -1,5 +1,6 @@
 from plotting.plotter_base import PlotterBase
 from plotting.subplotter import Subplotter
+from utils.utils import recursive_update
 
 from copy import deepcopy
 from functools import reduce
@@ -36,6 +37,8 @@ class Partition(PlotterBase):
             self.fig = self.active_fig
         self.inherited_info = info if info else {}
         self.info_by_division = []
+        self.info_by_division_by_layers = []
+        self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
         self.info_by_attr = {}
         self.processor_classes = {
             'section': Section,
@@ -55,7 +58,7 @@ class Partition(PlotterBase):
         if not divider:
             return
         if 'all' in divider.get('members', []):
-            divider['data_sources'] = [s.identifier for s in getattr(self.experiment, divider['members'][0])]
+            divider['members'] = [s.identifier for s in getattr(self.experiment, divider['members'])]
             
     def process_divider(self, divider_type, current_divider, divisions, info=None):
 
@@ -63,7 +66,6 @@ class Partition(PlotterBase):
         
         for i, member in enumerate(current_divider['members']):
 
-           
             info[divider_type] = member
             if divider_type == 'data_source':
                 info['data_object_type'] = current_divider['type']
@@ -88,21 +90,39 @@ class Partition(PlotterBase):
                     processor.start()
 
     def get_calcs(self):
-        for d in self.info_by_division:
-            # Set selected attributes if applicable
-            for key in ['neuron_type', 'period_type', 'period_group']:
-                if key in d:
-                    setattr(self, f"selected_{key}", d[key])
+        
+        d = self.info_by_division[-1]
 
-            data_source = self.get_data_sources(data_object_type = d['data_object_type'], 
-                                                identifier=d['data_source'])
-            
-            # Determine the list of attributes, with a fallback if none are found
-            attrs = [layer['attr'] for layer in self.layers if 'attr' in layer] or [
-                self.active_spec.get('attr', 'calc')]
-           
-            d.update({attr: getattr(data_source, attr) for attr in attrs})
-            d.update({data_source.name: data_source.identifier})
+        for key in ['neuron_type', 'period_type', 'period_group']:
+            if key in d:
+                setattr(self, f"selected_{key}", d[key])
+
+        data_source = self.get_data_sources(data_object_type = d['data_object_type'], 
+                                            identifier=d['data_source'])
+        
+        if self.layers:
+            for i, layer in enumerate(self.layers):
+                if i == 2:
+                    a = 'foo'
+                attr = layer.get('attr', self.active_spec.get('attr', 'calc'))
+                if 'calc_opts' in layer:
+                    recursive_update(self.calc_opts, layer['calc_opts'])
+                    self.calc_opts = self.calc_opts
+                new_d = deepcopy(d)
+                new_d.update({
+                    'layer': i, 
+                    'attr': attr,
+                    attr: getattr(data_source, attr), 
+                    data_source.name: data_source.identifier})
+                self.info_by_division_by_layers.append(new_d)
+                
+        else:
+            attr = self.active_spec.get('attr', 'calc')
+            d.update({
+                    'attr': attr, 
+                    attr: getattr(data_source, attr), 
+                    data_source.name: data_source.identifier})
+        
 
 class Section(Partition):
     def __init__(self, origin_plotter, parent_plotter=None,
@@ -140,7 +160,7 @@ class Section(Partition):
 
         if not self.next:
             self.get_calcs()
-            self.origin_plotter.delegate([self.info_by_division.pop()], is_last=self.last)
+            self.origin_plotter.delegate([self.info_dicts.pop()], is_last=self.last)
 
 
 class Segment(Partition):
@@ -161,10 +181,8 @@ class Segment(Partition):
         self.remaining_calls -= 1
         self.get_calcs()
         if self.last:
-        #if i == len(current_divider['members']) - 1:
-            self.origin_plotter.delegate(self.info_by_division, is_last=self.last)
+            self.origin_plotter.delegate(self.info_dicts, is_last=self.last)
             
-
 
 class Subset:
     pass

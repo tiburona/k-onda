@@ -15,11 +15,12 @@ def main():
 
 def run(log=True):
     # config_file = '/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json'
-    config_file = ('/Users/katie/likhtik/likhtik_scripts/spike_data_processing/' 
-                   'documentation/tutorials/psth/data/init_config.json')
+    # config_file = ('/Users/katie/likhtik/likhtik_scripts/spike_data_processing/' 
+    #               'documentation/tutorials/psth/data/init_config.json')
+    config_file = '/Users/katie/likhtik/CH27mice/init_config.json'
     runner = Runner(config_file=config_file)
 
-    runner.run(GROUP_PSTH_OPTS)
+    runner.run(NEW_CH27_PERCENT_CHANGE_OPTS)
  
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')

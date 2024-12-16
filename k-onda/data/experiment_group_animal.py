@@ -87,10 +87,11 @@ class Experiment(Data, SpikePrepMethods):
         self.prep_animals()
         if all(['neurons' in animal.initialized for animal in self.all_animals if animal.include()]):
             return
-        self.neuron_classifier.classify()
-        for animal in [animal for animal in self.all_animals if animal.include()]:
-            if not animal.neurons:
-                raise ValueError("This animal has not had units classified.")
+        if self.neuron_classifier.config:
+            self.neuron_classifier.classify()
+            for animal in [animal for animal in self.all_animals if animal.include()]:
+                if not animal.neurons:
+                   raise ValueError("This animal has not had units classified.")
         
     def lfp_prep(self):
         self.prep_animals()
@@ -105,8 +106,6 @@ class Experiment(Data, SpikePrepMethods):
 
     def prep_animals(self):
         for animal in self.all_animals:
-            if animal.identifier == 'IG178':
-                a = 'foo'
             if not animal.include():
                 continue
             getattr(animal, f"{self.kind_of_data}_prep")()

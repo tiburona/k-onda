@@ -10,20 +10,22 @@ class NeuronClassifier:
     
     def __init__(self, experiment):
         self.experiment = experiment
-        config = self.experiment.exp_info['categorize_neurons']
-        self.kmeans = config.get('kmeans')
-        self.neuron_types = config['neuron_types_ascending']
-        if config.get('neuron_colors'):
-            neuron_colors = config['neuron_colors']
+        self.config = self.experiment.exp_info.get('categorize_neurons')
+        if not self.config:
+            return
+        self.kmeans = self.config.get('kmeans')
+        self.neuron_types = self.config['neuron_types_ascending']
+        if self.config.get('neuron_colors'):
+            neuron_colors = self.config['neuron_colors']
         else:
             neuron_colors = plt.cm.get_cmap('viridis', len(self.neuron_types_ascending))
         self.neuron_colors = {t: c for t, c in zip(self.neuron_types, neuron_colors)}
-        self.characteristics = config.get('characteristics', ['firing_rate', 'fwhm_microseconds'])
-        self.sort_on = config.get('sort_on', 'firing_rate')
-        self.plot_characteristics = config.get('plot')
+        self.characteristics = self.config.get('characteristics', ['firing_rate', 'fwhm_microseconds'])
+        self.sort_on = self.config.get('sort_on', 'firing_rate')
+        self.plot_characteristics = self.config.get('plot')
         self.sort_on_ind = self.characteristics.index(self.sort_on) 
-        self.cutoffs = config.get('cutoffs', [])
-        self.block_ad_hoc_cutoffs_setting = config.get('block_ad_hoc_cutoffs_setting', False)
+        self.cutoffs = self.config.get('cutoffs', [])
+        self.block_ad_hoc_cutoffs_setting = self.config.get('block_ad_hoc_cutoffs_setting', False)
         self.labels = None
         self.centers = None
 
@@ -32,7 +34,8 @@ class NeuronClassifier:
         return [unit for unit in self.experiment.all_units if unit.category == 'good']
 
     def classify(self):
-
+        if not self.config:
+            return
         saved_calc_exists, categorized_neurons, pickle_path = self.experiment.load(
             self.experiment.construct_path('spike'), ['classified_neurons'])
         if not saved_calc_exists:

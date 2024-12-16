@@ -12,9 +12,11 @@ period_info = {
     'instructions': ['periods_from_nev']
 }
 
+units = {'instructions': ['get_units_from_phy']}
+
 animals = [
-    {'identifier':'CH275', 'period_info': period_info, 'condition': 'foo'},
-    {'identifier':'CH272', 'period_info': period_info, 'condition': 'foo'}
+    {'identifier':'CH275', 'period_info': period_info, 'condition': 'foo', 'units': units},
+    {'identifier':'CH272', 'period_info': period_info, 'condition': 'foo', 'units': units}
     
 ]
 
@@ -28,8 +30,9 @@ exp_info['path_constructors'] = {
     'nev' : 
         {'template': '/Users/katie/likhtik/CH27mice/{identifier}/{identifier}_HABCTXB.mat', 'fields': ['identifier']},
     'phy': 
-        {'template': '/Users/katie/likhtik/CH27mice/{identifier}', 'fields': ['identifier']}   
-        }
+        {'template': '/Users/katie/likhtik/CH27mice/{identifier}', 'fields': ['identifier']},
+    'spike':
+        {'template': '/Users/katie/likhtik/CH27mice/spike/{identifier}', 'fields': ['identifier']}}
     
 exp_info['get_units_from_phy'] = True
 
