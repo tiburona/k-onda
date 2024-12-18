@@ -208,7 +208,7 @@ class CategoryPlotter(FeaturePlotter):
 
         return new_divisions
     
-    def assign_positions(self, divisions, base_position=0, level_names=None, prefix_labels=()):
+    def assign_positions(self, divisions, aesthetics, base_position=0, level_names=None, prefix_labels=()):
         
         if level_names is None:
             level_names = list(divisions.keys())
@@ -221,7 +221,7 @@ class CategoryPlotter(FeaturePlotter):
         remaining_levels = level_names[1:]
 
         division_info = divisions[division]
-        spacing = division_info.get('spacing', 2)  # Get 'spacing' from division_info
+        spacing = aesthetics.get('default', {}).get('spacing', 2)  # Get 'spacing' from division_info
         members = division_info['members']
 
         label_to_pos = {}
@@ -234,6 +234,7 @@ class CategoryPlotter(FeaturePlotter):
                 # Recursively assign positions for subcategories
                 sub_positions = self.assign_positions(
                     divisions,
+                    aesthetics,
                     base_position=position,
                     level_names=remaining_levels,
                     prefix_labels=current_label
@@ -256,7 +257,7 @@ class CategoryPlotter(FeaturePlotter):
         
     def process_calc(self, info, aesthetics=None, is_last=False):
         transformed_divisions = deepcopy(self.active_spec['divisions'])
-        self.label_to_pos = self.assign_positions(transformed_divisions)
+        self.label_to_pos = self.assign_positions(transformed_divisions, aesthetics)
         ax = self.active_acks
 
         for row in info:
@@ -292,8 +293,8 @@ class CategoricalScatterPlotter(CategoryPlotter):
         if 'background_color' in aesthetic_args:
             background_color, alpha = aesthetic_args.pop('background_color')
             ax.axvspan(
-                position - cat_width / 2,
-                position + cat_width / 2,
+                position - cat_width / 4, # TODO cat_width isn't really doing anything now
+                position + cat_width / 4,
                 facecolor=background_color, alpha=alpha)
     
 

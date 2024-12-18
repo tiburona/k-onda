@@ -6,7 +6,7 @@ from datetime import datetime
 import h5py
 import json
 import pickle
-
+from copy import deepcopy
 
 DEBUG_MODE = 0
 
@@ -28,10 +28,6 @@ def make_class_property(attr_name, setter=True):
         return classproperty(getter, setter)
     else:
         return classproperty(getter)
-
-
-
-
 
 
 def cache_method(method):
@@ -236,9 +232,51 @@ def recursive_update(d1, d2):
         if isinstance(value, dict) and key in d1 and isinstance(d1[key], dict):
             recursive_update(d1[key], value)  # Recursively update inner dictionary
         else:
-            d1[key] = value  # Overwrite or add new key-value pair
+            d1[key] = deepcopy(value)  # Overwrite or add new key-value pair
     return d1
 
+
+def collect_dict_references(obj, prefix="root", refs=None):
+    """Collect all dictionary references (with their paths) from obj.
+    Returns a dict mapping: id(obj) -> list_of_paths."""
+    if refs is None:
+        refs = {}
+    if isinstance(obj, dict):
+        # Record this dictionary
+        refs.setdefault(id(obj), []).append(prefix)
+        # Recurse into dictionary values
+        for k, v in obj.items():
+            collect_dict_references(v, f"{prefix}.{k}", refs)
+    elif isinstance(obj, list):
+        # Recurse into list items
+        for i, item in enumerate(obj):
+            collect_dict_references(item, f"{prefix}[{i}]", refs)
+    # For other types, do nothing
+    return refs
+
+ 
+
+def print_common_dict_references(obj1, obj2):
+    # Collect references from both objects
+    refs1 = collect_dict_references(obj1, prefix="obj1")
+    refs2 = collect_dict_references(obj2, prefix="obj2")
+    
+    # Find common dictionary references
+    common_ids = set(refs1.keys()) & set(refs2.keys())
+    
+    if not common_ids:
+        print("No common dictionary references found.")
+    else:
+        for cid in common_ids:
+            paths_in_obj1 = refs1[cid]
+            paths_in_obj2 = refs2[cid]
+            print(f"Common dictionary id={cid} found:")
+            print(f"  In obj1 at: {paths_in_obj1}")
+            print(f"  In obj2 at: {paths_in_obj2}")
+
+# Example usage:
+# Suppose obj1 and obj2 share a dictionary reference somewhere deep inside.
+# print_common_dict_references(obj1, obj2)
 
 operations = {
             '==': lambda a, b: a == b,

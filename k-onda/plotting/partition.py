@@ -1,6 +1,6 @@
 from plotting.plotter_base import PlotterBase
 from plotting.subplotter import Subplotter
-from utils.utils import recursive_update
+from utils.utils import recursive_update, collect_dict_references, print_common_dict_references
 
 from copy import deepcopy
 from functools import reduce
@@ -23,7 +23,7 @@ class Partition(PlotterBase):
         self.total_calls = reduce(
             operator.mul, [len(div['members']) for div in self.spec['divisions'].values()], 1)
         self.remaining_calls = self.total_calls
-        self.layers = self.spec.get('layers', {})
+        self.layers = deepcopy(self.spec.get('layers', {}))
         if self.parent_processor:
             self.layers.update(self.parent_processor.layers)
         self.aesthetics = self.spec.get('aesthetics', {})
@@ -102,11 +102,13 @@ class Partition(PlotterBase):
         
         if self.layers:
             for i, layer in enumerate(self.layers):
-                if i == 2:
-                    a = 'foo'
                 attr = layer.get('attr', self.active_spec.get('attr', 'calc'))
                 if 'calc_opts' in layer:
+                    print_common_dict_references(self.layers, self.calc_opts)
+                    
                     recursive_update(self.calc_opts, layer['calc_opts'])
+                    print_common_dict_references(self.layers, self.calc_opts)
+
                     self.calc_opts = self.calc_opts
                 new_d = deepcopy(d)
                 new_d.update({

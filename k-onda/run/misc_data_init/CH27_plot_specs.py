@@ -224,33 +224,32 @@ new_percent_change_plot = {
                     'default': {'label': {'ax': {'axis': ('', 'Percent Change in Firing Rates')}}}
                     },
                 'divisions': {
-                'data_source': {
-                    'type': 'group', 
-                    'members': 'all_groups', 
+                'period_type': {
+                    'members': ['light'], 
                     'dim': 1}},
                 'segment': {
-                    'aesthetics': {
-                        'period_type': {
-                            'prelight': {'background_color': ('white', .2)},
-                            'light': {'background_color': ('green', .2)}}
-                },
                     'layers': [
                         {'plot_type': 'categorical_scatter', 
-                        'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'marker': {'color': 'black'}}},
-                        'attr': 'greatgrandchildren_scatter',
+                        'aesthetics': {'default': {'cat_width': 3, 'spacing': 2, 'marker': {'color': 'black'}},
+                                       'period_type': {'light': {'background_color': ('green', .2)}}},
+                        'attr': 'grandchildren_scatter',
                         'calc_opts': {'filter': {'unit': {'category':  ('==', 'good')}}}},
                         {'plot_type': 'categorical_scatter', 
-                        'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'marker': {'facecolor': 'white', 'edgecolor': 'black'}}},
-                        'attr': 'greatgrandchildren_scatter',
+                        'aesthetics': {'default': {'cat_width': 3, 'spacing': 2, 'marker': {'facecolor': 'white', 'edgecolor': 'black'}}},
+                        'attr': 'grandchildren_scatter',
                         'calc_opts': {'filter': {'unit': {'category':  ('==', 'mua')}}}}, 
                         {'plot_type': 'categorical_line', 
                         'attr': 'mean', 
                         'calc_opts': {'filter': None},
-                        'aesthetics': {'default': {'cat_width': 5, 'spacing': .2, 'marker': {'colors': 'blue', 
+                        'aesthetics': {'default': {'cat_width': 3, 'spacing': 2, 'marker': {'colors': 'blue', 
                                                     'linestyles': '--'}}}}],
                     'divisions': {
-                        'period_type': {
-                            'members': ['light']}}
+
+                        'data_source': {
+                            'type': 'animal',
+                            'members': 'all_animals',
+                            'dim':1},
+                            }
                     }
             }}
 }

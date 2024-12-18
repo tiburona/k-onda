@@ -22,13 +22,14 @@ class Data(Base):
     def get_calc(self, calc_type=None):
         if calc_type is None:
             calc_type = self.calc_type
-            self.calc_mode = 'normal'  # the other cases set calc_mode later
-            return getattr(self, f"get_{calc_type}")()
         if self.calc_opts.get('percent_change'):
             return self.percent_change
         elif self.calc_opts.get('evoked'):
             return self.evoked
-        
+        else:
+            self.calc_mode = 'normal'  # the other cases set calc_mode later
+            return getattr(self, f"get_{calc_type}")()
+       
     def resolve_calc_fun(self, calc_type):
         stop_at=self.calc_opts.get('base', 'event')
         if self.name == stop_at:
