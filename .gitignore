@@ -1,0 +1,33 @@
+# macOS system files
+.DS_Store
+
+# Python virtual environments
+env/
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+
+# JetBrains IDE settings
+.idea/
+
+# Visual Studio Code settings
+.vscode/
+.vscode/launch.json
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Other generated files
+*.bak
+*.orig
