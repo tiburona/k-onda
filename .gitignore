@@ -31,3 +31,6 @@ __pycache__/
 # Other generated files
 *.bak
 *.orig
+
+# Ignore egg-info
+*.egg-info/
