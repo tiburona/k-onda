@@ -60,7 +60,7 @@ class Period(Data, BinMethods, TimeLineMethods):
     @property
     def events(self):
         if not self._events:
-            return self.get_events()
+            self.get_events()
         return self._events
     
     @property
@@ -92,12 +92,12 @@ class Event(Data, BinMethods, TimeLineMethods):
         super().__init__()
         self.period = period
         self.onset = onset
-        self._start = onset/self.sampling_rate
         self.identifier = index
+        self.experiment = self.period.experiment
+        self._start = onset/self.sampling_rate
         self.parent = period
         self.period_type = self.period.period_type
         self.duration = self.pre_event + self.post_event
-        self.experiment = self.period.experiment
         self.universal_res_onset = self.get_universal_res_onset()
 
 

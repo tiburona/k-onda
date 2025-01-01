@@ -7,7 +7,7 @@ import random
 import string
 from functools import reduce
 
-from ..base import Base
+from k_onda.base import Base
 
 
 class Stats(Base):
@@ -193,10 +193,19 @@ class Stats(Base):
             
             for src in source.ancestors:
                 row_dict[src.name] = src.identifier
-                for other_attr in other_attributes:
-                    val = getattr(src, other_attr, None) 
+
+            for other_attr in other_attributes:
+                found_attr = False
+                for src in source.ancestors:
+                    val = getattr(src, other_attr, None)
                     if val is not None:
                         row_dict[other_attr] = val
+                        found_attr = True
+                        break
+                if found_attr:
+                    continue
+
+
             rows.append(row_dict)
 
         return rows

@@ -34,7 +34,8 @@ class PeriodConstructor:
             except AttributeError:
                 period_info = copy(self.animal.period_info)
 
-            del period_info['instructions']
+            if 'instructions' in period_info:
+                del period_info['instructions']
             
             filtered_period_info = {
                 k: v for k, v in period_info.items() if bool(v.get('relative')) == bool(boo)}

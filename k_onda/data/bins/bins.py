@@ -26,6 +26,8 @@ class TimeBin(Bin):
     def __init__(self, index, val, parent, parent_data):
         super().__init__(index, val, parent, parent_data) 
 
+        self.period_type = self.parent.period_type
+
         if self.calc_type == 'correlation':
             ts = np.arange(-self.calc_opts['lags'], self.calc_opts['lags'] + 1) / self.sampling_rate
         else:

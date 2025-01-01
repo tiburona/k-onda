@@ -31,7 +31,7 @@ class Data(Base):
     def resolve_calc_fun(self, calc_type):
         stop_at=self.calc_opts.get('base', 'event')
         if self.name == stop_at:
-            return getattr(self, f"_get_{calc_type}")()
+            return getattr(self, f"get_{calc_type}_")()
         else:
             return self.get_average(f"get_{calc_type}", stop_at=stop_at)
     
@@ -117,13 +117,15 @@ class Data(Base):
         """
 
         if not self.include():
-            return float('nan')
-                   
+            return float('nan')  
+
         if self.name == stop_at:  # we are at the base case and will call the base method
             if hasattr(self, base_method) and callable(getattr(self, base_method)):
                 return getattr(self, base_method)(*args, **kwargs)
             else:
                 raise ValueError(f"Invalid base method: {base_method}")
+            
+        print(f"Processing children: {self}, self.children: {getattr(self, 'children', 'No attribute')}")
 
         if not len(self.children):
             return float('nan')

@@ -312,7 +312,7 @@ def amp_crosscorr(signal1, signal2, samp_freq, low_freq, high_freq):
     signal1 = np.array(signal1)
     signal2 = np.array(signal2)
     if len(signal1) != len(signal2):
-        raise ValueError("eeg1 and eeg2 must be vectors of the same size.")
+        raise ValueError("signal1 and signal2 must be vectors of the same size.")
 
     if signal1.ndim != 1 or signal2.ndim != 1:
         raise ValueError("signal1 and signal2 must be one-dimensional vectors.")

@@ -3,7 +3,8 @@ from collections import defaultdict
 from ..data import Data
 from ..bins import BinMethods
 from ..period_constructor import PeriodConstructor
-from k_onda.calc import LFPPeriod, LFPMethods, SpikePeriod, SpikeMethods, SpikePrepMethods, NeuronClassifier, MRLPrepMethods, MRLMethods
+from k_onda.calc import (LFPPeriod, LFPMethods, SpikePeriod, SpikeMethods, SpikePrepMethods, 
+                         NeuronClassifier, MRLPrepMethods, MRLMethods)
 from k_onda.utils import formatted_now
 
 
@@ -61,6 +62,22 @@ class Experiment(Data, SpikePrepMethods):
     def all_lfp_periods(self):
         return [period for animal in self.all_animals for period in animal.get_all('lfp_periods') 
                 if period.include(check_ancestors=True)]
+    
+    @property
+    def all_coherence_calculators(self):
+        return self.get_data_calculated_by_period('coherence_calculators')
+    
+    @property
+    def all_correlation_calculators(self):
+        return self.get_data_calculated_by_period('correlation_calculators')
+    
+    @property
+    def all_granger_calculators(self):
+        return self.get_data_calculated_by_period('granger_calculators')
+    
+    @property
+    def all_phase_relationship_calculators(self):
+        return self.get_data_calculated_by_period('phase_relationship_calculators')
     
     @property
     def all_mrl_calculators(self):

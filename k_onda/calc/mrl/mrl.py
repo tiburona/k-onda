@@ -81,8 +81,6 @@ class MRLCalculator(Data, EventValidator):
         if not self.calc_opts.get('validate_events'):
             weights = [1 if weight in self.spikes else float('nan') for weight in wt_range]
         else:
-            if self.unit.identifier == 'IG156_good_3' and self.period.identifier == 1:
-                a = 'foo'
             indices = self.translate_spikes_to_lfp_events(self.spikes) 
             weight_validity = {spike: self.get_event_validity(self.current_brain_region)[event] 
                                for spike, event in indices.items()}
@@ -145,6 +143,9 @@ class MRLCalculator(Data, EventValidator):
             return circ_r2_unbiased(alpha, w, dim=dim)
         else:
             return compute_mrl(alpha, w, dim=dim)
+        
+
+
         
 
 class MRLPrepMethods(SpikePrepMethods, LFPPrepMethods):

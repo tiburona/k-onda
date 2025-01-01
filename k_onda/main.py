@@ -13,7 +13,7 @@ print("Current working directory:", os.getcwd())
 from k_onda.utils import log_directory_contents
 from k_onda.run import Runner
 
-from k_onda.run.misc_data_init.opts_library import  RUNNER_OPTS,  GROUP_PSTH_OPTS, MRL_OPTS, MRL_PREP_OPTS, MRL_CSV_OPTS
+from k_onda.run.misc_data_init.opts_library import  RUNNER_OPTS,  GROUP_PSTH_OPTS, MRL_OPTS, MRL_PREP_OPTS, PSTH_CSV_OPTS
 from k_onda.run.misc_data_init.CH27_plot_specs import *
 
 
@@ -23,13 +23,13 @@ def main():
 
 
 def run(log=True):
-    # config_file = '/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json'
+    config_file = '/Users/katie/likhtik/IG_INED_SAFETY_RECALL/init_config.json'
     # config_file = ('/Users/katie/likhtik/likhtik_scripts/spike_data_processing/' 
     #               'documentation/tutorials/psth/data/init_config.json')
-    config_file = '/Users/katie/likhtik/CH27mice/init_config.json'
+    # config_file = '/Users/katie/likhtik/CH27mice/init_config.json'
     runner = Runner(config_file=config_file)
 
-    runner.run(NEW_CH27_PERCENT_CHANGE_OPTS)
+    runner.run(PSTH_CSV_OPTS)
  
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')

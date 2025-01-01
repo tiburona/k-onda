@@ -529,3 +529,14 @@ MRL_PREP_OPTS = {
     'calc_opts': VALIDATION_DATA_OPTS
 }
 
+PSTH_CSV_OPTS = {
+    
+    'procedure': 'make_csv',
+    'sheet_opts': {'fname': 'spike_counts'},
+     'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'spike_counts', 
+                  'base': 'event', 'time_type': 'continuous', 'bin_size': .01,
+                   'periods': {'tone': {'event_pre_post': (0, .7)}, 'pretone': {'event_pre_post': (0, .7)}}, 
+                   'row_type': 'spike_event',
+                  'filter': {'animal': {'identifier': ('in', STANDARD_ANIMALS)}, 'unit': {'category': ('==', 'good')}},
+                  'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall'}
+    }

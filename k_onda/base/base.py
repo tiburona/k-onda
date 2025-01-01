@@ -191,7 +191,10 @@ class Base:
         return self.get_pre_post(1, 'period')
     
     def get_pre_post(self, time, obj_type):
-        pt = self.period_type if hasattr(self, 'period_type') else self.selected_period_type
+        pt = (
+            getattr(self, 'period_type', None) or
+            getattr(self.parent, 'period_type', self.selected_period_type)
+        )
         return self.calc_opts.get('periods', {}).get(pt, {}).get(
             f'{obj_type}_pre_post', (0, 0))[time]
 
