@@ -13,7 +13,7 @@ print("Current working directory:", os.getcwd())
 from k_onda.utils import log_directory_contents
 from k_onda.run import Runner
 
-from k_onda.run.misc_data_init.opts_library import  RUNNER_OPTS,  GROUP_PSTH_OPTS, MRL_OPTS, MRL_PREP_OPTS, PSTH_CSV_OPTS
+from k_onda.run.misc_data_init.opts_library import  RUNNER_OPTS,  GROUP_PSTH_OPTS, MRL_OPTS, MRL_PREP_OPTS, PSTH_CSV_OPTS, TEST_OPTS
 from k_onda.run.misc_data_init.CH27_plot_specs import *
 
 
@@ -29,7 +29,7 @@ def run(log=True):
     # config_file = '/Users/katie/likhtik/CH27mice/init_config.json'
     runner = Runner(config_file=config_file)
 
-    runner.run(PSTH_CSV_OPTS)
+    runner.run(TEST_OPTS)
  
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')

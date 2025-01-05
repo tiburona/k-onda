@@ -92,6 +92,7 @@ exp_info['frequency_bands'] = {
     'theta_2': (8, 12)
 }
 exp_info['identifier'] = 'IG_SAFETY_RECALL'
+exp_info['data_path'] = 'Users/katie/likhtik/IG_INED_Safety_Recall'
 exp_info['path_constructors'] = {
     'nev' : 
         {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/{identifier}/{identifier}.mat', 'fields': ['identifier']},

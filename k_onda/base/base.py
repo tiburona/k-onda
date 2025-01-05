@@ -191,10 +191,11 @@ class Base:
         return self.get_pre_post(1, 'period')
     
     def get_pre_post(self, time, obj_type):
-        pt = (
-            getattr(self, 'period_type', None) or
-            getattr(self.parent, 'period_type', self.selected_period_type)
-        )
+        pt = getattr(self, 'period_type', None)
+        if pt is None and hasattr(self, 'parent'):
+            pt = getattr(self.parent, 'period_type', None)
+        if pt is None:
+            pt = self.selected_period_type
         return self.calc_opts.get('periods', {}).get(pt, {}).get(
             f'{obj_type}_pre_post', (0, 0))[time]
 
@@ -205,7 +206,8 @@ class Base:
     
     def load(self, calc_name, other_identifiers):
         store = self.calc_opts.get('store', 'pkl')
-        d = os.path.join(self.calc_opts['data_path'], self.kind_of_data)
+        data_path = self.calc_opts.get('data_path', self.exp_info.get('data_path'))
+        d = os.path.join(data_path, self.kind_of_data)
         store_dir = os.path.join(d, f"{calc_name}_{store}s")
         for p in [d, store_dir]:
             if not os.path.exists(p):

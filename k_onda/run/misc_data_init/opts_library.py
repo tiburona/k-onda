@@ -540,3 +540,46 @@ PSTH_CSV_OPTS = {
                   'filter': {'animal': {'identifier': ('in', STANDARD_ANIMALS)}, 'unit': {'category': ('==', 'good')}},
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall'}
     }
+
+
+test_plot = {
+    'graph_dir': '/Users/katie/likhtik/IG_INED_Safety_Recall',
+    'fname': 'test_',
+    'plot_spec': {
+        'series': {
+            'divisions': {
+                'data_source': {
+                    'type': 'animal', 
+                    'members': ['IG160', 'IG163'], 
+                    'dim': 1}},
+            'base': {'calc_opts': 
+                     {'kind_of_data': 'spike', 'base': 'event', 'bin_size': .01, 
+                      'periods': {'tone': {'event_pre_post': (0, .7)}, 'pretone': {'event_pre_post': (0, .7)}},
+                      'filter': {'animal': {'identifier': ('in', STANDARD_ANIMALS)}, 
+                                 'unit': {'category': ('==', 'good')}}, 
+                                 'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall'},
+                     'plot_type': 'psth', 
+                     'section': {
+                         'divisions': {
+                             'neuron_type': {
+                                 'members': ['IN', 'PN'],
+                                 'dim': 0
+                             }
+                         },
+                         'segment': {
+                             'divisions': {'period_type': {
+                                 'members': ['tone']
+                             }}
+                         }
+                     }},
+            'components': [{'calc_opts': {'calc_type': 'psth'}},
+                           {'calc_opts': {'calc_type': 'proportion'}}],
+            }
+}}
+
+
+TEST_OPTS = {
+    'procedure': 'make_plots',
+    'graph_opts': test_plot,
+    'calc_opts': {}
+}

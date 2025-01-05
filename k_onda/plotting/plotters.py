@@ -8,8 +8,8 @@ import numpy as np
 
 from .plotting_helpers import smart_title_case, PlottingMixin, format_label
 from .plotter_base import PlotterBase
-from .partition import Section, Segment, Subset
-from .subplotter import Figurer
+from .partition_simplified import Section, Segment, Series
+from .layout_simplified import Figurer
 from k_onda.utils import to_serializable, safe_get, recursive_update
 
 plt.rcParams['font.family'] = 'sans-serif'
@@ -43,22 +43,24 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         processor_classes = {
             'section': Section,
             'segment': Segment,
-            'subset': Subset
+            'series': Series
         }
 
-        self.active_spec_type, self.active_spec = list(plot_spec.items())[0]
-        processor = processor_classes[self.active_spec_type](self, index=index)
+        spec_type, spec = list(plot_spec.items())[0]
+        processor = processor_classes[spec_type](self, index=index, figure=self.make_fig(), 
+                                                 spec=spec)
         processor.start()
 
     def make_fig(self):
         self.fig = Figurer().make_fig()
         self.active_fig = self.fig
+        return self.fig
             
     def close_plot(self, basename='', fig=None, do_title=True):
         
         if not fig:
             fig = self.active_fig  
-        fig.delaxes(fig.axes[0])
+        #fig.delaxes(fig.axes[0])
         self.set_dir_and_filename(fig, basename, do_title=do_title)
         plt.show()
         self.save_and_close_fig(fig, basename)
@@ -89,16 +91,16 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         plt.close(fig)
         self.active_fig = None
 
-    def delegate(self, info, is_last=False):
+    def delegate(self, info, spec, is_last=False):
 
         def send(plot_type):
-            PLOT_TYPES[plot_type]().process_calc(selected_info, aesthetics=aesthetics, is_last=is_last)
+            PLOT_TYPES[plot_type]().process_calc(selected_info, spec, aesthetics=aesthetics, is_last=is_last)
 
-        base_aesthetics = self.active_spec.get('aesthetics', {})
-        if 'layers' in self.active_spec:
-            for i, layer in enumerate(self.active_spec['layers']):
-                if i == len(self.active_spec['layers']):
-                    self.active_spec['main'] = True 
+        base_aesthetics = spec.get('aesthetics', {})
+        if 'layers' in spec:
+            for i, layer in enumerate(spec['layers']):
+                if i == len(spec['layers']):
+                    spec['main'] = True 
                 selected_info = [row for row in info if row['layer'] == i]
                 layer_aesthetics = deepcopy(base_aesthetics)
                 aesthetics = recursive_update(layer_aesthetics, layer.get('aesthetics', {}))           
@@ -144,7 +146,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
             data_divisions = data_divisions.reshape(1, -1)
        
             
-        acks = self.active_acks
+        acks = self.active_cell
         
         # Handle data division if break_axes is present
         if hasattr(acks, 'break_axes'):
@@ -162,7 +164,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
         else:
             length = len(data[0]) if data.ndim > 1 else len(data)
             x_slices = [(0, length*self.bin_size)]
-            ax_list = [self.active_acks]
+            ax_list = [self.active_cell]
         
         return data_divisions, ax_list, x_slices
     
@@ -178,9 +180,9 @@ class HistogramPlotter(FeaturePlotter):
 
 
 class LinePlotter(FeaturePlotter):
-    def process_calc(self, info, aesthetics=None, **_):
-        attr = self.active_spec.get('attr', 'calc')
-        ax = self.active_acks
+    def process_calc(self, info, spec, aesthetics=None, **_):
+        attr = spec.get('attr', 'calc')
+        ax = self.active_cell
         for row in info:
             val = row[attr]
             aesthetics = self.get_aesthetic_args(row, aesthetics)
@@ -190,7 +192,7 @@ class LinePlotter(FeaturePlotter):
 class WaveformPlotter(LinePlotter):
     def process_calc(self, info, aesthetics=None, is_last=False, **_):
         super().process_calc(info, aesthetics=aesthetics)
-        self.label(info[0], self.active_acks, is_last)  
+        self.label(info[0], self.active_cell, is_last)  
 
 
 class CategoryPlotter(FeaturePlotter):
@@ -254,10 +256,10 @@ class CategoryPlotter(FeaturePlotter):
 
         return label_to_pos
         
-    def process_calc(self, info, aesthetics=None, is_last=False):
-        transformed_divisions = deepcopy(self.active_spec['divisions'])
+    def process_calc(self, info, spec, aesthetics=None, is_last=False):
+        transformed_divisions = deepcopy(spec['divisions'])
         self.label_to_pos = self.assign_positions(transformed_divisions, aesthetics)
-        ax = self.active_acks
+        ax = self.active_cell
 
         for row in info:
             composite_label = tuple(row.get(division) for division in transformed_divisions.keys())
@@ -280,7 +282,7 @@ class CategoricalScatterPlotter(CategoryPlotter):
 
     def plot_markers(self, position, _, row, marker_args, aesthetic_args=None):
         scatter_vals = row[row['attr']]
-        ax = self.active_acks
+        ax = self.active_cell
         # Generate horizontal jitter
         jitter_strength = aesthetic_args.get('max_jitter', self.cat_width/6)
         jitter = np.random.uniform(-jitter_strength, jitter_strength, size=len(scatter_vals))
@@ -300,7 +302,7 @@ class CategoricalScatterPlotter(CategoryPlotter):
 class CategoricalLinePlotter(CategoryPlotter):
 
     def plot_markers(self, position, _, row, marker_args, aesthetic_args=None):
-        ax = self.active_acks
+        ax = self.active_cell
         bar_width = self.cat_width
         divisor = aesthetic_args.get('divisor', 2)
         width = bar_width / divisor
@@ -314,7 +316,7 @@ class CategoricalLinePlotter(CategoryPlotter):
 class BarPlotter(CategoryPlotter):
    
     def plot_markers(self, position, _, row, marker_args, aesthetic_args=None):
-        self.active_acks.bar(position, row[row['attr']], **marker_args)
+        self.active_cell.bar(position, row[row['attr']], **marker_args)
         
 
 class PeriStimulusPlotter(FeaturePlotter):
@@ -324,10 +326,10 @@ class PeriStimulusPlotter(FeaturePlotter):
         self.pre, self.post = (getattr(self, f"{opt}_{self.base}") for opt in ('pre', 'post'))
         self.marker_names = []
         
-    def process_calc(self, info, aesthetics=None, is_last=False, **_):
+    def process_calc(self, info, spec, aesthetics=None, is_last=False, **_):
                 
         for row in info:
-            attr = self.active_spec.get('attr', 'calc')
+            attr = spec.get('attr', 'calc')
             data = row[attr]
             aesthetic_args = self.get_aesthetic_args(row, aesthetics)
             data_divisions, ax_list, x_slices = self.handle_broken_axes(data)

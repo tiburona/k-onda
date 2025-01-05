@@ -3,7 +3,7 @@ from functools import reduce
 import operator
 
 from .plotter_base import PlotterBase
-from .subplotter import Subplotter
+from .layout import Layout
 from k_onda.utils import recursive_update, collect_dict_references, print_common_dict_references
 
 
@@ -12,11 +12,12 @@ class Partition(PlotterBase):
     def __init__(self, origin_plotter, parent_plotter=None, 
                  parent_processor = None, info=None):
         super().__init__()
-        self.origin_plotter = origin_plotter
+        self.executive_plotter = origin_plotter
         self.parent_plotter = parent_plotter
         self.spec = self.active_spec
+        self.active_partition = self
         self.next = None
-        for k in ('segment', 'section'):
+        for k in ('series', 'section', 'segment', 'components'):
             if k in self.spec:
                 self.next = {k: self.spec[k]}
         self.parent_processor = parent_processor
@@ -32,19 +33,22 @@ class Partition(PlotterBase):
             self.aesthetics.update(self.parent_processor.aesthetics)
 
         if self.active_fig == None:
-            self.fig = self.origin_plotter.make_fig()
-            self.parent_plotter = self.active_plotter
+            self.fig = self.executive_plotter.make_fig()
+            self.parent_plotter = self.active_layout
         else:
             self.fig = self.active_fig
+
+        
         self.inherited_info = info if info else {}
         self.info_by_division = []
         self.info_by_division_by_layers = []
         self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
         self.info_by_attr = {}
         self.processor_classes = {
+            'series': Series,
             'section': Section,
             'segment': Segment,
-            'subset': Subset
+            'split': Split
         }
         
     @property
@@ -82,13 +86,18 @@ class Partition(PlotterBase):
             else:
                 
                 self.info_by_division.append(updated_info)
-                self.wrap_up(current_divider, i)
+                self.wrap_up(updated_info)
 
-                if self.next:
-                    self.active_spec_type, self.active_spec = list(self.next.items())[0]
-                    processor = self.processor_classes[self.active_spec_type](
-                        self.origin_plotter, self.active_plotter, info=updated_info)
-                    processor.start()
+    def start_next_processor(self, spec, updated_info):
+        self.active_spec_type, self.active_spec = list(spec.items())[0]
+        processor = self.processor_classes[self.active_spec_type](
+        self.executive_plotter, self.active_layout, info=updated_info)
+        processor.start()
+
+    def set_dims(self, current_divider, i):
+        if 'dim' in current_divider:
+            dim = current_divider['dim']
+            self.current_index[dim] = self.starting_index[dim] + i
 
     def get_calcs(self):
         
@@ -122,16 +131,48 @@ class Partition(PlotterBase):
         else:
             attr = self.active_spec.get('attr', 'calc')
             d.update({
-                    'attr': attr, 
-                    attr: getattr(data_source, attr), 
-                    data_source.name: data_source.identifier})
+                'attr': attr, 
+                attr: getattr(data_source, attr), 
+                data_source.name: data_source.identifier})
         
 
-class Section(Partition):
+class Series(Partition):
     def __init__(self, origin_plotter, parent_plotter=None,
                   index=None, parent_processor=None):
         super().__init__(origin_plotter, parent_plotter=parent_plotter, 
                          parent_processor=parent_processor)
+        
+        self.gs_xy = self.spec.pop('gs_xy', None) 
+        if index:
+            self.starting_index = index
+        elif self.gs_xy:
+            self.starting_index = [dim[0] for dim in self.gs_xy]
+        else:
+            self.starting_index = [0, 0]
+        self.current_index = deepcopy(self.starting_index)
+        self.aspect = self.aesthetics.get('aspect')
+        self.active_layout = Layout(
+            self.active_layout, self.current_index, self.spec, aspect=self.aspect)
+        
+    def wrap_up(self, updated_info):
+        base = self.active_spec['base']
+        components = self.active_spec['components']
+        for component in components:
+            self.active_cell = self.active_layout.cells[*self.current_index]
+            spec = recursive_update(base, component)
+            if 'calc_opts' in spec:
+                self.calc_opts = spec.pop('calc_opts')
+                self.experiment.initialize_data()
+            if 'plot_type' in spec:
+                self.executive_plotter.graph_opts['plot_type'] = spec.pop('plot_type')
+            self.start_next_processor(spec, updated_info)
+
+
+class Section(Partition):
+    def __init__(self, origin_plotter, parent_plotter=None,
+                  index=None, parent_processor=None, info=None):
+        super().__init__(origin_plotter, parent_plotter=parent_plotter, 
+                         parent_processor=parent_processor, info=info)
         
         # index should refer to a starting point in the parent gridspec
         self.gs_xy = self.spec.pop('gs_xy', None) 
@@ -145,25 +186,25 @@ class Section(Partition):
 
         self.aspect = self.aesthetics.get('aspect')
 
-        if not self.is_layout:
-            self.active_plotter = Subplotter(
-                self.active_plotter, self.current_index, self.spec, aspect=self.aspect)
+        self.active_layout = Layout(
+            self.active_layout, self.current_index, self.spec, aspect=self.aspect)
 
-    def set_dims(self, current_divider, i):
-        if 'dim' in current_divider:
-            dim = current_divider['dim']
-            self.current_index[dim] = self.starting_index[dim] + i
-
-    def wrap_up(self, current_divider, i):
+    def wrap_up(self, updated_info):
         self.remaining_calls -= 1
-        self.active_acks = self.active_plotter.axes[*self.current_index]
-        self.active_plotter.apply_aesthetics(self.aesthetics)
-        self.origin_plotter.label(self.info_by_division[-1], self.active_acks, self.aesthetics, 
+        self.active_cell = self.active_layout.cells[*self.current_index]
+        self.active_layout.apply_aesthetics(self.aesthetics)
+        self.executive_plotter.label(self.info_by_division[-1], self.active_cell, self.aesthetics, 
                                   self.remaining_calls)
 
         if not self.next:
             self.get_calcs()
-            self.origin_plotter.delegate([self.info_dicts.pop()], is_last=self.last)
+            self.executive_plotter.delegate([self.info_dicts.pop()], is_last=self.last)
+
+        else:
+            self.active_spec_type, self.active_spec = list(self.next.items())[0]
+            processor = self.processor_classes[self.active_spec_type](
+            self.executive_plotter, self.active_layout, info=updated_info)
+            processor.start()
 
 
 class Segment(Partition):
@@ -180,14 +221,14 @@ class Segment(Partition):
     def set_dims(self, *_):
         pass
 
-    def wrap_up(self, current_divider, i): 
+    def wrap_up(self, updated_info): 
         self.remaining_calls -= 1
         self.get_calcs()
         if self.last:
-            self.origin_plotter.delegate(self.info_dicts, is_last=self.last)
+            self.executive_plotter.delegate(self.info_dicts, is_last=self.last)
             
 
-class Subset:
+class Split:
     pass
 
 

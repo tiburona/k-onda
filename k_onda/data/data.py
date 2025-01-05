@@ -125,7 +125,7 @@ class Data(Base):
             else:
                 raise ValueError(f"Invalid base method: {base_method}")
             
-        print(f"Processing children: {self}, self.children: {getattr(self, 'children', 'No attribute')}")
+        #print(f"Processing children: {self}, self.children: {getattr(self, 'children', 'No attribute')}")
 
         if not len(self.children):
             return float('nan')

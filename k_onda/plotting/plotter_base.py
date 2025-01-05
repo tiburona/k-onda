@@ -12,7 +12,7 @@ class PlotterBase(Base, LabelMethods):
     _active_spec = None
     _active_plot_type = None
     _active_aesthetics = None
-    _is_layout = False
+    _active_partition = None
 
     @property
     def experiment(self):
@@ -23,19 +23,19 @@ class PlotterBase(Base, LabelMethods):
         PlotterBase._experiment = value
 
     @property
-    def origin_plotter(self):
+    def executive_plotter(self):
         return PlotterBase._origin_plotter
 
-    @origin_plotter.setter
-    def origin_plotter(self, value):
+    @executive_plotter.setter
+    def executive_plotter(self, value):
         PlotterBase._origin_plotter = value
 
     @property
-    def active_plotter(self):
+    def active_layout(self):
         return PlotterBase._active_plotter
 
-    @active_plotter.setter
-    def active_plotter(self, value):
+    @active_layout.setter
+    def active_layout(self, value):
         PlotterBase._active_plotter = value
 
     @property
@@ -47,11 +47,11 @@ class PlotterBase(Base, LabelMethods):
         PlotterBase._active_fig = value
 
     @property
-    def active_acks(self):
+    def active_cell(self):
         return PlotterBase._active_ax
 
-    @active_acks.setter
-    def active_acks(self, value):
+    @active_cell.setter
+    def active_cell(self, value):
         PlotterBase._active_ax = value
 
     @property
@@ -93,6 +93,14 @@ class PlotterBase(Base, LabelMethods):
     @active_aesthetics.setter
     def active_aesthetics(self, value):
         PlotterBase._active_aesthetics = value
+
+    @property
+    def active_partition(self):
+        return PlotterBase._active_partition
+    
+    @active_partition.setter
+    def active_partition(self, value):
+        PlotterBase._active_partition = value
     
 
 

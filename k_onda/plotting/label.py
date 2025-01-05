@@ -7,7 +7,7 @@ class LabelMethods:
 
     def label(self, row, ax, aesthetics, is_last):
         # label is a dictionary like {'component': {'axis_label': (), 'title': ''}, 'ax': {}}
-        subplotter = self.active_plotter
+        layout = self.active_layout
         label_properties = aesthetics.get('label', {})
         font_properties = FontProperties(aesthetics.get('font_properties', {}))
 
@@ -26,10 +26,10 @@ class LabelMethods:
                     }
                     # Apply rotation after creation
            
-                    label = subplotter.frame_ax.annotate(text, **kwargs)
-                    self.adjust_label_position(subplotter.frame_ax, label, axis=dim)
+                    label = layout.frame_ax.annotate(text, **kwargs)
+                    self.adjust_label_position(layout.frame_ax, label, axis=dim)
                 if title:
-                    subplotter.frame_ax.set_title(title)
+                    layout.frame_ax.set_title(title)
 
             elif position == 'ax':
                 axis_labels, title = self.get_labels(label_properties['ax'], row)

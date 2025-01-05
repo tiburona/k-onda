@@ -95,7 +95,8 @@ class Experiment(Data, SpikePrepMethods):
             entity.experiment = self
 
     def initialize_data(self):
-        getattr(self, f"{self.kind_of_data}_prep")()
+        if 'kind_of_data' in self.calc_opts:
+            getattr(self, f"{self.kind_of_data}_prep")()
 
     def spike_prep(self):
         self.prep_animals()
