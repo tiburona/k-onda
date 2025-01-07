@@ -49,8 +49,7 @@ class Initializer(PrepMethods):
         if 'periods_from_nev' in animal.period_info.get('instructions', []):
             animal.period_info.update(self.get_periods_from_nev(animal))
         return animal
-        
-                
+                   
     def get_periods_from_nev(self, animal):
         file_path = animal.animal_info.get('nev_file_path')
         if not file_path:
@@ -66,22 +65,6 @@ class Initializer(PrepMethods):
                         onsets.append(int(data['Data']['SerialDigitalIO']['TimeStamp'][i][0]))
                 periods_with_code[period_type]['onsets'] = onsets
         return periods_with_code
-    
-
-    def init_behavior_experiment(self):
-        data_source = self.exp_info['behavior_data']
-        behavior_id_column = self.exp_info['behavior_animal_id_column']
-        behavior_data = {}
-        if isinstance(data_source, str):
-            with open(data_source, mode='r') as f:
-                csv_reader = csv.DictReader(f)
-                self.behavior_data_source = {row[behavior_id_column]: row for row in csv_reader}
-        for animal in self.experiment.all_animals:
-            if animal.identifier in self.behavior_data_source:
-                animal_data = self.process_spreadsheet_row(animal)
-                behavior_data[animal.identifier] = animal_data
-        self.behavior_experiment = Behavior(self.experiment, self.exp_info, behavior_data)
-        return self.behavior_experiment
 
     def process_spreadsheet_row(self, animal):
         row = self.behavior_data_source[animal.identifier]

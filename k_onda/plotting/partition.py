@@ -3,7 +3,7 @@ from functools import reduce
 import operator
 
 from .plotter_base import PlotterBase
-from .layout import Layout
+from .layout import Layout, ContainerLayout
 from k_onda.utils import recursive_update, collect_dict_references, print_common_dict_references
 
 
@@ -230,5 +230,3 @@ class Segment(Partition):
 
 class Split:
     pass
-
-

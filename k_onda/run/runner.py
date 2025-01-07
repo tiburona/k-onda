@@ -1,5 +1,6 @@
 import json
 import os
+from copy import deepcopy
 
 from ..spreadsheet import Stats
 from ..plotting import ExecutivePlotter, Layout
@@ -13,20 +14,26 @@ class Runner(OptsValidator):
         self.config = config_file if config_file else os.getenv('INIT_CONFIG')
         self.initializer = Initializer(self.config)
         self.experiment = self.initializer.init_experiment()
+        self.prep = None
+        self.opts = None
+        self.follow_up = None
         self.executing_class = None
         self.executing_instance = None
         self.executing_instances = {}
         self.executing_method = None
-        self.loop_lists = {}
-        self.follow_up_method = None
-        self.calc_opts = None
-        self.graph_opts = None
-        self.sheet_opts = None
-        self.proc_name = None
-        self.current_calc_opts = None
-        self.preparatory_method = None
+        
+    def setup(self, opts, prep=None, follow_up=None):
+       
+        self.prep = self.load(prep)
+        self.opts = self.load(opts)
+        if follow_up:
+            self.follow_up = self.load(follow_up)
+        elif self.opts['proc_name'] == 'make_csv':
+            self.follow_up = {'proc_name': 'write_csv', 'calc_opts': {}}
+        else:
+            self.follow_up = None
 
-    def load_analysis_config(self, opts):
+    def load(self, opts):
         if isinstance(opts, str):
             try:
                 with open(opts, 'r', encoding='utf-8') as file:
@@ -36,61 +43,101 @@ class Runner(OptsValidator):
                 raise Exception(f"File not found: {opts}")
             except json.JSONDecodeError:
                 raise Exception(f"Error decoding JSON from the file: {opts}")
-        self.opts = opts
+        return opts
 
-    def run_main(self, opts):
-        if self.proc_name == 'make_figure':
-            self.set_executors(Layout, 'make_figure')
-            self.executing_method(opts)
+    def execute(self, opts):
+
+        executors = {
+            'make_plots': (ExecutivePlotter, 'plot'),
+            'make_csv': (Stats, 'make_df'),
+            'validate_lfp_events': (self.experiment, 'validate_lfp_events'),
+            'write_csv': (self.experiment, 'write_csv')
+        }
         
-        elif self.proc_name == 'make_plots':
-            self.set_executors(ExecutivePlotter, 'plot')
-            self.graph_opts = self.opts['graph_opts']
-            opts_list = [opts['calc_opts']]
-            self.run_list(opts_list)
+        self.set_executors(*executors[opts['proc_name']])
 
-        elif self.proc_name == 'make_csv':
-            self.sheet_opts = self.opts['sheet_opts']
-            self.set_executors(Stats, 'make_df')
-            self.follow_up_method = 'make_csv'
-            opts_list = [opts['calc_opts']]
-            self.run_list(opts_list)
+        calc_opts = opts.get('calc_opts', [])
+        if isinstance(calc_opts, dict):
+            calc_opts = [calc_opts]
 
-        elif self.proc_name == 'validate_lfp_events':
-            self.set_executors(self.experiment, 'validate_lfp_events')
-            opts_list = opts if isinstance(self.opts, list) else [opts]
-            self.run_list(opts_list)
+        expanded_calc_opts = [
+            d 
+            for single_calc_opts in calc_opts
+            for d in CalcOptsProcessor(single_calc_opts).process()
+        ]
+
+        if opts['proc_name'] == 'make_csv':
+            self.executing_method(expanded_calc_opts)
 
         else:
-            raise ValueError("Unknown proc name")
-        
-    def set_executors(self, cls, method):
-        self.executing_class = cls
-        if self.executing_class.__name__ in self.executing_instances:
-            self.executing_instance = self.executing_instances[self.executing_class.__name__]
+            for each_opts in expanded_calc_opts:
+                self.executing_method(each_opts)
+            
+    def set_executors(self, executor, method):
+        if isinstance(executor, type):
+            self.executing_class = executor
+            if self.executing_class.__name__ in self.executing_instances:
+                self.executing_instance = self.executing_instances[self.executing_class.__name__]
+            else:
+                self.executing_instance = self.executing_class(self.experiment)
         else:
-            self.executing_instance = self.executing_class(self.experiment)
+            self.executing_instance = executor
         self.executing_method = getattr(self.executing_instance, method)
 
-    def get_loop_lists(self):
-        for opt_list_key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
-                             'neuron_qualities', 'inclusion_rules', 'region_sets']:
-            opt_list = self.current_calc_opts.get(opt_list_key)
-            if opt_list is not None:
-                self.loop_lists[opt_list_key] = opt_list
+    def run(self, opts, prep=None, follow_up=None):
 
-    def iterate_loop_lists(self, remaining_loop_lists, current_index=0):
+        self.setup(opts, prep, follow_up)
+        for opts in [self.prep, self.opts, self.follow_up]:
+            if opts:
+                self.execute(opts)
+        
+
+class CalcOptsProcessor(OptsValidator):
+
+    def __init__(self, calc_opts):
+        self.calc_opts_ = calc_opts
+        self.current_calc_opts_ = calc_opts
+
+    def process(self):
+        loop_lists = self.get_loop_lists()
+        opts = self.loop_lists() if loop_lists else [self.apply_rules(self.calc_opts_)]
+        return opts
+     
+    def get_loop_lists(self):
+        loop_lists = {
+            key: opt_list 
+            for key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
+                        'neuron_qualities', 'inclusion_rules', 'region_sets'] 
+                        for opt_list in self.calc_opts_.get(key) 
+                        if opt_list is not None}
+        return self.iterate_loop_lists(loop_lists)
+            
+    def iterate_loop_lists(self, remaining_loop_lists, current_index=0, accumulated_results=None):
+        # Initialize the results list if not provided
+        if accumulated_results is None:
+            accumulated_results = []
+
+        # Base case: accumulate the current state as a result
         if current_index >= len(remaining_loop_lists):
-            self.execute()
-            return
+            # Optionally apply rules if needed
+            if self.current_calc_opts_.get('rules'):
+                self.apply_rules()
+            
+            accumulated_results.append(deepcopy(self.current_calc_opts_))
+            return accumulated_results
+
+        # Recursive case: iterate over the current loop
         opt_list_key, opt_list = remaining_loop_lists[current_index]
         for opt in opt_list:
             key = opt_list_key[:-1] if opt_list_key != 'neuron_qualities' else 'neuron_quality'
-            self.current_calc_opts[key] = opt
-            self.iterate_loop_lists(remaining_loop_lists, current_index + 1)
+            self.current_calc_opts_[key] = opt
+            # Recursively iterate
+            self.iterate_loop_lists(remaining_loop_lists, current_index + 1, accumulated_results)
 
-    def apply_rules(self):
-        rules = self.current_calc_opts['rules']
+        return accumulated_results
+
+    def apply_rules(self, calc_opts):
+        rules = calc_opts['rules']
         if not isinstance(rules, dict):
             for rule in rules:
                 self.assign_per_rule(*self.parse_natural_language_rule(rule))
@@ -99,13 +146,13 @@ class Runner(OptsValidator):
             for trigger_k, conditions in rules.items():
                 for trigger_v, target_vals in conditions.items():
                     for target_k, target_v in target_vals:
-                        self.assign_per_rule(trigger_k, trigger_v, target_k, target_v)
+                        self.assign_per_rule(calc_opts, trigger_k, trigger_v, target_k, target_v)
     
-    def assign_per_rule(self, trigger_k, trigger_v, target_k, target_v):
-        if trigger_k not in self.current_calc_opts:
+    def assign_per_rule(self, calc_opts, trigger_k, trigger_v, target_k, target_v):
+        if trigger_k not in calc_opts:
             raise ValueError(f"Key '{trigger_k}' not found in calc_opts")
-        if self.current_calc_opts[trigger_k] == trigger_v:
-            self.current_calc_opts[target_k] = target_v
+        if calc_opts[trigger_k] == trigger_v:
+            calc_opts[target_k] = target_v
 
     def parse_natural_language_rule(self, rule):
         # assuming rule is a tuple like ('if brain_region is bla', frequency_band is', 'theta')
@@ -116,45 +163,3 @@ class Runner(OptsValidator):
         trigger_val = split_string[3][:-1]
         target_key = split_string[4]
         return trigger_key, trigger_val, target_key, target_val
-
-    def execute(self):
-        if self.current_calc_opts.get('rules'):
-            self.apply_rules()
-        print(f"executing {self.executing_method} with options {self.current_calc_opts}")
-        if self.graph_opts is not None:
-            self.executing_method(self.current_calc_opts, self.graph_opts)
-        elif self.sheet_opts is not None:
-            self.executing_method(self.current_calc_opts, self.sheet_opts)
-        else:
-            self.executing_method(self.current_calc_opts)
-
-    def prep(self, prep):
-        self.validate_and_load(prep)
-        self.executing_method = getattr(self.experiment, self.proc_name)
-        self.run_list([prep['calc_opts']])
-        self.loop_lists = {}
-
-    def run_list(self, opts_list):
-
-        for opts in opts_list:
-            self.current_calc_opts = opts
-            self.get_loop_lists()
-            if self.loop_lists:
-                self.iterate_loop_lists(list(self.loop_lists.items()))
-            else:
-                self.execute()
-
-    def validate_and_load(self, opts):
-        self.validate_opts(opts)
-        self.proc_name = opts['procedure']
-        self.load_analysis_config(opts)
-
-    def run(self, opts, *args, prep=None, **kwargs):
-        
-        if prep:
-            self.prep(prep)
-        self.validate_and_load(opts)
-        self.run_main(opts)
-        if self.follow_up_method is not None:
-            follow_up_method = getattr(self.executing_instance, self.follow_up_method)
-            follow_up_method(*args, **kwargs)

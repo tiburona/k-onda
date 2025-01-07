@@ -542,11 +542,7 @@ PSTH_CSV_OPTS = {
     }
 
 
-test_plot = {
-    'graph_dir': '/Users/katie/likhtik/IG_INED_Safety_Recall',
-    'fname': 'test_',
-    'plot_spec': {
-        'series': {
+animal_plots =  {'series': {
             'divisions': {
                 'data_source': {
                     'type': 'animal', 
@@ -574,8 +570,21 @@ test_plot = {
                      }},
             'components': [{'calc_opts': {'calc_type': 'psth'}},
                            {'calc_opts': {'calc_type': 'proportion'}}],
-            }
-}}
+            }}
+
+
+test_plot = {
+    'graph_dir': '/Users/katie/likhtik/IG_INED_Safety_Recall',
+    'fname': 'test_',
+    'plot_spec': {
+        'container': {
+            'dimensions': [1, 3],
+            'width_ratios': [],
+            'height_ratios': [],
+            'components': [
+                [{}, animal_plots, {'text': ('hello')}]
+                ] 
+}}}
 
 
 TEST_OPTS = {

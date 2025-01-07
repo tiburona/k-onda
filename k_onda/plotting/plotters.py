@@ -8,7 +8,7 @@ import numpy as np
 
 from .plotting_helpers import smart_title_case, PlottingMixin, format_label
 from .plotter_base import PlotterBase
-from .partition_simplified import Section, Segment, Series
+from .partition_simplified import Section, Segment, Series, Container
 from .layout_simplified import Figurer
 from k_onda.utils import to_serializable, safe_get, recursive_update
 
@@ -20,30 +20,26 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple 
     plots of multiple kinds of data, see the figure module."""
 
-    def __init__(self, experiment, graph_opts=None):
+    def __init__(self, experiment):
         self.experiment = experiment
-        self.graph_opts = graph_opts
-        
-    def initialize(self, calc_opts, graph_opts):
-        """Both initializes values on self and sets values for the context."""
-        self.calc_opts = calc_opts  
-        self.graph_opts = graph_opts
-        self.experiment.initialize_data()
-
-    def plot(self, calc_opts, graph_opts, parent_figure=None, index=None):
-        self.initialize(calc_opts, graph_opts)
-        plot_spec = graph_opts['plot_spec']
+              
+    def plot(self, opts, parent_figure=None, index=None):
+        if 'calc_opts' in opts:
+            self.calc_opts = opts['calc_opts']
+            self.experiment.initialize_data()
+        plot_spec = opts['plot_spec']
         self.parent_figure = parent_figure
         self.process_plot_spec(plot_spec, index=index)
         if not self.parent_figure:
-            self.close_plot(graph_opts.get('fname', ''))
+            self.close_plot(opts.get('fname', ''))
 
     def process_plot_spec(self, plot_spec, index=None):
 
         processor_classes = {
             'section': Section,
             'segment': Segment,
-            'series': Series
+            'series': Series,
+            'container': Container
         }
 
         spec_type, spec = list(plot_spec.items())[0]
@@ -91,10 +87,10 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
         plt.close(fig)
         self.active_fig = None
 
-    def delegate(self, info, spec, is_last=False):
+    def delegate(self, cell, info=None, spec=None, is_last=False):
 
         def send(plot_type):
-            PLOT_TYPES[plot_type]().process_calc(selected_info, spec, aesthetics=aesthetics, is_last=is_last)
+            PLOT_TYPES[plot_type]().process_calc(selected_info, spec, cell, aesthetics=aesthetics, is_last=is_last)
 
         base_aesthetics = spec.get('aesthetics', {})
         if 'layers' in spec:
@@ -426,6 +422,17 @@ class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
         x = np.linspace(-self.pre, self.post, len(data)+1)[:-1]
         y = data
         self.plot_hist(x, y, self.calc_opts['bin_size'], ax, aesthetic_args)
+
+
+class TextPlotter(PlotterBase):
+    """
+    Very minimal text plotter.
+    """
+    def plot(self, cell, text_spec):
+        # If cell is an AxWrapper, cell.ax is the actual Matplotlib Ax
+        ax = cell.ax if hasattr(cell, 'ax') else cell
+        ax.text(0.5, 0.5, text_spec['content'], ha='center', va='center')
+        ax.set_axis_off()
         
 
 PLOT_TYPES = {'categorical_scatter': CategoricalScatterPlotter,
