@@ -12,10 +12,26 @@ class Base:
     _calc_opts = {}
     _cache = defaultdict(dict)
     _filter = {}
+    _selected_conditions = []
     _selected_period_type = ''
+    _selected_period_types = []
     _selected_neuron_type = ''
+    _selected_brain_region = ''
+    _selected_frequency_band = ''
+    _selected_region_set = []
     _calc_mode = 'normal'
     original_periods = None
+    selectable_variables = [
+        'period_type', 
+        'period_types',
+        'period_conditions', 
+        'period_groups',
+        'neuron_type', 
+        'conditions', 
+        'brain_region', 
+        'region_set',
+        'frequency_band'
+        ]
     
 
     @property
@@ -99,6 +115,15 @@ class Base:
         self._calc_mode = calc_mode
 
     @property
+    def selected_conditions(self):
+        return self._selected_conditions
+    
+    @selected_conditions.setter
+    def selected_conditions(self, conditions):
+        Base._selected_conditions = conditions
+        self.add_to_filters('animal', 'conditions', '==', conditions)
+
+    @property
     def selected_neuron_type(self):
         return Base._selected_neuron_type
 
@@ -115,6 +140,22 @@ class Base:
         Base._selected_period_type = period_type
 
     @property
+    def selected_period_types(self):
+        return Base._selected_period_types
+        
+    @selected_period_types.setter
+    def selected_period_types(self, period_types):
+        Base._selected_period_types = period_types
+
+    @property
+    def selected_period_conditions(self):
+        return Base._selected_period_conditions
+        
+    @selected_period_types.setter
+    def selected_period_conditions(self, period_conditions):
+        Base._selected_period_conditions = period_conditions
+
+    @property
     def selected_period_group(self):
         return tuple(self.calc_opts['periods'][self.selected_period_type])
     
@@ -123,35 +164,35 @@ class Base:
         self.calc_opts['periods'][self.selected_period_type] = period_group
     
     @property
-    def current_frequency_band(self):
+    def selected_frequency_band(self):
         return self.calc_opts['frequency_band']
 
-    @current_frequency_band.setter
-    def current_frequency_band(self, frequency_band):
+    @selected_frequency_band.setter
+    def selected_frequency_band(self, frequency_band):
         self.calc_opts['frequency_band'] = frequency_band
 
     @property
-    def current_brain_region(self):
+    def selected_brain_region(self):
         return self.calc_opts.get('brain_region')
     
-    @current_brain_region.setter
-    def current_brain_region(self, brain_region):
+    @selected_brain_region.setter
+    def selected_brain_region(self, brain_region):
         self.calc_opts['brain_region'] = brain_region
 
     @property
-    def current_region_set(self):
+    def selected_region_set(self):
         return self.calc_opts.get('region_set')
 
-    @current_region_set.setter
-    def current_region_set(self, region_set):
+    @selected_region_set.setter
+    def selected_region_set(self, region_set):
         self.calc_opts['region_set'] = region_set
 
     @property
     def freq_range(self):
-        if isinstance(self.current_frequency_band, type('str')):
-            return self.experiment.exp_info['frequency_bands'][self.current_frequency_band]
+        if isinstance(self.selected_frequency_band, type('str')):
+            return self.experiment.exp_info['frequency_bands'][self.selected_frequency_band]
         else:
-            return self.current_frequency_band
+            return self.selected_frequency_band
         
     @property
     def finest_res(self):
@@ -206,7 +247,7 @@ class Base:
     
     def load(self, calc_name, other_identifiers):
         store = self.calc_opts.get('store', 'pkl')
-        data_path = self.calc_opts.get('data_path', self.exp_info.get('data_path'))
+        data_path = self.calc_opts.get('data_path', self.experiment.exp_info.get('data_path'))
         d = os.path.join(data_path, self.kind_of_data)
         store_dir = os.path.join(d, f"{calc_name}_{store}s")
         for p in [d, store_dir]:

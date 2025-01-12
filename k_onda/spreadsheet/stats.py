@@ -33,14 +33,14 @@ class Stats(Base):
 
     def set_attributes(self):
         if self.kind_of_data in ['lfp', 'mrl']:
-            fb = self.current_frequency_band
-            if not isinstance(self.current_frequency_band, str):
+            fb = self.selected_frequency_band
+            if not isinstance(self.selected_frequency_band, str):
                 translation_table = str.maketrans({k: '_' for k in '[](),'})
                 fb = str(list(fb)).translate(translation_table)
             if any([s in self.calc_type for s in ['coherence', 'correlation', 'phase', 'granger']]):
                 self.data_col = f"{self.calc_opts['region_set']}_{fb}_{self.calc_type}"
             else:
-                self.data_col = f"{self.current_brain_region}_{fb}_{self.calc_type}"
+                self.data_col = f"{self.selected_brain_region}_{fb}_{self.calc_type}"
         else:
             self.data_col = 'rate' if self.calc_type == 'psth' else self.calc_type
 
@@ -485,7 +485,7 @@ class Stats(Base):
             return(results)
         }}
 
-        data <- prepare_df('{self.current_frequency_band}', '{self.lfp.brain_region}')  
+        data <- prepare_df('{self.selected_frequency_band}', '{self.lfp.brain_region}')  
         evoked_data <- prepare_df('{self.frequency_band}', '{self.brain_region}', evoked=TRUE)
 
         results <- rbind(perform_tests(data), perform_tests(evoked_data, evoked=TRUE))

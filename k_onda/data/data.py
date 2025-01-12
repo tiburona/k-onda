@@ -124,8 +124,6 @@ class Data(Base):
                 return getattr(self, base_method)(*args, **kwargs)
             else:
                 raise ValueError(f"Invalid base method: {base_method}")
-            
-        #print(f"Processing children: {self}, self.children: {getattr(self, 'children', 'No attribute')}")
 
         if not len(self.children):
             return float('nan')
@@ -365,14 +363,15 @@ class Data(Base):
         self.calc_mode = comparison
         comparison_dict = self.calc_opts.get(comparison, {'level': 'period'})
         level = comparison_dict['level']
+        # we are currently at a higher tree level than the comparison ref level
         if level not in self.hierarchy or (
             self.hierarchy.index(self.name) < self.hierarchy.index(level)):
-            return self.get_average(f'get_{comparison}', stop_at=level)
-        # we are currently at a lower tree level than the % change ref level
+            return self.get_average(f'get_{comparison}')
+        # we are currently at a lower tree level than the comparison ref level
         elif self.hierarchy.index(self.name) > self.hierarchy.index(level):
             ref_obj = [anc for anc in self.ancestors if anc.name == level][0]
             ref = self.get_ref(ref_obj, comparison_dict['reference'])
-        # we are currently at the % change ref level
+        # we are currently at the comparison ref level
         else: 
             ref = self.get_ref(self, comparison_dict['reference'])
         orig = getattr(self, f"get_{self.calc_type}")()
@@ -384,12 +383,18 @@ class Data(Base):
         else:
             return obj.get_reference_calc(reference_period_type)
         
-    def get_reference_calc(self, reference_period_type):
-        orig_period_type = self.selected_period_type
-        self.selected_period_type = reference_period_type
+    def get_reference_calc(self, reference_period):
+        if isinstance(reference_period, str):
+            attr_to_set = 'selected_period_type'
+        else:
+            attr_to_set = 'selected_period_types'
+        orig_val = getattr(self, attr_to_set)
+        setattr(self, attr_to_set, reference_period)
         reference_calc = getattr(self, f"get_{self.calc_type}")()
-        self.selected_period_type = orig_period_type
+        setattr(self, attr_to_set, orig_val)
         return reference_calc
+
+
         
         
   

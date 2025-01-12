@@ -28,8 +28,8 @@ class MRLCalculator(Data, EventValidator):
         self.experiment = self.period.experiment
         self._spikes = None
         self._weights = None
-        self.brain_region = self.current_brain_region
-        self.frequency_band = self.current_frequency_band
+        self.brain_region = self.selected_brain_region
+        self.frequency_band = self.selected_frequency_band
         
 
     @property
@@ -82,7 +82,7 @@ class MRLCalculator(Data, EventValidator):
             weights = [1 if weight in self.spikes else float('nan') for weight in wt_range]
         else:
             indices = self.translate_spikes_to_lfp_events(self.spikes) 
-            weight_validity = {spike: self.get_event_validity(self.current_brain_region)[event] 
+            weight_validity = {spike: self.get_event_validity(self.selected_brain_region)[event] 
                                for spike, event in indices.items()}
             weights = np.array([1 if weight_validity.get(w) else float('nan') for w in wt_range])
         return np.array(weights)
@@ -91,7 +91,7 @@ class MRLCalculator(Data, EventValidator):
         low = self.freq_range[0] + .05
         high = self.freq_range[1]
        
-        if isinstance(self.current_frequency_band, type('str')):
+        if isinstance(self.selected_frequency_band, type('str')):
             return compute_phase(bandpass_filter(self.mrl_data, low, high, self.sampling_rate))
         else:
             frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
@@ -128,7 +128,7 @@ class MRLCalculator(Data, EventValidator):
             return np.nan
         w = self.get_weights()
         alpha = self.get_phases()
-        dim = int(not isinstance(self.current_frequency_band, type('str')))
+        dim = int(not isinstance(self.selected_frequency_band, type('str')))
 
         if w.ndim == 1 and alpha.ndim == 2:
             w = w[np.newaxis, :]

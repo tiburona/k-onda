@@ -53,7 +53,7 @@ class Layout(PlotterBase):
                 dims = self.spec['dimensions']
 
             else: 
-                for division in self.spec['divisions'].values():
+                for division in self.spec['divisions']:
                     if 'dim' in division:
                         dims[division['dim']] = len(division['members'])
         return copy(dims)

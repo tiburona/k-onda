@@ -50,9 +50,15 @@ def cache_method(method):
         if 'level' in kwargs and isinstance(kwargs['level'], int) and kwargs['level'] > cache_level:
             return method(self, *args, **kwargs)
             
-        key_list = [self.calc_type, method.__name__, self.selected_neuron_type, 
-                    self.selected_period_type, *(arg for arg in args), 
+        # TODO: make sure as selected period types evolve that there can't be any
+        # key overlap between different calculations    
+        key_list = [self.calc_type, method.__name__, 
+                    self.selected_neuron_type, self.selected_period_type, 
+                    *(self.selected_period_types), 
+                    *(f'{k}_{v}' for k, v in self.selected_conditions.items()), 
+                    *(arg for arg in args), 
                     *(kwarg for kwarg in kwargs)]
+
         for obj in list(reversed(self.ancestors))[1:]:
             key_list.append(obj.name)
             key_list.append(obj.identifier)
@@ -274,6 +280,12 @@ def print_common_dict_references(obj1, obj2):
             print(f"Common dictionary id={cid} found:")
             print(f"  In obj1 at: {paths_in_obj1}")
             print(f"  In obj2 at: {paths_in_obj2}")
+
+def is_truthy(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.size > 0  # True if the array has elements
+    return bool(obj)  # General truthiness check for other types
+
 
 # Example usage:
 # Suppose obj1 and obj2 share a dictionary reference somewhere deep inside.

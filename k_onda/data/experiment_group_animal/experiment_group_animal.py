@@ -17,7 +17,7 @@ class Experiment(Data, SpikePrepMethods):
         self.exp_info = info
         self.identifier = info['identifier'] 
         self.now = formatted_now
-        self.conditions = info['conditions']
+        self.group_names = info['group_names']
         self._sampling_rate = info.get('sampling_rate')
         self._lfp_sampling_rate = info.get('lfp_sampling_rate')
         self.stimulus_duration = info.get('stimulus_duration')
@@ -26,7 +26,6 @@ class Experiment(Data, SpikePrepMethods):
         self.all_groups = None
         self.all_animals = []
         self.neuron_classifier = NeuronClassifier(self)
-        self.children = self.groups
         self._ancestors = [self]
         self.kind_of_data_to_period_type = {
             'lfp': LFPPeriod,
@@ -37,6 +36,10 @@ class Experiment(Data, SpikePrepMethods):
     @property
     def ancestors(self):
         return self._ancestors
+    
+    @property
+    def children(self):
+        return self.groups
     
     @property
     def all_units(self):
@@ -98,6 +101,11 @@ class Experiment(Data, SpikePrepMethods):
         if 'kind_of_data' in self.calc_opts:
             getattr(self, f"{self.kind_of_data}_prep")()
 
+    def delete_lfp_data(self, regions):
+        for region in regions:
+            for animal in self.all_animals:
+                animal.delete_lfp_data(region)
+
     def spike_prep(self):
         self.prep_animals()
         if all(['neurons' in animal.initialized for animal in self.all_animals if animal.include()]):
@@ -150,14 +158,15 @@ class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
 class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, MRLMethods, BinMethods):
     _name = 'animal'
 
-    def __init__(self, identifier, condition, animal_info, experiment=None, neuron_types=None):
+    def __init__(self, identifier, group_name, animal_info, experiment=None, neuron_types=None):
         super().__init__()
         PeriodConstructor().__init__()
         self.identifier = identifier
-        self.condition = condition
+        self.group_name = group_name
         self.animal_info = animal_info
         self.experiment = experiment
         self.experiment.all_animals.append(self)
+        self.conditions = animal_info.get('conditions')
         self.group = None
         self.period_info = animal_info['period_info'] if 'period_info' in animal_info is not None else {}
         if neuron_types is not None:
@@ -170,7 +179,7 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, 
         self.lfp_periods = defaultdict(list)
         self.mrl_calculators = defaultdict(lambda: defaultdict(list))
         self.granger_calculators = defaultdict(list)
-        self.codherence_calculators = defaultdict(list)
+        self.coherence_calculators = defaultdict(list)
         self.correlation_calculators = defaultdict(list)
         self.phase_relationship_calculators = defaultdict(list)
         self.lfp_event_validity = defaultdict(dict)

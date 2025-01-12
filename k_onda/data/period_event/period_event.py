@@ -33,7 +33,9 @@ class Period(Data, BinMethods, TimeLineMethods):
         self.is_relative = is_relative
         self.experiment = experiment
         self.event_starts = events if events is not None else []
+        self.onset_in_seconds = self.onset/self.sampling_rate
         self._events = []
+        self.conditions = period_info.get('conditions')
         self.shift = period_info.get('shift')
         self.duration = period_info.get('duration')
         self.reference_period_type = period_info.get('reference_period_type')

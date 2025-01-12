@@ -1,9 +1,10 @@
 import json
 import os
 from copy import deepcopy
+from collections import defaultdict
 
 from ..spreadsheet import Stats
-from ..plotting import ExecutivePlotter, Layout
+from ..plotting import ExecutivePlotter
 from .opts_validator import OptsValidator
 from .initialize_experiment import Initializer
 
@@ -28,8 +29,8 @@ class Runner(OptsValidator):
         self.opts = self.load(opts)
         if follow_up:
             self.follow_up = self.load(follow_up)
-        elif self.opts['proc_name'] == 'make_csv':
-            self.follow_up = {'proc_name': 'write_csv', 'calc_opts': {}}
+        elif self.opts['procedure'] == 'make_csv':
+            self.follow_up = {'procedure': 'write_csv', 'calc_opts': {}}
         else:
             self.follow_up = None
 
@@ -46,15 +47,8 @@ class Runner(OptsValidator):
         return opts
 
     def execute(self, opts):
-
-        executors = {
-            'make_plots': (ExecutivePlotter, 'plot'),
-            'make_csv': (Stats, 'make_df'),
-            'validate_lfp_events': (self.experiment, 'validate_lfp_events'),
-            'write_csv': (self.experiment, 'write_csv')
-        }
-        
-        self.set_executors(*executors[opts['proc_name']])
+  
+        self.set_executors(opts)
 
         calc_opts = opts.get('calc_opts', [])
         if isinstance(calc_opts, dict):
@@ -66,14 +60,59 @@ class Runner(OptsValidator):
             for d in CalcOptsProcessor(single_calc_opts).process()
         ]
 
-        if opts['proc_name'] == 'make_csv':
+        if opts['procedure'] == 'make_csv':
             self.executing_method(expanded_calc_opts)
 
         else:
-            for each_opts in expanded_calc_opts:
-                self.executing_method(each_opts)
+            # TODO: an idea here for controlling lfp memory usage
+            # you could do a look ahead and see whether that regions brain_region/region_set
+            # was still going to be used, and if not send a message to experiment
+            # to flush all the animals' processed lfp data
+            for i, each_opts in enumerate(expanded_calc_opts):
+                regions_to_delete = self._find_unused_brain_regions(expanded_calc_opts[i+1:])
+                if regions_to_delete:
+                    self.experiment.delete_lfp_data(regions_to_delete)
+                opts['calc_opts'] = each_opts
+                self.executing_method(opts)
+
+    def _find_unused_brain_regions(self, remaining_opts):
+        """
+        Identify brain regions or region sets that are no longer referenced in the remaining options.
+
+        Args:
+            remaining_opts (list): The list of remaining calculation options to check.
+
+        Returns:
+            list: A list of brain regions/sets to delete.
+        """
+        region_keys = ['brain_region', 'region_set']
+        regions_to_delete = []
+
+        for key in region_keys:
+            current_val = getattr(self.experiment, f'selected_{key}', None)
+            if current_val:
+                current_regions = current_val.split('_')
+                for region in current_regions:
+                    # Check if the region is used in any of the remaining options
+                    is_still_used = any(
+                        region in opts.get(key, '').split('_') for opts in remaining_opts
+                    )
+                    if not is_still_used:
+                        regions_to_delete.append(region)
+
+        return regions_to_delete
             
-    def set_executors(self, executor, method):
+    def set_executors(self, opts):
+
+        executors = {
+            'make_plots': (ExecutivePlotter, 'plot'),
+            'make_csv': (Stats, 'make_df'),
+            'validate_lfp_events': (self.experiment, 'validate_lfp_events'),
+            'write_csv': (self.experiment, 'write_csv')
+        }
+        
+        executor, method = executors[opts['procedure']]
+
         if isinstance(executor, type):
             self.executing_class = executor
             if self.executing_class.__name__ in self.executing_instances:
@@ -100,17 +139,17 @@ class CalcOptsProcessor(OptsValidator):
 
     def process(self):
         loop_lists = self.get_loop_lists()
-        opts = self.loop_lists() if loop_lists else [self.apply_rules(self.calc_opts_)]
+        opts = loop_lists if loop_lists else [self.apply_rules(self.calc_opts_)]
         return opts
      
     def get_loop_lists(self):
-        loop_lists = {
-            key: opt_list 
-            for key in ['brain_regions', 'frequency_bands', 'levels', 'unit_pairs', 
-                        'neuron_qualities', 'inclusion_rules', 'region_sets'] 
-                        for opt_list in self.calc_opts_.get(key) 
-                        if opt_list is not None}
-        return self.iterate_loop_lists(loop_lists)
+        loop_lists = defaultdict(list)
+        for opt_list_key in ['brain_regions', 'region_sets', 'frequency_bands', 'levels', 'unit_pairs', 
+                             'neuron_qualities', 'inclusion_rules']:
+            opt_list = self.calc_opts_.get(opt_list_key)
+            if opt_list is not None:
+                loop_lists[opt_list_key] = opt_list
+        return self.iterate_loop_lists(list(loop_lists.items()))
             
     def iterate_loop_lists(self, remaining_loop_lists, current_index=0, accumulated_results=None):
         # Initialize the results list if not provided

@@ -164,7 +164,7 @@ class Series(Partition):
                 self.calc_opts = spec.pop('calc_opts')
                 self.experiment.initialize_data()
             if 'plot_type' in spec:
-                self.executive_plotter.graph_opts['plot_type'] = spec.pop('plot_type')
+                self.executive_plotter.current_plot_type = spec.pop('plot_type')
             self.start_next_processor(spec, updated_info)
 
 

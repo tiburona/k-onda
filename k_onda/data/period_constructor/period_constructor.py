@@ -18,12 +18,22 @@ class PeriodConstructor:
     def get_all(self, attr):
         return [item for sublist in getattr(self, attr).values() for item in sublist]
 
-    
     def select_children(self, attr):
+        periods = getattr(self, attr)
+
         if self.selected_period_type:
-            return getattr(self, attr)[self.selected_period_type]     
+            return periods[self.selected_period_type]
+    
+        if self.selected_period_types:
+            condition = lambda pt, _: pt in self.selected_period_types
+        elif self.selected_period_conditions:
+            condition = lambda _, p: any(cond in self.selected_period_conditions 
+                                         for cond in p.conditions)
         else:
             return self.get_all(attr)
+
+        return [p for pt in periods for p in periods[pt] if condition(pt, p)]
+
 
     def prepare_periods(self):
         self.period_class = self.experiment.kind_of_data_to_period_type[self.kind_of_data]
@@ -33,9 +43,6 @@ class PeriodConstructor:
                 period_info = copy(self.period_info)
             except AttributeError:
                 period_info = copy(self.animal.period_info)
-
-            if 'instructions' in period_info:
-                del period_info['instructions']
             
             filtered_period_info = {
                 k: v for k, v in period_info.items() if bool(v.get('relative')) == bool(boo)}
@@ -131,15 +138,13 @@ class PeriodConstructor:
 
         return events_to_return
    
-
     def construct_relative_periods(self, period_type, period_info):
 
         periods = []
-        target_periods = getattr(self, f"{self.kind_of_data}_periods") 
+        target_periods = getattr(self, f"{self.kind_of_data}_periods")
         paired_periods = target_periods[period_info['target']]
+        
         exceptions = period_info.get('exceptions') 
-
-        sampling_rate = self.lfp_sampling_rate if self.kind_of_data == 'lfp' else self.sampling_rate # type: ignore
 
         for i, paired_period in enumerate(paired_periods):
             i_key = str(i)
@@ -150,14 +155,14 @@ class PeriodConstructor:
                 shift = period_info['shift']
                 duration = period_info.get('duration')
             # if self is animal this is an lfp period
-            if self.name == 'animal':  # type: ignore
+            if self.name == 'animal':  
                 shift -= sum(self.calc_opts['lfp_padding']) # type: ignore
-            shift_in_samples = shift * sampling_rate
+            shift_in_samples = shift * self.sampling_rate
             onset = paired_period.onset + shift_in_samples
             event_starts = []
             event_duration = paired_period
             if paired_period.period_info.get('event_duration'):
-                event_duration = paired_period.period_info['event_duration'] * sampling_rate
+                event_duration = paired_period.period_info['event_duration'] * self.sampling_rate
             else:
                 event_duration = None
 

@@ -1,6 +1,7 @@
 import json
+from copy import deepcopy
+from collections import defaultdict
 
-import csv
 from scipy.signal import firwin, lfilter
 import h5py
 
@@ -19,11 +20,11 @@ class Initializer(PrepMethods):
                 self.exp_info = json.loads(data)
         else:
             raise ValueError('Unknown input type')
-        self.conditions = self.exp_info['conditions']
+        self.group_names = self.exp_info['group_names']
         self.animals_info = self.exp_info['animals']
         self.neuron_types = self.exp_info.get('neuron_types')
         self.neuron_classification_rule = self.exp_info.get('neuron_classification_rule')
-        self.sampling_rate = self.exp_info['sampling_rate']
+        self.sampling_rate = self.exp_info.get('sampling_rate')
         self.experiment = None
         self.groups = None
         self.animals = None
@@ -36,35 +37,47 @@ class Initializer(PrepMethods):
         self.experiment = Experiment(self.exp_info)
         self.animals = [self.init_animal(animal_info) for animal_info in self.animals_info]
         self.groups = [
-            Group(name=condition, 
-                  animals=[animal for animal in self.animals if animal.condition == condition],
+            Group(name=group, 
+                  animals=[animal for animal in self.animals if animal.group_name == group],
                   experiment=self.experiment)
-            for condition in self.conditions]
+            for group in self.group_names]
         self.experiment.initialize_groups(self.groups)
         return self.experiment
 
     def init_animal(self, animal_info):  
-        animal = Animal(animal_info['identifier'], animal_info['condition'], animal_info=animal_info,
+        animal = Animal(animal_info['identifier'], animal_info['group_name'], animal_info=animal_info,
                         neuron_types=self.neuron_types, experiment=self.experiment)
-        if 'periods_from_nev' in animal.period_info.get('instructions', []):
-            animal.period_info.update(self.get_periods_from_nev(animal))
+        self.get_periods_from_nev(animal)
         return animal
-                   
+           
     def get_periods_from_nev(self, animal):
+        codes_and_onsets = None
+        for period_info in animal.period_info.values():
+            if 'nev' not in period_info:
+                continue
+            if codes_and_onsets is None:
+                codes_and_onsets = self.get_onsets_from_nev(animal)
+            nev = period_info['nev']
+            period_info['onsets'] = [
+                onset 
+                for i, onset in enumerate(codes_and_onsets[nev['code']]) 
+                if i in nev['indices']
+                ]
+     
+    def get_onsets_from_nev(self, animal):
         file_path = animal.animal_info.get('nev_file_path')
         if not file_path:
             file_path = animal.construct_path('nev')
-        periods_with_code = {k: v for k, v in animal.animal_info['period_info'].items() if 'code' in v}
 
         with h5py.File(file_path, 'r') as mat_file:
             data = group_to_dict(mat_file['NEV'])
-            for period_type, period_dict in periods_with_code.items():
-                onsets = []
-                for i, code in enumerate(data['Data']['SerialDigitalIO']['UnparsedData'][0]):
-                    if code == period_dict['code']:
-                        onsets.append(int(data['Data']['SerialDigitalIO']['TimeStamp'][i][0]))
-                periods_with_code[period_type]['onsets'] = onsets
-        return periods_with_code
+            onsets_and_codes = defaultdict(list)
+
+            for i, code in enumerate(data['Data']['SerialDigitalIO']['UnparsedData'][0]):
+                onset = int(data['Data']['SerialDigitalIO']['TimeStamp'][i][0])
+                onsets_and_codes[code].append(onset)
+
+            return onsets_and_codes
 
     def process_spreadsheet_row(self, animal):
         row = self.behavior_data_source[animal.identifier]

@@ -473,7 +473,7 @@ MRL_OPTS = {
     'calc_opts': {'kind_of_data': 'mrl', 'calc_type': 'mrl', 'validate_events': True, 
                   'base': 'event', 'frequency_bands': ['theta_1', 'theta_2'], 'brain_regions': ['pl', 'bla'],
                    'periods': {'tone': {'event_pre_post': (0, 1)}, 'pretone': {'event_pre_post': (0, 1)}}, 
-                   'lfp_padding': [0, 0],
+                   'lfp_padding': [0, 0], 
                   'data_path': '/Users/katie/likhtik/IG_INED_Safety_Recall',
                    'rules': {
         'brain_region': 
@@ -573,22 +573,44 @@ animal_plots =  {'series': {
             }}
 
 
-test_plot = {
-    'graph_dir': '/Users/katie/likhtik/IG_INED_Safety_Recall',
-    'fname': 'test_',
-    'plot_spec': {
-        'container': {
-            'dimensions': [1, 3],
-            'width_ratios': [],
-            'height_ratios': [],
-            'components': [
-                [{}, animal_plots, {'text': ('hello')}]
-                ] 
-}}}
+AS_POWER_OPTS = {
+    'kind_of_data': 'lfp', 'calc_type': 'power', 'validate_events': True,
+    'frequency_bands': [ 'theta_1', 'theta_2'], 
+    'brain_regions': ['pl', 'bla', 'vhip'], 
+    'periods': {'pretone': range(5), 'tone': range(5)}, 
+    'power_arg_set': (2048, 2000, 500, 480, 2),
+    'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.75, .75], 'bin_size': .01,
+    'periods': {'pretone_plus': {'event_pre_post': (0, .3)}, 
+                'pretone_minus': {'event_pre_post': (0, .3)},
+                'cs_plus': {'event_pre_post': (0, .3)},
+                'cs_minus': {'event_pre_post': (0, .3)}},
+    'matlab_configuration': MATLAB_CONFIG, 
+    'evoked': {'level': 'animal', 'reference': ['pretone_plus', 'pretone_minus']}
+    }
+
+AS_PLOT_SPEC = {
+            'plot_type': 'bar_plot',
+            'segment': {
+                'attr': 'mean',
+                'divisions': 
+                [{'data_source': 'experiment',
+                  'divider_type': 'conditions',
+                  'members': [{'sex': 'female'}, {'sex': 'male'}]
+            },
+                  {'data_source': 'experiment',
+                   'divider_type': 'conditions',
+                   'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}]
+                   }]   
+            }}
 
 
-TEST_OPTS = {
+AS_OPTS = {
     'procedure': 'make_plots',
-    'graph_opts': test_plot,
-    'calc_opts': {}
+    'write_opts': {
+        'fname': {'template': '/Users/katie/likhtik/AS/power_{brain_region}_{frequency_band}',
+                  'fields': ['brain_region', 'frequency_band']}
+    },
+    'calc_opts': AS_POWER_OPTS,
+    'plot_spec': AS_PLOT_SPEC
+ 
 }

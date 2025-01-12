@@ -1,5 +1,7 @@
 from neo.rawio import BlackrockRawIO
 import numpy as np
+import h5py
+import os
 
 from k_onda.utils import filter_60_hz, divide_by_rms, downsample, PrepMethods
 from k_onda.interfaces import MatlabInterface
@@ -18,21 +20,32 @@ class LFPPrepMethods(PrepMethods):
             getattr(self, f"get_{self.calc_type}_calculators")()
     
     def prep_data(self):
-        data_label = f"{self.current_brain_region}_lfp"
+        data_label = f"{self.selected_brain_region}_lfp"
         if data_label not in self.initialized:
             self.process_lfp()
             self.initialized.append(data_label)
         
     def get_raw_lfp(self):
+        if all(k not in self.animal_info for k in ('lfp_electrodes', 'lfp_from_stereotrodes')):
+            return {}
         file_path = self.construct_path('lfp')
         try:
             reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
+            reader.parse_header()
+            data = reader.nsx_datas[3][0]
         except OSError:
             return {}
-        reader.parse_header()
-        if all(k not in self.animal_info for k in ('lfp_electrodes', 'lfp_from_stereotrodes')):
-            return {}
-        data_to_return = {region: reader.nsx_datas[3][0][:, val]
+        except KeyError as e:
+            print(f"KeyError: {e}") 
+            file_dir = os.path.dirname(file_path)
+            h5_path = os.path.join(file_dir, 'output_data.h5')
+            ml = MatlabInterface(self.calc_opts['matlab_configuration'])
+            if not os.path.exists(os.path.join(file_dir, 'output_data.h5')):
+                ml.open_nsx(file_path)
+            with h5py.File(h5_path, 'r') as f:
+                data = f['/NS3_Data'][:]
+                
+        data_to_return = {region: data[:, val]
                           for region, val in self.animal_info['lfp_electrodes'].items()}
         if self.animal_info.get('lfp_from_stereotrodes') is not None:
             data_to_return = self.get_lfp_from_stereotrodes(self, data_to_return, file_path)
@@ -52,9 +65,12 @@ class LFPPrepMethods(PrepMethods):
 
     @property
     def processed_lfp(self):
-        if self.current_brain_region not in self._processed_lfp:
+        if self.selected_brain_region not in self._processed_lfp:
             self.process_lfp()
         return self._processed_lfp
+    
+    def delete_lfp_data(self, region):
+        self.processed_lfp.pop(region)
     
     def process_lfp(self):
         

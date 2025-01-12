@@ -64,14 +64,16 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         conversion_factor = self.lfp_sampling_rate/self.sampling_rate 
         # For LFP, you need a subtraction for 0 indexing. 
         self.onset_in_lfp_samples = int(self.onset * conversion_factor) - 1
-        period_events = (np.array(period_events) * conversion_factor).astype(int) - 1
+        self.event_starts = np.array(events)
+        self.event_starts_in_seconds = self.event_starts/self.sampling_rate 
+        self.event_starts_in_lfp_samples = (np.array(events) * conversion_factor).astype(int) - 1
         self.start_in_lfp_samples = self.onset_in_lfp_samples
         self.stop_in_lfp_samples = self.start_in_lfp_samples + self.duration_in_lfp_samples
         self.pad_start = self.start_in_lfp_samples - start_pad
         self.pad_stop = self.stop_in_lfp_samples + end_pad
         self._spectrogram = None
-        self.brain_region = self.current_brain_region
-        self.frequency_band = self.current_frequency_band
+        self.brain_region = self.selected_brain_region
+        self.frequency_band = self.selected_frequency_band
         
     @property
     def padded_data(self):
@@ -84,8 +86,8 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
             self.animal.processed_lfp, self.start_in_lfp_samples, self.stop_in_lfp_samples)
     
     def get_data_from_animal_dict(self, data_source, start, stop):
-        if self.current_brain_region:
-            return data_source[self.current_brain_region][start:stop]
+        if self.selected_brain_region:
+            return data_source[self.selected_brain_region][start:stop]
         else:
             return {brain_region: data_source[brain_region][start:stop] 
                     for brain_region in data_source}
@@ -107,12 +109,11 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         events = []
         epsilon = 1e-6  # a small offset to avoid floating-point issues
 
-        for i, event_start in enumerate(self.event_starts):
+        for i, event_start in enumerate(self.event_starts_in_seconds):
 
             # get time points where the event will fall in the spectrogram in seconds
-            spect_start = round(
-                (event_start - self.lfp_onset)/self.lfp_sampling_rate + true_beginning - self.pre_event
-                , 2)
+            spect_start = round(event_start - self.onset_in_seconds + 
+                                true_beginning - self.pre_event, 2)
             spect_end = round(spect_start + self.pre_event + self.post_event, 2)
             num_points = round(np.ceil((spect_end - spect_start) / bin_size - epsilon))  
             event_times = np.linspace(spect_start, spect_start + (num_points * bin_size), 
@@ -155,13 +156,15 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
         super().__init__(period, onset, identifier)
         self.event_times = event_times
         self.mask = mask
+        if sum(self.mask) == 0:
+            a = 'foo'
         self.animal = period.animal
         self.period_type = self.parent.period_type
         self.spectrogram = self.parent.spectrogram
 
     @property
     def is_valid(self):        
-        return self.animal.lfp_event_validity[self.current_brain_region][self.period_type][
+        return self.animal.lfp_event_validity[self.selected_brain_region][self.period_type][
             self.period.identifier][self.identifier]
     
     def get_power(self):
@@ -399,7 +402,7 @@ class PhaseRelationshipEvent(RelationshipCalculatorEvent):
         data = self.get_angles()
         return compute_mrl(data, np.ones(data.shape()), dim=1)
     
-    
+
 class GrangerFunctions:
 
     def fetch_granger_stat(self, d1, d2, tags, proc_name, do_weight=True, max_len_sets=None):
@@ -486,7 +489,7 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
     
     def get_granger_causality(self):
         ids = [self.period.animal.identifier, self.period_type, str(self.period.identifier), 
-               str(self.current_frequency_band)]
+               str(self.selected_frequency_band)]
         saved_calc_exists, saved_granger_calc, pickle_path = self.load('granger', ids)
         if saved_calc_exists:
             return saved_granger_calc
@@ -507,7 +510,7 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
         for i, (set1, set2) in enumerate(valid_sets):
             if len(set1) > self.data_opts.get('min_data_length', 8000):
                 tags = ['animal', str(self.period.animal.identifier), self.period_type, 
-                        self.period.identifier, 'set', str(i), str(self.current_frequency_band)]
+                        self.period.identifier, 'set', str(i), str(self.selected_frequency_band)]
                 results.append(self.fetch_granger_stat(set1, set2, tags, proc_name, do_weight=True, 
                                                        max_len_sets=max(len_sets)))
         return results
@@ -534,7 +537,7 @@ class GrangerSegment(Data, GrangerFunctions):
     def get_granger_stat(self, proc_name):
         tags = ['animal', str(self.period.animal.identifier), self.period_type, 
                 str(self.period.identifier), 'segment', str(self.identifier), 
-                str(self.current_frequency_band)]
+                str(self.selected_frequency_band)]
         saved_calc_exists, saved_granger_calc, pickle_path = self.load('granger', tags)
         if saved_calc_exists:
             return saved_granger_calc

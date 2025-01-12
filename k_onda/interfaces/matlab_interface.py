@@ -5,6 +5,8 @@ import subprocess
 import time
 import scipy.io
 
+from k_onda.utils import is_truthy
+
 
 class MatlabInterface:
 
@@ -36,6 +38,19 @@ class MatlabInterface:
         execution_line = f"[yo, fo, to] = mtcsg(data, {str_args});\n"
         result = self.execute_function(data, execution_line, results=['yo', 'fo', 'to'])
         return result
+    
+    def open_nsx(self, file_path):
+        file_dir = os.path.dirname(file_path)
+        file_path += '.ns3'
+
+        execution_line = f"""
+            openNSx('{file_path}');\n
+            data = NS3.Data;\n
+            h5create('{file_dir}/output_data.h5', '/NS3_Data', size(data), 'Datatype', 'int16');\n
+            h5write('{file_dir}/output_data.h5', '/NS3_Data', data);\n
+        """
+        self.execute_function('', execution_line, input_type='string')
+        return os.path.join(file_dir, 'output_data.h5')
 
     def filter(self, data):
         execution_line = f"filtered_data = removeLineNoise_SpectrumEstimation(data', 2000, ['NH=5','LF=60']);"
@@ -60,16 +75,21 @@ class MatlabInterface:
         return result
 
     
-    def execute_function(self, data, execution_line, results=['result'], ext='txt'):
+    def execute_function(self, data, execution_line, results=[], ext='txt', input_type='numeric'):
         self.init_session()
-        np.savetxt(self.data_file_path, data)
+        if input_type == 'numeric':
+            np.savetxt(self.data_file_path, data)
+        else:
+            with open(self.data_file_path, 'w') as f: f.write(data)
+
         results_paths = [os.path.join(self.session_directory, result + f'.{ext}') for result in results]
         with open(self.script_file_path, 'w') as script_file:
             for p in self.recursive_paths_to_add:
                 script_file.write(f"addpath(genpath('{p}'));\n")
             for p in self.paths_to_add:
                 script_file.write(f"addpath('{p}');\n")
-            script_file.write(f"data = load('{self.data_file_path}');\n")
+            if is_truthy(data):
+                script_file.write(f"data = load('{self.data_file_path}');\n")
             script_file.write(execution_line)
             for result in results:
                 result_path = os.path.join(self.session_directory, result + f'.{ext}')

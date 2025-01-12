@@ -1,6 +1,7 @@
 import os
 from copy import deepcopy, copy
 import json
+import uuid
 
 import matplotlib.pyplot as plt
 import matplotlib.transforms as transforms
@@ -8,32 +9,32 @@ import numpy as np
 
 from .plotting_helpers import smart_title_case, PlottingMixin, format_label
 from .plotter_base import PlotterBase
-from .partition_simplified import Section, Segment, Series, Container
+from .partition_simplified import Section, Segment, Series, Container, ProcessorConfig
 from .layout_simplified import Figurer
-from k_onda.utils import to_serializable, safe_get, recursive_update
+from k_onda.utils import to_serializable, safe_get, recursive_update, PrepMethods
 
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial'] 
 
 
-class ExecutivePlotter(PlotterBase, PlottingMixin):
+class ExecutivePlotter(PlotterBase, PlottingMixin, PrepMethods):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple 
     plots of multiple kinds of data, see the figure module."""
 
     def __init__(self, experiment):
         self.experiment = experiment
+        self.write_opts = None
               
-    def plot(self, opts, parent_figure=None, index=None):
+    def plot(self, opts, index=None):
         if 'calc_opts' in opts:
             self.calc_opts = opts['calc_opts']
             self.experiment.initialize_data()
+        self.write_opts = opts.get('write_opts', {}) # TODO: add user formatted filename
         plot_spec = opts['plot_spec']
-        self.parent_figure = parent_figure
-        self.process_plot_spec(plot_spec, index=index)
-        if not self.parent_figure:
-            self.close_plot(opts.get('fname', ''))
+        self.process_plot_spec(plot_spec)
+        self.close_plot(opts.get('fname', ''))
 
-    def process_plot_spec(self, plot_spec, index=None):
+    def process_plot_spec(self, plot_spec):
 
         processor_classes = {
             'section': Section,
@@ -41,53 +42,81 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
             'series': Series,
             'container': Container
         }
-
-        spec_type, spec = list(plot_spec.items())[0]
-        processor = processor_classes[spec_type](self, index=index, figure=self.make_fig(), 
-                                                 spec=spec)
+    
+        config = ProcessorConfig(self, plot_spec, figure=self.make_fig(), index=[0, 0])
+        processor = processor_classes[config.spec_type](config)
         processor.start()
 
     def make_fig(self):
         self.fig = Figurer().make_fig()
         self.active_fig = self.fig
         return self.fig
+    
+    def construct_path(self):
+        # Fill fields
+        root, fname, path = [
+            self.fill_fields(self.write_opts.get(key)) 
+            for key in ['root', 'fname', 'path']
+        ]
+        
+        # If user explicitly set 'path', we skip building our own path
+        if path:
+            self.file_path = path
+    
+        else:
+            # Fallback to some default root
+            if not root:
+                root = self.experiment.exp_info.get('data_path', os.getcwd())
             
+            # Fallback to some default fname
+            if not fname:
+                fname = '_'.join([self.kind_of_data, self.calc_type])
+            
+            self.title = smart_title_case(fname.replace('_', ' '))
+            
+            # Build partial path (no extension yet)
+            self.file_path = os.path.join(root, self.kind_of_data, fname)
+
+        self.handle_collisions()
+        
+        # Build final file path and an opts file
+        ext = self.write_opts.get('extension', '.png')
+        self.opts_file_path = self.file_path + '.txt'
+        self.file_path += ext
+
+    def handle_collisions(self):
+        if os.path.exists(self.file_path) and not self.write_opts.get('allow_overwrite', True):
+            uuid_str = str(uuid.uuid4())[:self.write_opts.get('unique_hash', 8)]
+            basename = os.path.basename(self.file_path)
+            dir_ = os.path.dirname(self.file_path)
+            new_name = f"{basename}_{uuid_str}"
+            self.file_path = os.path.join(dir_, new_name)
+
     def close_plot(self, basename='', fig=None, do_title=True):
         
         if not fig:
             fig = self.active_fig  
         #fig.delaxes(fig.axes[0])
-        self.set_dir_and_filename(fig, basename, do_title=do_title)
         plt.show()
         self.save_and_close_fig(fig, basename)
+       
+    def save_and_close_fig(self, fig, do_title=True):
+        
+        self.construct_path()
 
-    def set_dir_and_filename(self, fig, basename, do_title=True):
-        if self.graph_opts.get('fname'):
-            tags = [self.graph_opts['fname']]
-        else:
-            tags = [comp for comp in [self.current_brain_region, self.current_frequency_band]] + [
-            basename if basename else self.calc_type]
-        self.title = smart_title_case(' '.join([tag.replace('_', ' ') for tag in tags]))
         if do_title:
             bbox = fig.axes[0].get_position()
             fig.suptitle(self.title, fontsize=16, y=bbox.ymax + 0.1)
-        self.fname = f"{'_'.join(tags)}.png"
-
-    def save_and_close_fig(self, fig, basename):
-        dirs = [self.graph_opts['graph_dir'], self.calc_type]
-        path = os.path.join(*dirs)
-        os.makedirs(path, exist_ok=True)
        
-        fig.savefig(os.path.join(path, self.fname), bbox_inches='tight', dpi=300)
-        opts_filename = self.fname.replace('png', 'txt')
+        fig.savefig(self.file_path, bbox_inches='tight', dpi=300)
 
-        with open(os.path.join(path, opts_filename), 'w') as file:
+        with open(self.opts_file_path, 'w') as file:
             json.dump(to_serializable(self.calc_opts), file)
-        print(print(hex(id(fig))))
+
         plt.close(fig)
         self.active_fig = None
 
-    def delegate(self, cell, info=None, spec=None, is_last=False):
+    def delegate(self, cell, info=None, spec=None, plot_type=None, is_last=False):
 
         def send(plot_type):
             PLOT_TYPES[plot_type]().process_calc(selected_info, spec, cell, aesthetics=aesthetics, is_last=is_last)
@@ -103,11 +132,11 @@ class ExecutivePlotter(PlotterBase, PlottingMixin):
                 if 'plot_type' in layer:
                     send(layer['plot_type'])
                 else:
-                    send(self.graph_opts['plot_type'])
+                    send(plot_type)
         else:
             selected_info = info
             aesthetics = base_aesthetics
-            send(self.graph_opts['plot_type'])
+            send(plot_type)
                 
 
 class FeaturePlotter(PlotterBase, PlottingMixin):
@@ -205,36 +234,39 @@ class CategoryPlotter(FeaturePlotter):
 
         return new_divisions
     
-    def assign_positions(self, divisions, aesthetics, base_position=0, level_names=None, prefix_labels=()):
+    def assign_positions(self, divisions, aesthetics, base_position=0, label_prefix=None):
         
-        if level_names is None:
-            level_names = list(divisions.keys())
+        if not label_prefix:
+            label_prefix = []
 
-        if not level_names:
+
+        if not divisions:
             # Base case: no more divisions
             return {}
+        
+        division = divisions[0]
+        remaining_divisions = divisions[1:]
 
-        division = level_names[0]
-        remaining_levels = level_names[1:]
-
-        division_info = divisions[division]
         spacing = aesthetics.get('default', {}).get('spacing', 2)  # Get 'spacing' from division_info
-        members = division_info['members']
+        members = division['members']
 
         label_to_pos = {}
         position = base_position
 
         for member in members:
-            current_label = prefix_labels + (member,)
-
-            if remaining_levels:
+            current_label = deepcopy(label_prefix)
+            if isinstance(member, str):
+                current_label.append(member)
+            else:
+                current_label.extend(list(v for v in member.values()))
+  
+            if remaining_divisions:
                 # Recursively assign positions for subcategories
                 sub_positions = self.assign_positions(
-                    divisions,
+                    remaining_divisions,
                     aesthetics,
                     base_position=position,
-                    level_names=remaining_levels,
-                    prefix_labels=current_label
+                    label_prefix=current_label
                 )
                 label_to_pos.update(sub_positions)
 
@@ -247,25 +279,35 @@ class CategoryPlotter(FeaturePlotter):
                     position += spacing
             else:
                 # Base case: assign position to the composite label
-                label_to_pos[current_label] = position
+                label_to_pos[tuple(current_label)] = position
                 position += spacing
 
         return label_to_pos
+    
+    def get_composite_label(self, spec, row):
+        label = []
+        divider_types = set([division['divider_type'] for division in spec['divisions']])
+        for divider_type in divider_types:
+            if isinstance(row[divider_type], str):
+                label.append(row[divider_type])
+            else:
+                label.extend([v for d in row[divider_type] for v in d.values()])
+        return tuple(label)
+       
         
-    def process_calc(self, info, spec, aesthetics=None, is_last=False):
+    def process_calc(self, info, spec, ax, aesthetics=None, is_last=False):
         transformed_divisions = deepcopy(spec['divisions'])
         self.label_to_pos = self.assign_positions(transformed_divisions, aesthetics)
-        ax = self.active_cell
 
         for row in info:
-            composite_label = tuple(row.get(division) for division in transformed_divisions.keys())
+            composite_label = self.get_composite_label(spec, row)
             position = self.label_to_pos[composite_label]
 
             aesthetic_args = self.get_aesthetic_args(row, aesthetics)
             self.cat_width = aesthetic_args.get('cat_width', 1)
             marker_args = aesthetic_args.get('marker', {})
 
-            self.plot_markers(position, composite_label, row, marker_args, aesthetic_args=aesthetic_args)
+            self.plot_markers(ax, position, composite_label, row, marker_args, aesthetic_args=aesthetic_args)
             self.label(row, ax, aesthetic_args, is_last)
 
         # Set x-ticks and labels
@@ -276,9 +318,9 @@ class CategoryPlotter(FeaturePlotter):
 
 class CategoricalScatterPlotter(CategoryPlotter):
 
-    def plot_markers(self, position, _, row, marker_args, aesthetic_args=None):
+    def plot_markers(self, ax, position, _, row, marker_args, aesthetic_args=None):
         scatter_vals = row[row['attr']]
-        ax = self.active_cell
+
         # Generate horizontal jitter
         jitter_strength = aesthetic_args.get('max_jitter', self.cat_width/6)
         jitter = np.random.uniform(-jitter_strength, jitter_strength, size=len(scatter_vals))
@@ -297,8 +339,7 @@ class CategoricalScatterPlotter(CategoryPlotter):
 
 class CategoricalLinePlotter(CategoryPlotter):
 
-    def plot_markers(self, position, _, row, marker_args, aesthetic_args=None):
-        ax = self.active_cell
+    def plot_markers(self, ax, position, _, row, marker_args, aesthetic_args=None):
         bar_width = self.cat_width
         divisor = aesthetic_args.get('divisor', 2)
         width = bar_width / divisor
@@ -311,8 +352,8 @@ class CategoricalLinePlotter(CategoryPlotter):
         
 class BarPlotter(CategoryPlotter):
    
-    def plot_markers(self, position, _, row, marker_args, aesthetic_args=None):
-        self.active_cell.bar(position, row[row['attr']], **marker_args)
+    def plot_markers(self, ax, position, _, row, marker_args, aesthetic_args=None):
+        ax.bar(position, row[row['attr']], **marker_args)
         
 
 class PeriStimulusPlotter(FeaturePlotter):
