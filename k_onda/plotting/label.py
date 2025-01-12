@@ -5,9 +5,8 @@ from .plotting_helpers import format_label
 
 class LabelMethods:
 
-    def label(self, row, ax, aesthetics, is_last):
+    def label(self, row, ax, layout, aesthetics, is_last):
         # label is a dictionary like {'component': {'axis_label': (), 'title': ''}, 'ax': {}}
-        layout = self.active_layout
         label_properties = aesthetics.get('label', {})
         font_properties = FontProperties(aesthetics.get('font_properties', {}))
 

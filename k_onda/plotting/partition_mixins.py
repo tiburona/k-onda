@@ -38,10 +38,10 @@ class LayerMixin(ProcessorMixin):
             self.info_by_division_by_layers.append(new_d)
     
 
-class AestheticMixin(ProcessorMixin):
+class AestheticsMixin(ProcessorMixin):
 
-    def init_aesthetic(self):
-        return self.init_spec_element('aesthetic')
+    def init_aesthetics(self):
+        return self.init_spec_element('aesthetics')
     
 
 

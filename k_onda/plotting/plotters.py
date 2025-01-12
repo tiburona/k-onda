@@ -8,16 +8,17 @@ import matplotlib.transforms as transforms
 import numpy as np
 
 from .plotting_helpers import smart_title_case, PlottingMixin, format_label
-from .plotter_base import PlotterBase
+from .label import LabelMethods
+from k_onda.base import Base
 from .partition_simplified import Section, Segment, Series, Container, ProcessorConfig
-from .layout_simplified import Figurer
+from .layout_simplified import Layout
 from k_onda.utils import to_serializable, safe_get, recursive_update, PrepMethods
 
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial'] 
 
 
-class ExecutivePlotter(PlotterBase, PlottingMixin, PrepMethods):
+class ExecutivePlotter(Base, PlottingMixin, PrepMethods):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple 
     plots of multiple kinds of data, see the figure module."""
 
@@ -47,9 +48,9 @@ class ExecutivePlotter(PlotterBase, PlottingMixin, PrepMethods):
         processor = processor_classes[config.spec_type](config)
         processor.start()
 
-    def make_fig(self):
-        self.fig = Figurer().make_fig()
-        self.active_fig = self.fig
+    def make_fig(self):     
+        self.fig = plt.figure(constrained_layout=True)
+        Layout(self, [0, 0], figure=self.fig)
         return self.fig
     
     def construct_path(self):
@@ -95,7 +96,7 @@ class ExecutivePlotter(PlotterBase, PlottingMixin, PrepMethods):
     def close_plot(self, basename='', fig=None, do_title=True):
         
         if not fig:
-            fig = self.active_fig  
+            fig = self.fig  
         #fig.delaxes(fig.axes[0])
         plt.show()
         self.save_and_close_fig(fig, basename)
@@ -114,32 +115,16 @@ class ExecutivePlotter(PlotterBase, PlottingMixin, PrepMethods):
             json.dump(to_serializable(self.calc_opts), file)
 
         plt.close(fig)
-        self.active_fig = None
 
-    def delegate(self, cell, info=None, spec=None, plot_type=None, is_last=False):
+    def delegate(self, cell, info=None, spec=None, plot_type=None, aesthetics=None, 
+                 layout=None, is_last=False):
 
-        def send(plot_type):
-            PLOT_TYPES[plot_type]().process_calc(selected_info, spec, cell, aesthetics=aesthetics, is_last=is_last)
-
-        base_aesthetics = spec.get('aesthetics', {})
-        if 'layers' in spec:
-            for i, layer in enumerate(spec['layers']):
-                if i == len(spec['layers']):
-                    spec['main'] = True 
-                selected_info = [row for row in info if row['layer'] == i]
-                layer_aesthetics = deepcopy(base_aesthetics)
-                aesthetics = recursive_update(layer_aesthetics, layer.get('aesthetics', {}))           
-                if 'plot_type' in layer:
-                    send(layer['plot_type'])
-                else:
-                    send(plot_type)
-        else:
-            selected_info = info
-            aesthetics = base_aesthetics
-            send(plot_type)
+        PLOT_TYPES[plot_type]().process_calc(
+            info, spec, cell, layout=layout, aesthetics=aesthetics, is_last=is_last)
+        
                 
 
-class FeaturePlotter(PlotterBase, PlottingMixin):
+class FeaturePlotter(Base, PlottingMixin, LabelMethods):
     
     def get_aesthetic_args(self, row, aesthetics):
 
@@ -151,7 +136,7 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
             
         for category, members in aesthetic_spec.items():
             for member, aesthetic_vals in members.items():
-                if category in row and row[category] == member:
+                if self.is_condition_met(category, row, member):
                     recursive_update(aesthetic, aesthetic_vals)
 
         for combination, overrides in override.items():
@@ -163,7 +148,16 @@ class FeaturePlotter(PlotterBase, PlottingMixin):
 
         return aesthetic
     
-    def handle_broken_axes(self, data):
+    def is_condition_met(self, category, row, member):
+        if category in row and row[category] == member:
+            return True
+        for composite_category_type in ['conditions', 'period_types']:
+            if {category:member} in row.get(composite_category_type, []):
+                return True
+        return False
+
+    
+    def handle_broken_axes(self, data, cell):
     # Initial data division (copying the original data)
 
         data_divisions = np.array(copy(data))
@@ -205,9 +199,9 @@ class HistogramPlotter(FeaturePlotter):
 
 
 class LinePlotter(FeaturePlotter):
-    def process_calc(self, info, spec, aesthetics=None, **_):
+    def process_calc(self, info, spec, cell, layout=None, aesthetics=None, **_):
         attr = spec.get('attr', 'calc')
-        ax = self.active_cell
+        ax = cell
         for row in info:
             val = row[attr]
             aesthetics = self.get_aesthetic_args(row, aesthetics)
@@ -215,9 +209,9 @@ class LinePlotter(FeaturePlotter):
 
 
 class WaveformPlotter(LinePlotter):
-    def process_calc(self, info, aesthetics=None, is_last=False, **_):
+    def process_calc(self, info, spec, cell, aesthetics=None, is_last=False, **_):
         super().process_calc(info, aesthetics=aesthetics)
-        self.label(info[0], self.active_cell, is_last)  
+        self.label(info[0], cell, is_last)  
 
 
 class CategoryPlotter(FeaturePlotter):
@@ -294,8 +288,7 @@ class CategoryPlotter(FeaturePlotter):
                 label.extend([v for d in row[divider_type] for v in d.values()])
         return tuple(label)
        
-        
-    def process_calc(self, info, spec, ax, aesthetics=None, is_last=False):
+    def process_calc(self, info, spec, ax, layout=None, aesthetics=None, is_last=False):
         transformed_divisions = deepcopy(spec['divisions'])
         self.label_to_pos = self.assign_positions(transformed_divisions, aesthetics)
 
@@ -308,7 +301,7 @@ class CategoryPlotter(FeaturePlotter):
             marker_args = aesthetic_args.get('marker', {})
 
             self.plot_markers(ax, position, composite_label, row, marker_args, aesthetic_args=aesthetic_args)
-            self.label(row, ax, aesthetic_args, is_last)
+            self.label(row, ax, layout, aesthetic_args, is_last)
 
         # Set x-ticks and labels
         positions = list(self.label_to_pos.values())
@@ -465,7 +458,7 @@ class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
         self.plot_hist(x, y, self.calc_opts['bin_size'], ax, aesthetic_args)
 
 
-class TextPlotter(PlotterBase):
+class TextPlotter(Base):
     """
     Very minimal text plotter.
     """

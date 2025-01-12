@@ -8,7 +8,8 @@ from k_onda.utils import get_round_decimals
 
 
 class Base:
-
+    
+    _experiment = None
     _calc_opts = {}
     _cache = defaultdict(dict)
     _filter = {}
@@ -33,6 +34,13 @@ class Base:
         'frequency_band'
         ]
     
+    @property
+    def experiment(self):
+        return Base._experiment
+
+    @experiment.setter
+    def experiment(self, value):
+        Base._experiment = value
 
     @property
     def calc_opts(self):

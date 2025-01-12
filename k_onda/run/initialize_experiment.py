@@ -38,15 +38,14 @@ class Initializer(PrepMethods):
         self.animals = [self.init_animal(animal_info) for animal_info in self.animals_info]
         self.groups = [
             Group(name=group, 
-                  animals=[animal for animal in self.animals if animal.group_name == group],
-                  experiment=self.experiment)
+                  animals=[animal for animal in self.animals if animal.group_name == group])
             for group in self.group_names]
         self.experiment.initialize_groups(self.groups)
         return self.experiment
 
     def init_animal(self, animal_info):  
         animal = Animal(animal_info['identifier'], animal_info['group_name'], animal_info=animal_info,
-                        neuron_types=self.neuron_types, experiment=self.experiment)
+                        neuron_types=self.neuron_types)
         self.get_periods_from_nev(animal)
         return animal
            

@@ -94,8 +94,6 @@ class Experiment(Data, SpikePrepMethods):
         self.period_types = set(period_type for animal in self.all_animals 
                                 for period_type in animal.period_info)
         self.neuron_types = set([unit.neuron_type for unit in self.all_units])
-        for entity in self.all_animals + self.all_groups:
-            entity.experiment = self
 
     def initialize_data(self):
         if 'kind_of_data' in self.calc_opts:
@@ -143,12 +141,11 @@ class Experiment(Data, SpikePrepMethods):
 class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
     _name = 'group'
 
-    def __init__(self, name, animals=None, experiment=None):
+    def __init__(self, name, animals=None):
         super().__init__()
         self.identifier = name
         self.animals = animals if animals else []
-        self.experiment = experiment
-        self.parent = experiment
+        self.parent = self.experiment
         for animal in self.animals:
             animal.parent = self
             animal.group = self
@@ -158,13 +155,12 @@ class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
 class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, MRLMethods, BinMethods):
     _name = 'animal'
 
-    def __init__(self, identifier, group_name, animal_info, experiment=None, neuron_types=None):
+    def __init__(self, identifier, group_name, animal_info, neuron_types=None):
         super().__init__()
         PeriodConstructor().__init__()
         self.identifier = identifier
         self.group_name = group_name
         self.animal_info = animal_info
-        self.experiment = experiment
         self.experiment.all_animals.append(self)
         self.conditions = animal_info.get('conditions')
         self.group = None

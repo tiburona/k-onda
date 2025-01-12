@@ -1,14 +1,14 @@
 from copy import deepcopy
 
-from .plotter_base import PlotterBase
+from k_onda.base import Base
 from .layout_simplified import Layout
 from k_onda.utils import recursive_update
-from .partition_mixins import AestheticMixin, LayerMixin
+from .partition_mixins import AestheticsMixin, LayerMixin
 
 
-class ProcessorConfig(PlotterBase):
+class ProcessorConfig(Base):
     def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
-                 figure=None, division_info=None, index=None ):
+                 figure=None, division_info=None, index=None, aesthetics=None, layers=None):
         
         self.executive_plotter = executive_plotter
         self.full_spec = full_spec
@@ -20,6 +20,8 @@ class ProcessorConfig(PlotterBase):
         self.figure = figure
         self.division_info = division_info
         self.index = index
+        self.aesthetics = aesthetics
+        self.layers = layers
         self.plot_type = self.full_spec.get('plot_type')
         self.next = None
         for k in processor_types:
@@ -43,25 +45,25 @@ class ProcessorConfig(PlotterBase):
         }
         
         
-class Processor(PlotterBase, AestheticMixin, LayerMixin):
+class Processor(Base, AestheticsMixin, LayerMixin):
     def __init__(self, config):
         # Copy all attributes from config to the Processor instance
         self.__dict__.update(config.__dict__)
 
         if self.next:
             self.child_layout = Layout(self.parent_layout, self.current_index, processor=self, 
-                                    figure=self.figure)
-            
+                                    figure=self.figure) 
         self.layers = self.init_layers()
-        self.aesthetic = self.init_aesthetic()
+        self.aesthetics = self.init_aesthetics()
 
     def next_processor_config(self, spec, updated_division_info):
         plot_type = spec.get('plot_type', self.plot_type) 
         cell = self.child_layout.cells[*self.current_index]
 
         return ProcessorConfig(
-            self.executive_plotter, spec, layout=self.child_layout, division_info=updated_division_info, 
-            figure=cell, plot_type=plot_type, parent_processor=self)
+            self.executive_plotter, spec, layout=self.child_layout, 
+            division_info=updated_division_info, figure=cell, 
+            plot_type=plot_type, parent_processor=self, layers=self.layers)
         
     def start_next_processor(self, spec, updated_division_info):
 
@@ -168,6 +170,8 @@ class Partition(Processor):
         
         attr = self.spec.get('attr', 'calc')
 
+        # TODO I need to move everything to do with layers in here.  I already
+        # deleted it from ExecutivePlotter; it's not its job.
         if self.layers:
             self.get_layer_calcs()
         else:
@@ -206,7 +210,8 @@ class Section(Partition):
         if not self.next:
             self.get_calcs()
             self.executive_plotter.delegate(
-                cell, info=[self.info_dicts.pop()], spec=self.spec, is_last=not self.next)
+                cell, info=[self.info_dicts.pop()], spec=self.spec, 
+                aesthetics=self.aesthetics, is_last=not self.next)
 
         else:
             self.start_next_processor(self.next, updated_info)
@@ -222,16 +227,14 @@ class Segment(Partition):
             self.parent_layout = Layout(self.parent_layout, self.current_index, processor=self, 
                                     figure=self.figure)
             self.child_layout = self.parent_layout
-     
-        
 
     def start(self):
         super().start()
         cell = self.parent_layout.cells[*self.current_index]
-        self.executive_plotter.delegate(cell, info=self.info_by_division, 
-                                        spec=self.spec, plot_type=self.plot_type, is_last=True)
+        self.executive_plotter.delegate(
+            cell, layout=self.parent_layout, info=self.info_by_division, spec=self.spec, 
+            plot_type=self.plot_type, aesthetics=self.aesthetics, is_last=True)
         
-
     def wrap_up(self, _): 
         self.get_calcs()
            

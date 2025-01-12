@@ -600,8 +600,18 @@ AS_PLOT_SPEC = {
                   {'data_source': 'experiment',
                    'divider_type': 'conditions',
                    'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}]
-                   }]   
-            }}
+                   }],
+                'aesthetics': {
+                    'default': {'cat_width': 3, 'spacing': 2},
+                     'treatment': {
+                        'stressed': {'marker': {'color': 'red'}}, 
+                        'non_stressed': {'marker': {'color':'blue'}}
+                        },
+                     'sex': {
+                         'female': {'marker': {'hatch': '/'}},
+                         'male': {'marker': {'hatch': ''}}
+                     }}}
+            }
 
 
 AS_OPTS = {

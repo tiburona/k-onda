@@ -1,28 +1,12 @@
 from copy import copy
 
-import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 import numpy as np
 
-from .plotter_base import PlotterBase
-from k_onda.utils import safe_get
-
-
-class Figurer(PlotterBase):
-            
-    def __init__(self):
-        self.fig = None
-        self.gs = None
-
-    def make_fig(self):
-        self.fig = plt.figure(constrained_layout=True)
-        self.active_fig = self.fig
-        self.layout = Layout(self, [0, 0], figure=self.fig)
-     
-        return self.active_fig
+from k_onda.base import Base
     
 
-class Layout(PlotterBase):
+class Layout(Base):
 
     def __init__(self, parent, index, figure=None, processor=None):
         self.parent = parent
@@ -92,7 +76,7 @@ class Layout(PlotterBase):
         return AxWrapper(ax, index)
      
 
-class AxWrapper(PlotterBase):
+class AxWrapper(Base):
 
     def __init__(self, ax, index):
         self.ax = ax  # Store the original ax
@@ -109,7 +93,7 @@ class AxWrapper(PlotterBase):
 
     
 
-class BrokenAxes(PlotterBase):
+class BrokenAxes(Base):
     
     def __init__(self, fig, parent_gridspec, index, break_axes, aspect=None):
         self.break_axes = {
