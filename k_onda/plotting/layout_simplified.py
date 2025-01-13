@@ -67,15 +67,10 @@ class Layout(Base):
             ax = self.figure.add_subplot(gridspec_slice, zorder=0)
             return AxWrapper(ax, (i, j))
 
-   
-
     def add_ax(self, sub_fig_cell, index):
             ax = sub_fig_cell.add_subplot()
             return AxWrapper(ax, index)
     
-
-
-     
 
 class AxWrapper(Base):
 
@@ -86,12 +81,9 @@ class AxWrapper(Base):
         self.bottom_edge = None
         self.left_edge = None
         
-
     def __getattr__(self, name):
         # Forward any unknown attribute access to the original ax
         return getattr(self.ax, name)
-    
-
     
 
 class BrokenAxes(Base):

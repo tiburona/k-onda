@@ -1,5 +1,6 @@
 from copy import deepcopy
 from k_onda.utils import recursive_update
+from .plotting_helpers import smart_title_case
 
 
 class ProcessorMixin:
@@ -47,9 +48,22 @@ class AestheticsMixin(ProcessorMixin):
 class LabelMixin:
 
     def label(self):
-        for axis in self.spec.get('label', []):
-            label_setter = getattr(self.figure, f'sup{axis}label')
-            label_setter(self.spec['label'][axis])
-           
+        for position in self.spec.get('label', []):
+            if position in 'xy':
+                label_setter = getattr(self.figure, f'sup{position}label')
+                lab = self.spec['label'][position]    
+            elif position == 'title':
+                lab = self.fill_fields(self.spec['label'][position])
+                label_setter = getattr(self.figure, 'suptitle')
+            else:
+                raise ValueError(f"Unknown label position: {position}")
+                
+            if not self.spec['label'].get('smart_label', False):
+                lab = smart_title_case(lab.replace('_', ' '))
+
+            label_setter(lab)
+
+            
+                           
 
 

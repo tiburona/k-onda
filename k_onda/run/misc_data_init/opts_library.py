@@ -589,29 +589,31 @@ AS_POWER_OPTS = {
     }
 
 AS_PLOT_SPEC = {
-            'plot_type': 'bar_plot',
-            'segment': {
-                'attr': 'mean',
-                'divisions': 
-                [{'data_source': 'experiment',
-                  'divider_type': 'conditions',
-                  'members': [{'sex': 'female'}, {'sex': 'male'}]},
-                  {'data_source': 'experiment',
-                   'divider_type': 'conditions',
-                   'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}]
-                   }],
-                'aesthetics': {
-                    'default': {'cat_width': 3, 'spacing': 2},
-                     'treatment': {
-                        'stressed': {'marker': {'color': 'red'}}, 
-                        'non_stressed': {'marker': {'color':'blue'}}
-                        },
-                     'sex': {
-                         'female': {'marker': {'hatch': '/'}},
-                         'male': {'marker': {'hatch': ''}}
+    'plot_type': 'bar_plot',
+    'segment': {
+        'attr': 'mean',
+        'divisions':[
+            {'data_source': 'experiment',
+             'divider_type': 'conditions',
+             'members': [{'sex': 'female'}, {'sex': 'male'}]},
+             {'data_source': 'experiment',
+              'divider_type': 'conditions',
+              'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}]
+           }],
+        'aesthetics': {
+            'default': {'cat_width': 3, 'spacing': 2},
+            'treatment': {
+                'stressed': {'marker': {'color': 'red'}},
+                'non_stressed': {'marker': {'color':'blue'}}
+                },
+            'sex': {
+                'female': {'marker': {'hatch': '/'}},
+                'male': {'marker': {'hatch': ''}}
                      }},
-                'label': {'y': 'power'}}
-            }
+        'label': {'y': 'power', 
+                  'title': {'template': '{brain_region} {frequency_band} Power',
+                            'fields': ['brain_region', 'frequency_band']}}
+            }}
 
 
 AS_OPTS = {

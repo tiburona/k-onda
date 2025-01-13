@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import deepcopy
 import importlib
 import json
 import pickle
@@ -293,3 +294,20 @@ class Base:
             return module
         else:
             raise ImportError(f"Could not load module from {file_path}")
+        
+    def construct_path(self, constructor_id):
+        constructor = deepcopy(self.experiment.exp_info['path_constructors'][constructor_id])
+        return self.fill_fields(constructor)
+    
+    def fill_fields(self, constructor):
+        if not constructor:
+            return
+        if isinstance(constructor, str):
+            return constructor
+        
+        for field in constructor['fields']:
+            if field in self.selectable_variables:
+                constructor[field] = getattr(self, field, getattr(self, f'selected_{field}'))
+            else:
+                constructor[field] = getattr(self, field)
+        return constructor['template'].format(**constructor)

@@ -88,10 +88,9 @@ class Partition(Processor):
         # each unique layer
         self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
         
-        if 'label' in self.spec:
-            self.label()
-
         self.assign_data_sources()
+
+        self.label()
 
     def start(self):
         self.process_divisions(self.spec['divisions'])
@@ -104,7 +103,8 @@ class Partition(Processor):
                 return
             # if data_source is 'all_animals' or similar, expand that into a list of identifiers
             if 'all' in division.get('members', []):
-                division['members'] = [s.identifier for s in getattr(self.experiment, division['members'])]
+                division['members'] = [
+                    s.identifier for s in getattr(self.experiment, division['members'])]
             
     def process_divisions(self, divisions, info=None):
         """
@@ -113,7 +113,7 @@ class Partition(Processor):
             {
                 'divider_type': 'conditions',
                 'members': [...],
-                'dim': ...
+                'dim': ...,
             }
         `info` is the accumulated info from previous dividers.
         """
@@ -226,10 +226,12 @@ class Segment(Partition):
 
     def __init__(self, config):
         super().__init__(config)
+        # If another processor passed down a parent layout, it already created the ax cells.
+        # Otherwise, segment is the first processor, and we need to create them.
         if not self.parent_layout:
             self.parent_layout = Layout(self.parent_layout, self.current_index, processor=self, 
-                                    figure=self.figure)
-            self.child_layout = self.parent_layout
+                                    figure=self.figure, dimensions=[1, 1])
+           
 
     def start(self):
         super().start()
@@ -239,7 +241,7 @@ class Segment(Partition):
             plot_type=self.plot_type, aesthetics=self.aesthetics, is_last=True)
         
     def wrap_up(self, _): 
-        self.get_calcs()
+        self.get_calcs()    
            
 
 class Split:
