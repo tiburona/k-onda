@@ -45,11 +45,6 @@ class AestheticsMixin(ProcessorMixin):
         return self.init_spec_element('aesthetics')
     
 
-class BorderMixin(ProcessorMixin):
-    def init_border(self):
-        return self.init_spec_element('border')
-    
-
 class LabelMixin:
 
     def label(self):
@@ -67,6 +62,15 @@ class LabelMixin:
                 lab = smart_title_case(lab.replace('_', ' '))
 
             label_setter(lab)
+
+class MarginMixin:
+
+    def apply_margins(self):
+        margin_spec = deepcopy(self.spec.get('margins', {}))
+        for key in margin_spec:
+            if key in ['right', 'top']:
+                margin_spec[key] = 1 - margin_spec[key]
+        self.figure.subplots_adjust(**margin_spec)
 
 
 

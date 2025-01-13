@@ -3,12 +3,13 @@ from copy import deepcopy
 from k_onda.base import Base
 from .layout_simplified import Layout
 from k_onda.utils import recursive_update
-from .partition_mixins import AestheticsMixin, LayerMixin, BorderMixin, LabelMixin
+from .partition_mixins import AestheticsMixin, LayerMixin, MarginMixin, LabelMixin
 
 
 class ProcessorConfig(Base):
     def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
-                 figure=None, division_info=None, index=None, aesthetics=None, layers=None):
+                 figure=None, division_info=None, index=None, aesthetics=None, layers=None, 
+                 is_first=False):
         
         self.executive_plotter = executive_plotter
         self.full_spec = full_spec
@@ -22,6 +23,7 @@ class ProcessorConfig(Base):
         self.index = index
         self.aesthetics = aesthetics
         self.layers = layers
+        self.is_first = is_first
         self.plot_type = self.full_spec.get('plot_type')
         self.next = None
         for k in processor_types:
@@ -45,7 +47,7 @@ class ProcessorConfig(Base):
         }
         
         
-class Processor(Base, AestheticsMixin, LayerMixin, BorderMixin, LabelMixin):
+class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
     def __init__(self, config):
         # Copy all attributes from config to the Processor instance
         self.__dict__.update(config.__dict__)
@@ -55,6 +57,9 @@ class Processor(Base, AestheticsMixin, LayerMixin, BorderMixin, LabelMixin):
                                     figure=self.figure) 
         self.layers = self.init_layers()
         self.aesthetics = self.init_aesthetics()
+        self.apply_margins()
+        self.label()
+        
 
     def next_processor_config(self, spec, updated_division_info):
         plot_type = spec.get('plot_type', self.plot_type) 
@@ -89,8 +94,6 @@ class Partition(Processor):
         self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
         
         self.assign_data_sources()
-
-        self.label()
 
     def start(self):
         self.process_divisions(self.spec['divisions'])
@@ -228,7 +231,7 @@ class Segment(Partition):
         super().__init__(config)
         # If another processor passed down a parent layout, it already created the ax cells.
         # Otherwise, segment is the first processor, and we need to create them.
-        if not self.parent_layout:
+        if self.is_first:
             self.child_layout = Layout(self.parent_layout, self.current_index, processor=self, 
                                     figure=self.figure, dimensions=[1, 1])
            

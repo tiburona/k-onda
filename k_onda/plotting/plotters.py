@@ -44,14 +44,18 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods):
             'series': Series,
             'container': Container
         }
+
+        self.make_fig()
     
-        config = ProcessorConfig(self, plot_spec, figure=self.make_fig(), index=[0, 0])
+        config = ProcessorConfig(self, plot_spec, layout=self.layout, 
+                                  figure=self.layout.cells[0, 0], index=[0, 0], 
+                                 is_first=True)
         processor = processor_classes[config.spec_type](config)
         processor.start()
 
     def make_fig(self):     
-        self.fig = plt.figure(constrained_layout=True)
-        Layout(self, [0, 0], figure=self.fig)
+        self.fig = plt.figure()
+        self.layout = Layout(self, [0, 0], figure=self.fig)
         return self.fig
     
     def construct_path(self):
@@ -159,6 +163,8 @@ class FeaturePlotter(Base, PlottingMixin, LabelMethods):
         return False
     
     def apply_borders(self, ax, border):
+        border = deepcopy(border)
+
         default = border.pop('default', {})
         if default:
             for side in ['top', 'bottom', 'left', 'right']:

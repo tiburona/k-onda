@@ -611,7 +611,8 @@ AS_PLOT_SPEC = {
                 'male': {'marker': {'hatch': ''}}
                      }},
         'border': {'top': {'visible': 'FFF'}, 'right': {'visible': 'FFF'}},
-        'label': {'y': 'power', 
+        'margins': {'top': 0.3, 'bottom': 0.3, 'left': 0.3, 'right': 0.3},
+        'label': {'y': 'Power', 
                   'title': {'template': '{brain_region} {frequency_band} Power',
                             'fields': ['brain_region', 'frequency_band']}}
             }}
