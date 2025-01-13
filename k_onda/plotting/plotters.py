@@ -35,6 +35,7 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods):
         self.process_plot_spec(plot_spec)
         self.close_plot(opts.get('fname', ''))
 
+    
     def process_plot_spec(self, plot_spec):
 
         processor_classes = {

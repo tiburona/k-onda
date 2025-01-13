@@ -44,4 +44,12 @@ class AestheticsMixin(ProcessorMixin):
         return self.init_spec_element('aesthetics')
     
 
+class LabelMixin:
+
+    def label(self):
+        for axis in self.spec.get('label', []):
+            label_setter = getattr(self.figure, f'sup{axis}label')
+            label_setter(self.spec['label'][axis])
+           
+
 

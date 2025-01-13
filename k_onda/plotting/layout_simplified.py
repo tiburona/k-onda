@@ -8,7 +8,7 @@ from k_onda.base import Base
 
 class Layout(Base):
 
-    def __init__(self, parent, index, figure=None, processor=None):
+    def __init__(self, parent, index, figure=None, processor=None, dimensions=None):
         self.parent = parent
         self.index = index
         self.figure = figure
@@ -22,7 +22,7 @@ class Layout(Base):
             self.processor_type = processor.name
             self.spec = self.processor.spec
 
-        self.dimensions = self.calculate_my_dimensions()
+        self.dimensions = dimensions or self.calculate_my_dimensions()
         self.gs = self.create_grid()  # Create the gridspec for the actual data
         self.cells = self.make_all_cells()
             
@@ -53,27 +53,28 @@ class Layout(Base):
         ])
         
     def make_cell(self, i, j):
-
-        # Add a subfigure to the first parent figure.
         if self.processor is None:
-            cell = self.figure.add_subfigure(self.gs[0, 0])
-            return cell
+            subfigure = self.figure.add_subfigure(self.gs[0, 0])
+            return subfigure
 
-        # Add a subfigure that will contain more than one subplots.
         elif self.processor.next is not None and any(
             name in self.processor.next for name in ['section', 'split', 'components']):
-                cell = self.figure.add_subfigure(self.gs[i, j])
-                return cell
+            subfigure = self.figure.add_subfigure(self.gs[i, j])
+            return subfigure
 
-        # At an indivisible subplot. Add an ax rather than a subfigure.
         else:
             gridspec_slice = self.gs[i, j]
-            ax = self.figure.add_subplot(gridspec_slice)
+            ax = self.figure.add_subplot(gridspec_slice, zorder=0)
             return AxWrapper(ax, (i, j))
 
+   
+
     def add_ax(self, sub_fig_cell, index):
-        ax = sub_fig_cell.add_subplot()
-        return AxWrapper(ax, index)
+            ax = sub_fig_cell.add_subplot()
+            return AxWrapper(ax, index)
+    
+
+
      
 
 class AxWrapper(Base):

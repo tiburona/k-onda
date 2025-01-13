@@ -3,7 +3,7 @@ from copy import deepcopy
 from k_onda.base import Base
 from .layout_simplified import Layout
 from k_onda.utils import recursive_update
-from .partition_mixins import AestheticsMixin, LayerMixin
+from .partition_mixins import AestheticsMixin, LayerMixin, LabelMixin
 
 
 class ProcessorConfig(Base):
@@ -45,7 +45,7 @@ class ProcessorConfig(Base):
         }
         
         
-class Processor(Base, AestheticsMixin, LayerMixin):
+class Processor(Base, AestheticsMixin, LayerMixin, LabelMixin):
     def __init__(self, config):
         # Copy all attributes from config to the Processor instance
         self.__dict__.update(config.__dict__)
@@ -87,6 +87,9 @@ class Partition(Processor):
         # self.info_by_division_by_layers is a list with these same unique values, repeated for
         # each unique layer
         self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
+        
+        if 'label' in self.spec:
+            self.label()
 
         self.assign_data_sources()
 

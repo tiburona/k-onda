@@ -595,8 +595,7 @@ AS_PLOT_SPEC = {
                 'divisions': 
                 [{'data_source': 'experiment',
                   'divider_type': 'conditions',
-                  'members': [{'sex': 'female'}, {'sex': 'male'}]
-            },
+                  'members': [{'sex': 'female'}, {'sex': 'male'}]},
                   {'data_source': 'experiment',
                    'divider_type': 'conditions',
                    'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}]
@@ -610,7 +609,8 @@ AS_PLOT_SPEC = {
                      'sex': {
                          'female': {'marker': {'hatch': '/'}},
                          'male': {'marker': {'hatch': ''}}
-                     }}}
+                     }},
+                'label': {'y': 'power'}}
             }
 
 
