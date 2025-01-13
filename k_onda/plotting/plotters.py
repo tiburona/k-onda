@@ -131,6 +131,7 @@ class FeaturePlotter(Base, PlottingMixin, LabelMethods):
 
         aesthetic = {}
         aesthetic_spec = deepcopy(aesthetics)
+
         default, override, invariant = (aesthetic_spec.pop(k, {}) for k in ['default', 'override', 'invariant'])
 
         aesthetic.update(default)
@@ -156,8 +157,51 @@ class FeaturePlotter(Base, PlottingMixin, LabelMethods):
             if {category:member} in row.get(composite_category_type, []):
                 return True
         return False
-
     
+    def apply_borders(self, ax, border):
+        default = border.pop('default', {})
+        if default:
+            for side in ['top', 'bottom', 'left', 'right']:
+                self.set_border_args(ax, side, default)
+
+        for side, border_args in border.items():
+            self.set_border_args(ax, side, border_args)
+
+    def set_border_args(self, ax, side, border_args):
+        # Define falsy values to interpret
+        is_falsy = {'f', 'F', False, 'false', 'False', 0}
+        
+        # Handle visibility settings
+        visible = border_args.pop('visible', None)
+        if visible:
+            # Ensure visible is iterable and convert to a list (e.g., 'fff' → ['f', 'f', 'f'])
+            visible = list(visible) if isinstance(visible, (str, tuple, list)) else [visible]
+            
+            # Pad or truncate visible to ensure it's exactly three items (spine, ticks, labels)
+            visible = (visible + [True] * 3)[:3]
+            spine_visible, tick_visible, label_visible = visible
+
+            # Set spine visibility
+            if spine_visible in is_falsy:
+                ax.spines[side].set_visible(False)
+            else:
+                ax.spines[side].set_visible(True)
+
+            # Set tick visibility
+            if tick_visible in is_falsy:
+                ax.tick_params(**{side: False})  # Disable bottom ticks
+
+            # Determine axis based on the side
+            axis = 'x' if side in ['top', 'bottom'] else 'y'
+
+            # Set label visibility
+            if label_visible in is_falsy:
+                if label_visible in is_falsy:
+                    ax.tick_params(axis=axis, which='both', **{'label' + side: False})
+        
+        # Apply remaining border arguments to the spine
+        ax.spines[side].set(**border_args)
+        
     def handle_broken_axes(self, data, cell):
     # Initial data division (copying the original data)
 
@@ -203,6 +247,7 @@ class LinePlotter(FeaturePlotter):
     def process_calc(self, info, spec, cell, layout=None, aesthetics=None, **_):
         attr = spec.get('attr', 'calc')
         ax = cell
+        self.apply_borders(ax, spec.get('border', {}))
         for row in info:
             val = row[attr]
             aesthetics = self.get_aesthetic_args(row, aesthetics)
@@ -290,6 +335,7 @@ class CategoryPlotter(FeaturePlotter):
         return tuple(label)
        
     def process_calc(self, info, spec, ax, layout=None, aesthetics=None, is_last=False):
+        self.apply_borders(ax, spec.get('border', {}))
         transformed_divisions = deepcopy(spec['divisions'])
         self.label_to_pos = self.assign_positions(transformed_divisions, aesthetics)
 
@@ -362,7 +408,7 @@ class PeriStimulusPlotter(FeaturePlotter):
         for row in info:
             attr = spec.get('attr', 'calc')
             data = row[attr]
-            aesthetic_args = self.get_aesthetic_args(row, aesthetics)
+            aesthetic_args = self.get_aesthetic_args(ax, row, aesthetics)
             data_divisions, ax_list, x_slices = self.handle_broken_axes(data)
             
             for i, (ax, data, x_slice) in enumerate(zip(ax_list, data_divisions, x_slices)):

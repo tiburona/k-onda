@@ -45,6 +45,11 @@ class AestheticsMixin(ProcessorMixin):
         return self.init_spec_element('aesthetics')
     
 
+class BorderMixin(ProcessorMixin):
+    def init_border(self):
+        return self.init_spec_element('border')
+    
+
 class LabelMixin:
 
     def label(self):
@@ -62,6 +67,11 @@ class LabelMixin:
                 lab = smart_title_case(lab.replace('_', ' '))
 
             label_setter(lab)
+
+
+
+
+
 
             
                            

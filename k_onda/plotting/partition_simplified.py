@@ -3,7 +3,7 @@ from copy import deepcopy
 from k_onda.base import Base
 from .layout_simplified import Layout
 from k_onda.utils import recursive_update
-from .partition_mixins import AestheticsMixin, LayerMixin, LabelMixin
+from .partition_mixins import AestheticsMixin, LayerMixin, BorderMixin, LabelMixin
 
 
 class ProcessorConfig(Base):
@@ -45,7 +45,7 @@ class ProcessorConfig(Base):
         }
         
         
-class Processor(Base, AestheticsMixin, LayerMixin, LabelMixin):
+class Processor(Base, AestheticsMixin, LayerMixin, BorderMixin, LabelMixin):
     def __init__(self, config):
         # Copy all attributes from config to the Processor instance
         self.__dict__.update(config.__dict__)
@@ -229,15 +229,15 @@ class Segment(Partition):
         # If another processor passed down a parent layout, it already created the ax cells.
         # Otherwise, segment is the first processor, and we need to create them.
         if not self.parent_layout:
-            self.parent_layout = Layout(self.parent_layout, self.current_index, processor=self, 
+            self.child_layout = Layout(self.parent_layout, self.current_index, processor=self, 
                                     figure=self.figure, dimensions=[1, 1])
            
 
     def start(self):
         super().start()
-        cell = self.parent_layout.cells[*self.current_index]
+        cell = self.child_layout.cells[*self.current_index]
         self.executive_plotter.delegate(
-            cell, layout=self.parent_layout, info=self.info_by_division, spec=self.spec, 
+            cell, layout=self.child_layout, info=self.info_by_division, spec=self.spec, 
             plot_type=self.plot_type, aesthetics=self.aesthetics, is_last=True)
         
     def wrap_up(self, _): 
