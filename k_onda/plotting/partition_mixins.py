@@ -48,29 +48,43 @@ class AestheticsMixin(ProcessorMixin):
 class LabelMixin:
 
     def label(self):
-        for position in self.spec.get('label', []):
+        label = deepcopy(self.spec.get('label', {}))
+        label_pad = label.pop('label_pad', 0)
+        for position in label:
             if position in 'xy':
                 label_setter = getattr(self.figure, f'sup{position}label')
-                lab = self.spec['label'][position]    
+                lab = self.spec['label'][position] 
+                if label_pad:
+                    kwargs = {'y' if position == 'x' else 'x': label_pad}
+                else: 
+                    kwargs = {}
             elif position == 'title':
                 lab = self.fill_fields(self.spec['label'][position])
                 label_setter = getattr(self.figure, 'suptitle')
+                kwargs = {}
             else:
                 raise ValueError(f"Unknown label position: {position}")
                 
             if not self.spec['label'].get('smart_label', False):
                 lab = smart_title_case(lab.replace('_', ' '))
 
-            label_setter(lab)
+            label_setter(lab, **kwargs)
 
 class MarginMixin:
 
-    def apply_margins(self):
-        margin_spec = deepcopy(self.spec.get('margins', {}))
-        for key in margin_spec:
-            if key in ['right', 'top']:
-                margin_spec[key] = 1 - margin_spec[key]
-        self.figure.subplots_adjust(**margin_spec)
+    def calculate_rect(self, margin_spec):
+        width = 1 - (margin_spec['right'] + margin_spec['left'])
+        height = 1 - (margin_spec['top'] + margin_spec['bottom'])
+        rect = (margin_spec['left'], margin_spec['bottom'], width, height)
+        return rect
+    
+    def calculate_margins(self, margin_spec):
+        margin_spec = deepcopy(margin_spec)
+        for k, v in margin_spec.items():
+            if k in ('top', 'right'):
+                margin_spec[k] = 1 - v
+        return margin_spec
+            
 
 
 

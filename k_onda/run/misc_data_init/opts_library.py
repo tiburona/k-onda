@@ -590,6 +590,7 @@ AS_POWER_OPTS = {
 
 AS_PLOT_SPEC = {
     'plot_type': 'bar_plot',
+    'margins': {'left': .05, 'right': .05, 'top': .05, 'bottom': .05},
     'segment': {
         'attr': 'mean',
         'divisions':[
@@ -611,7 +612,6 @@ AS_PLOT_SPEC = {
                 'male': {'marker': {'hatch': ''}}
                      }},
         'border': {'top': {'visible': 'FFF'}, 'right': {'visible': 'FFF'}},
-        'margins': {'top': 0.3, 'bottom': 0.3, 'left': 0.3, 'right': 0.3},
         'label': {'y': 'Power', 
                   'title': {'template': '{brain_region} {frequency_band} Power',
                             'fields': ['brain_region', 'frequency_band']}}

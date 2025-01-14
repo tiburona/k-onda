@@ -1,4 +1,4 @@
-from .layout_simplified import Layout
+from .layout import Layout
 from .plotters import ExecutivePlotter
 
 __all__ = [

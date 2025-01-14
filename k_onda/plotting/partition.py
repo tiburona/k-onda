@@ -1,232 +1,289 @@
 from copy import deepcopy
-from functools import reduce
-import operator
 
-from .plotter_base import PlotterBase
-from .layout import Layout, ContainerLayout
-from k_onda.utils import recursive_update, collect_dict_references, print_common_dict_references
+from k_onda.base import Base
+from .layout import Layout
+from k_onda.utils import recursive_update
+from .partition_mixins import AestheticsMixin, LayerMixin, MarginMixin, LabelMixin
 
 
-class Partition(PlotterBase):
-
-    def __init__(self, origin_plotter, parent_plotter=None, 
-                 parent_processor = None, info=None):
-        super().__init__()
-        self.executive_plotter = origin_plotter
-        self.parent_plotter = parent_plotter
-        self.spec = self.active_spec
-        self.active_partition = self
+class ProcessorConfig(Base):
+    def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
+                 figure=None, division_info=None, index=None, aesthetics=None, layers=None, 
+                 is_first=False):
+        
+        self.executive_plotter = executive_plotter
+        self.full_spec = full_spec
+        processor_types = ['section', 'split', 'segment', 'series', 'container']
+        self.spec_type = [k for k in processor_types if k in self.full_spec][0]
+        self.spec = self.full_spec[self.spec_type]
+        self.parent_layout = layout
+        self.parent_processor = parent_processor
+        self.figure = figure
+        self.division_info = division_info
+        self.index = index
+        self.aesthetics = aesthetics
+        self.layers = layers
+        self.is_first = is_first
+        self.plot_type = self.full_spec.get('plot_type')
         self.next = None
-        for k in ('series', 'section', 'segment', 'components'):
+        for k in processor_types:
             if k in self.spec:
                 self.next = {k: self.spec[k]}
-        self.parent_processor = parent_processor
-        self.assign_data_sources()
-        self.total_calls = reduce(
-            operator.mul, [len(div['members']) for div in self.spec['divisions'].values()], 1)
-        self.remaining_calls = self.total_calls
-        self.layers = deepcopy(self.spec.get('layers', {}))
-        if self.parent_processor:
-            self.layers.update(self.parent_processor.layers)
-        self.aesthetics = self.spec.get('aesthetics', {})
-        if self.parent_processor:
-            self.aesthetics.update(self.parent_processor.aesthetics)
-
-        if self.active_fig == None:
-            self.fig = self.executive_plotter.make_fig()
-            self.parent_plotter = self.active_layout
-        else:
-            self.fig = self.active_fig
-
         
-        self.inherited_info = info if info else {}
-        self.info_by_division = []
-        self.info_by_division_by_layers = []
-        self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
-        self.info_by_attr = {}
+        if self.index:
+            self.starting_index = self.index
+        else:
+            self.starting_index = [0, 0]
+
+        self.inherited_division_info = self.division_info if self.division_info else {}  
+        self.current_index = deepcopy(self.starting_index)
+        
         self.processor_classes = {
             'series': Series,
             'section': Section,
+            'split': Split,
             'segment': Segment,
-            'split': Split
+            'container': Container
         }
         
-    @property
-    def last(self):
-        return not self.remaining_calls and not self.next
-
-    def start(self):
-        self.process_divider(*next(iter(self.spec['divisions'].items())), self.spec['divisions'])
-
-    def assign_data_sources(self):
-        divider = self.spec['divisions'].get('data_source')
-        if not divider:
-            return
-        if 'all' in divider.get('members', []):
-            divider['members'] = [s.identifier for s in getattr(self.experiment, divider['members'])]
-            
-    def process_divider(self, divider_type, current_divider, divisions, info=None):
-
-        info = info or {}
         
-        for i, member in enumerate(current_divider['members']):
+class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
+    def __init__(self, config):
+        # Copy all attributes from config to the Processor instance
+        self.__dict__.update(config.__dict__)
 
-            info[divider_type] = member
-            if divider_type == 'data_source':
-                info['data_object_type'] = current_divider['type']
-                
-            self.set_dims(current_divider, i)
-            
-            updated_info = self.inherited_info | info
+        if self.next:
+            self.child_layout = Layout(self.parent_layout, self.current_index, processor=self, 
+                                    figure=self.figure, gs_args=self.next.get('gs_args')) 
+        self.layers = self.init_layers()
+        self.aesthetics = self.init_aesthetics()
+        self.label()
+        
+    def next_processor_config(self, spec, updated_division_info):
+        plot_type = spec.get('plot_type', self.plot_type) 
+        cell = self.child_layout.cells[*self.current_index]
 
-            if len(divisions) > 1:
-                remaining_divisions = {k: v for k, v in divisions.items() if k != divider_type}
-                self.process_divider(*next(iter(remaining_divisions.items())), remaining_divisions, 
-                                     info=updated_info)
-            else:
-                
-                self.info_by_division.append(updated_info)
-                self.wrap_up(updated_info)
+        return ProcessorConfig(
+            self.executive_plotter, spec, layout=self.child_layout, 
+            division_info=updated_division_info, figure=cell, 
+            plot_type=plot_type, parent_processor=self, layers=self.layers)
+        
+    def start_next_processor(self, spec, updated_division_info):
 
-    def start_next_processor(self, spec, updated_info):
-        self.active_spec_type, self.active_spec = list(spec.items())[0]
-        processor = self.processor_classes[self.active_spec_type](
-        self.executive_plotter, self.active_layout, info=updated_info)
+        if 'calc_opts' in spec: 
+            self.calc_opts = spec['calc_opts']
+            self.experiment.initialize_data()
+
+        config = self.next_processor_config(spec, updated_division_info)
+        
+        processor = self.processor_classes[config.spec_type](config)
         processor.start()
 
-    def set_dims(self, current_divider, i):
+
+class Partition(Processor):
+
+    def __init__(self, config):
+        super().__init__(config)
+        
+        # a list of dictionaries with the unique combinations of values for the divisions
+        self.info_by_division = []
+        # self.info_by_division_by_layers is a list with these same unique values, repeated for
+        # each unique layer
+        self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
+        
+        self.assign_data_sources()
+
+    def start(self):
+        self.process_divisions(self.spec['divisions'])
+
+    def assign_data_sources(self):
+        for division in self.spec['divisions']:
+            data_source = division.get('data_source')
+            
+            if not data_source:
+                return
+            # if data_source is 'all_animals' or similar, expand that into a list of identifiers
+            if 'all' in division.get('members', []):
+                division['members'] = [
+                    s.identifier for s in getattr(self.experiment, division['members'])]
+            
+    def process_divisions(self, divisions, info=None):
+        """
+        Recursively process a list of divider dicts, building up a cartesian product.
+        Each divider dict looks like:
+            {
+                'divider_type': 'conditions',
+                'members': [...],
+                'dim': ...,
+            }
+        `info` is the accumulated info from previous dividers.
+        """
+        if info is None:
+            info = {}
+
+        # we hit a leaf in the recursion
+        if not divisions:
+            # This is the final combination of all previous divider choices.
+            self.info_by_division.append(info)            
+            self.wrap_up(info)
+            return
+
+        # Otherwise, take the first divider in the list
+        divider = divisions[0]
+        divider_type = divider['divider_type']
+
+        # Go through each of its members
+        for i, member in enumerate(divider['members']):
+            # Merge it into our accumulated info
+            
+            if not isinstance(member, str):
+                updated_info = {**info, divider_type: info.get(divider_type, []) + [member]}
+            else:
+                updated_info = {**info, divider_type: member}
+
+            self.advance_index(divider, i)
+
+            # Now recurse on the remainder of the list, carrying `updated_info`
+            self.process_divisions(divisions[1:], info=updated_info)
+
+    def advance_index(self, current_divider, i):
+        if self.name == 'segment':
+            return
         if 'dim' in current_divider:
             dim = current_divider['dim']
             self.current_index[dim] = self.starting_index[dim] + i
 
     def get_calcs(self):
         
-        d = self.info_by_division[-1]
-
-        for key in ['neuron_type', 'period_type', 'period_group']:
-            if key in d:
-                setattr(self, f"selected_{key}", d[key])
-
-        data_source = self.get_data_sources(data_object_type = d['data_object_type'], 
-                                            identifier=d['data_source'])
+        info = self.info_by_division[-1]
         
-        if self.layers:
-            for i, layer in enumerate(self.layers):
-                attr = layer.get('attr', self.active_spec.get('attr', 'calc'))
-                if 'calc_opts' in layer:
-                    print_common_dict_references(self.layers, self.calc_opts)
-                    
-                    recursive_update(self.calc_opts, layer['calc_opts'])
-                    print_common_dict_references(self.layers, self.calc_opts)
+        for key in ['neuron_type', 'period_type', 'period_group', 'period_types', 'conditions']:
+           if key in info: 
+                member = info[key]
+                if isinstance(member, list):
+                    val_to_set = {key: value for d in member for key, value in d.items()}
+                else:
+                    val_to_set = member
+                setattr(self, f"selected_{key}", val_to_set)
 
-                    self.calc_opts = self.calc_opts
-                new_d = deepcopy(d)
-                new_d.update({
-                    'layer': i, 
-                    'attr': attr,
-                    attr: getattr(data_source, attr), 
-                    data_source.name: data_source.identifier})
-                self.info_by_division_by_layers.append(new_d)
-                
+        if 'data_source' not in info:
+            data_source = self.experiment
         else:
-            attr = self.active_spec.get('attr', 'calc')
-            d.update({
+            data_source = self.get_data_sources(data_object_type = info['data_object_type'], 
+                                            identifier=info['data_source'])
+        
+        attr = self.spec.get('attr', 'calc')
+
+        # TODO I need to move everything to do with layers in here.  I already
+        # deleted it from ExecutivePlotter; it's not its job.
+        if self.layers:
+            self.get_layer_calcs()
+        else:
+            info.update({
                 'attr': attr, 
                 attr: getattr(data_source, attr), 
                 data_source.name: data_source.identifier})
         
 
 class Series(Partition):
-    def __init__(self, origin_plotter, parent_plotter=None,
-                  index=None, parent_processor=None):
-        super().__init__(origin_plotter, parent_plotter=parent_plotter, 
-                         parent_processor=parent_processor)
-        
-        self.gs_xy = self.spec.pop('gs_xy', None) 
-        if index:
-            self.starting_index = index
-        elif self.gs_xy:
-            self.starting_index = [dim[0] for dim in self.gs_xy]
-        else:
-            self.starting_index = [0, 0]
-        self.current_index = deepcopy(self.starting_index)
-        self.aspect = self.aesthetics.get('aspect')
-        self.active_layout = Layout(
-            self.active_layout, self.current_index, self.spec, aspect=self.aspect)
-        
-    def wrap_up(self, updated_info):
-        base = self.active_spec['base']
-        components = self.active_spec['components']
-        for component in components:
-            self.active_cell = self.active_layout.cells[*self.current_index]
-            spec = recursive_update(base, component)
-            if 'calc_opts' in spec:
-                self.calc_opts = spec.pop('calc_opts')
-                self.experiment.initialize_data()
-            if 'plot_type' in spec:
-                self.executive_plotter.current_plot_type = spec.pop('plot_type')
-            self.start_next_processor(spec, updated_info)
 
+    name = 'series'
+
+    def __init__(self, config):
+        super().__init__(config)
+                
+    def wrap_up(self, updated_info):
+        
+        for component in self.spec['components']:
+            base = deepcopy(self.spec['base'])
+            spec = recursive_update(base, component)
+            self.start_next_processor(spec, updated_info) 
+                
 
 class Section(Partition):
-    def __init__(self, origin_plotter, parent_plotter=None,
-                  index=None, parent_processor=None, info=None):
-        super().__init__(origin_plotter, parent_plotter=parent_plotter, 
-                         parent_processor=parent_processor, info=info)
-        
-        # index should refer to a starting point in the parent gridspec
-        self.gs_xy = self.spec.pop('gs_xy', None) 
-        if index:
-            self.starting_index = index
-        elif self.gs_xy:
-            self.starting_index = [dim[0] for dim in self.gs_xy]
-        else:
-            self.starting_index = [0, 0]
-        self.current_index = deepcopy(self.starting_index)
 
-        self.aspect = self.aesthetics.get('aspect')
-
-        self.active_layout = Layout(
-            self.active_layout, self.current_index, self.spec, aspect=self.aspect)
+    name = 'section'
+    
+    def __init__(self, config):
+        super().__init__(config)
 
     def wrap_up(self, updated_info):
-        self.remaining_calls -= 1
-        self.active_cell = self.active_layout.cells[*self.current_index]
-        self.active_layout.apply_aesthetics(self.aesthetics)
-        self.executive_plotter.label(self.info_by_division[-1], self.active_cell, self.aesthetics, 
-                                  self.remaining_calls)
+        
+        cell = self.child_layout.cells[*self.current_index]
 
         if not self.next:
             self.get_calcs()
-            self.executive_plotter.delegate([self.info_dicts.pop()], is_last=self.last)
+            self.executive_plotter.delegate(
+                cell, info=[self.info_dicts.pop()], spec=self.spec, 
+                aesthetics=self.aesthetics, is_last=not self.next)
 
         else:
-            self.active_spec_type, self.active_spec = list(self.next.items())[0]
-            processor = self.processor_classes[self.active_spec_type](
-            self.executive_plotter, self.active_layout, info=updated_info)
-            processor.start()
-
+            self.start_next_processor(self.next, updated_info)
+          
 
 class Segment(Partition):
-    def __init__(self, origin_plotter, parent_plotter, info=None,
-                 parent_processor=None):
-          super().__init__(origin_plotter, parent_plotter, info=info,
-                           parent_processor=parent_processor)
-          self.data = []
-          self.columns = []
 
-    def prep(self):
-        pass
-    
-    def set_dims(self, *_):
-        pass
+    name = 'segment'
 
-    def wrap_up(self, updated_info): 
-        self.remaining_calls -= 1
-        self.get_calcs()
-        if self.last:
-            self.executive_plotter.delegate(self.info_dicts, is_last=self.last)
-            
+    def __init__(self, config):
+        super().__init__(config)
+        # If another processor passed down a parent layout, it already created the ax cells.
+        # Otherwise, segment is the first processor, and we need to create them.
+        if self.is_first:
+            self.child_layout = Layout(self.parent_layout, self.current_index, processor=self, 
+                                       figure=self.figure, dimensions=[1, 1], 
+                                       gs_args=self.spec.get('gs_args'))
+           
+
+    def start(self):
+        super().start()
+        cell = self.child_layout.cells[*self.current_index]
+        self.executive_plotter.delegate(
+            cell, layout=self.child_layout, info=self.info_by_division, spec=self.spec, 
+            plot_type=self.plot_type, aesthetics=self.aesthetics, is_last=True)
+        
+    def wrap_up(self, _): 
+        self.get_calcs()    
+           
 
 class Split:
     pass
+
+
+class Container(Processor):
+    """
+    A freeform container that can display text, images, or partitions in each cell.
+    """
+    def __init__(self, config):
+        super().__init__(config)
+        
+    def check_type(self, spec):
+        processor_keys = ['series', 'section', 'segment', 'split', 'container']
+        for key in processor_keys:
+            if key in spec:
+                return 'processor'  
+        return spec.get('type')  # e.g. 'text', 'image', or None
+  
+    def start(self):
+        for i in range(self.child_layout.dimensions[0]):
+            for j in range(self.child_layout.dimensions[1]):
+
+                self.current_index = [i, j]
+                spec = self.spec['components'][i][j]  # e.g. { 'type': 'text', 'content': 'Hello' }
+                kind = self.check_type(spec)
+
+                if kind == 'processor':
+                    self.start_next_processor(spec, self.inherited_info)
+
+                elif kind == 'text':
+                    current_cell = self.child_layout[*self.current_index]
+                    ax = self.child_layout.add_ax(current_cell, (i, j))
+                    self.executive_plotter.delegate(ax, spec=spec)
+
+                elif kind == 'image':
+                    pass
+
+                    
+
+                # else: handle table, or skip if empty, etc.
+

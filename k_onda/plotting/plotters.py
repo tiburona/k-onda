@@ -8,17 +8,17 @@ import matplotlib.transforms as transforms
 import numpy as np
 
 from .plotting_helpers import smart_title_case, PlottingMixin, format_label
-from .label import LabelMethods
 from k_onda.base import Base
-from .partition_simplified import Section, Segment, Series, Container, ProcessorConfig
-from .layout_simplified import Layout
+from .partition import Section, Segment, Series, Container, ProcessorConfig
+from .partition_mixins import MarginMixin
+from .layout import Layout
 from k_onda.utils import to_serializable, safe_get, recursive_update, PrepMethods
 
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial'] 
 
 
-class ExecutivePlotter(Base, PlottingMixin, PrepMethods):
+class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
     """Makes plots, where a plot is a display of particular kind of data.  For displays of multiple 
     plots of multiple kinds of data, see the figure module."""
 
@@ -44,8 +44,8 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods):
             'series': Series,
             'container': Container
         }
-
-        self.make_fig()
+    
+        self.make_fig(plot_spec)
     
         config = ProcessorConfig(self, plot_spec, layout=self.layout, 
                                   figure=self.layout.cells[0, 0], index=[0, 0], 
@@ -53,10 +53,20 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods):
         processor = processor_classes[config.spec_type](config)
         processor.start()
 
-    def make_fig(self):     
+    def make_fig(self, plot_spec):     
         self.fig = plt.figure()
-        self.layout = Layout(self, [0, 0], figure=self.fig)
+        if plot_spec.get('margins'):
+            gs_args = self.calculate_margins(plot_spec['margins'])
+        else:
+            gs_args = {}
+        self.layout = Layout(self, [0, 0], figure=self.fig, gs_args=gs_args)
         return self.fig
+    
+    def get_margins_from_spec(self, spec):
+        for k in ['series', 'section', 'segment', 'container']:
+            if k in spec:
+                return spec[k].get('margins', {})
+
     
     def construct_path(self):
         # Fill fields
@@ -129,7 +139,7 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods):
         
                 
 
-class FeaturePlotter(Base, PlottingMixin, LabelMethods):
+class FeaturePlotter(Base, PlottingMixin):
     
     def get_aesthetic_args(self, row, aesthetics):
 
@@ -354,11 +364,12 @@ class CategoryPlotter(FeaturePlotter):
             marker_args = aesthetic_args.get('marker', {})
 
             self.plot_markers(ax, position, composite_label, row, marker_args, aesthetic_args=aesthetic_args)
-            self.label(row, ax, layout, aesthetic_args, is_last)
+            
 
         # Set x-ticks and labels
         positions = list(self.label_to_pos.values())
-        labels = [smart_title_case(' '.join(label)) for label in self.label_to_pos.keys()]
+        labels = [smart_title_case(' '.join(label).replace('_', ' ')) 
+                  for label in self.label_to_pos.keys()]
         ax.set_xticks(positions)
         ax.set_xticklabels(labels)
 
