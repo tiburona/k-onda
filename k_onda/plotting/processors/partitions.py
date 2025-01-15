@@ -1,86 +1,18 @@
 from copy import deepcopy
 
-from k_onda.base import Base
-from .layout import Layout
+from .processor import Processor
+from ..layout import Layout
 from k_onda.utils import recursive_update
-from .partition_mixins import AestheticsMixin, LayerMixin, MarginMixin, LabelMixin
-
-
-class ProcessorConfig(Base):
-    def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
-                 figure=None, division_info=None, index=None, aesthetics=None, layers=None, 
-                 is_first=False):
-        
-        self.executive_plotter = executive_plotter
-        self.full_spec = full_spec
-        processor_types = ['section', 'split', 'segment', 'series', 'container']
-        self.spec_type = [k for k in processor_types if k in self.full_spec][0]
-        self.spec = self.full_spec[self.spec_type]
-        self.parent_layout = layout
-        self.parent_processor = parent_processor
-        self.figure = figure
-        self.division_info = division_info
-        self.index = index
-        self.aesthetics = aesthetics
-        self.layers = layers
-        self.is_first = is_first
-        self.plot_type = self.full_spec.get('plot_type')
-        self.next = None
-        for k in processor_types:
-            if k in self.spec:
-                self.next = {k: self.spec[k]}
-        
-        if self.index:
-            self.starting_index = self.index
-        else:
-            self.starting_index = [0, 0]
-
-        self.inherited_division_info = self.division_info if self.division_info else {}  
-        self.current_index = deepcopy(self.starting_index)
-        
-        self.processor_classes = {
-            'series': Series,
-            'section': Section,
-            'split': Split,
-            'segment': Segment,
-            'container': Container
-        }
-        
-        
-class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
-    def __init__(self, config):
-        # Copy all attributes from config to the Processor instance
-        self.__dict__.update(config.__dict__)
-
-        if self.next:
-            self.child_layout = Layout(self.parent_layout, self.current_index, processor=self, 
-                                    figure=self.figure, gs_args=self.next.get('gs_args')) 
-        self.layers = self.init_layers()
-        self.aesthetics = self.init_aesthetics()
-        self.label()
-        
-    def next_processor_config(self, spec, updated_division_info):
-        plot_type = spec.get('plot_type', self.plot_type) 
-        cell = self.child_layout.cells[*self.current_index]
-
-        return ProcessorConfig(
-            self.executive_plotter, spec, layout=self.child_layout, 
-            division_info=updated_division_info, figure=cell, 
-            plot_type=plot_type, parent_processor=self, layers=self.layers)
-        
-    def start_next_processor(self, spec, updated_division_info):
-
-        if 'calc_opts' in spec: 
-            self.calc_opts = spec['calc_opts']
-            self.experiment.initialize_data()
-
-        config = self.next_processor_config(spec, updated_division_info)
-        
-        processor = self.processor_classes[config.spec_type](config)
-        processor.start()
 
 
 class Partition(Processor):
+    """
+    A Processor that divides the data into multiple parts. It recurses through a list of 
+    `divisions`, each of which is a dictionary with a `divider_type` and a list of `members`. Once 
+    the partitioner has defined a unique combinations of members, it calls `wrap_up`. `wrap_up` is
+    defined differently for each partition subclass, but it always calls `get_calcs` to perform the 
+    relevant calculation for the unique combination.
+    """
 
     def __init__(self, config):
         super().__init__(config)
@@ -97,6 +29,12 @@ class Partition(Processor):
         self.process_divisions(self.spec['divisions'])
 
     def assign_data_sources(self):
+        """
+        Assign data sources to each division. If a division's 'members' key is a string beginning 
+        with 'all', fetches the identifiers for the relevant data objects and assigns them to 
+        'members'. E.g., 'all_animals' assigns a list of the identifiers of all the animals in the 
+         experiment."""
+
         for division in self.spec['divisions']:
             data_source = division.get('data_source')
             
@@ -186,6 +124,14 @@ class Partition(Processor):
         
 
 class Series(Partition):
+    """
+    A processor that allows plotting several `components` for a unique 
+    combination of divisions in a partition. For example, if you were to plot both a waveform 
+    and a PSTH for any of several neurons, you would use a Series processor. The waveform and the 
+    PSTH would be the `components`, and the neuron  would be the `divisions`.
+
+    TODO: Can I get rid of the concept of layers if I allow Series to be the final processor?
+    """
 
     name = 'series'
 
@@ -215,7 +161,7 @@ class Section(Partition):
             self.get_calcs()
             self.executive_plotter.delegate(
                 cell, info=[self.info_dicts.pop()], spec=self.spec, 
-                aesthetics=self.aesthetics, is_last=not self.next)
+                aesthetics=self.aesthetics, plot_type=self.plot_type)
 
         else:
             self.start_next_processor(self.next, updated_info)
@@ -226,15 +172,28 @@ class Segment(Partition):
     name = 'segment'
 
     def __init__(self, config):
-        super().__init__(config)
-        # If another processor passed down a parent layout, it already created the ax cells.
-        # Otherwise, segment is the first processor, and we need to create them.
-        if self.is_first:
-            self.child_layout = Layout(self.parent_layout, self.current_index, processor=self, 
-                                       figure=self.figure, dimensions=[1, 1], 
-                                       gs_args=self.spec.get('gs_args'))
-           
+        # Copy all attributes from config to the Processor instance
+        self.__dict__.update(config.__dict__)
+        
+        self.child_layout = Layout(
+            self.parent_layout, 
+            self.current_index, 
+            processor=self,
+            figure=self.figure, 
+            gs_args=self.next.get('gs_args')
+            ) 
+            
+        self.layers = self.init_layers()
+        self.aesthetics = self.init_aesthetics()
+        self.label()
 
+    def __init__(self, config):
+        super().__init__(config)
+    
+    def get_layout_args(self):
+        """Override to customize layout arguments."""
+        return {"dimensions": [1, 1]}  # Add dimensions for the subclass
+           
     def start(self):
         super().start()
         cell = self.child_layout.cells[*self.current_index]
@@ -248,42 +207,3 @@ class Segment(Partition):
 
 class Split:
     pass
-
-
-class Container(Processor):
-    """
-    A freeform container that can display text, images, or partitions in each cell.
-    """
-    def __init__(self, config):
-        super().__init__(config)
-        
-    def check_type(self, spec):
-        processor_keys = ['series', 'section', 'segment', 'split', 'container']
-        for key in processor_keys:
-            if key in spec:
-                return 'processor'  
-        return spec.get('type')  # e.g. 'text', 'image', or None
-  
-    def start(self):
-        for i in range(self.child_layout.dimensions[0]):
-            for j in range(self.child_layout.dimensions[1]):
-
-                self.current_index = [i, j]
-                spec = self.spec['components'][i][j]  # e.g. { 'type': 'text', 'content': 'Hello' }
-                kind = self.check_type(spec)
-
-                if kind == 'processor':
-                    self.start_next_processor(spec, self.inherited_info)
-
-                elif kind == 'text':
-                    current_cell = self.child_layout[*self.current_index]
-                    ax = self.child_layout.add_ax(current_cell, (i, j))
-                    self.executive_plotter.delegate(ax, spec=spec)
-
-                elif kind == 'image':
-                    pass
-
-                    
-
-                # else: handle table, or skip if empty, etc.
-

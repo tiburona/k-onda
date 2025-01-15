@@ -589,20 +589,21 @@ AS_POWER_OPTS = {
     }
 
 AS_PLOT_SPEC = {
-    'plot_type': 'bar_plot',
+    'plot_type': 'heat_map',
     'margins': {'left': .05, 'right': .05, 'top': .05, 'bottom': .05},
-    'segment': {
-        'attr': 'mean',
+    'section': {
+        'attr': 'calc',
         'divisions':[
             {'data_source': 'experiment',
              'divider_type': 'conditions',
-             'members': [{'sex': 'female'}, {'sex': 'male'}]},
+             'members': [{'sex': 'female'}, {'sex': 'male'}],
+             'dim': 0},
              {'data_source': 'experiment',
               'divider_type': 'conditions',
-              'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}]
+              'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}],
+              'dim': 1
            }],
         'aesthetics': {
-            'default': {'cat_width': 3, 'spacing': 2},
             'treatment': {
                 'stressed': {'marker': {'color': 'red'}},
                 'non_stressed': {'marker': {'color':'blue'}}
@@ -611,6 +612,7 @@ AS_PLOT_SPEC = {
                 'female': {'marker': {'hatch': '/'}},
                 'male': {'marker': {'hatch': ''}}
                      }},
+        'aspect': 3,
         'border': {'top': {'visible': 'FFF'}, 'right': {'visible': 'FFF'}},
         'label': {'y': 'Power', 
                   'title': {'template': '{brain_region} {frequency_band} Power',

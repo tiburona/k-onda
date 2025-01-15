@@ -1,5 +1,5 @@
 from .layout import Layout
-from .plotters import ExecutivePlotter
+from .executive import ExecutivePlotter
 
 __all__ = [
     "Layout",

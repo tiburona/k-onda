@@ -10,7 +10,7 @@ import pickle
 main_folder_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(main_folder_path)
 
-from plotting.plotters import ExecutivePlotter, PeriStimulusPlotter, GroupStatsPlotter
+from k_onda.plotting.feature.feature_plotters import ExecutivePlotter, PeriStimulusPlotter, GroupStatsPlotter
 from phy_interface import PhyInterface
 from run.initialize_experiment import Initializer
 from misc_data_init.opts_library import FIGURE_1_OPTS, PSTH_OPTS, PROPORTION_OPTS, GROUP_STAT_PSTH_OPTS, GROUP_STAT_PROPORTION_OPTS

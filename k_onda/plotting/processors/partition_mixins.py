@@ -1,6 +1,6 @@
 from copy import deepcopy
 from k_onda.utils import recursive_update
-from .plotting_helpers import smart_title_case
+from ..plotting_helpers import smart_title_case
 
 
 class ProcessorMixin:

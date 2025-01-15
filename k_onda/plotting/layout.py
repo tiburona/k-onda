@@ -27,10 +27,6 @@ class Layout(Base):
         self.dimensions = dimensions or self.calculate_my_dimensions()
         self.gs = self.create_grid()  # Create the gridspec for the actual data
         self.cells = self.make_all_cells()
-            
-    @property
-    def one_d_cell_list(self):
-        return [c for r in self.cells for c in r]
     
     def calculate_my_dimensions(self):
         dims = [1, 1]
@@ -56,24 +52,14 @@ class Layout(Base):
         ])
         
     def make_cell(self, i, j):
-        if self.processor is None:
-            subfigure = self.figure.add_subfigure(self.gs[0, 0])
-            return subfigure
 
-        elif self.processor.next is not None and any(
-            name in self.processor.next for name in ['section', 'split', 'components']):
+        if self.processor is None or self.processor.next is not None:
             subfigure = self.figure.add_subfigure(self.gs[i, j])
             return subfigure
 
         else:
-            gridspec_slice = self.gs[i, j]
-            ax = self.figure.add_subplot(gridspec_slice, zorder=0)
+            ax = self.figure.add_subplot(self.gs[i, j], zorder=0)
             return AxWrapper(ax, (i, j))
-
-    def add_ax(self, sub_fig_cell, index):
-            ax = sub_fig_cell.add_subplot()
-            return AxWrapper(ax, index)
-    
     
 
 class AxWrapper(Base):

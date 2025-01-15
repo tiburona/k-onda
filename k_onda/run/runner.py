@@ -64,10 +64,6 @@ class Runner(OptsValidator):
             self.executing_method(expanded_calc_opts)
 
         else:
-            # TODO: an idea here for controlling lfp memory usage
-            # you could do a look ahead and see whether that regions brain_region/region_set
-            # was still going to be used, and if not send a message to experiment
-            # to flush all the animals' processed lfp data
             for i, each_opts in enumerate(expanded_calc_opts):
                 regions_to_delete = self._find_unused_brain_regions(expanded_calc_opts[i+1:])
                 if regions_to_delete:
