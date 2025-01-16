@@ -12,7 +12,9 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 
 class FeaturePlotter(Base, PlottingMixin):
 
-    def process_calc(self, info, spec, spec_type, aesthetics=None):
+    def process_calc(self, calc_config):
+        info, spec, spec_type, aesthetics = (
+            calc_config[k] for k in ('info', 'spec', 'spec_type', 'aesthetics'))
         attr = spec.get('attr', 'calc')
         aesthetics = deepcopy(aesthetics) if aesthetics else None
         for i, entry in enumerate(info):

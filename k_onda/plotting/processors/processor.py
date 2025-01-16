@@ -1,4 +1,4 @@
-from copy import deepcopy
+from copy import deepcopy, copy
 
 from k_onda.base import Base
 from ..layout import Layout
@@ -12,8 +12,8 @@ class ProcessorConfig(Base):
     """
 
     def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
-                 figure=None, division_info=None, index=None, aesthetics=None, layers=None, 
-                 is_first=False):
+                 figure=None, division_info=None, info_by_division=None, index=None, aesthetics=None, layers=None, 
+                 is_first=False, plot_type=None):
         
         self.executive_plotter = executive_plotter
         self.full_spec = full_spec
@@ -24,11 +24,12 @@ class ProcessorConfig(Base):
         self.parent_processor = parent_processor
         self.figure = figure
         self.division_info = division_info
+        self.info_by_division = info_by_division
         self.index = index
         self.aesthetics = aesthetics
         self.layers = layers
         self.is_first = is_first
-        self.plot_type = self.full_spec.get('plot_type')
+        self.plot_type = plot_type or self.full_spec.get('plot_type')
         self.next = None
         for k in processor_types:
             if k in self.spec:
@@ -39,8 +40,9 @@ class ProcessorConfig(Base):
         else:
             self.starting_index = [0, 0]
 
-        self.inherited_division_info = self.division_info if self.division_info else {}  
-        self.current_index = deepcopy(self.starting_index)
+        self.inherited_division_info = self.division_info if self.division_info else {}
+        self.info_by_division = self.info_by_division if self.info_by_division else []
+        self.current_index = copy(self.starting_index)
         
 class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
     """
@@ -67,16 +69,15 @@ class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
         """Provides additional arguments for Layout."""
         return {}  # Default implementation provides no extra arguments
         
-    def next_processor_config(self, spec, updated_division_info):
-        plot_type = spec.get('plot_type', self.plot_type) 
+    def next_processor_config(self, spec, updated_division_info, info_by_division):
         cell = self.child_layout.cells[*self.current_index]
 
         return ProcessorConfig(
             self.executive_plotter, spec, layout=self.child_layout, 
             division_info=updated_division_info, figure=cell, 
-            plot_type=plot_type, parent_processor=self, layers=self.layers)
+            parent_processor=self, layers=self.layers, plot_type = self.plot_type)
         
-    def start_next_processor(self, spec, updated_division_info):
+    def start_next_processor(self, spec, updated_division_info, info_by_division):
 
         from .processor_map import PROCESSOR_MAP as processor_map
 
@@ -84,7 +85,7 @@ class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
             self.calc_opts = spec['calc_opts']
             self.experiment.initialize_data()
 
-        config = self.next_processor_config(spec, updated_division_info)
+        config = self.next_processor_config(spec, updated_division_info, info_by_division)
         
         processor = processor_map[config.spec_type](config)
         processor.start()
@@ -114,7 +115,7 @@ class Container(Processor):
                 kind = self.check_type(spec)
 
                 if kind == 'processor':
-                    self.start_next_processor(spec, self.inherited_info)
+                    self.start_next_processor(spec, self.inherited_info, self.info_by_division)
 
                 else:
                     current_cell = self.child_layout[*self.current_index]

@@ -589,34 +589,33 @@ AS_POWER_OPTS = {
     }
 
 AS_PLOT_SPEC = {
-    'plot_type': 'heat_map',
+    'plot_type': 'peristimulus_power_spectrum',
     'margins': {'left': .05, 'right': .05, 'top': .05, 'bottom': .05},
     'section': {
-        'attr': 'calc',
-        'divisions':[
+        'divisions': [
             {'divider_type': 'conditions',
              'members': [{'sex': 'female'}, {'sex': 'male'}],
-             'dim': 0},
-             {'divider_type': 'conditions',
-              'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}],
-              'dim': 1
-           }],
-        'aesthetics': {
-            'color_bar_spec': {'share': 0, 'location': 'right'},
-            'default': {'aspect': 1, 'border': {'top': 'FFF', 'right': 'FFF'}},
-            # 'treatment': {
-            #     'stressed': {'marker': {'color': 'red'}},
-            #     'non_stressed': {'marker': {'color':'blue'}}
-            #     },
-            # 'sex': {
-            #     'female': {'marker': {'hatch': '/'}},
-            #     'male': {'marker': {'hatch': ''}}
-            #          }},
-        },
+             'dim': 0}],
         'label': {'y': 'Power', 
                   'title': {'template': '{brain_region} {frequency_band} Power',
-                            'fields': ['brain_region', 'frequency_band']}}
-            }}
+                            'fields': ['brain_region', 'frequency_band']}},
+        'section': {
+            'attr': 'calc',
+            'divisions':[
+                {'divider_type': 'period_type',
+                'members': ['cs_plus', 'cs_minus'],
+                'dim': 0},
+                {'divider_type': 'conditions',
+                'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}],
+                'dim': 1
+            }],
+            'aesthetics': {
+                'color_bar_spec': {'share': 0, 'location': 'right'},
+                'default': {'aspect': 1, 'border': {'top': 'FFF', 'right': 'FFF'}},
+            }
+           
+                }}}
+    
 
 
 AS_OPTS = {

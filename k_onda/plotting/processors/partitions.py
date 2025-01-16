@@ -25,6 +25,8 @@ class Partition(Processor):
         self.assign_data_sources()
 
     def start(self):
+        if self.spec.get('default_period_type'):
+            self.selected_period_type = self.spec['default_period_type']
         self.process_divisions(self.spec['divisions'])
         self.executive_plotter.delegate(
             info=self.info_by_division, spec=self.spec, spec_type=self.name, 
@@ -56,17 +58,18 @@ class Partition(Processor):
                 'members': [...],
                 'dim': ...,
             }
-        `info` is the accumulated info from previous dividers.
+       
         """
-        if info is None:
-            info = {}
+        
+        if not info:
+            cell = self.inherited_division_info.pop('cell', None)
+            info = deepcopy(self.inherited_division_info) 
+            info['cell'] = cell
 
         # we hit a leaf in the recursion
         if not divisions:
             # This is the final combination of all previous divider choices.
-            info['cell'] = self.child_layout.cells[*self.current_index]
-            info['index'] = copy(self.current_index)
-            self.info_by_division.append(info)            
+                    
             self.wrap_up(info)
             return
 
@@ -96,9 +99,12 @@ class Partition(Processor):
     def wrap_up(self, updated_info): 
 
         if not self.next:
+            updated_info['cell'] = self.child_layout.cells[*self.current_index]
+            updated_info['index'] = copy(self.current_index) 
+            self.info_by_division.append(updated_info)
             self.get_calcs()
         else:
-            self.start_next_processor(self.next, updated_info)
+            self.start_next_processor(self.next, updated_info, self.info_by_division)
 
     def get_calcs(self):
         
@@ -146,7 +152,7 @@ class Series(Partition):
         for component in self.spec['components']:
             base = deepcopy(self.spec['base'])
             spec = recursive_update(base, component)
-            self.start_next_processor(spec, updated_info) 
+            self.start_next_processor(spec, updated_info, self.info_by_division) 
                 
 
 class Section(Partition):
@@ -155,14 +161,6 @@ class Section(Partition):
     
     def __init__(self, config):
         super().__init__(config)
-
-    def wrap_up(self, updated_info):
-        
-        if not self.next:
-            self.get_calcs()
-
-        else:
-            self.start_next_processor(self.next, updated_info)
           
 
 class Segment(Partition):

@@ -8,7 +8,7 @@ class ProcessorMixin:
     def init_spec_element(self, element):
         element_dict = deepcopy(self.spec.get(element, {}))
         if self.parent_processor:
-            element.update(getattr(self.parent_processor, element))
+            element_dict.update(getattr(self.parent_processor, element, {}))
         return element_dict
 
 

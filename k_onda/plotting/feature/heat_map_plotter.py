@@ -11,8 +11,10 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 
 class HeatMapPlotter(FeaturePlotter):
 
-    def process_calc(self, info, *_, aesthetics=None):
-        aesthetics = deepcopy(aesthetics) if aesthetics else None
+    def process_calc(self, calc_config):
+        info = calc_config['info']
+        aesthetics = calc_config['aesthetics']
+
         colorbar_spec = aesthetics.pop('color_bar_spec', {})
         share = colorbar_spec.get('share', None)
         location = colorbar_spec.get('location', 'right')
@@ -44,22 +46,33 @@ class HeatMapPlotter(FeaturePlotter):
     def process_entries(self, entries, aesthetics, location):
         norm = self.get_norm(entries)
         axes = []
-        imgs = []  
+        imgs = [] 
+        
         for entry in entries:
+            
+
             img, ax = self.plot_entry(entry, aesthetics, norm)
             axes.append(ax)
             imgs.append(img)
+
         fig = axes[0].figure
         fig.colorbar(imgs[-1], ax=axes, location=location)
-  
-    def plot_entry(self, entry, aesthetics, norm):
-        ax = entry['cell']
-        aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
+
+    def get_marker_args(self, aesthetic_args):
+        
         marker_args = {'cmap': 'jet', 'aspect': 'auto', 'origin': 'lower'}
         marker_args.update(aesthetic_args.get('marker', {}))
+        return marker_args
+  
+    def plot_entry(self, entry, aesthetics, norm):
+        aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
+        marker_args = self.get_marker_args(aesthetic_args)
+        ax = entry['cell']
         val = entry[entry['attr']]
         img = ax.imshow(val, norm=norm, **marker_args)
         return img, ax
+        
+
     
     def get_norm(self, entries):
         attr = entries[0]['attr']

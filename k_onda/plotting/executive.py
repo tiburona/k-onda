@@ -12,7 +12,8 @@ from .processors.partition_mixins import MarginMixin
 from .layout import Layout
 from .feature import (
     CategoricalScatterPlotter, LinePlotter, BarPlotter, WaveformPlotter, CategoricalLinePlotter, 
-    RasterPlotter, PeriStimulusHistogramPlotter, HeatMapPlotter)
+    RasterPlotter, PeriStimulusHistogramPlotter, HeatMapPlotter, PeriStimulusHeatMapPlotter, 
+    PeriStimulusPowerSpectrumPlotter)
 from k_onda.utils import to_serializable, PrepMethods
 
 
@@ -27,7 +28,9 @@ PLOT_TYPES = {'categorical_scatter': CategoricalScatterPlotter,
               'categorical_line': CategoricalLinePlotter,
               'raster': RasterPlotter,
               'psth': PeriStimulusHistogramPlotter,
-              'heat_map': HeatMapPlotter}  
+              'heat_map': HeatMapPlotter,
+              'peristimulus_heat_map': PeriStimulusHeatMapPlotter,
+              'peristimulus_power_spectrum': PeriStimulusPowerSpectrumPlotter}  
 
 
 class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
@@ -161,11 +164,10 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         """
         Delegate to the appropriate feature plotter based on the plot_type.
         """
-        if spec_type == 'container':
-            # Containers pass different arguments to delegate. They have no info, only an ax.
-            PLOT_TYPES[plot_type]().process_calc(ax, info, spec=spec)
-        else:
-            PLOT_TYPES[plot_type]().process_calc(info, spec, spec_type, aesthetics=aesthetics)
+        calc_config = dict(info=info, spec=spec, plot_type=plot_type, aesthetics=aesthetics, ax=ax,
+                  spec_type=spec_type)
+        PLOT_TYPES[plot_type]().process_calc(calc_config)
+      
             
 
         

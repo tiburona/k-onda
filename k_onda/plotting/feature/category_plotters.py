@@ -85,22 +85,28 @@ class CategoryPlotter(FeaturePlotter):
                 label.extend([v for d in row[divider_type] for v in d.values()])
         return tuple(label)
        
-    def process_calc(self, info, spec, ax, layout=None, aesthetics=None, is_last=False):
-        self.apply_borders(ax, spec.get('border', {}))
+    def process_calc(self, calc_config):
+
+        info, spec, aesthetics = (calc_config[k] 
+                                  for k in ['info', 'spec', 'asethetics'])
+    
         transformed_divisions = deepcopy(spec['divisions'])
         self.label_to_pos = self.assign_positions(transformed_divisions, aesthetics)
+        ax = row['cell']
+        ax_args = aesthetic_args.get('ax', {})
+        self.apply_ax_args(ax, ax_args)
 
         for row in info:
             composite_label = self.get_composite_label(spec, row)
             position = self.label_to_pos[composite_label]
 
             aesthetic_args = self.get_aesthetic_args(row, aesthetics)
-            self.cat_width = aesthetic_args.get('cat_width', 1)
             marker_args = aesthetic_args.get('marker', {})
+
+            self.cat_width = aesthetic_args.get('cat_width', 1)
 
             self.plot_markers(ax, position, composite_label, row, marker_args, aesthetic_args=aesthetic_args)
             
-
         # Set x-ticks and labels
         positions = list(self.label_to_pos.values())
         labels = [smart_title_case(' '.join(label).replace('_', ' ')) 
@@ -120,7 +126,7 @@ class CategoricalScatterPlotter(CategoryPlotter):
         # Plot with jittered positions
         ax.scatter(x_positions, scatter_vals, **marker_args)
         # Retrieve positions and bar width
-        cat_width = self.cat_width
+        cat_width = aesthetic_args.get('cat_width', 1)
         if 'background_color' in aesthetic_args:
             background_color, alpha = aesthetic_args.pop('background_color')
             ax.axvspan(
