@@ -12,17 +12,18 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 
 class FeaturePlotter(Base, PlottingMixin):
 
-    def process_calc(self, info, spec, ax, aesthetics=None):
-        self.apply_borders(ax, spec.get('border', {}))
-        if spec.get('aspect'):
-            ax.set_box_aspect(spec['aspect'])
+    def process_calc(self, info, spec, spec_type, aesthetics=None):
+        attr = spec.get('attr', 'calc')
         aesthetics = deepcopy(aesthetics) if aesthetics else None
-        for row in info:
-            aesthetic_args = self.get_aesthetic_args(row, aesthetics)
-            val = row[spec.get('attr', 'calc')]
-            self.plot_row(ax, val, aesthetic_args)            
+        for i, entry in enumerate(info):
+            ax = entry['cell']
+            aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
+            ax_args = aesthetic_args.get('ax', {})
+            self.apply_ax_args(ax, ax_args, i, spec_type)
+            val = entry[attr]
+            self.plot_entry(ax, val, aesthetic_args)            
     
-    def get_aesthetic_args(self, row, aesthetics):
+    def get_aesthetic_args(self, entry, aesthetics):
 
         aesthetic = {}
         aesthetic_spec = deepcopy(aesthetics)
@@ -33,25 +34,33 @@ class FeaturePlotter(Base, PlottingMixin):
             
         for category, members in aesthetic_spec.items():
             for member, aesthetic_vals in members.items():
-                if self.is_condition_met(category, row, member):
+                if self.is_condition_met(category, entry, member):
                     recursive_update(aesthetic, aesthetic_vals)
 
         for combination, overrides in override.items():
             pairs = list(zip(combination.split('.')[::2], combination.split('.')[1::2]))
-            if all(row.get(key, val) == val for key, val in pairs):
+            if all(entry.get(key, val) == val for key, val in pairs):
                 aesthetic.update(overrides)
 
         aesthetic = recursive_update(aesthetic, invariant)
 
         return aesthetic
     
-    def is_condition_met(self, category, row, member):
-        if category in row and row[category] == member:
+    def is_condition_met(self, category, entry, member):
+        if category in entry and entry[category] == member:
             return True
         for composite_category_type in ['conditions', 'period_types']:
-            if {category:member} in row.get(composite_category_type, []):
+            if {category:member} in entry.get(composite_category_type, []):
                 return True
         return False
+    
+    def apply_ax_args(self, ax, ax_args, i, spec_name):
+        if spec_name == 'segment' and i > 0:
+            return
+        if 'border' in ax_args:
+            self.apply_borders(ax, ax_args['border'])
+        if 'aspect' in ax_args:
+            ax.set_box_aspect(ax_args['aspect'])
     
     def apply_borders(self, ax, border):
         border = deepcopy(border)

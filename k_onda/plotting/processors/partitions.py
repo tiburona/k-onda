@@ -1,4 +1,4 @@
-from copy import deepcopy
+from copy import copy, deepcopy
 
 from .processor import Processor
 from ..layout import Layout
@@ -7,11 +7,10 @@ from k_onda.utils import recursive_update
 
 class Partition(Processor):
     """
-    A Processor that divides the data into multiple parts. It recurses through a list of 
-    `divisions`, each of which is a dictionary with a `divider_type` and a list of `members`. Once 
-    the partitioner has defined a unique combinations of members, it calls `wrap_up`. `wrap_up` is
-    defined differently for each partition subclass, but it always calls `get_calcs` to perform the 
-    relevant calculation for the unique combination.
+    A Processor that divides the data into parts. It recurses through a list of `divisions`, each of 
+    which is a dictionary with a `divider_type` and a list of `members`. Once the partition has 
+    defined a unique combinations of members, it calls `wrap_up` to get the calcs for the unique 
+    combination, or to start the next processor(s) if the partition is not the final.
     """
 
     def __init__(self, config):
@@ -27,6 +26,9 @@ class Partition(Processor):
 
     def start(self):
         self.process_divisions(self.spec['divisions'])
+        self.executive_plotter.delegate(
+            info=self.info_by_division, spec=self.spec, spec_type=self.name, 
+            plot_type=self.plot_type, aesthetics=self.aesthetics)
 
     def assign_data_sources(self):
         """
@@ -62,6 +64,8 @@ class Partition(Processor):
         # we hit a leaf in the recursion
         if not divisions:
             # This is the final combination of all previous divider choices.
+            info['cell'] = self.child_layout.cells[*self.current_index]
+            info['index'] = copy(self.current_index)
             self.info_by_division.append(info)            
             self.wrap_up(info)
             return
@@ -85,11 +89,16 @@ class Partition(Processor):
             self.process_divisions(divisions[1:], info=updated_info)
 
     def advance_index(self, current_divider, i):
-        if self.name == 'segment':
-            return
         if 'dim' in current_divider:
             dim = current_divider['dim']
             self.current_index[dim] = self.starting_index[dim] + i
+
+    def wrap_up(self, updated_info): 
+
+        if not self.next:
+            self.get_calcs()
+        else:
+            self.start_next_processor(self.next, updated_info)
 
     def get_calcs(self):
         
@@ -112,25 +121,19 @@ class Partition(Processor):
         
         attr = self.spec.get('attr', 'calc')
 
-        # TODO I need to move everything to do with layers in here.  I already
-        # deleted it from ExecutivePlotter; it's not its job.
-        if self.layers:
-            self.get_layer_calcs()
-        else:
-            info.update({
-                'attr': attr, 
-                attr: getattr(data_source, attr), 
-                data_source.name: data_source.identifier})
+        info.update({
+            'attr': attr, 
+            attr: getattr(data_source, attr), 
+            data_source.name: data_source.identifier})
         
 
 class Series(Partition):
     """
-    A processor that allows plotting several `components` for a unique 
-    combination of divisions in a partition. For example, if you were to plot both a waveform 
-    and a PSTH for any of several neurons, you would use a Series processor. The waveform and the 
-    PSTH would be the `components`, and the neuron  would be the `divisions`.
+    A processor that allows plotting several `components` for a unique combination of divisions in a 
+    partition. For example, if you were to plot both a waveform and a PSTH for any of several 
+    neurons, you would use a Series processor. The waveform and the PSTH would be the `components`, 
+    and the neurons would be the `divisions`.
 
-    TODO: Can I get rid of the concept of layers if I allow Series to be the final processor?
     """
 
     name = 'series'
@@ -155,13 +158,8 @@ class Section(Partition):
 
     def wrap_up(self, updated_info):
         
-        cell = self.child_layout.cells[*self.current_index]
-
         if not self.next:
             self.get_calcs()
-            self.executive_plotter.delegate(
-                cell, info=[self.info_dicts.pop()], spec=self.spec, 
-                aesthetics=self.aesthetics, plot_type=self.plot_type)
 
         else:
             self.start_next_processor(self.next, updated_info)
@@ -180,10 +178,9 @@ class Segment(Partition):
             self.current_index, 
             processor=self,
             figure=self.figure, 
-            gs_args=self.next.get('gs_args')
+            gs_args=self.get('gs_args')
             ) 
             
-        self.layers = self.init_layers()
         self.aesthetics = self.init_aesthetics()
         self.label()
 
@@ -191,18 +188,16 @@ class Segment(Partition):
         super().__init__(config)
     
     def get_layout_args(self):
-        """Override to customize layout arguments."""
-        return {"dimensions": [1, 1]}  # Add dimensions for the subclass
-           
-    def start(self):
-        super().start()
-        cell = self.child_layout.cells[*self.current_index]
-        self.executive_plotter.delegate(
-            cell, layout=self.child_layout, info=self.info_by_division, spec=self.spec, 
-            plot_type=self.plot_type, aesthetics=self.aesthetics, is_last=True)
-        
-    def wrap_up(self, _): 
-        self.get_calcs()    
+        """
+        Called by a Processor when creating a child layout; establishes that a Segment's child 
+        layout is always a 1x1 grid containing a single ax.
+        """
+        return {'dimensions': [1, 1]}  
+    
+    def advance_index(self, *_):
+        # A Segment does not advance its index, as it only contains a single ax.
+
+        return 
            
 
 class Split:

@@ -15,6 +15,7 @@ class HistogramPlotter:
     def plot_hist(self, x, y, width, ax, aesthetic_args):
         ax.bar(x, y, width=width, **aesthetic_args.get('marker', {})) 
 
+
 class PeriStimulusPlotter(FeaturePlotter):
     
     def __init__(self ):
@@ -22,7 +23,7 @@ class PeriStimulusPlotter(FeaturePlotter):
         self.pre, self.post = (getattr(self, f"{opt}_{self.base}") for opt in ('pre', 'post'))
         self.marker_names = []
         
-    def plot_row(self, ax, val, aesthetic_args):
+    def plot_entry(self, ax, val, aesthetic_args):
             data_divisions, ax_list, x_slices = self.handle_broken_axes(val)
             row = 'foo' # TODO fix this
             for i, (ax, data, _) in enumerate(zip(ax_list, data_divisions, x_slices)):
@@ -117,7 +118,7 @@ class RasterPlotter(PeriStimulusPlotter):
                 
 class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
     
-    def plot_row(self, ax, val, row, aesthetic_args):
+    def plot_entry(self, ax, val, row, aesthetic_args):
         if val.ndim > 1:
             val = val[0]
         x = np.linspace(-self.pre, self.post, len(val)+1)[:-1]

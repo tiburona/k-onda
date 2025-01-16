@@ -156,9 +156,19 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
 
         plt.close(fig)
 
-    def delegate(self, ax, info=None, spec=None, plot_type=None, aesthetics=None):
+    def delegate(self, info=None, spec=None, plot_type=None, aesthetics=None, ax=None,
+                  spec_type=None):
         """
         Delegate to the appropriate feature plotter based on the plot_type.
         """
+        if spec_type == 'container':
+            # Containers pass different arguments to delegate. They have no info, only an ax.
+            PLOT_TYPES[plot_type]().process_calc(ax, info, spec=spec)
+        else:
+            PLOT_TYPES[plot_type]().process_calc(info, spec, spec_type, aesthetics=aesthetics)
+            
 
-        PLOT_TYPES[plot_type]().process_calc(info, spec, ax, aesthetics=aesthetics)
+        
+        
+
+        

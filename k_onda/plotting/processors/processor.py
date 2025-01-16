@@ -116,15 +116,11 @@ class Container(Processor):
                 if kind == 'processor':
                     self.start_next_processor(spec, self.inherited_info)
 
-                elif kind == 'text':
+                else:
                     current_cell = self.child_layout[*self.current_index]
                     ax = self.child_layout.add_ax(current_cell, (i, j))
-                    self.executive_plotter.delegate(ax, spec=spec)
+                    self.executive_plotter.delegate(
+                        plot_type=spec['plot_type'], info=self.inherited_info, spec=spec, ax=ax)
 
-                elif kind == 'image':
-                    pass
-
-                    
-
-                # else: handle table, or skip if empty, etc.
+              
 

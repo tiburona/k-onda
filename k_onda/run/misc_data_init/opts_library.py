@@ -594,26 +594,25 @@ AS_PLOT_SPEC = {
     'section': {
         'attr': 'calc',
         'divisions':[
-            {'data_source': 'experiment',
-             'divider_type': 'conditions',
+            {'divider_type': 'conditions',
              'members': [{'sex': 'female'}, {'sex': 'male'}],
              'dim': 0},
-             {'data_source': 'experiment',
-              'divider_type': 'conditions',
+             {'divider_type': 'conditions',
               'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}],
               'dim': 1
            }],
         'aesthetics': {
-            'treatment': {
-                'stressed': {'marker': {'color': 'red'}},
-                'non_stressed': {'marker': {'color':'blue'}}
-                },
-            'sex': {
-                'female': {'marker': {'hatch': '/'}},
-                'male': {'marker': {'hatch': ''}}
-                     }},
-        'aspect': 3,
-        'border': {'top': {'visible': 'FFF'}, 'right': {'visible': 'FFF'}},
+            'color_bar_spec': {'share': 0, 'location': 'right'},
+            'default': {'aspect': 1, 'border': {'top': 'FFF', 'right': 'FFF'}},
+            # 'treatment': {
+            #     'stressed': {'marker': {'color': 'red'}},
+            #     'non_stressed': {'marker': {'color':'blue'}}
+            #     },
+            # 'sex': {
+            #     'female': {'marker': {'hatch': '/'}},
+            #     'male': {'marker': {'hatch': ''}}
+            #          }},
+        },
         'label': {'y': 'Power', 
                   'title': {'template': '{brain_region} {frequency_band} Power',
                             'fields': ['brain_region', 'frequency_band']}}

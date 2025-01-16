@@ -53,19 +53,22 @@ class Layout(Base):
         
     def make_cell(self, i, j):
 
-        if self.processor is None or self.processor.next is not None:
-            subfigure = self.figure.add_subfigure(self.gs[i, j])
-            return subfigure
+        if self.processor and (
+            self.processor.name == 'segment' or self.processor.next is None
+            ):
+            ax = self.figure.add_subplot(self.gs[i, j])
+            return AxWrapper(ax, self.figure, (i, j))
 
         else:
-            ax = self.figure.add_subplot(self.gs[i, j], zorder=0)
-            return AxWrapper(ax, (i, j))
+            subfigure = self.figure.add_subfigure(self.gs[i, j])
+            return subfigure
     
 
 class AxWrapper(Base):
 
-    def __init__(self, ax, index):
+    def __init__(self, ax, figure, index):
         self.ax = ax  # Store the original ax
+        self.figure = figure # the subfigure the ax is on
         self.ax_list = [self]
         self.index = index
         self.bottom_edge = None
