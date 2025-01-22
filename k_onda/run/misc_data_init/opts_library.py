@@ -609,12 +609,16 @@ AS_PLOT_SPEC = {
                 'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}],
                 'dim': 1
             }],
+            'legend': {'colorbar': {'share': 'global', 'position': 'right'}},
+            'label': {'title': {'template': '{conditions|sex}', 'fields': ['conditions|sex']},  
+                      'override': 
+                      {'treatment|non_stressed|sex|male': 
+                       {'x_ax': {'template': '{period_type}', 'fields': ['period_type']}}}},
             'aesthetics': {
-                'color_bar_spec': {'share': 0, 'location': 'right'},
                 'default': {'aspect': 1, 'border': {'top': 'FFF', 'right': 'FFF'}},
+    
             }
-           
-                }}}
+            }}}
     
 
 

@@ -4,9 +4,10 @@ import importlib
 import json
 import pickle
 import os
+import string
 
 from k_onda.utils import get_round_decimals
-
+    
 
 class Base:
     
@@ -14,7 +15,7 @@ class Base:
     _calc_opts = {}
     _cache = defaultdict(dict)
     _filter = {}
-    _selected_conditions = []
+    _selected_conditions = {}
     _selected_period_type = ''
     _selected_period_types = []
     _selected_neuron_type = ''
@@ -299,7 +300,18 @@ class Base:
         constructor = deepcopy(self.experiment.exp_info['path_constructors'][constructor_id])
         return self.fill_fields(constructor)
     
+    @staticmethod
+    def preprocess_constructor(constructor, placeholder="__"):
+        # Replace dots in keys
+        processed_constructor = {
+            key.replace(".", placeholder): value for key, value in constructor.items()
+        }
+        # Replace dots in the template
+        processed_constructor['template'] = processed_constructor['template'].replace(".", placeholder)
+        return processed_constructor
+    
     def fill_fields(self, constructor):
+        
         if not constructor:
             return
         if isinstance(constructor, str):
@@ -308,6 +320,10 @@ class Base:
         for field in constructor['fields']:
             if field in self.selectable_variables:
                 constructor[field] = getattr(self, field, getattr(self, f'selected_{field}'))
+            elif '|' in field:
+                field_type, field_key = field.split('|')
+                constructor[field] = getattr(self, f'selected_{field_type}')[field_key]
             else:
                 constructor[field] = getattr(self, field)
+        
         return constructor['template'].format(**constructor)

@@ -16,21 +16,24 @@ class Partition(Processor):
     def __init__(self, config):
         super().__init__(config)
         
-        # a list of dictionaries with the unique combinations of values for the divisions
-        self.info_by_division = []
         # self.info_by_division_by_layers is a list with these same unique values, repeated for
         # each unique layer
         self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
         
         self.assign_data_sources()
 
-    def start(self):
+        if self.global_colorbar:
+            self.legend_info_list.append((self.figure, self.colorbar_spec, []))
+
+    def start(self, top_level=False):
         if self.spec.get('default_period_type'):
             self.selected_period_type = self.spec['default_period_type']
         self.process_divisions(self.spec['divisions'])
-        self.executive_plotter.delegate(
-            info=self.info_by_division, spec=self.spec, spec_type=self.name, 
-            plot_type=self.plot_type, aesthetics=self.aesthetics)
+        if top_level:
+            self.executive_plotter.delegate(
+                info=self.info_by_division, spec=self.spec, spec_type=self.name, 
+                plot_type=self.plot_type, aesthetics=self.aesthetics, 
+                legend_info_list=self.legend_info_list)
 
     def assign_data_sources(self):
         """
@@ -62,14 +65,14 @@ class Partition(Processor):
         """
         
         if not info:
+            # can't deepcopy info with cell in it; causes infinite loop 
             cell = self.inherited_division_info.pop('cell', None)
             info = deepcopy(self.inherited_division_info) 
             info['cell'] = cell
 
         # we hit a leaf in the recursion
         if not divisions:
-            # This is the final combination of all previous divider choices.
-                    
+            # This is the final combination of all previous divider choices.        
             self.wrap_up(info)
             return
 
@@ -79,10 +82,10 @@ class Partition(Processor):
 
         # Go through each of its members
         for i, member in enumerate(divider['members']):
+
             # Merge it into our accumulated info
-            
             if not isinstance(member, str):
-                updated_info = {**info, divider_type: info.get(divider_type, []) + [member]}
+                updated_info = {**info, divider_type: {**info.get(divider_type, {}), **member}}
             else:
                 updated_info = {**info, divider_type: member}
 
@@ -97,28 +100,38 @@ class Partition(Processor):
             self.current_index[dim] = self.starting_index[dim] + i
 
     def wrap_up(self, updated_info): 
+        
+        # set vals before you label because labels often use vals, e.g. labeling the period_type
+        self.set_vals(updated_info)
+        cell = self.child_layout.cells[*self.current_index]
+        # labels are applied at every level so they go on the appropriate subfigure 
+        self.label(cell=cell)
+
+        if self.colorbar_for_each_plot:
+            self.legend_info_list.append((cell, self.colorbar_spec, [updated_info]))
 
         if not self.next:
-            updated_info['cell'] = self.child_layout.cells[*self.current_index]
+            updated_info['cell'] = cell
             updated_info['index'] = copy(self.current_index) 
             self.info_by_division.append(updated_info)
-            self.get_calcs()
+            self.get_calcs(updated_info)
+            
         else:
             self.start_next_processor(self.next, updated_info, self.info_by_division)
 
-    def get_calcs(self):
-        
-        info = self.info_by_division[-1]
-        
+    def set_vals(self, info):
+        # TODO: Make sure you've thoroughly thought through *unsetting* attributes 
+        # for later plots in which those attributes aren't divisions.
+        # Maybe add an attribute to Base that's a list called already_set_attributes
+        # and also keep a running list of division_types in a processor, and if when
+        # you start a processor if you see that something is set that's nowhere in your 
+        # running list of already encountered divisions, you unset it.
         for key in ['neuron_type', 'period_type', 'period_group', 'period_types', 'conditions']:
-           if key in info: 
-                member = info[key]
-                if isinstance(member, list):
-                    val_to_set = {key: value for d in member for key, value in d.items()}
-                else:
-                    val_to_set = member
-                setattr(self, f"selected_{key}", val_to_set)
+            if key in info: 
+                setattr(self, f"selected_{key}", info[key])
 
+    def get_calcs(self, info):
+        
         if 'data_source' not in info:
             data_source = self.experiment
         else:
@@ -132,6 +145,9 @@ class Partition(Processor):
             attr: getattr(data_source, attr), 
             data_source.name: data_source.identifier})
         
+        if self.legend_info_list:
+            self.legend_info_list[-1][2].append(info)
+        
 
 class Series(Partition):
     """
@@ -139,7 +155,6 @@ class Series(Partition):
     partition. For example, if you were to plot both a waveform and a PSTH for any of several 
     neurons, you would use a Series processor. The waveform and the PSTH would be the `components`, 
     and the neurons would be the `divisions`.
-
     """
 
     name = 'series'
@@ -148,7 +163,7 @@ class Series(Partition):
         super().__init__(config)
                 
     def wrap_up(self, updated_info):
-        
+        self.label(cell=None)
         for component in self.spec['components']:
             base = deepcopy(self.spec['base'])
             spec = recursive_update(base, component)
@@ -180,10 +195,6 @@ class Segment(Partition):
             ) 
             
         self.aesthetics = self.init_aesthetics()
-        self.label()
-
-    def __init__(self, config):
-        super().__init__(config)
     
     def get_layout_args(self):
         """

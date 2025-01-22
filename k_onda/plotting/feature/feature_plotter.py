@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 
 from ..plotting_helpers import PlottingMixin
 from k_onda.base import Base
-from k_onda.utils import  recursive_update
 
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial'] 
@@ -26,29 +25,12 @@ class FeaturePlotter(Base, PlottingMixin):
             self.plot_entry(ax, val, aesthetic_args)            
     
     def get_aesthetic_args(self, entry, aesthetics):
-
-        aesthetic = {}
-        aesthetic_spec = deepcopy(aesthetics)
-
-        default, override, invariant = (aesthetic_spec.pop(k, {}) for k in ['default', 'override', 'invariant'])
-
-        aesthetic.update(default)
-            
-        for category, members in aesthetic_spec.items():
-            for member, aesthetic_vals in members.items():
-                if self.is_condition_met(category, entry, member):
-                    recursive_update(aesthetic, aesthetic_vals)
-
-        for combination, overrides in override.items():
-            pairs = list(zip(combination.split('.')[::2], combination.split('.')[1::2]))
-            if all(entry.get(key, val) == val for key, val in pairs):
-                aesthetic.update(overrides)
-
-        aesthetic = recursive_update(aesthetic, invariant)
-
-        return aesthetic
+        return self.construct_spec_based_on_conditions(aesthetics, entry=entry)
     
-    def is_condition_met(self, category, entry, member):
+    def is_condition_met(self, category, member, entry=None):
+        """`self.construct_spec_based_on_conditions` expects this method to be defined"""
+        if entry is None:
+            return
         if category in entry and entry[category] == member:
             return True
         for composite_category_type in ['conditions', 'period_types']:

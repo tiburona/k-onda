@@ -2,7 +2,8 @@ from copy import deepcopy, copy
 
 from k_onda.base import Base
 from ..layout import Layout
-from .partition_mixins import AestheticsMixin, LayerMixin, MarginMixin, LabelMixin
+from .partition_mixins import AestheticsMixin, LayerMixin, MarginMixin, LabelMixin, LegendMixin
+from ..plotting_helpers import PlottingMixin
 
 
 class ProcessorConfig(Base):
@@ -13,7 +14,7 @@ class ProcessorConfig(Base):
 
     def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
                  figure=None, division_info=None, info_by_division=None, index=None, aesthetics=None, layers=None, 
-                 is_first=False, plot_type=None):
+                 is_first=False, plot_type=None, legend_info_list=None):
         
         self.executive_plotter = executive_plotter
         self.full_spec = full_spec
@@ -26,7 +27,7 @@ class ProcessorConfig(Base):
         self.division_info = division_info
         self.info_by_division = info_by_division
         self.index = index
-        self.aesthetics = aesthetics
+        self.aesthetics = aesthetics    
         self.layers = layers
         self.is_first = is_first
         self.plot_type = plot_type or self.full_spec.get('plot_type')
@@ -40,11 +41,12 @@ class ProcessorConfig(Base):
         else:
             self.starting_index = [0, 0]
 
-        self.inherited_division_info = self.division_info if self.division_info else {}
-        self.info_by_division = self.info_by_division if self.info_by_division else []
+        self.inherited_division_info = self.division_info if self.division_info is not None else {}
+        self.info_by_division = self.info_by_division if self.info_by_division is not None else []
+        self.legend_info_list = legend_info_list if legend_info_list is not None else []
         self.current_index = copy(self.starting_index)
         
-class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
+class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin, LegendMixin):
     """
     The base class for all processors. Its responsible for initializing the `child_layout` and 
     configuring and starting the next processor, if it exists.
@@ -52,6 +54,9 @@ class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
 
     def __init__(self, config):
         self.__dict__.update(config.__dict__)
+
+        self.layers = self.init_layers()
+        self.aesthetics = self.init_aesthetics()
         
         self.child_layout = Layout(
             self.parent_layout,
@@ -61,10 +66,6 @@ class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
             **self.get_layout_args()  # Dynamically include additional arguments
         )
         
-        self.layers = self.init_layers()
-        self.aesthetics = self.init_aesthetics()
-        self.label()
-
     def get_layout_args(self):
         """Provides additional arguments for Layout."""
         return {}  # Default implementation provides no extra arguments
@@ -72,10 +73,18 @@ class Processor(Base, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin):
     def next_processor_config(self, spec, updated_division_info, info_by_division):
         cell = self.child_layout.cells[*self.current_index]
 
-        return ProcessorConfig(
-            self.executive_plotter, spec, layout=self.child_layout, 
-            division_info=updated_division_info, figure=cell, 
-            parent_processor=self, layers=self.layers, plot_type = self.plot_type)
+        processor_config = dict(
+            figure=cell, 
+            layers=self.layers, 
+            parent_processor=self, 
+            plot_type=self.plot_type,
+            layout=self.child_layout, 
+            division_info=updated_division_info, 
+            info_by_division=info_by_division,
+            legend_info_list=self.legend_info_list
+            )
+        
+        return ProcessorConfig(self.executive_plotter, spec, **processor_config)
         
     def start_next_processor(self, spec, updated_division_info, info_by_division):
 

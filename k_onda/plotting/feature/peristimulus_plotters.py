@@ -3,7 +3,6 @@ import matplotlib.transforms as transforms
 import numpy as np
 
 from .feature_plotter import FeaturePlotter
-from ..plotting_helpers import format_label
 from .heat_map_plotter import HeatMapPlotter
 from k_onda.utils import safe_get
 

@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 import pickle
 from copy import deepcopy
+import string
 
 import numpy as np
 import h5py
@@ -301,3 +302,5 @@ operations = {
             '!=': lambda a, b: a != b,
             'not in': lambda a, b: a not in b
         }
+
+

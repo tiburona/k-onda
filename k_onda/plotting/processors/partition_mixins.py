@@ -45,30 +45,75 @@ class AestheticsMixin(ProcessorMixin):
         return self.init_spec_element('aesthetics')
     
 
+class LegendMixin:
+
+    # TODO: why don't I make it so that this can work either way:  you can spec 
+    # your colorbar as a legend around the subfigure, and in the init function
+    # of the processor it adds to the list self.legend_info_list
+
+    # or you can spec it as 'each' and wrap_up with the now updated division info
+    # and the figure from the cell in the child layout
+
+    @property
+    def has_colorbar(self):
+        return bool(self.colorbar_spec)
+
+    @property
+    def colorbar_spec(self):
+        return self.spec.get('legend', {}).get('colorbar', {})
+            
+    @property
+    def colorbar_for_each_plot(self):
+        return self.has_colorbar and self.colorbar_spec.get('share') in ['each', None]
+
+    @property
+    def global_colorbar(self):
+        return self.has_colorbar and self.colorbar_spec.get('share') == 'global'
+    
+
+
+ 
+            
+    
+
 class LabelMixin:
 
-    def label(self):
-        label = deepcopy(self.spec.get('label', {}))
+    def label(self, cell=None):
+        label = self.construct_spec_based_on_conditions(self.spec.get('label', {}))
+        
         label_pad = label.pop('label_pad', 0)
         for position in label:
-            if position in 'xy':
-                label_setter = getattr(self.figure, f'sup{position}label')
-                lab = self.spec['label'][position] 
-                if label_pad:
-                    kwargs = {'y' if position == 'x' else 'x': label_pad}
-                else: 
-                    kwargs = {}
-            elif position == 'title':
-                lab = self.fill_fields(self.spec['label'][position])
+
+            # get text of label
+            text = self.fill_fields(label[position])
+            if not self.spec['label'].get('smart_label', False):
+                text = smart_title_case(text.replace('_', ' '))
+
+            # get label_setter and kwargs
+            if position == 'title':
                 label_setter = getattr(self.figure, 'suptitle')
                 kwargs = {}
             else:
-                raise ValueError(f"Unknown label position: {position}")
-                
-            if not self.spec['label'].get('smart_label', False):
-                lab = smart_title_case(lab.replace('_', ' '))
+                kwargs = {'y' if position[0] == 'x' else 'x': label_pad} if label_pad else {}
 
-            label_setter(lab, **kwargs)
+                if position in 'xy':
+                    label_setter = getattr(self.figure, f'sup{position}label')   
+                elif position in ['x_ax', 'y_ax']:
+                    label_setter = getattr(cell, f'set_{position[0]}label')
+                else:
+                    raise ValueError(f"Unknown label position: {position}")
+                
+            # set label
+            label_setter(text, **kwargs)
+
+    def is_condition_met(self, category, member, **_):
+        
+        return (
+            getattr(self, f'selected_{category}', None) == member or
+            self.selected_conditions.get(category) == member or
+            category == 'period_types' and member in self.selected_period_types
+            )
+
 
 class MarginMixin:
 

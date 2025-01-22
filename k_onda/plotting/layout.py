@@ -4,18 +4,24 @@ from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 import numpy as np
 
 from k_onda.base import Base
-    
+from .legend import ColorbarMixin
 
-class Layout(Base):
+class Layout(Base, ColorbarMixin):
 
     def __init__(self, parent, index, figure=None, processor=None, dimensions=None,
                  gs_args=None):
         self.parent = parent
         self.index = index
         self.figure = figure
+        print("in Layout init")
+        print(figure)
+        
         self.gs_args = gs_args
 
         self.processor = processor
+        if self.processor:
+            print([division['members'] for division in self.processor.spec['divisions']])
+        print("")
 
         if self.processor is None:
             self.processor_type = None
@@ -25,7 +31,12 @@ class Layout(Base):
             self.spec = self.processor.spec
 
         self.dimensions = dimensions or self.calculate_my_dimensions()
-        self.gs = self.create_grid()  # Create the gridspec for the actual data
+
+        if self.global_colorbar:
+            self.create_outer_and_subgrid()
+        else:
+            self.create_grid() 
+
         self.cells = self.make_all_cells()
     
     def calculate_my_dimensions(self):
@@ -33,7 +44,6 @@ class Layout(Base):
         if self.spec is not None:
             if self.processor_type == 'container':
                 dims = self.spec['dimensions']
-
             else: 
                 for division in self.spec['divisions']:
                     if 'dim' in division:
@@ -42,26 +52,69 @@ class Layout(Base):
     
     def create_grid(self):
         gs_args = self.gs_args or dict(left=0.1, right=0.9, top=0.9, bottom=0.1)
-        data_gridspec = GridSpec(*self.dimensions, **gs_args)
-        return data_gridspec
+        self.gs = self.figure.add_gridspec(*self.dimensions, **gs_args)
+        print("just created a gridspec")
+        if self.processor:
+            print([division['members'] for division in self.processor.spec['divisions']])
+        print(f"the figure it's attached to is {self.figure}")
+        print(f"the gridspec I created is {self.gs}")
+        print(f"the gridspec's id is {id(self.gs)}")
+        print("")
+       
+    def create_outer_and_subgrid(self):
+        outer_gs, main_slice, cax_slice = self.make_outer_gridspec() 
+        gs_subfig = self.figure.add_subfigure(outer_gs[main_slice])
+        self.figure = gs_subfig
+        self.gs = gs_subfig.add_gridspec(*self.dimensions)
+        cax_subfig = self.figure.add_subfigure(outer_gs[cax_slice])
+        self.figure.cax = cax_subfig.add_subplot(outer_gs[cax_slice])
+        self.processor.figure = self.figure
+        
+       
         
     def make_all_cells(self):
         return np.array([
             [self.make_cell(i, j) for j in range(self.dimensions[1])] 
             for i in range(self.dimensions[0])
         ])
+    
+    @property
+    def no_more_processors(self):
+        return self.processor and (
+            self.processor.name == 'segment' or 
+            self.processor.next is None
+            )
         
     def make_cell(self, i, j):
+        subfigure = self.make_subfigure(i, j)
 
-        if self.processor and (
-            self.processor.name == 'segment' or self.processor.next is None
-            ):
-            ax = self.figure.add_subplot(self.gs[i, j])
-            return AxWrapper(ax, self.figure, (i, j))
-
+        if self.no_more_processors:
+            ax = subfigure.add_subplot()
+            return AxWrapper(ax, subfigure, (i, j))
         else:
-            subfigure = self.figure.add_subfigure(self.gs[i, j])
             return subfigure
+    
+    def make_subfigure(self, i, j):
+        if self.colorbar_for_each_plot:
+            return self.colorbar_enabled_subfigure(
+                self.figure, self.gs[i, j], self.colorbar_position)
+        else:
+            print("I'm attaching a subfigure")
+            if self.processor:
+                print([division['members'] for division in self.processor.spec['divisions']])
+
+            print(f"the figure I'm attaching to is {self.figure}")
+            print(f"the gridspec I'm attaching to is {self.gs}")
+            print(f"the gridspec's id is {id(self.gs)}")
+        
+            subfigure = self.figure.add_subfigure(self.gs[i, j])
+            print(f"the new subfigure is {subfigure}\n")
+            print(f"the new subfigure's position is {subfigure.bbox}")
+            
+            return subfigure
+       
+            
+        
     
 
 class AxWrapper(Base):

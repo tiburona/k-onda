@@ -77,14 +77,14 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
                                   figure=self.layout.cells[0, 0], index=[0, 0], 
                                  is_first=True)
         processor = processor_classes[config.spec_type](config)
-        processor.start()
+        processor.start(top_level=True)
 
     def make_fig(self, plot_spec):
         """
         Make and return a figure and the top-level layout.
         """     
 
-        self.fig = plt.figure(layout='tight')
+        self.fig = plt.figure()
         if plot_spec.get('margins'):
             gs_args = self.calculate_margins(plot_spec['margins'])
         else:
@@ -160,12 +160,12 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         plt.close(fig)
 
     def delegate(self, info=None, spec=None, plot_type=None, aesthetics=None, ax=None,
-                  spec_type=None):
+                  spec_type=None, legend_info_list=None):
         """
         Delegate to the appropriate feature plotter based on the plot_type.
         """
         calc_config = dict(info=info, spec=spec, plot_type=plot_type, aesthetics=aesthetics, ax=ax,
-                  spec_type=spec_type)
+                  spec_type=spec_type, legend_info_list=legend_info_list)
         PLOT_TYPES[plot_type]().process_calc(calc_config)
       
             

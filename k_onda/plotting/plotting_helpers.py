@@ -1,10 +1,14 @@
+from copy import deepcopy
 import re
+
+from k_onda.utils import recursive_update
+
 
 
 def smart_title_case(s):
     lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 
                        'as', 'but', 'or', 'nor', 'is'}
-    acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl', 'il', 'bf', 'mua'}
+    acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl', 'il', 'bf', 'mua', 'cs'}
     tokens = re.findall(r'\b\w+\b|[^\w\s]', s)  # Find words and punctuation separately
     title_words = []
 
@@ -26,7 +30,49 @@ def smart_title_case(s):
         title += title_words[i]
     return title
 
+
+def is_condition_met(category, member, entry=None):
+        """`self.construct_spec_based_on_conditions` expects this method to be defined"""
+        if entry is None:
+            return
+        if category in entry and entry[category] == member:
+            return True
+        for composite_category_type in ['conditions', 'period_types']:
+            if {category:member} in entry.get(composite_category_type, []):
+                return True
+        return False
+
 class PlottingMixin:
+
+    def construct_spec_based_on_conditions(self, spec_dict, entry=None):
+        config_keys = ['default', 'conditional', 'override', 'invariant']
+
+        # there's no varying configuration; all the config should be applied to all elements
+        if not any(key in spec_dict for key in config_keys):
+            return spec_dict
+        
+        # treat all keys not in one of the config keys as an implicit default (default by default)
+        spec_to_return = {k: v for k, v in spec_dict.items() if k not in config_keys}
+
+        default, conditional, override, invariant = (
+            spec_dict.get(k, {}) for k in config_keys)
+
+        recursive_update(spec_to_return, default)
+
+        for category, members in conditional.items():
+            for member, vals in members.items():
+                if is_condition_met(category, member, entry=entry):
+                    recursive_update(spec_to_return, vals)
+
+        for combination, overrides in override.items():
+            pairs = list(zip(combination.split('|')[::2], combination.split('|')[1::2]))
+            if all(self.is_condition_met(category, member) for category, member in pairs):
+                recursive_update(spec_to_return, overrides)
+
+        recursive_update(spec_to_return, invariant)
+
+        return spec_to_return
+    
     def get_default_labels(self):
        
         sps = '(Spikes per Second)'
@@ -70,36 +116,6 @@ class PlottingMixin:
             sets.append(data_sources[counter:counter + max])
             counter += max  
         return sets
-
-
-def format_label(label, row):
-    parts = []  # This will hold the parts of the title
-
-    # Helper function to check if an element is iterable (and not a string)
-    def is_iterable(elem):
-        try:
-            iter(elem)
-        except TypeError:
-            return False
-        return not isinstance(elem, str)  # Exclude strings, as they're iterable in Python
-    
-    # Iterate through the elements of the title
-    for elem in label:
-        if elem in row:
-            parts.append(row[elem])
-        elif is_iterable(elem):
-            if is_iterable(elem):  # If the element is a list or tuple, get attributes progressively
-                obj = row['data_source']
-                for attr in elem[:-1]:
-                    obj = getattr(obj, attr)
-                parts.append(getattr(obj, elem[-1]))  # Append the final value as a string
-        else:
-            parts.append(elem)
-
-    # Capitalize each part and join with spaces
-    formatted_title = " ".join(smart_title_case(part) for part in parts)
-    return formatted_title
-
 
 
 class LabelMethods:
