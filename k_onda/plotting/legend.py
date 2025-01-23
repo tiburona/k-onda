@@ -86,7 +86,8 @@ class ColorbarMixin:
         ratios = [.9, .1]
         if not i % 2:
             ratios.reverse()
-        outer_gs = self.figure.add_gridspec(*outer_gridspec_dim, **{f'{ratio_string}_ratios': ratios})
+        gs_args = dict(left=0.1, right=0.9, top=0.9, bottom=0.1)
+        outer_gs = self.figure.add_gridspec(*outer_gridspec_dim, **{f'{ratio_string}_ratios': ratios}, **gs_args)
         location_of_main_figure_gridspec = [0, 0]
         location_of_colorbar_ax = [0, 0]
         if i % 2:

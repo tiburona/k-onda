@@ -8,7 +8,7 @@ from .plotting_helpers import smart_title_case, PlottingMixin
 from k_onda.base import Base
 from .processors.partitions import Section, Segment, Series
 from .processors.processor import Container, ProcessorConfig
-from .processors.partition_mixins import MarginMixin
+from .processors.processor_mixins import MarginMixin
 from .layout import Layout
 from .feature import (
     CategoricalScatterPlotter, LinePlotter, BarPlotter, WaveformPlotter, CategoricalLinePlotter, 

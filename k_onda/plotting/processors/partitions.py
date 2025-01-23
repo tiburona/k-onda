@@ -105,7 +105,7 @@ class Partition(Processor):
         self.set_vals(updated_info)
         cell = self.child_layout.cells[*self.current_index]
         # labels are applied at every level so they go on the appropriate subfigure 
-        self.label(cell=cell)
+        self.set_label(cell=cell)
 
         if self.colorbar_for_each_plot:
             self.legend_info_list.append((cell, self.colorbar_spec, [updated_info]))

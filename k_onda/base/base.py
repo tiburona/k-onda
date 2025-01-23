@@ -4,7 +4,7 @@ import importlib
 import json
 import pickle
 import os
-import string
+import re
 
 from k_onda.utils import get_round_decimals
     
@@ -314,8 +314,14 @@ class Base:
         
         if not constructor:
             return
+        
         if isinstance(constructor, str):
-            return constructor
+            if '{' not in constructor:
+                return constructor
+            else:
+                constructor = {
+                    'template': constructor, 
+                    'fields': re.findall(r'\{(.*?)\}', constructor)}
         
         for field in constructor['fields']:
             if field in self.selectable_variables:

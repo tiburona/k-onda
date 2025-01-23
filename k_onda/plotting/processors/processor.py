@@ -2,7 +2,7 @@ from copy import deepcopy, copy
 
 from k_onda.base import Base
 from ..layout import Layout
-from .partition_mixins import AestheticsMixin, LayerMixin, MarginMixin, LabelMixin, LegendMixin
+from .processor_mixins import AestheticsMixin, LayerMixin, MarginMixin, LabelMixin, LegendMixin
 from ..plotting_helpers import PlottingMixin
 
 
@@ -30,11 +30,13 @@ class ProcessorConfig(Base):
         self.aesthetics = aesthetics    
         self.layers = layers
         self.is_first = is_first
+        self.label = None
         self.plot_type = plot_type or self.full_spec.get('plot_type')
         self.next = None
         for k in processor_types:
             if k in self.spec:
                 self.next = {k: self.spec[k]}
+        
         
         if self.index:
             self.starting_index = self.index
@@ -57,7 +59,8 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
 
         self.layers = self.init_layers()
         self.aesthetics = self.init_aesthetics()
-        
+        self.label = self.get_label()
+
         self.child_layout = Layout(
             self.parent_layout,
             self.current_index,

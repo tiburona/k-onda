@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+from matplotlib.gridspec import  GridSpecFromSubplotSpec
 import numpy as np
 
 from k_onda.base import Base
@@ -13,15 +13,11 @@ class Layout(Base, ColorbarMixin):
         self.parent = parent
         self.index = index
         self.figure = figure
-        print("in Layout init")
-        print(figure)
         
-        self.gs_args = gs_args
+        self.gs_args = gs_args if gs_args else {}
+        self.gs_args = dict(left=0.1, right=0.9, top=0.9, bottom=0.1)
 
         self.processor = processor
-        if self.processor:
-            print([division['members'] for division in self.processor.spec['divisions']])
-        print("")
 
         if self.processor is None:
             self.processor_type = None
@@ -32,10 +28,7 @@ class Layout(Base, ColorbarMixin):
 
         self.dimensions = dimensions or self.calculate_my_dimensions()
 
-        if self.global_colorbar:
-            self.create_outer_and_subgrid()
-        else:
-            self.create_grid() 
+        self.create_grid()
 
         self.cells = self.make_all_cells()
     
@@ -51,26 +44,40 @@ class Layout(Base, ColorbarMixin):
         return deepcopy(dims)
     
     def create_grid(self):
-        gs_args = self.gs_args or dict(left=0.1, right=0.9, top=0.9, bottom=0.1)
-        self.gs = self.figure.add_gridspec(*self.dimensions, **gs_args)
-        print("just created a gridspec")
+        self.adjust_grid_for_labels()
+
+        if self.global_colorbar:
+            self.create_outer_and_subgrid()
+              
+        self.gs = self.figure.add_gridspec(*self.dimensions, **self.gs_args)
+
+    def adjust_grid_for_labels(self):
         if self.processor:
-            print([division['members'] for division in self.processor.spec['divisions']])
-        print(f"the figure it's attached to is {self.figure}")
-        print(f"the gridspec I created is {self.gs}")
-        print(f"the gridspec's id is {id(self.gs)}")
-        print("")
+
+            if self.processor.label.get('title'):
+                if self.processor.next:
+                    title_gs = self.figure.add_gridspec(2, 1, height_ratios=[.05, 1])
+                    main_subfigure = self.figure.add_subfigure(title_gs[1, 0])
+                    self.gs_args.update({'hspace': 60})
+                    self.figure = main_subfigure
+                else:
+                    self.figure.subplots_adjust(top=.7)
+            if self.processor.label.get('x'):
+                x_gs = self.figure.add_gridspec(2, 1, width_ratios = [1, .05])
+                main_subfigure = self.figure.add_subfigure(x_gs[0, 1])
+                self.figure = main_subfigure
+            if self.processor.label.get('y'):
+                y_gs = self.figure.add_gridspec(1, 2, width_ratios = [.05, 1])
+                main_subfigure = self.figure.add_subfigure(y_gs[0, 1])
+                self.figure = main_subfigure
        
     def create_outer_and_subgrid(self):
         outer_gs, main_slice, cax_slice = self.make_outer_gridspec() 
         gs_subfig = self.figure.add_subfigure(outer_gs[main_slice])
         self.figure = gs_subfig
-        self.gs = gs_subfig.add_gridspec(*self.dimensions)
         cax_subfig = self.figure.add_subfigure(outer_gs[cax_slice])
         self.figure.cax = cax_subfig.add_subplot(outer_gs[cax_slice])
         self.processor.figure = self.figure
-        
-       
         
     def make_all_cells(self):
         return np.array([
@@ -92,26 +99,28 @@ class Layout(Base, ColorbarMixin):
             ax = subfigure.add_subplot()
             return AxWrapper(ax, subfigure, (i, j))
         else:
+            self.adjust_for_labels(subfigure)
             return subfigure
+        
+    def adjust_for_labels(self, subfigure):
+        if self.processor and self.processor.label:
+            adjust_kwargs = {}
+            # for position, kwargs in zip(
+            #     ['x', 'y', 'title'], 
+            #     [{'bottom': .15}, {'left': .20}, {'top': .75}]):
+            #     if position in self.processor.label:
+            #         adjust_kwargs.update(kwargs)
+            subfigure.subplots_adjust(**adjust_kwargs)
     
     def make_subfigure(self, i, j):
+
         if self.colorbar_for_each_plot:
-            return self.colorbar_enabled_subfigure(
+            subfigure = self.colorbar_enabled_subfigure(
                 self.figure, self.gs[i, j], self.colorbar_position)
         else:
-            print("I'm attaching a subfigure")
-            if self.processor:
-                print([division['members'] for division in self.processor.spec['divisions']])
-
-            print(f"the figure I'm attaching to is {self.figure}")
-            print(f"the gridspec I'm attaching to is {self.gs}")
-            print(f"the gridspec's id is {id(self.gs)}")
-        
             subfigure = self.figure.add_subfigure(self.gs[i, j])
-            print(f"the new subfigure is {subfigure}\n")
-            print(f"the new subfigure's position is {subfigure.bbox}")
             
-            return subfigure
+        return subfigure
        
             
         

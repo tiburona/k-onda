@@ -69,33 +69,39 @@ class LegendMixin:
     @property
     def global_colorbar(self):
         return self.has_colorbar and self.colorbar_spec.get('share') == 'global'
-    
 
-
- 
-            
     
 
 class LabelMixin:
 
-    def label(self, cell=None):
-        label = self.construct_spec_based_on_conditions(self.spec.get('label', {}))
+    def get_label(self):
+       return self.spec.get('label', {})
+
+    def get_next_label(self):
+        if not self.next:
+            return None
+        else:
+            next_spec = list(self.next.values())[0]
+            return next_spec.get('label', {})
         
-        label_pad = label.pop('label_pad', 0)
-        for position in label:
+    
+
+    def set_label(self, cell=None):
+
+        kwargs = {}
+        
+        for position in self.label:
 
             # get text of label
-            text = self.fill_fields(label[position])
-            if not self.spec['label'].get('smart_label', False):
+            text = self.fill_fields(self.label[position]['text'])
+            if not self.label.get('smart_label', False):
                 text = smart_title_case(text.replace('_', ' '))
 
             # get label_setter and kwargs
             if position == 'title':
                 label_setter = getattr(self.figure, 'suptitle')
-                kwargs = {}
             else:
-                kwargs = {'y' if position[0] == 'x' else 'x': label_pad} if label_pad else {}
-
+                kwargs = self.label[position].get('kwargs', {})
                 if position in 'xy':
                     label_setter = getattr(self.figure, f'sup{position}label')   
                 elif position in ['x_ax', 'y_ax']:
