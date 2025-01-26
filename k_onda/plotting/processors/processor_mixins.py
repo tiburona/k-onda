@@ -97,13 +97,14 @@ class LabelMixin:
             if not self.label.get('smart_label', False):
                 text = smart_title_case(text.replace('_', ' '))
 
+            label_figure = self.child_layout.label_figure
             # get label_setter and kwargs
+            kwargs = self.label[position].get('kwargs', {})
             if position == 'title':
-                label_setter = getattr(self.figure, 'suptitle')
+                label_setter = getattr(label_figure, 'suptitle')
             else:
-                kwargs = self.label[position].get('kwargs', {})
                 if position in 'xy':
-                    label_setter = getattr(self.figure, f'sup{position}label')   
+                    label_setter = getattr(label_figure, f'sup{position}label')   
                 elif position in ['x_ax', 'y_ax']:
                     label_setter = getattr(cell, f'set_{position[0]}label')
                 else:

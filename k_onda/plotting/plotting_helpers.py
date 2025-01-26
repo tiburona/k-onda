@@ -1,4 +1,6 @@
 from copy import deepcopy
+
+import numpy as np
 import re
 
 from k_onda.utils import recursive_update
@@ -29,6 +31,44 @@ def smart_title_case(s):
             title += ' '
         title += title_words[i]
     return title
+
+
+
+def reshape_subfigures(subfigures, nrows, ncols):
+    """
+    Ensures that subfigures is returned as a 2D array with the specified dimensions.
+
+    Parameters:
+    ----------
+    subfigures : object, list, or array
+        The output of the subfigures method, which can be a single SubFigure,
+        a 1D list, or an already 2D array of SubFigures.
+    nrows : int
+        The number of rows for the 2D array.
+    ncols : int
+        The number of columns for the 2D array.
+
+    Returns:
+    -------
+    np.ndarray
+        A 2D array of subfigures with shape (nrows, ncols).
+    """
+    if isinstance(subfigures, np.ndarray) and subfigures.ndim == 2:
+        # If it's already a 2D array, return as-is
+        return subfigures
+    elif not isinstance(subfigures, (list, np.ndarray)):
+        # If it's a single SubFigure, wrap it in a 2D array
+        return np.full((nrows, ncols), subfigures)
+    else:
+        # If it's 1D, reshape to the specified dimensions
+        subfigures = np.array(subfigures)
+        if subfigures.ndim == 1:
+            if subfigures.size != nrows * ncols:
+                raise ValueError(f"Cannot reshape {subfigures.size} subfigures into ({nrows}, {ncols})")
+            return subfigures.reshape((nrows, ncols))
+        else:
+            raise ValueError("Input subfigures is not 1D or 2D, which is unexpected.")
+
 
 
 def is_condition_met(category, member, entry=None):

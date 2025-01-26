@@ -5,6 +5,8 @@ import numpy as np
 
 from k_onda.base import Base
 from .legend import ColorbarMixin
+from .plotting_helpers import reshape_subfigures
+
 
 class Layout(Base, ColorbarMixin):
 
@@ -15,7 +17,6 @@ class Layout(Base, ColorbarMixin):
         self.figure = figure
         
         self.gs_args = gs_args if gs_args else {}
-        self.gs_args = dict(left=0.1, right=0.9, top=0.9, bottom=0.1)
 
         self.processor = processor
 
@@ -30,7 +31,14 @@ class Layout(Base, ColorbarMixin):
 
         self.create_grid()
 
-        self.cells = self.make_all_cells()
+        if self.no_more_processors:
+            self.cells = self.make_all_cells()
+        else:
+            self.cells = self.subfigure_grid
+        
+
+    def subfigures(self, i, j, **kwargs):
+        return reshape_subfigures(self.figure.subfigures(i, j, **kwargs), i, j)
     
     def calculate_my_dimensions(self):
         dims = [1, 1]
@@ -48,29 +56,47 @@ class Layout(Base, ColorbarMixin):
 
         if self.global_colorbar:
             self.create_outer_and_subgrid()
-              
-        self.gs = self.figure.add_gridspec(*self.dimensions, **self.gs_args)
+
+        subfigure_args = self.spec.get('subfigure', {}) if self.processor else {}
+            
+        self.subfigure_grid = self.subfigures(*self.dimensions, **self.gs_args, 
+                                              **subfigure_args)
+        
+        if self.spec and self.spec.get('subplots_adjust'):
+            self.figure.get_figure().subplots_adjust(**self.spec['subplots_adjust'])
+        
 
     def adjust_grid_for_labels(self):
         if self.processor:
 
-            if self.processor.label.get('title'):
-                if self.processor.next:
-                    title_gs = self.figure.add_gridspec(2, 1, height_ratios=[.05, 1])
-                    main_subfigure = self.figure.add_subfigure(title_gs[1, 0])
-                    self.gs_args.update({'hspace': 60})
-                    self.figure = main_subfigure
-                else:
-                    self.figure.subplots_adjust(top=.7)
-            if self.processor.label.get('x'):
-                x_gs = self.figure.add_gridspec(2, 1, width_ratios = [1, .05])
-                main_subfigure = self.figure.add_subfigure(x_gs[0, 1])
-                self.figure = main_subfigure
-            if self.processor.label.get('y'):
-                y_gs = self.figure.add_gridspec(1, 2, width_ratios = [.05, 1])
-                main_subfigure = self.figure.add_subfigure(y_gs[0, 1])
-                self.figure = main_subfigure
-       
+            self.label_figure = self.figure
+
+            self.adjust_dimension('title', label_figure_dims=(2, 1), 
+                new_figure_ind=(1, 0), ratio_dim='height', reverse=False)
+            
+            self.adjust_dimension('x', label_figure_dims=(2, 1), 
+                new_figure_ind=(0, 0), ratio_dim='height', reverse=True)
+
+            self.adjust_dimension('y', label_figure_dims=(1, 2), 
+                new_figure_ind=(0, 1), ratio_dim='width', reverse=False)
+         
+
+    def adjust_dimension(self, position, label_figure_dims, new_figure_ind, ratio_dim, reverse):
+        
+        position_info = self.processor.label.get(position)
+
+        if not position_info:
+            return
+        
+        ratio = position_info.get('space_between_label_and_plot', .05)
+        ratios = [ratio, 1].reversed if reverse else [ratio, 1]
+
+        ratio_dict = {f"{ratio_dim}_ratios": ratios}
+
+        grid = self.subfigures(*label_figure_dims, **ratio_dict)
+    
+        self.figure = grid[new_figure_ind]
+                
     def create_outer_and_subgrid(self):
         outer_gs, main_slice, cax_slice = self.make_outer_gridspec() 
         gs_subfig = self.figure.add_subfigure(outer_gs[main_slice])
@@ -80,9 +106,12 @@ class Layout(Base, ColorbarMixin):
         self.processor.figure = self.figure
         
     def make_all_cells(self):
+        
         return np.array([
-            [self.make_cell(i, j) for j in range(self.dimensions[1])] 
-            for i in range(self.dimensions[0])
+            [AxWrapper(self.subfigure_grid[i,j].subfigures(1, 1).add_subplot(), 
+                       self.figure, (i, j)) 
+             for j in range(self.dimensions[1])] 
+             for i in range(self.dimensions[0])
         ])
     
     @property
@@ -92,33 +121,13 @@ class Layout(Base, ColorbarMixin):
             self.processor.next is None
             )
         
-    def make_cell(self, i, j):
-        subfigure = self.make_subfigure(i, j)
-
-        if self.no_more_processors:
-            ax = subfigure.add_subplot()
-            return AxWrapper(ax, subfigure, (i, j))
-        else:
-            self.adjust_for_labels(subfigure)
-            return subfigure
-        
-    def adjust_for_labels(self, subfigure):
-        if self.processor and self.processor.label:
-            adjust_kwargs = {}
-            # for position, kwargs in zip(
-            #     ['x', 'y', 'title'], 
-            #     [{'bottom': .15}, {'left': .20}, {'top': .75}]):
-            #     if position in self.processor.label:
-            #         adjust_kwargs.update(kwargs)
-            subfigure.subplots_adjust(**adjust_kwargs)
-    
     def make_subfigure(self, i, j):
 
         if self.colorbar_for_each_plot:
             subfigure = self.colorbar_enabled_subfigure(
-                self.figure, self.gs[i, j], self.colorbar_position)
+                self.figure, self.subfigure_grid[i, j], self.colorbar_position)
         else:
-            subfigure = self.figure.add_subfigure(self.gs[i, j])
+            subfigure = self.figure.add_subfigure(self.subfigure_grid[i, j])
             
         return subfigure
        

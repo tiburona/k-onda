@@ -57,6 +57,7 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         self.write_opts = opts.get('write_opts', {}) 
         plot_spec = opts['plot_spec']
         self.process_plot_spec(plot_spec)
+        plt.show()
         self.close_plot(opts.get('fname', ''))
 
     def process_plot_spec(self, plot_spec):

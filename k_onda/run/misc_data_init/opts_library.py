@@ -590,16 +590,17 @@ AS_POWER_OPTS = {
 
 AS_PLOT_SPEC = {
     'plot_type': 'peristimulus_power_spectrum',
-    'margins': {'left': .05, 'right': .05, 'top': .3, 'bottom': .05},
     'section': {
         'divisions': [
             {'divider_type': 'conditions',
              'members': [{'sex': 'female'}, {'sex': 'male'}],
              'dim': 0}],
         'label': {'y': {'text': 'Power'}, 
-                  'title': {'text': '{brain_region} {frequency_band} Power'}},
+                  'title': {'text': '{brain_region} {frequency_band} Power',
+                            'space_between_label_and_plot': .08}},
+        'subfigure': {'hspace': .1},
+        'subplots_adjust': {'bottom': .3},
         'section': {
-            'foo': 'bar',
             'attr': 'calc',
             'divisions':[
                 {'divider_type': 'period_type',
@@ -609,16 +610,17 @@ AS_PLOT_SPEC = {
                 'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}],
                 'dim': 0
             }],
+            'subfigure': {'hspace': .07, 'wspace': 0},
             'legend': {'colorbar': {'share': 'global', 'position': 'right'}},
-            'label': {'title': {'text':'{conditions|sex}'}},  
-                      'override': 
-                      {'treatment|non_stressed|sex|male': {'x_ax': {'text': '{period_type}'}},
-                       'period_type|cs_plus': {'y_ax': {'text': '{treatment}'}}     
-                       }}},
+            'label': {'title': 
+                      {'text':'{conditions|sex}', 
+                       'space_between_label_and_plot': .08,
+                       'kwargs':  {'x': .45}}
+                      }},
             'aesthetics': {
                 'default': {'aspect': 1, 'border': {'top': 'FFF', 'right': 'FFF'}},
             }
-            }
+            }}
     
 
 
