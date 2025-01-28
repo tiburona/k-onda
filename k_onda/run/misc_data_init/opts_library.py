@@ -577,13 +577,12 @@ AS_POWER_OPTS = {
     'kind_of_data': 'lfp', 'calc_type': 'power', 'validate_events': True,
     'frequency_bands': [ 'theta_1', 'theta_2'], 
     'brain_regions': ['pl', 'bla', 'vhip'], 
-    'periods': {'pretone': range(5), 'tone': range(5)}, 
     'power_arg_set': (2048, 2000, 500, 480, 2),
     'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.75, .75], 'bin_size': .01,
-    'periods': {'pretone_plus': {'event_pre_post': (0, .3)}, 
-                'pretone_minus': {'event_pre_post': (0, .3)},
-                'cs_plus': {'event_pre_post': (0, .3)},
-                'cs_minus': {'event_pre_post': (0, .3)}},
+    'periods': {'pretone_plus': {'event_pre_post': (.1, .3)}, 
+                'pretone_minus': {'event_pre_post': (.1, .3)},
+                'cs_plus': {'event_pre_post': (.1, .3)},
+                'cs_minus': {'event_pre_post': (.1, .3)}},
     'matlab_configuration': MATLAB_CONFIG, 
     'evoked': {'level': 'animal', 'reference': ['pretone_plus', 'pretone_minus']}
     }
@@ -595,11 +594,11 @@ AS_PLOT_SPEC = {
             {'divider_type': 'conditions',
              'members': [{'sex': 'female'}, {'sex': 'male'}],
              'dim': 0}],
-        'label': {'y': {'text': 'Power'}, 
+        'label': {'y': {'text': 'Power', 
+                        'space_within': .08}, 
                   'title': {'text': '{brain_region} {frequency_band} Power',
-                            'space_between_label_and_plot': .08}},
-        'subfigure': {'hspace': .1},
-        'subplots_adjust': {'bottom': .3},
+                            'space_between': .1,
+                            'kwargs': {'x': .45}}},
         'section': {
             'attr': 'calc',
             'divisions':[
@@ -610,20 +609,28 @@ AS_PLOT_SPEC = {
                 'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}],
                 'dim': 0
             }],
-            'subfigure': {'hspace': .07, 'wspace': 0},
+            'subfigure': {'hspace': .08, 'wspace': 0},
             'legend': {'colorbar': {'share': 'global', 'position': 'right'}},
             'label': {'title': 
                       {'text':'{conditions|sex}', 
-                       'space_between_label_and_plot': .08,
-                       'kwargs':  {'x': .45}}
-                      }},
+                       'space_within': .15,
+                       'space_between': .08,
+                       'kwargs':  {'x': .45}},
+                       'y_ax': 
+                       {'text': '{conditions|treatment}',
+                        'which': 'absolute_first'},
+                       'x_ax': 
+                       {'text': '{period_type}',
+                        'space_within': .02,
+                        'which': 'absolute_last'}
+                       
+                        }},
             'aesthetics': {
-                'default': {'aspect': 1, 'border': {'top': 'FFF', 'right': 'FFF'}},
+                'default': {'aspect': 1, 'border': {'top': 'FFF', 'right': 'FFF'},
+                            'indicator': {'type': 'patch', 'when': [0, .05]}},
             }
             }}
     
-
-
 AS_OPTS = {
     'procedure': 'make_plots',
     'write_opts': {
@@ -632,5 +639,4 @@ AS_OPTS = {
     },
     'calc_opts': AS_POWER_OPTS,
     'plot_spec': AS_PLOT_SPEC
- 
 }

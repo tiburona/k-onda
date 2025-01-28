@@ -89,7 +89,11 @@ class Partition(Processor):
             else:
                 updated_info = {**info, divider_type: member}
 
+            #print(f"self.current_index before advance index {self.current_index}")
             self.advance_index(divider, i)
+           # print(f"self.current_index after advance index {self.current_index}")
+           # print("")
+
 
             # Now recurse on the remainder of the list, carrying `updated_info`
             self.process_divisions(divisions[1:], info=updated_info)
@@ -100,11 +104,16 @@ class Partition(Processor):
             self.current_index[dim] = self.starting_index[dim] + i
 
     def wrap_up(self, updated_info): 
+
+       
         
         # set vals before you label because labels often use vals, e.g. labeling the period_type
         self.set_vals(updated_info)
         cell = self.child_layout.cells[*self.current_index]
-        # labels are applied at every level so they go on the appropriate subfigure 
+        # labels are applied at every level so they go on the appropriate subfigure
+        # TODO: something here needs to be tracking the index in the larger figure 
+        print(f"self.current_index in wrap up {self.current_index}")
+        print("")
         self.set_label(cell=cell)
 
         if self.colorbar_for_each_plot:

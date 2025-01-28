@@ -72,6 +72,7 @@ class PeriStimulusPlotter(FeaturePlotter):
         ax.set_xticklabels([f"{label:.2f}" for label in tick_range])  # Labels in seconds
             
 
+    
     def place_indicator(self, ax, aesthetic_args):
         indicator = aesthetic_args.get('indicator', {})
         if not indicator:
@@ -87,7 +88,8 @@ class PeriStimulusPlotter(FeaturePlotter):
                 ax.add_patch(plt.Rectangle(
                     (when[0], 0), width, 1,
                     facecolor='gray', alpha=0.3,
-                    transform=transform  # Apply the transformation
+                    transform=transform,  # Apply the transformation
+                    zorder=10
                 ))
                 
 
@@ -131,10 +133,14 @@ class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
 class PeriStimulusHeatMapPlotter(HeatMapPlotter, PeriStimulusPlotter):
 
     def plot_entry(self, entry, aesthetics, norm):
-        return HeatMapPlotter.plot_entry(self, entry, aesthetics, norm)
+        img, ax = HeatMapPlotter.plot_entry(self, entry, aesthetics, norm)
+        aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
+        self.place_indicator(ax, aesthetic_args)
+        return img, ax
     
     def process_calc(self, calc_config):
         HeatMapPlotter.process_calc(self, calc_config)
+        
         
         # info = calc_config['info']
 
@@ -153,7 +159,7 @@ class PeriStimulusPowerSpectrumPlotter(PeriStimulusHeatMapPlotter):
         marker_args = super().get_marker_args(aesthetic_args)
         # TODO I need another way of knowing what pre and post event are because 
         # they aren't the current period
-        extent = (self.pre_event, self.post_event, self.freq_range[0], self.freq_range[1])
+        extent = (-self.pre_event, self.post_event, self.freq_range[0], self.freq_range[1])
         marker_args['extent'] = extent
         return marker_args
 

@@ -1,5 +1,7 @@
 from matplotlib.gridspec import GridSpec
 
+from .plotting_helpers import reshape_subfigures
+
 
 class SubFigureWrapper:
     def __init__(self, parent_fig, gridspec_pos, colorbar_position="right", ratios=None):
@@ -76,26 +78,33 @@ class ColorbarMixin:
     def colorbar_enabled_subfigure(self, figure, gridspec_slice):
         return SubFigureWrapper(figure, gridspec_slice, colorbar_position=self.colorbar_position)
     
-    def make_outer_gridspec(self):
-       
+    def create_outer_and_subgrid(self):
+        outer_grid, main_slice, cax_slice = self.make_outer_grid() 
+        self.figure = outer_grid[main_slice]
+        self.figure.cax = outer_grid[cax_slice].add_subplot(111)
+        self.processor.figure = self.figure
     
+    def make_outer_grid(self):
+       
         i = ['top', 'bottom', 'left', 'right'].index(self.colorbar_position)
-        outer_gridspec_dim = [1, 1]
-        outer_gridspec_dim[i//2] += 1
+        outer_dim = [1, 1]
+        outer_dim[i//2] += 2
         ratio_string = ['height', 'width'][i//2]
-        ratios = [.9, .1]
+        ratios = [1, .025, .075]
         if not i % 2:
             ratios.reverse()
-        gs_args = dict(left=0.1, right=0.9, top=0.9, bottom=0.1)
-        outer_gs = self.figure.add_gridspec(*outer_gridspec_dim, **{f'{ratio_string}_ratios': ratios}, **gs_args)
-        location_of_main_figure_gridspec = [0, 0]
+        # self.figure.subplots_adjust(right=.7)
+        outer_grid = self.subfigures(*outer_dim, **{f'{ratio_string}_ratios': ratios})
+        location_of_main_figure = [0, 0]
         location_of_colorbar_ax = [0, 0]
-        if i % 2:
-            location_of_colorbar_ax[i//2] += 1
-        else:
-            location_of_main_figure_gridspec[i//2] +=1
 
-        return (outer_gs, tuple(location_of_main_figure_gridspec), 
+        location_of_colorbar_ax[i//2] += 1
+        if not i%2:
+            location_of_main_figure[i//2] += 2
+
+        # outer_grid[*location_of_colorbar_ax].subplots_adjust(right = .8)
+
+        return (outer_grid, tuple(location_of_main_figure), 
                 tuple(location_of_colorbar_ax))
         
 

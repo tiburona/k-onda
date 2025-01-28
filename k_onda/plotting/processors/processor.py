@@ -37,11 +37,8 @@ class ProcessorConfig(Base):
             if k in self.spec:
                 self.next = {k: self.spec[k]}
         
-        
-        if self.index:
-            self.starting_index = self.index
-        else:
-            self.starting_index = [0, 0]
+        self.index = index
+        self.starting_index = [0, 0]
 
         self.inherited_division_info = self.division_info if self.division_info is not None else {}
         self.info_by_division = self.info_by_division if self.info_by_division is not None else []
@@ -78,6 +75,7 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
 
         processor_config = dict(
             figure=cell, 
+            index=deepcopy(self.current_index),
             layers=self.layers, 
             parent_processor=self, 
             plot_type=self.plot_type,

@@ -71,39 +71,34 @@ class Layout(Base, ColorbarMixin):
 
             self.label_figure = self.figure
 
-            self.adjust_dimension('title', label_figure_dims=(2, 1), 
-                new_figure_ind=(1, 0), ratio_dim='height', reverse=False)
+            self.adjust_dimension('title', label_figure_dims=(3, 1), 
+                new_figure_ind=(1, 0), ratio_dim='height', rvrs=False)
             
-            self.adjust_dimension('x', label_figure_dims=(2, 1), 
-                new_figure_ind=(0, 0), ratio_dim='height', reverse=True)
+            self.adjust_dimension('x', label_figure_dims=(3, 1), 
+                new_figure_ind=(1, 0), ratio_dim='height', rvrs=True)
 
-            self.adjust_dimension('y', label_figure_dims=(1, 2), 
-                new_figure_ind=(0, 1), ratio_dim='width', reverse=False)
+            self.adjust_dimension('y', label_figure_dims=(1, 3), 
+                new_figure_ind=(0, 1), ratio_dim='width', rvrs=False)
          
 
-    def adjust_dimension(self, position, label_figure_dims, new_figure_ind, ratio_dim, reverse):
+    def adjust_dimension(self, position, label_figure_dims, new_figure_ind, ratio_dim, rvrs):
         
         position_info = self.processor.label.get(position)
 
         if not position_info:
             return
         
-        ratio = position_info.get('space_between_label_and_plot', .05)
-        ratios = [ratio, 1].reversed if reverse else [ratio, 1]
+        space_between = position_info.get('space_between', .05)
+        space_within = position_info.get('space_within', .05)
+        ratios = [space_between, 1, space_within]
+        if rvrs:
+            reversed(ratios)
 
         ratio_dict = {f"{ratio_dim}_ratios": ratios}
 
         grid = self.subfigures(*label_figure_dims, **ratio_dict)
     
         self.figure = grid[new_figure_ind]
-                
-    def create_outer_and_subgrid(self):
-        outer_gs, main_slice, cax_slice = self.make_outer_gridspec() 
-        gs_subfig = self.figure.add_subfigure(outer_gs[main_slice])
-        self.figure = gs_subfig
-        cax_subfig = self.figure.add_subfigure(outer_gs[cax_slice])
-        self.figure.cax = cax_subfig.add_subplot(outer_gs[cax_slice])
-        self.processor.figure = self.figure
         
     def make_all_cells(self):
         

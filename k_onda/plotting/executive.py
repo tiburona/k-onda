@@ -86,6 +86,7 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         """     
 
         self.fig = plt.figure()
+        self.fig.subplots_adjust()
         if plot_spec.get('margins'):
             gs_args = self.calculate_margins(plot_spec['margins'])
         else:

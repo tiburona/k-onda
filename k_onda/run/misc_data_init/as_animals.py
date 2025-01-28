@@ -59,7 +59,7 @@ exp_info['group_names'] = ['male_stressed', 'female_stressed', 'male_non_stresse
 exp_info['sampling_rate'] = 30000
 exp_info['lfp_sampling_rate'] = 2000
 exp_info['frequency_bands'] = {
-    'theta_1': (0, 4),
+    'theta_1': (4, 8),
     'theta_2': (8, 12)
 }
 exp_info['identifier'] = 'AS'

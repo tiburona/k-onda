@@ -84,13 +84,43 @@ class LabelMixin:
             next_spec = list(self.next.values())[0]
             return next_spec.get('label', {})
         
+    def is_extreme_index(self, index, layout, dim, last):
+        return index[dim] ==  (layout.dimensions[dim] - 1 if last else 0)
+        
+    def is_in_extreme_position(self, axis, last, absolute):
+        dim = int(not axis == 'x')
+        is_extreme_within_subfig = self.is_extreme_index(
+            self.current_index, self.child_layout, dim, last)
+        if not absolute:
+            return is_extreme_within_subfig
+        return is_extreme_within_subfig and self.subfig_is_extreme(dim, last)
     
+    def subfig_is_extreme(self, dim, last):
+        processors = []
+        current_proc = self
+        while current_proc is not None:
+            if current_proc.parent_processor:
+                processors.append([current_proc.index, current_proc.parent_layout])
+                #print(f"index {current_proc.index}")
+                #print(f"dimensions {current_proc.parent_layout.dimensions}")
+            current_proc = current_proc.parent_processor
+        if any([not self.is_extreme_index(index, layout, dim, last) 
+                for index, layout in processors]):
+            return False
+        return True
+    
+                
+            
 
     def set_label(self, cell=None):
 
         kwargs = {}
         
         for position in self.label:
+            print(f"position {position}")
+
+            if 'ax' in position:
+                a = 'foo'
 
             # get text of label
             text = self.fill_fields(self.label[position]['text'])
@@ -106,6 +136,14 @@ class LabelMixin:
                 if position in 'xy':
                     label_setter = getattr(label_figure, f'sup{position}label')   
                 elif position in ['x_ax', 'y_ax']:
+                    if position in 'y_ax':
+                        a = 'foo'
+                        print(f'y_ax {self.current_index}')
+                    which = self.label[position].get('which', 'all')
+                    if which and which != 'all':
+                        if not self.is_in_extreme_position(
+                            position[0], 'last' in which, 'absolute' in which):
+                            continue
                     label_setter = getattr(cell, f'set_{position[0]}label')
                 else:
                     raise ValueError(f"Unknown label position: {position}")
