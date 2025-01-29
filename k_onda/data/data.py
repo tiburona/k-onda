@@ -383,15 +383,29 @@ class Data(Base):
         else:
             return obj.get_reference_calc(reference_period_type)
         
-    def get_reference_calc(self, reference_period):
-        if isinstance(reference_period, str):
+    def get_reference_calc(self, reference):
+        # record the original values of the period attributes
+        period_attrs = ['selected_period_type', 'selected_period_types']
+        orig_vals = [getattr(self, attr) for attr in period_attrs]
+
+        # infer whether we are setting period_types or period_type from value of reference
+        if isinstance(reference, str):
             attr_to_set = 'selected_period_type'
         else:
             attr_to_set = 'selected_period_types'
-        orig_val = getattr(self, attr_to_set)
-        setattr(self, attr_to_set, reference_period)
+        
+        # set the relevent attribute to its new value and get the calculation
+        setattr(self, attr_to_set, reference)
         reference_calc = getattr(self, f"get_{self.calc_type}")()
-        setattr(self, attr_to_set, orig_val)
+
+        # reset the original value before returning
+        if attr_to_set == 'selected_period_types':
+            self.selected_period_type = orig_vals[0]
+        else:
+            self.selected_period_types = orig_vals[1]
+        
+        #[setattr(self, attr, orig_val) for attr, orig_val in zip(period_attrs, orig_vals)]
+        
         return reference_calc
 
 

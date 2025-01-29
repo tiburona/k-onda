@@ -147,6 +147,7 @@ class Base:
         
     @selected_period_type.setter
     def selected_period_type(self, period_type):
+        Base._selected_period_types = []
         Base._selected_period_type = period_type
 
     @property
@@ -155,6 +156,7 @@ class Base:
         
     @selected_period_types.setter
     def selected_period_types(self, period_types):
+        Base._selected_period_type = ''
         Base._selected_period_types = period_types
 
     @property

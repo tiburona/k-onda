@@ -1,12 +1,11 @@
 import os
 import json
-from copy import deepcopy
 
 root = '/Users/katie/likhtik/AS'
 
-lfp_electrodes = {'bla': 0, 'vhip': 1, 'pl': 2}
-as110_lfp_electrodes = {'bla': 0, 'vhip': 1, 'pl': 2}
-as112_lfp_electrodes = {'bla': 0, 'vhip': 1, 'pl': 2}
+lfp_electrodes = {'bla': 1, 'vhip': 0, 'pl': 2}
+as110_lfp_electrodes = {'vhip': 0, 'pl': 4}
+as112_lfp_electrodes = {'bla': 2, 'vhip': 0, 'pl': 3}
 
 male_stressed = ['As107', 'As108']
 male_non_stressed = ['As105', 'As106']

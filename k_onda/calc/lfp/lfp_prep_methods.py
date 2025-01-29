@@ -70,7 +70,8 @@ class LFPPrepMethods(PrepMethods):
         return self._processed_lfp
     
     def delete_lfp_data(self, region):
-        self.processed_lfp.pop(region)
+        if region in self.processed_lfp:
+            self.processed_lfp.pop(region)
     
     def process_lfp(self):
         
