@@ -1,5 +1,6 @@
 import os
 import json
+from copy import deepcopy
 
 root = '/Users/katie/likhtik/AS'
 
@@ -11,6 +12,17 @@ male_stressed = ['As107', 'As108']
 male_non_stressed = ['As105', 'As106']
 female_stressed = ['As112', 'As113']
 female_non_stressed = ['As110', 'As111']
+
+learning_dict = {
+    'As105': 'discriminator',
+    'As106': 'bad_learner',
+    'As107': 'generalizer',
+    'As108': 'generalizer',
+    'As110': 'bad_learner',
+    'As111': 'generalizer',
+    'As112': 'generalizer',
+    'As113': 'generalizer'
+}
 
 animals_and_groups = zip(
     [male_stressed, male_non_stressed, female_stressed, female_non_stressed],
@@ -28,7 +40,9 @@ for animals, group_name, conditions in animals_and_groups:
             electrodes = as110_lfp_electrodes
         else:
             electrodes = lfp_electrodes
-        animal_info[animal] = {'group_name': group_name, 'conditions': conditions, 'lfp_electrodes': electrodes}
+        an_conditions = deepcopy(conditions)
+        an_conditions['learning_style'] = learning_dict[animal]
+        animal_info[animal] = {'group_name': group_name, 'conditions': an_conditions, 'lfp_electrodes': electrodes}
 
 period_info = {
     'pretone_plus': {'relative': True, 'target': 'cs_plus', 'shift': -30, 'duration': 30,
