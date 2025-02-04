@@ -231,12 +231,40 @@ class Data(Base):
     
     @property
     def concatenation(self):
-        return self.concatenate()
+        kwargs = self.calc_opts['concatenation']
+        return self.concatenate(**kwargs)
     
-    def concatenate(self, depth=1, attr='calc', method=None):
-        return self.apply_fun_to_accumulated_data(
-            np.concatenate, depth=depth, attr=attr, method=method)
-    
+    def concatenate(self, concatenator=None, concatenated=None, attr='calc', method=None, 
+                    started=False):
+        f = lambda x: (
+            getattr(x, method)() if method else getattr(x, attr)
+            ) if hasattr(x, method if method else attr) else None
+        
+        if self.name == concatenator:
+            print(self.identifier)
+            print(id(self))
+            started = True
+            return np.array([child.concatenate(concatenator=concatenator, concatenated=concatenated, 
+                                               attr=attr, method=method, started=started) 
+                             for child in self.children if child.include()])
+        
+        elif self.name != concatenated and not started:
+            return np.nanmean([val for val in [child.concatenate(concatenator=concatenator, concatenated=concatenated, 
+                                              attr=attr, method=method, started=started) 
+                            for child in self.children if child.include()] 
+                            if not (isinstance(val, float) and np.isnan(val))], axis=0)
+        # TODO: the above nan filtering is made necessary by the fact that groups are not excluded by the 
+        # conditions filter.  Fix that or better, move away from having groups now that there are conditions
+        
+        elif self.name != concatenated and started:
+            return np.array([child.concatenate(concatenator=concatenator, concatenated=concatenated, 
+                                               attr=attr, method=method, started=started) 
+                             for child in self.children if child.include()]).flatten()
+        else: # self.name == concatenated
+            return f(self)
+
+        # TODO: what's going to happen if, say, an animal is missing a period
+         
     @property
     def stack(self):
         return self.get_stack()
@@ -288,12 +316,12 @@ class Data(Base):
             accumulator = defaultdict(list)
         
         accumulator[depth].append(self)
-
+        
         if depth != max_depth and self.included_children:
             for child in self.included_children:
                 child.accumulate(max_depth, depth + 1, accumulator)
         
-        return accumulator
+        return accumulator    
 
     @property
     def hierarchy(self):
@@ -366,7 +394,7 @@ class Data(Base):
         # we are currently at a higher tree level than the comparison ref level
         if level not in self.hierarchy or (
             self.hierarchy.index(self.name) < self.hierarchy.index(level)):
-            return self.get_average(f'get_{comparison}')
+            return self.get_average(f'get_{comparison}', stop_at=self.calc_opts.get('base', 'event'))
         # we are currently at a lower tree level than the comparison ref level
         elif self.hierarchy.index(self.name) > self.hierarchy.index(level):
             ref_obj = [anc for anc in self.ancestors if anc.name == level][0]

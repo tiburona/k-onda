@@ -37,9 +37,25 @@ class Layout(Base, ColorbarMixin):
             self.cells = self.subfigure_grid
         
 
-    def subfigures(self, i, j, **kwargs):
-        return reshape_subfigures(self.figure.subfigures(i, j, **kwargs), i, j)
-    
+    def subfigures(self, nrows, ncols, **kwargs):
+        subfigures = self.figure.subfigures(nrows, ncols, **kwargs)
+
+        # If it's a single SubFigure, wrap it in a 2D array
+        if not isinstance(subfigures, (list, np.ndarray)):
+            return np.full((nrows, ncols), [SubfigWrapper(subfigures, (0, 0), self)])
+
+        elif isinstance(subfigures, np.ndarray) and subfigures.ndim == 1: 
+            return np.array([SubfigWrapper(subfig, (nrows, ncols), self) 
+                             for subfig in subfigures]).reshape(nrows, ncols)
+            
+        elif isinstance(subfigures, np.ndarray) and subfigures.ndim == 2:
+            return np.array([[SubfigWrapper(subfig, (i, j), self) 
+                              for j, subfig in enumerate(row)] 
+                              for i, row in enumerate(subfigures)])
+            
+        else:
+            raise ValueError("Unexpected dimensions for subfigures")
+            
     def calculate_my_dimensions(self):
         dims = [1, 1]
         if self.spec is not None:
@@ -67,7 +83,7 @@ class Layout(Base, ColorbarMixin):
         
 
     def adjust_grid_for_labels(self):
-        if self.processor:
+        if self.processor and self.processor.label:
 
             self.label_figure = self.figure
 
@@ -103,8 +119,7 @@ class Layout(Base, ColorbarMixin):
     def make_all_cells(self):
         
         return np.array([
-            [AxWrapper(self.subfigure_grid[i,j].subfigures(1, 1).add_subplot(), 
-                       self.figure, (i, j)) 
+            [AxWrapper(self.subfigure_grid[i,j].subfigures(1, 1).add_subplot(), (i, j), self) 
              for j in range(self.dimensions[1])] 
              for i in range(self.dimensions[0])
         ])
@@ -126,23 +141,61 @@ class Layout(Base, ColorbarMixin):
             
         return subfigure
        
-            
-        
-    
 
-class AxWrapper(Base):
+class Wrapper(Base):
 
-    def __init__(self, ax, figure, index):
-        self.ax = ax  # Store the original ax
-        self.figure = figure # the subfigure the ax is on
-        self.ax_list = [self]
-        self.index = index
-        self.bottom_edge = None
-        self.left_edge = None
-        
+    def __init__(self, obj, index, layout):
+        self.obj = obj
+        self.figure = layout.figure # the subfigure the obj is on
+        self.index = index 
+        self.layout = layout
+        self.processor = layout.processor
+
     def __getattr__(self, name):
-        # Forward any unknown attribute access to the original ax
-        return getattr(self.ax, name)
+        # Forward any unknown attribute access to the original obj
+        return getattr(self.obj, name)
+    
+    @staticmethod
+    def is_extreme_index(index, layout, dim, last):
+        return index[dim] ==  (layout.dimensions[dim] - 1 if last else 0)
+    
+    def parent_is_extreme(self, dim, last):
+        processors = []
+        current_proc = self.processor
+        while current_proc is not None:
+            if current_proc.parent_processor:
+                processors.append([current_proc.index, current_proc.parent_layout])
+            current_proc = current_proc.parent_processor
+        if any([not self.is_extreme_index(index, layout, dim, last) 
+                for index, layout in processors]):
+            return False
+        return True
+    
+    def is_extreme_within_parent(self, dim, last):
+        if self.processor.spec_type == 'section':
+            return True
+        else:
+            return self.is_extreme_index(self.index, self.layout, dim, last)
+    
+    def is_in_extreme_position(self, axis, last, absolute):
+        dim = int(not axis == 'x')
+
+        is_extreme_within_parent = self.is_extreme_within_parent(dim, last)
+        
+        if not absolute:
+            return is_extreme_within_parent
+
+        return is_extreme_within_parent and self.parent_is_extreme(dim, last)
+
+
+class SubfigWrapper(Wrapper):
+
+    def __init__(self, subfig, index, layout):
+        super().__init__(subfig, index, layout)
+
+class AxWrapper(Wrapper):
+    def __init__(self, ax, index, layout):
+        super().__init__(ax, index, layout)
     
 
 class BrokenAxes(Base):

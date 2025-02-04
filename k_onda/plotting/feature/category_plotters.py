@@ -25,11 +25,31 @@ class CategoryPlotter(FeaturePlotter):
 
         return new_divisions
     
+    def extract_deepest_dict(self, d):
+        """
+        Recursively searches for specific keys in a dictionary. If found, it calls itself
+        on the value of that key until no more keys are found. Returns the deepest dictionary.
+        
+        :param d: Dictionary to search.
+        :return: The deepest nested dictionary found.
+        """
+        if not isinstance(d, dict):
+            return d  # If somehow a non-dict is passed, return it unchanged
+
+        # Keys to look for
+        keys_to_check = {'segment', 'section', 'split', 'series', 'container'}
+
+        for key in keys_to_check:
+            if key in d and isinstance(d[key], dict):
+                return self.extract_deepest_dict(d[key])  # Recurse
+
+        return d  # Return the dictionary if no matching keys are found
+
+    
     def assign_positions(self, divisions, aesthetics, base_position=0, label_prefix=None):
         
         if not label_prefix:
             label_prefix = []
-
 
         if not divisions:
             # Base case: no more divisions
@@ -77,42 +97,57 @@ class CategoryPlotter(FeaturePlotter):
     
     def get_composite_label(self, spec, row):
         label = []
-        divider_types = set([division['divider_type'] for division in spec['divisions']])
-        for divider_type in divider_types:
-            if isinstance(row[divider_type], str):
+        divisions = spec['divisions']
+        #divider_types = set([division['divider_type'] for division in divisions])
+        for division in divisions:
+            divider_type = division['divider_type']
+            if divider_type not in ['conditions', 'period_types']:
                 label.append(row[divider_type])
             else:
-                label.extend([v for d in row[divider_type] for v in d.values()])
+                # division['members'] is a list like [{'sex': 'female'}, {'sex': 'male'}]
+                # every key will be identical; take the first key
+                key = list(division['members'][0].keys())[0]
+                label.append(row[divider_type][key])
         return tuple(label)
        
     def process_calc(self, calc_config):
 
-        info, spec, aesthetics = (calc_config[k] 
-                                  for k in ['info', 'spec', 'asethetics'])
-    
-        transformed_divisions = deepcopy(spec['divisions'])
-        self.label_to_pos = self.assign_positions(transformed_divisions, aesthetics)
-        ax = row['cell']
-        ax_args = aesthetic_args.get('ax', {})
-        self.apply_ax_args(ax, ax_args)
+        info, spec, spec_type, aesthetics = (
+            calc_config[k] for k in ('info', 'spec', 'spec_type', 'aesthetics'))
 
-        for row in info:
-            composite_label = self.get_composite_label(spec, row)
+        # Get x-ticks labels
+        last_spec = self.extract_deepest_dict(spec)
+        transformed_divisions = deepcopy(last_spec['divisions'])
+        self.label_to_pos = self.assign_positions(transformed_divisions, aesthetics)
+        positions = list(self.label_to_pos.values())
+        labels = [smart_title_case(' '.join(label).replace('_', ' ')) 
+                  for label in self.label_to_pos.keys()]
+
+        for i, entry in enumerate(info):
+
+            ax = entry['cell']
+
+            composite_label = self.get_composite_label(last_spec, entry)
             position = self.label_to_pos[composite_label]
 
-            aesthetic_args = self.get_aesthetic_args(row, aesthetics)
+            aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
+            ax.axhline(y=0, color='black', linewidth=1)
+
+            ax_args = aesthetic_args.get('ax', {})
+            self.apply_ax_args(ax, ax_args, i, spec_type)
             marker_args = aesthetic_args.get('marker', {})
 
             self.cat_width = aesthetic_args.get('cat_width', 1)
 
-            self.plot_markers(ax, position, composite_label, row, marker_args, aesthetic_args=aesthetic_args)
-            
-        # Set x-ticks and labels
-        positions = list(self.label_to_pos.values())
-        labels = [smart_title_case(' '.join(label).replace('_', ' ')) 
-                  for label in self.label_to_pos.keys()]
-        ax.set_xticks(positions)
-        ax.set_xticklabels(labels)
+            self.plot_markers(ax, position, composite_label, entry, marker_args, aesthetic_args=aesthetic_args)
+
+            which_ticks = aesthetic_args.get('ticklabel', {}).get('which', 'all')
+            if which_ticks == 'all' or ax.is_in_extreme_position(
+                    'x', 'last' in which_ticks, 'absolute' in which_ticks):
+                # Set tick visibility; overrides border args in aesthetics
+                ax.tick_params(axis='x', which='both', labelbottom=True)
+                ax.set_xticks(positions)
+                ax.set_xticklabels(labels)
 
 class CategoricalScatterPlotter(CategoryPlotter):
 

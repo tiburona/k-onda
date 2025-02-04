@@ -5,19 +5,22 @@ import os
 
 from k_onda.utils import filter_60_hz, divide_by_rms, downsample, PrepMethods
 from k_onda.interfaces import MatlabInterface
-from .lfp_methods_and_data_structures import AmpCrossCorrCalculator, GrangerCalculator
+from .lfp_methods_and_data_structures import AmpCrossCorrCalculator, GrangerCalculator, CoherenceCalculator
 
 
 class LFPPrepMethods(PrepMethods):
 
     def select_lfp_children(self):
-        return self.select_children('lfp_periods')
+        if self.calc_type in ['coherence', 'granger']: # TODO: add the others
+            return self.select_children(f"{self.calc_type}_calculators")
+        else:
+            return self.select_children('lfp_periods')
 
     def lfp_prep(self):
         self.prep_data()
         self.prepare_periods()
         if self.calc_type in ['phase_relationship', 'granger', 'amp_crosscorr', 'coherence']:
-            getattr(self, f"get_{self.calc_type}_calculators")()
+            getattr(self, f"prepare_{self.calc_type}_calculators")()
     
     def prep_data(self):
         data_label = f"{self.selected_brain_region}_lfp"
@@ -142,7 +145,7 @@ class LFPPrepMethods(PrepMethods):
         self.phase_relationship_calculators = self.prepare_region_relationship_calculators(cls)
 
     def prepare_region_relationship_calculators(self, calc_class):
-        brain_region_1, brain_region_2 = self.data_opts.get('region_set').split('_')
-        return ({period_type: [calc_class(period, brain_region_1, brain_region_2) 
-                               for period in self.periods[period_type]] 
-                               for period_type in self.periods})
+        brain_regions = self.calc_opts.get('region_set').split('_')
+        return ({period_type: [calc_class(period, brain_regions) 
+                               for period in self.lfp_periods[period_type]] 
+                               for period_type in self.lfp_periods})

@@ -70,7 +70,6 @@ def reshape_subfigures(subfigures, nrows, ncols):
             raise ValueError("Input subfigures is not 1D or 2D, which is unexpected.")
 
 
-
 def is_condition_met(category, member, entry=None):
         """`self.construct_spec_based_on_conditions` expects this method to be defined"""
         if entry is None:
@@ -78,7 +77,7 @@ def is_condition_met(category, member, entry=None):
         if category in entry and entry[category] == member:
             return True
         for composite_category_type in ['conditions', 'period_types']:
-            if {category:member} in entry.get(composite_category_type, []):
+            if entry.get(composite_category_type, {}).get(category) == member:
                 return True
         return False
 

@@ -61,8 +61,8 @@ def profile_run(timeout=1000):
 
 
 def visualize_profile():
-    stats = pstats.Stats('/Users/katie/likhtik/data/logdir/profile_output.prof')
-
+    stats = stats.Stats('/Users/katie/likhtik/data/logdir/profile_output.prof')
+ 
     # Sort the statistics by cumulative time and print the top 10 functions 
     stats.sort_stats('cumulative').print_stats(10)
 

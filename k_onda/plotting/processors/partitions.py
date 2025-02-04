@@ -104,16 +104,13 @@ class Partition(Processor):
             self.current_index[dim] = self.starting_index[dim] + i
 
     def wrap_up(self, updated_info): 
-
-       
         
         # set vals before you label because labels often use vals, e.g. labeling the period_type
         self.set_vals(updated_info)
         cell = self.child_layout.cells[*self.current_index]
         # labels are applied at every level so they go on the appropriate subfigure
         # TODO: something here needs to be tracking the index in the larger figure 
-        print(f"self.current_index in wrap up {self.current_index}")
-        print("")
+       
         self.set_label(cell=cell)
 
         if self.colorbar_for_each_plot:
@@ -122,6 +119,7 @@ class Partition(Processor):
         if not self.next:
             updated_info['cell'] = cell
             updated_info['index'] = copy(self.current_index) 
+            updated_info['last_spec'] = self.spec
             self.info_by_division.append(updated_info)
             self.get_calcs(updated_info)
             
@@ -172,6 +170,7 @@ class Series(Partition):
         super().__init__(config)
                 
     def wrap_up(self, updated_info):
+        
         self.label(cell=None)
         for component in self.spec['components']:
             base = deepcopy(self.spec['base'])
@@ -192,18 +191,7 @@ class Segment(Partition):
     name = 'segment'
 
     def __init__(self, config):
-        # Copy all attributes from config to the Processor instance
-        self.__dict__.update(config.__dict__)
-        
-        self.child_layout = Layout(
-            self.parent_layout, 
-            self.current_index, 
-            processor=self,
-            figure=self.figure, 
-            gs_args=self.get('gs_args')
-            ) 
-            
-        self.aesthetics = self.init_aesthetics()
+        super().__init__(config)
     
     def get_layout_args(self):
         """

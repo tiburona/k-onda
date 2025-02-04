@@ -1,6 +1,8 @@
 from copy import deepcopy
+from collections import defaultdict
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from ..plotting_helpers import PlottingMixin
 from k_onda.base import Base
@@ -12,21 +14,51 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 class FeaturePlotter(Base, PlottingMixin):
 
     def process_calc(self, calc_config):
-        info, spec, spec_type, aesthetics = (
-            calc_config[k] for k in ('info', 'spec', 'spec_type', 'aesthetics'))
-        attr = spec.get('attr', 'calc')
+        info, spec_type, aesthetics = (
+            calc_config[k] for k in ('info', 'spec_type', 'aesthetics'))
         aesthetics = deepcopy(aesthetics) if aesthetics else None
+        unique_axs = defaultdict(lambda: {'ax': None, 'entries': []})
+
         for i, entry in enumerate(info):
             ax = entry['cell']
+            unique_axs[id(ax)]['ax'] = ax
+            unique_axs[id(ax)]['entries'].append(entry)
+
             aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
             ax_args = aesthetic_args.get('ax', {})
             self.apply_ax_args(ax, ax_args, i, spec_type)
-            val = entry[attr]
-            self.plot_entry(ax, val, aesthetic_args)            
-    
-    def get_aesthetic_args(self, entry, aesthetics):
-        return self.construct_spec_based_on_conditions(aesthetics, entry=entry)
-    
+
+            # Plot entry with a temporary label
+            val = entry[entry['attr']]
+            self.plot_entry(ax, val, aesthetic_args)
+            entry['legend_label'] = self.get_entry_label(entry)
+
+        self.make_legend(unique_axs)
+
+    def make_legend(self, unique_axs):
+        for i, data in enumerate(unique_axs.values()):
+            ax = data['ax']
+            entries = data['entries']
+
+            if not entries or 'last_spec' not in entries[0]:
+                continue
+
+            legend = entries[0]['last_spec'].get('legend', {})
+            if legend and legend.get('which', 'all') in ['all', i]:
+                handles = self.get_handles(ax)  # Instead of get_legend_handles_labels()
+                if not handles:
+                    # Debugging output if handles are empty
+                    print("No handles found on axis:", ax)
+                    print("Lines on axis:", ax.get_lines())
+                print("Manually collected handles:", handles)
+                custom_labels = [e['legend_label'] for e in entries]
+                print(custom_labels)
+                ax.legend(handles, custom_labels, **legend['key'])
+
+    def plot_entry(self, ax, val, aesthetic_args=None):
+        # Pass a temporary label to ensure the legend can register the line
+        ax.plot(np.arange(len(val)), val, label='', **aesthetic_args.get('marker', {}))
+        
     def is_condition_met(self, category, member, entry=None):
         """`self.construct_spec_based_on_conditions` expects this method to be defined"""
         if entry is None:
@@ -37,6 +69,25 @@ class FeaturePlotter(Base, PlottingMixin):
             if {category:member} in entry.get(composite_category_type, []):
                 return True
         return False
+        
+    def get_entry_label(self, entry):
+        relevant_divisions = entry['last_spec']['divisions']
+        label = []
+        for division in relevant_divisions:
+            for member in division['members']:
+                if division['divider_type'] in ['conditions', 'period_types']:
+                    key, val = list(member.items())[0]  # Correct unpacking
+                    if entry[key] == val:
+                        label.append(val)
+                else:
+                    if entry[division['divider_type']] == member:
+                        label.append(member)
+        label = ' '.join(label)
+
+        return label
+    
+    def get_aesthetic_args(self, entry, aesthetics):
+        return self.construct_spec_based_on_conditions(aesthetics, entry=entry)
     
     def apply_ax_args(self, ax, ax_args, i, spec_name):
         if spec_name == 'segment' and i > 0:
@@ -45,6 +96,9 @@ class FeaturePlotter(Base, PlottingMixin):
             self.apply_borders(ax, ax_args['border'])
         if 'aspect' in ax_args:
             ax.set_box_aspect(ax_args['aspect'])
+        if 'axis_position' in ax_args:
+            for side in ax_args['axis_position']:
+                ax.spines[side].set_position(ax_args['axis_position'][side])
     
     def apply_borders(self, ax, border):
         border = deepcopy(border)

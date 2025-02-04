@@ -4,8 +4,8 @@ import json
 root = '/Users/katie/likhtik/AS'
 
 lfp_electrodes = {'bla': 1, 'vhip': 0, 'pl': 2}
-as110_lfp_electrodes = {'vhip': 0, 'pl': 4}
-as112_lfp_electrodes = {'bla': 2, 'vhip': 0, 'pl': 3}
+as110_lfp_electrodes = {'vhip': 0, 'pl': 3, 'bla':1}
+as113_lfp_electrodes = {'bla': 2, 'vhip': 0, 'pl': 3}
 
 male_stressed = ['As107', 'As108']
 male_non_stressed = ['As105', 'As106']
@@ -22,8 +22,8 @@ animal_info = {}
 
 for animals, group_name, conditions in animals_and_groups:
     for animal in animals:
-        if animal == 'As112': 
-            electrodes = as112_lfp_electrodes
+        if animal == 'As113': 
+            electrodes = as113_lfp_electrodes
         elif animal == 'As110':
             electrodes = as110_lfp_electrodes
         else:

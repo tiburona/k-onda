@@ -574,7 +574,7 @@ animal_plots =  {'series': {
 
 
 AS_POWER_OPTS = {
-    'kind_of_data': 'lfp', 'calc_type': 'power', 'validate_events': True,
+    'kind_of_data': 'lfp', 'calc_type': 'power', 'validate_events': False,
     'frequency_bands': [ 'theta_1', 'theta_2'], 
     'brain_regions': ['pl', 'bla', 'vhip'], 
     'power_arg_set': (2048, 2000, 500, 480, 2),
@@ -587,7 +587,25 @@ AS_POWER_OPTS = {
     'evoked': {'level': 'animal', 'reference': ['pretone_plus', 'pretone_minus']}
     }
 
-AS_PLOT_SPEC = {
+AS_COHERENCE_CALC_OPTS = {
+    'kind_of_data': 'lfp', 'calc_type': 'coherence', 
+    'frequency_bands': [ 'theta_1', 'theta_2'], 
+    'region_sets': ['pl_bla', 'bla_vhip', 'pl_vhip'], 
+    'base': 'coherence_calculator',
+    'concatenation': {'concatenator': 'animal',
+                      'concatenated': 'coherence_calculator',
+                      'attr': 'mean'},
+    'power_arg_set': (2048, 2000, 500, 480, 2),
+    'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.75, .75], 'bin_size': .01,
+    'periods': {'pretone_plus': {'event_pre_post': (0, .3)}, 
+                'pretone_minus': {'event_pre_post': (0, .3)},
+                'cs_plus': {'event_pre_post': (0, .3)},
+                'cs_minus': {'event_pre_post': (0, .3)}},
+    'matlab_configuration': MATLAB_CONFIG, 
+    'evoked': {'level': 'animal', 'reference': ['pretone_plus', 'pretone_minus']}
+    }
+
+AS_SPECTRUM_PLOT_SPEC = {
     'plot_type': 'peristimulus_power_spectrum',
     'section': {
         'divisions': [
@@ -626,10 +644,90 @@ AS_PLOT_SPEC = {
                        
                         }},
             'aesthetics': {
-                'default': {'aspect': 1, 'border': {'top': 'FFF', 'right': 'FFF'},
+                'default': {'aspect': 1, 
                             'indicator': {'type': 'patch', 'when': [0, .05]}},
             }
             }}
+
+AS_POWER_PLOT_SPEC = {
+    'plot_type': 'bar_plot',
+    'section': {
+        'divisions': [
+            {'divider_type': 'conditions',
+             'members': [{'sex': 'female'}, {'sex': 'male'}],
+             'dim': 0}],
+        'label': {'y': {'text': 'Power',
+                        'space_between': 0, 
+                        'space_within': 0}, 
+                  'title': {'text': '{brain_region} {frequency_band} Power',
+                            'space_between': .1,
+                            'x': .60}},
+        'segment': {
+            'attr': 'mean',
+            'divisions':[
+                {'divider_type': 'period_type',
+                'members': ['cs_plus', 'cs_minus']},
+                {'divider_type': 'conditions',
+                'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}]
+            }],
+            'subfigure': {'hspace': .08, 'wspace': 0},
+            'label': {'title': 
+                      {'text':'{conditions|sex}', 
+                       'space_within': .15,
+                       'space_between': .08}
+                        }},
+            'aesthetics': {
+                'ticklabel': {'which': 'absolute_last'},
+                'ax': {'border': {'top': {'visible': 'FFF'}, 
+                                  'right': {'visible': 'FFF'},
+                                  'bottom': {'visible': 'FFF'}}},
+                'conditional': 
+                {'treatment': {'stressed': {'marker': {'color': 'orange'}},
+                              'non_stressed': {'marker': {'color': 'purple'}}},
+                'period_type': {'cs_plus': {'marker': {'hatch': '/'}}}}}
+            }}
+
+
+AS_COHERENCE_PLOT_SPEC = {
+    'plot_type': 'line_plot',
+    'section': {
+        'divisions': [
+            {'divider_type': 'conditions',
+             'members': [{'sex': 'female'}, {'sex': 'male'}],
+             'dim': 0},
+             {'divider_type': 'conditions',
+              'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}],
+              'dim': 1}],
+        'label': {
+            'y': {
+                'text': 'Coherence',
+                'space_between': .05,
+                'space_within': 0.1}, 
+            'title': {
+                'text': '{region_set} {frequency_band} Coherence',
+                'space_between': .1,
+                'x': .60},
+            },
+        'segment': {
+            'attr': 'concatenation',
+            'divisions':[
+                {'divider_type': 'period_type',
+                'members': ['cs_plus', 'cs_minus']}],
+            'subfigure': {'hspace': .08, 'wspace': 0},
+            'label': {
+                       'x_ax': 
+                       {'text': '{conditions|treatment}', 'which': 'absolute_last'},
+                       'y_ax': {'text': '{conditions|sex}', 'which': 'absolute_first'}
+                        },
+            'legend': {'key': { 'loc': 'upper right'},
+                       'which': 1},
+            'aesthetics': {
+                'ax': {'border': {'top': {'visible': 'FFF'}, 
+                                  'right': {'visible': 'FFF'}}},
+                'conditional': 
+                {'period_type': {'cs_plus': {'marker': {'color': 'pink'}},
+                                 'cs_minus': {'marker': {'color': 'green'}}}}}
+            }}}
     
 AS_OPTS = {
     'procedure': 'make_plots',
@@ -637,6 +735,6 @@ AS_OPTS = {
         'fname': {'template': '/Users/katie/likhtik/AS/power_{brain_region}_{frequency_band}',
                   'fields': ['brain_region', 'frequency_band']}
     },
-    'calc_opts': AS_POWER_OPTS,
-    'plot_spec': AS_PLOT_SPEC
+    'calc_opts': AS_COHERENCE_CALC_OPTS,
+    'plot_spec': AS_COHERENCE_PLOT_SPEC
 }

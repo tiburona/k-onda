@@ -13,6 +13,10 @@ class LFPMethods:
     def get_power(self):
         return self.get_average('get_power', stop_at=self.calc_opts.get('base', 'event'))
     
+    def get_coherence(self):
+        return self.get_average('get_coherence', 
+                                stop_at=self.calc_opts.get('base', 'coherence_calculator'))
+    
 
 class LFPDataSelector:
     """A class with methods shared by LFPPeriod and LFPEvent that are used to return portions of their data."""
@@ -173,25 +177,22 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
 
 class RegionRelationshipCalculator(Data, EventValidator): # TODO: make the data lazy attributes
 
-    def __init__(self, period, brain_region_1, brain_region_2):
+    def __init__(self, period, regions):
         self.period = period
         self.parent = self.period.parent
         self.period_id = period.identifier
         self.period_type = period.period_type
-        self.region_1 = brain_region_1
-        self.region_2 = brain_region_2
-        self.identifier = f"{brain_region_1}_{brain_region_2}_{self.period.identifier}"
-        self.region_1_data = self.period.animal.processed_lfp[self.region_1][
-            self.period.start:self.period.stop]
-        self.region_2_data = self.period.animal.processed_lfp[self.region_2][
-            self.period.start:self.period.stop]
-        self.region_1_data_padded = self.period.animal.processed_lfp[self.region_1][
-            self.period.start - round(self.period.event_duration*self.sampling_rate):self.period.stop]
-        self.region_2_data_padded = self.period.animal.processed_lfp[self.region_2][
-            self.period.start - round(self.period.event_duration*self.sampling_rate):self.period.stop]
+        self.regions = regions
+        self.identifier = f"{'_'.join(self.regions)}_{self.period.identifier}"
+        processed_lfp = self.period.animal.processed_lfp
+        start = self.period.start_in_lfp_samples
+        stop = self.period.stop_in_lfp_samples
+        self.regions_data = [processed_lfp[r][start:stop] for r in self.regions]
+        self.event_duration = round(self.sampling_rate * self.period.event_duration)
+        self.padded_regions_data = [
+            processed_lfp[r][start - self.event_duration:stop] for r in self.regions]
         self._children = []
         self.frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
-        self.event_duration = self.sampling_rate * self.period.event_duration
 
     @property
     def children(self):
@@ -200,17 +201,17 @@ class RegionRelationshipCalculator(Data, EventValidator): # TODO: make the data 
         return self._children
 
     def joint_event_validity(self):
-        ev1, ev2 = [self.get_event_validity(region) for region in (self.region_1, self.region_2)]
-        return {i: ev1[i] and ev2[i] for i in ev1}
+        evs = [self.get_event_validity(region) for region in self.regions]
+        return {i: all([ev[i] for ev in evs]) for i in evs[0]}
 
     def divide_data_into_valid_sets(self, region_data):
-        if not self.data_opts.get('validate_events'):
+        if not self.calc_opts.get('validate_events'):
             return [region_data]
         valid_sets = []
         current_set = []
         
         # this is required for padlen in scipy.signal.filtfilt
-        min_len = 0 if self.data_type == 'coherence' else (self.sampling_rate + 1) * 3 + 1
+        min_len = 0 if self.calc_type == 'coherence' else (self.sampling_rate + 1) * 3 + 1
     
         for start in range(0, len(region_data), self.event_duration):
             if self.joint_event_validity()[start // self.event_duration]:
@@ -226,24 +227,25 @@ class RegionRelationshipCalculator(Data, EventValidator): # TODO: make the data 
         return valid_sets
     
     def get_valid_sets(self):
-        valid_sets = list(zip(self.divide_data_into_valid_sets(self.region_1_data), 
-                         self.divide_data_into_valid_sets(self.region_2_data)))
+        valid_sets = list(zip(*(self.divide_data_into_valid_sets(data) 
+                               for data in self.regions_data)))
         len_sets = [len(a) for a, _ in valid_sets]
         return valid_sets, len_sets
     
 
 class RelationshipCalculatorEvent(Event):
 
-    def __init__(self, parent_calculator, i, region_1_data, region_2_data):
+    _parent_name = 'animal'
+
+    def __init__(self, parent_calculator, i, regions_data):
         period = self.parent_calculator.period
         super().init(period, period.onset, i)
         self.parent = parent_calculator
-        self.region_1_data = region_1_data
-        self.region_2_data = region_2_data
+        self.regions_data = regions_data
         self.frequency_bands = self.parent.frequency_bands
 
     def validator(self):
-        return (not self.data_opts.get('validate_events') or 
+        return (not self.calc_opts.get('validate_events') or 
                 self.parent.joint_event_validity()[self.identifier // self.parent.event_duration])
 
 
@@ -252,14 +254,14 @@ class CoherenceCalculator(RegionRelationshipCalculator):
     name = 'coherence_calculator'
 
     def get_coherence(self):
-        if not self.data_opts.get('validate_events'):
-            return calc_coherence(self.region_1_data, self.region_2_data, self.sampling_rate, 
+        if not self.calc_opts.get('validate_events'):
+            return calc_coherence(*self.regions_data, self.lfp_sampling_rate, 
                                   *self.freq_range)
         else:
             valid_sets, len_sets = self.get_valid_sets()
-            return sum([calc_coherence(
-                data_1, data_2, self.sampling_rate, *self.freq_range) * len(data_1)/sum(len_sets) 
-                for data_1, data_2 in valid_sets
+            return sum([calc_coherence(*data, self.sampling_rate, *self.freq_range) * len(data[0])
+                        /sum(len_sets) 
+                for data in valid_sets
                 ])
         
     
@@ -275,8 +277,8 @@ class AmpCrossCorrCalculator(RegionRelationshipCalculator):
     
     def get_max_histogram(self):
         lag_of_max = self.get_lag_of_max_corr()
-        num_lags = self.data_opts.get('lags', self.sampling_rate/10)  
-        bin_size = self.data_opts.get('bin_size', .01) # in seconds
+        num_lags = self.calc_opts.get('lags', self.sampling_rate/10)  
+        bin_size = self.calc_opts.get('bin_size', .01) # in seconds
         lags_per_bin = bin_size * self.sampling_rate
         number_of_bins = round(num_lags*2/lags_per_bin)
         return np.histogram([lag_of_max], bins=number_of_bins, range=(0, 2*num_lags + 2))[0]
@@ -286,7 +288,7 @@ class AmpCrossCorrCalculator(RegionRelationshipCalculator):
          
     def get_amp_crosscorr(self):
 
-        if not self.data_opts.get('validate_events'):
+        if not self.calc_opts.get('validate_events'):
             result = amp_crosscorr(self.region_1_data, self.region_2_data, self.sampling_rate, 
                                   *self.freq_range)
         else:
@@ -303,7 +305,7 @@ class AmpCrossCorrCalculator(RegionRelationshipCalculator):
                 corrs.append(padded_corr)
             result = np.nansum(np.vstack(tuple(corrs)), axis=0) 
 
-        lags = self.data_opts.get('lags', self.sampling_rate/10)
+        lags = self.calc_opts.get('lags', self.sampling_rate/10)
         mid = result.size // 2
         return result[mid-lags:mid+lags+1]
     
@@ -314,8 +316,8 @@ class PhaseRelationshipCalculator(RegionRelationshipCalculator):
 
     @property
     def time_to_use(self):
-        if self.data_opts.get('events'):
-            time_to_use = self.data_opts.get('events')[self.parent.period_type]['post_stim']  # TODO: Fix this to allow for pre stim time
+        if self.calc_opts.get('events'):
+            time_to_use = self.calc_opts.get('events')[self.parent.period_type]['post_stim']  # TODO: Fix this to allow for pre stim time
             time_to_use *= self.sampling_rate
         else:
             time_to_use = self.event_duration
@@ -353,7 +355,7 @@ class PhaseRelationshipCalculator(RegionRelationshipCalculator):
     def get_events(self): # I need to add some pre event stuff ehre
         events = []
         d1, d2 = (self.region_1_data_padded, self.region_2_data_padded)
-        events_info = self.data_opts.get('events')
+        events_info = self.calc_opts.get('events')
         if events_info is not None:
             pre_stim = events_info[self.period_type].get('pre_stim', 0)
             post_stim = events_info[self.period_type].get('post_stim', self.event_duration/self.sampling_rate)
@@ -406,7 +408,7 @@ class PhaseRelationshipEvent(RelationshipCalculatorEvent):
 class GrangerFunctions:
 
     def fetch_granger_stat(self, d1, d2, tags, proc_name, do_weight=True, max_len_sets=None):
-        ml = MatlabInterface(self.data_opts['matlab_configuration'], tags=tags)
+        ml = MatlabInterface(self.calc_opts['matlab_configuration'], tags=tags)
         data = np.vstack((d1, d2))
         proc = getattr(ml, proc_name)
         result = proc(data)
@@ -417,7 +419,7 @@ class GrangerFunctions:
             index_2 = round(self.freq_range[1]*matrix.shape[2]/(self.sampling_rate/2)) + 1
             forward = []
             backward = []
-            if self.data_opts.get('frequency_type') == 'continuous':
+            if self.calc_opts.get('frequency_type') == 'continuous':
                 # check to make sure we have at least 1 Hz res data
                 nec_freqs = self.freq_range[1] - self.freq_range[0] + 1
                 if index_2 - index_1 < nec_freqs:
@@ -456,7 +458,7 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
     def get_events(self): # I need to add some pre event stuff ehre
         events = []
         d1, d2 = (self.region_1_data_padded, self.region_2_data_padded)
-        events_info = self.data_opts.get('events')
+        events_info = self.calc_opts.get('events')
         if events_info is not None:
             pre_stim = events_info[self.period_type].get('pre_stim', 0)
             post_stim = events_info[self.period_type].get('post_stim', self.event_duration/self.sampling_rate)
@@ -468,7 +470,7 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
     def get_segments(self):
         segments = []
         valid_sets, len_sets = self.get_valid_sets() 
-        min_set_length = self.data_opts.get('min_data_length', 8000)
+        min_set_length = self.calc_opts.get('min_data_length', 8000)
         divisor = self.period.duration*self.sampling_rate
         for i, (set1, set2) in enumerate(valid_sets):
             len_set = len_sets[i]
@@ -494,7 +496,7 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
         if saved_calc_exists:
             return saved_granger_calc
         fstat = self.get_granger_stat('granger_causality')
-        if self.data_opts.get('frequency_type') == 'continuous':
+        if self.calc_opts.get('frequency_type') == 'continuous':
             forward = np.sum(np.vstack([forward for forward, _ in fstat]), 0)
             backward = np.sum(np.vstack([backward for _, backward in fstat]), 0)
         else:
@@ -508,7 +510,7 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
         valid_sets, len_sets = self.get_valid_sets()
         results = []
         for i, (set1, set2) in enumerate(valid_sets):
-            if len(set1) > self.data_opts.get('min_data_length', 8000):
+            if len(set1) > self.calc_opts.get('min_data_length', 8000):
                 tags = ['animal', str(self.period.animal.identifier), self.period_type, 
                         self.period.identifier, 'set', str(i), str(self.selected_frequency_band)]
                 results.append(self.fetch_granger_stat(set1, set2, tags, proc_name, do_weight=True, 
@@ -553,7 +555,7 @@ class GrangerEvent(RelationshipCalculatorEvent):
     name = 'granger_event'
 
     def get_granger_model_order(self):
-        ml = MatlabInterface(self.data_opts['matlab_configuration'])
+        ml = MatlabInterface(self.calc_opts['matlab_configuration'])
         data = np.vstack((self.region_1_data, self.region_2_data))
         result = ml.tsdata_to_info_crit(data)
         return result
