@@ -44,8 +44,9 @@ class AestheticsMixin(ProcessorMixin):
     def init_aesthetics(self):
         element_dict = deepcopy(self.spec.get('aesthetics', {}))
         if self.parent_processor:
-            getattr(self.parent_processor, 'aesthetics', {}).update(element_dict)
-        return getattr(self.parent_processor, 'aesthetics', {})
+            return getattr(self.parent_processor, 'aesthetics', {}).update(element_dict)
+        else:
+            return element_dict
     
 
 class LegendMixin:

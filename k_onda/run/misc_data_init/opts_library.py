@@ -735,6 +735,6 @@ AS_OPTS = {
         'fname': {'template': '/Users/katie/likhtik/AS/power_{brain_region}_{frequency_band}',
                   'fields': ['brain_region', 'frequency_band']}
     },
-    'calc_opts': AS_COHERENCE_CALC_OPTS,
-    'plot_spec': AS_COHERENCE_PLOT_SPEC
+    'calc_opts': AS_POWER_OPTS,
+    'plot_spec': AS_POWER_PLOT_SPEC
 }
