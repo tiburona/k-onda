@@ -584,6 +584,7 @@ AS_POWER_OPTS = {
                 'cs_plus': {'event_pre_post': (.1, .3)},
                 'cs_minus': {'event_pre_post': (.1, .3)}},
     'matlab_configuration': MATLAB_CONFIG, 
+    'remove_noise': 'spectrum_estimation', 
     'evoked': {'level': 'animal', 'reference': ['pretone_plus', 'pretone_minus']}
     }
 
@@ -658,7 +659,8 @@ AS_POWER_PLOT_SPEC = {
              'dim': 0}],
         'label': {'y': {'text': 'Power',
                         'space_between': 0, 
-                        'space_within': 0}, 
+                        'space_within': 0, 
+                        'x': 0.5}, 
                   'title': {'text': '{brain_region} {frequency_band} Power',
                             'space_between': .1,
                             'x': .60}},
@@ -668,13 +670,14 @@ AS_POWER_PLOT_SPEC = {
                 {'divider_type': 'period_type',
                 'members': ['cs_plus', 'cs_minus']},
                 {'divider_type': 'conditions',
-                'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}]
+                'members': [{'learning_style': 'discriminator'}, {'learning_style': 'generalizer'},
+                            {'learning_style': 'bad_learner'}]
             }],
             'subfigure': {'hspace': .08, 'wspace': 0},
             'label': {'title': 
                       {'text':'{conditions|sex}', 
                        'space_within': .15,
-                       'space_between': .08}
+                       'space_between':  .08}
                         }},
             'aesthetics': {
                 'ticklabel': {'which': 'absolute_last'},
@@ -682,8 +685,9 @@ AS_POWER_PLOT_SPEC = {
                                   'right': {'visible': 'FFF'},
                                   'bottom': {'visible': 'FFF'}}},
                 'conditional': 
-                {'treatment': {'stressed': {'marker': {'color': 'orange'}},
-                              'non_stressed': {'marker': {'color': 'purple'}}},
+                {'learning_style': {'discriminator': {'marker': {'color': 'green'}},
+                              'generalizer': {'marker': {'color': 'pink'}},
+                              'bad_learner': {'marker': {'color': 'red'}}},
                 'period_type': {'cs_plus': {'marker': {'hatch': '/'}}}}}
             }}
 
@@ -735,6 +739,64 @@ AS_OPTS = {
         'fname': {'template': '/Users/katie/likhtik/AS/power_{brain_region}_{frequency_band}',
                   'fields': ['brain_region', 'frequency_band']}
     },
-    'calc_opts': AS_POWER_OPTS,
-    'plot_spec': AS_POWER_PLOT_SPEC
+    'calc_opts': AS_COHERENCE_CALC_OPTS,
+    'plot_spec': AS_COHERENCE_PLOT_SPEC
 }
+
+
+AS_TEST_POWER_OPTS = {
+    'kind_of_data': 'lfp', 'calc_type': 'power', 'validate_events': False,
+    'frequency_bands': [ 'theta_1', 'theta_2'], 
+    'brain_regions': ['pl', 'bla', 'vhip'], 
+    'power_arg_set': (2048, 2000, 500, 480, 2),
+    'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.75, .75], 'bin_size': .01,
+    'periods': {'pretone_plus': {'event_pre_post': (.0, .3)}, 
+                'pretone_minus': {'event_pre_post': (.0, .3)},
+                'cs_plus': {'event_pre_post': (.0, .3)},
+                'cs_minus': {'event_pre_post': (.0, .3)}},
+    'matlab_configuration': MATLAB_CONFIG
+    }
+
+
+# AS_TEST_POWER_PLOT_SPEC = {
+#     'plot_type': 'bar_plot',
+#     'section': {
+#         'divisions': [
+#             {'divider_type': 'conditions',
+#              'members': [{'sex': 'female'}, {'sex': 'male'}],
+#              'dim': 0},
+#              {'divider_type': 'conditions',
+#                 'members': [{'learning_style': 'discriminator'}, {'learning_style': 'generalizer'},
+#                             {'learning_style': 'bad_learner'}
+#              ],
+#         'label': {'y': {'text': 'Power',
+#                         'space_between': 0, 
+#                         'space_within': 0, 
+#                         'x': 0.5}, 
+#                   'title': {'text': '{brain_region} {frequency_band} Power',
+#                             'space_between': .1,
+#                             'x': .60}},
+#         'segment': {
+#             'attr': 'mean',
+#             'divisions':[
+#                 {'divider_type': 'conditions',
+#                 'members': [{'learning_style': 'discriminator'}, {'learning_style': 'generalizer'},
+#                             {'learning_style': 'bad_learner'}]
+#             }],
+#             'subfigure': {'hspace': .08, 'wspace': 0},
+#             'label': {'title': 
+#                       {'text':'{conditions|sex}', 
+#                        'space_within': .15,
+#                        'space_between':  .08}
+#                         }},
+#             'aesthetics': {
+#                 'ticklabel': {'which': 'absolute_last'},
+#                 'ax': {'border': {'top': {'visible': 'FFF'}, 
+#                                   'right': {'visible': 'FFF'},
+#                                   'bottom': {'visible': 'FFF'}}},
+#                 'conditional': 
+#                 {'learning_style': {'discriminator': {'marker': {'color': 'green'}},
+#                               'generalizer': {'marker': {'color': 'pink'}},
+#                               'bad_learner': {'marker': {'color': 'red'}}},
+#                 'period_type': {'cs_plus': {'marker': {'hatch': '/'}}}}}
+#             }}}

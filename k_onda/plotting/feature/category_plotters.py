@@ -186,4 +186,8 @@ class CategoricalLinePlotter(CategoryPlotter):
 class BarPlotter(CategoryPlotter):
    
     def plot_markers(self, ax, position, _, row, marker_args, aesthetic_args=None):
-        ax.bar(position, row[row['attr']], **marker_args)
+        val = row[row['attr']]
+        if np.isnan(val):
+            marker_args = {'color': 'none'}
+            val = 0
+        ax.bar(position, val, **marker_args)

@@ -86,7 +86,16 @@ class Base:
                 self.filter['event']['is_valid'] = ('==', True)
 
     def add_to_filters(self, obj_name, attr, operator, target_val):
-         self.filter[obj_name][attr] = (operator, target_val)
+       
+        if attr in ['conditions', 'period_types'] and attr in self.filter[obj_name]:
+            self.filter[obj_name][attr][1].update(target_val)
+
+        else:
+            self.filter[obj_name][attr] = (operator, target_val)
+              
+    def del_all_filters(self):
+        self.filter = defaultdict(lambda: defaultdict(tuple))
+
 
     def del_from_filters(self, obj_name, attr):
         del self.filter[obj_name][attr]
@@ -131,7 +140,7 @@ class Base:
     @selected_conditions.setter
     def selected_conditions(self, conditions):
         Base._selected_conditions = conditions
-        self.add_to_filters('animal', 'conditions', '==', conditions)
+        self.add_to_filters('animal', 'conditions', 'partial_dict_match', conditions)
 
     @property
     def selected_neuron_type(self):

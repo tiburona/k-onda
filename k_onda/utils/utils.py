@@ -300,7 +300,6 @@ operations = {
             '>=': lambda a, b: a >= b,
             'in': lambda a, b: a in b,
             '!=': lambda a, b: a != b,
-            'not in': lambda a, b: a not in b
+            'not in': lambda a, b: a not in b, 
+            'partial_dict_match': lambda a, b: all(a.get(k) == v for k, v in b.items())
         }
-
-

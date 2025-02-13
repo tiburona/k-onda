@@ -135,7 +135,11 @@ class Partition(Processor):
         # running list of already encountered divisions, you unset it.
         for key in ['neuron_type', 'period_type', 'period_group', 'period_types', 'conditions']:
             if key in info: 
+                
                 setattr(self, f"selected_{key}", info[key])
+                if key == 'conditions':
+                    a = 'foo'
+
 
     def get_calcs(self, info):
         
