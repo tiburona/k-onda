@@ -8,7 +8,7 @@ from k_onda.calc import (LFPPeriod, LFPMethods, SpikePeriod, SpikeMethods, Spike
 from k_onda.utils import formatted_now
 
 
-class Experiment(Data, SpikePrepMethods):
+class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
 
     _name = 'experiment'
 

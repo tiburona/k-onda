@@ -575,16 +575,15 @@ animal_plots =  {'series': {
 
 AS_POWER_OPTS = {
     'kind_of_data': 'lfp', 'calc_type': 'power', 'validate_events': False,
-    'frequency_bands': [ 'theta_1', 'theta_2'], 
+    'frequency_bands': [ 'theta_1'], 
     'brain_regions': ['pl', 'bla', 'vhip'], 
-    'power_arg_set': (2048, 2000, 500, 480, 2),
+    'power_arg_set': (2048, 2000, 1000, 980, 2),
     'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.75, .75], 'bin_size': .01,
     'periods': {'pretone_plus': {'event_pre_post': (.1, .3)}, 
                 'pretone_minus': {'event_pre_post': (.1, .3)},
                 'cs_plus': {'event_pre_post': (.1, .3)},
                 'cs_minus': {'event_pre_post': (.1, .3)}},
-    'matlab_configuration': MATLAB_CONFIG, 
-    'remove_noise': 'spectrum_estimation', 
+    'matlab_configuration': MATLAB_CONFIG,  
     'evoked': {'level': 'animal', 'reference': ['pretone_plus', 'pretone_minus']}
     }
 
@@ -596,7 +595,7 @@ AS_COHERENCE_CALC_OPTS = {
     'concatenation': {'concatenator': 'animal',
                       'concatenated': 'coherence_calculator',
                       'attr': 'mean'},
-    'power_arg_set': (2048, 2000, 500, 480, 2),
+    'power_arg_set': (2048, 2000, 1000, 980, 2),
     'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.75, .75], 'bin_size': .01,
     'periods': {'pretone_plus': {'event_pre_post': (0, .3)}, 
                 'pretone_minus': {'event_pre_post': (0, .3)},
@@ -732,23 +731,14 @@ AS_COHERENCE_PLOT_SPEC = {
                 {'period_type': {'cs_plus': {'marker': {'color': 'pink'}},
                                  'cs_minus': {'marker': {'color': 'green'}}}}}
             }}}
-    
-AS_OPTS = {
-    'procedure': 'make_plots',
-    'write_opts': {
-        'fname': {'template': '/Users/katie/likhtik/AS/power_{brain_region}_{frequency_band}',
-                  'fields': ['brain_region', 'frequency_band']}
-    },
-    'calc_opts': AS_COHERENCE_CALC_OPTS,
-    'plot_spec': AS_COHERENCE_PLOT_SPEC
-}
+
 
 
 AS_TEST_POWER_OPTS = {
     'kind_of_data': 'lfp', 'calc_type': 'power', 'validate_events': False,
-    'frequency_bands': [ 'theta_1', 'theta_2'], 
-    'brain_regions': ['pl', 'bla', 'vhip'], 
-    'power_arg_set': (2048, 2000, 500, 480, 2),
+    'frequency_bands': [ 'theta_1'], 
+    'brain_regions': ['pl'], 
+    'power_arg_set': (2048, 2000, 1000, 980, 2),
     'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.75, .75], 'bin_size': .01,
     'periods': {'pretone_plus': {'event_pre_post': (.0, .3)}, 
                 'pretone_minus': {'event_pre_post': (.0, .3)},
@@ -756,7 +746,16 @@ AS_TEST_POWER_OPTS = {
                 'cs_minus': {'event_pre_post': (.0, .3)}},
     'matlab_configuration': MATLAB_CONFIG
     }
-
+    
+AS_OPTS = {
+    'procedure': 'make_plots',
+    'write_opts': {
+        'fname': {'template': '/Users/katie/likhtik/AS/power_{brain_region}_{frequency_band}',
+                  'fields': ['brain_region', 'frequency_band']}
+    },
+    'calc_opts': AS_POWER_OPTS,
+    'plot_spec': AS_POWER_PLOT_SPEC
+}
 
 # AS_TEST_POWER_PLOT_SPEC = {
 #     'plot_type': 'bar_plot',

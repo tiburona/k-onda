@@ -66,8 +66,7 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         start_pad, end_pad = np.round(np.array(padding) * self.lfp_sampling_rate).astype(int)
         self.duration_in_lfp_samples = round(self.duration * self.lfp_sampling_rate)
         conversion_factor = self.lfp_sampling_rate/self.sampling_rate 
-        # For LFP, you need a subtraction for 0 indexing. 
-        self.onset_in_lfp_samples = int(self.onset * conversion_factor) - 1
+        self.onset_in_lfp_samples = round(self.onset * conversion_factor)
         self.event_starts = np.array(events)
         self.event_starts_in_seconds = self.event_starts/self.sampling_rate 
         self.event_starts_in_lfp_samples = (np.array(events) * conversion_factor).astype(int) - 1
@@ -81,6 +80,7 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         
     @property
     def padded_data(self):
+        a = 'foo'
         return self.get_data_from_animal_dict(self.animal.processed_lfp, 
                                               self.pad_start, self.pad_stop)
         

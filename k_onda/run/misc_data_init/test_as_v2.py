@@ -6,6 +6,7 @@ import tempfile
 import scipy.signal as signal
 import scipy.io
 import matplotlib.pyplot as plt
+from scipy.stats import wilcoxon  # for Wilcoxon tests
 
 # =============================================================================
 # Helper functions for filtering, MATLAB interfacing, etc.
@@ -72,8 +73,6 @@ exit;
     subprocess.run(cmd, check=True)
     os.remove(script_filename)
 
-# gamma FFT 2048,Fs 2000,moving win in samples 500,overlap in samples 480, 2
-# 2048,2000,1000,980,2 
 def run_matlab_mtcsg(data, matlab_path, brain_region,
                      animal, period_number, period_type, params=('2048', '2000', '1000', '980', '2'),
                      output_dir='/Users/katie/likhtik/data/temp'):
@@ -224,7 +223,7 @@ def freq_band_to_mtcsg_args(freq_band):
         return ('2048', '2000', '500', '480', '2')
 
 # =============================================================================
-# Plotting functions
+# Plotting functions (original, splitting by sex and learning)
 # =============================================================================
 
 def plot_evoked_heatmaps(group_means, brain_region, freq_band):
@@ -240,17 +239,7 @@ def plot_evoked_heatmaps(group_means, brain_region, freq_band):
            Column 3: Female CS+ (tone_plus)
            Column 4: Female CS– (tone_minus)
     
-    For each (learning, sex) pair, a common color scale is computed from both CS+ and CS– data,
-    so that the two subplots in the pair share the same vmin/vmax. Each subplot uses the 'jet'
-    colormap and overlays a vertical translucent gray patch from 0 to 0.05 s.
-    
-    Parameters:
-      group_means: dict with keys like "male_discriminator", "male_generalizer", etc. Each contains
-                   sub-dicts for conditions (e.g. "tone_plus" and "tone_minus") with:
-                       - "mean_spec": 2D evoked spectrogram (n_freq x n_time)
-                       - "rel_time": 1D relative time axis (in seconds)
-                       - "f": 1D frequency vector (already restricted to desired range)
-      brain_region: string (e.g., 'vhip') to include in the title.
+    [See original docstring for more details…]
     """
     learning_styles = ['discriminator', 'generalizer', 'bad_learner']
     sexes = ['male', 'female']
@@ -325,16 +314,6 @@ def plot_evoked_bar_graph(group_means, brain_region, freq_band):
     """
     Plots evoked bar values for each group defined by sex and learning style,
     separately for CS+ (tone_plus; with hatch) and CS– (tone_minus).
-    
-    Parameters:
-      group_means: dict with keys like "male_bad_learner", etc. For each group,
-                   group_means[group] is a dict with keys "tone_plus" and "tone_minus"
-                   containing:
-                       - "mean_bar": evoked value,
-                       - "std_bar": error bar value,
-                       - "rel_time": ..., "f": ...
-      brain_region: string (e.g., 'vhip') for labeling.
-      freq_band: string indicating the frequency band (affects axis labeling).
     """
     sexes = ['male', 'female']
     learning_styles = ['bad_learner', 'discriminator', 'generalizer']
@@ -409,26 +388,8 @@ def plot_group_spectrum_lines(all_animal_means, brain_region, spec_label='Power'
     Plots group spectra (raw, non-evoked) as line plots arranged in a 2x3 grid:
       - Rows correspond to sex (male and female)
       - Columns correspond to learning style (bad_learner, discriminator, generalizer)
-    
-    For each group, the spectrum for each condition is computed by averaging the raw spectrogram
-    (i.e., 'event_spectrogram') over the time axis for each animal, and then averaging over animals.
-    Three lines are plotted:
-       - CS+ (tone_plus) in red,
-       - CS– (tone_minus) in blue,
-       - and Pretone in gray.
-       
-    A translucent error band (standard error over animals) is also added.
-    
-    Parameters:
-      all_animal_means: dict keyed by animal, each value is a dict with condition keys that contain:
-                           - 'event_spectrogram': 2D array (n_freq x n_time)
-                           - 'f': 1D frequency vector
-      brain_region: string (e.g., 'bla') for labeling.
-      spec_label: label for the y-axis.
-      conditions: tuple of condition keys to plot.
     """
-
-    # Define grouping info.
+    # Hard-coded grouping using animal_info.
     learning_styles = ['bad_learner', 'discriminator', 'generalizer']
     sexes = ['male', 'female']
     animal_info = {
@@ -513,7 +474,7 @@ def plot_group_spectrum_lines(all_animal_means, brain_region, spec_label='Power'
                 ax.set_xticklabels(xticks)
                 ax.set_xlabel('Frequency (Hz)')
             
-            # Compute y-axis ticks: limit to at most 6 ticks and force them to be multiples of 5 or 10.
+            # Compute y-axis ticks.
             ymin, ymax = ax.get_ylim()
             candidate_steps = [5, 10, 20, 50, 100]
             for step in candidate_steps:
@@ -524,7 +485,6 @@ def plot_group_spectrum_lines(all_animal_means, brain_region, spec_label='Power'
                     yticks = np.arange(start_tick, end_tick + step/2, step)
                     break
             else:
-                # Fallback: use the largest candidate.
                 step = candidate_steps[-1]
                 start_tick = np.floor(ymin / step) * step
                 end_tick = np.ceil(ymax / step) * step
@@ -539,6 +499,349 @@ def plot_group_spectrum_lines(all_animal_means, brain_region, spec_label='Power'
     fig.suptitle(f"{brain_region.upper()} Group Spectrum (Raw, Non-Evoked)", fontsize=16)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
+
+# =============================================================================
+# New helper functions for combined-sex analysis and Wilcoxon tests.
+# =============================================================================
+
+def get_animal_info():
+    """Return a dictionary of animal info for grouping."""
+    return {
+        'As105': {'sex': 'male', 'learning': 'discriminator'},
+        'As106': {'sex': 'male', 'learning': 'bad_learner'},
+        'As107': {'sex': 'male', 'learning': 'generalizer'},
+        'As108': {'sex': 'male', 'learning': 'generalizer'},
+        'As110': {'sex': 'female', 'learning': 'bad_learner'},
+        'As111': {'sex': 'female', 'learning': 'generalizer'},
+        'As112': {'sex': 'female', 'learning': 'generalizer'},
+        'As113': {'sex': 'female', 'learning': 'generalizer'},
+    }
+
+def compute_individual_statistics(animals_data, conditions):
+    """
+    Computes per-animal measures (mean bar and spectrogram) for each condition.
+    Returns a dictionary keyed by animal.
+    """
+    animal_info = get_animal_info()
+    all_animal_means = {}
+    for animal, data_by_within_subject_condition in animals_data.items():
+        animal_means = {}
+        for cond in conditions:
+            events = data_by_within_subject_condition[cond]
+            if len(events) == 0:
+                continue
+            bar_vals = np.array([ev['bar_value'] for ev in events])
+            mean_bar = np.mean(bar_vals)
+            spec_stack = np.stack([ev['event_spectrogram'] for ev in events], axis=0)
+            mean_spec = np.mean(spec_stack, axis=0)
+            animal_means[cond] = {
+                'mean_bar': mean_bar,
+                'mean_spec': mean_spec,
+                'rel_time': events[0]['rel_time'],
+                'f': events[0]['f']
+            }
+        if 'tone_plus' in animal_means and 'pretone' in animal_means:
+            animal_means['tone_plus']['evoked_bar'] = animal_means['tone_plus']['mean_bar'] - animal_means['pretone']['mean_bar']
+            animal_means['tone_plus']['evoked_spec'] = animal_means['tone_plus']['mean_spec'] - animal_means['pretone']['mean_spec']
+        if 'tone_minus' in animal_means and 'pretone' in animal_means:
+            animal_means['tone_minus']['evoked_bar'] = animal_means['tone_minus']['mean_bar'] - animal_means['pretone']['mean_bar']
+            animal_means['tone_minus']['evoked_spec'] = animal_means['tone_minus']['mean_spec'] - animal_means['pretone']['mean_spec']
+        all_animal_means[animal] = animal_means
+    return all_animal_means
+
+def group_animal_means(all_animal_means, group_by='sex_learning'):
+    """
+    Aggregates per-animal measures into group-level means.
+    group_by can be 'sex_learning' (default) or 'learning' (combined sexes).
+    Returns a dictionary keyed by the grouping category.
+    """
+    animal_info = get_animal_info()
+    grouped = {}
+    for animal, measures in all_animal_means.items():
+        if animal not in animal_info:
+            continue
+        info = animal_info[animal]
+        if group_by == 'sex_learning':
+            group_key = f"{info['sex']}_{info['learning']}"
+        elif group_by == 'learning':
+            group_key = info['learning']
+        else:
+            group_key = animal
+        grouped.setdefault(group_key, []).append(measures)
+    
+    group_means = {}
+    for group_key, animal_means_list in grouped.items():
+        group_means[group_key] = {}
+        for cond in ['tone_plus', 'tone_minus', 'pretone']:
+            bar_vals = []
+            spec_vals = []
+            evoked_bar_vals = []
+            evoked_spec_vals = []
+            rel_time = None
+            f_vec = None
+            for am in animal_means_list:
+                if cond not in am:
+                    continue
+                bar_vals.append(am[cond]['mean_bar'])
+                spec_vals.append(am[cond]['mean_spec'])
+                if cond in ['tone_plus', 'tone_minus']:
+                    evoked_bar_vals.append(am[cond]['evoked_bar'])
+                    evoked_spec_vals.append(am[cond]['evoked_spec'])
+                if rel_time is None:
+                    rel_time = am[cond]['rel_time']
+                if f_vec is None:
+                    f_vec = am[cond]['f']
+            if len(bar_vals) == 0:
+                continue
+            group_means[group_key][cond] = {
+                'mean_bar': np.mean(bar_vals),
+                'evoked_bar': np.mean(evoked_bar_vals) if evoked_bar_vals else None,
+                'std_bar': np.std(bar_vals),
+                'std_evoked_bar': np.std(evoked_bar_vals) if evoked_bar_vals else None,
+                'mean_spec': np.mean(spec_vals, axis=0),
+                'evoked_spec': np.mean(evoked_spec_vals, axis=0) if evoked_spec_vals else None,
+                'std_spec': np.std(spec_vals, axis=0),
+                'std_evoked_spec': np.std(evoked_spec_vals, axis=0) if evoked_spec_vals else None,
+                'rel_time': rel_time,
+                'f': f_vec
+            }
+    return group_means
+
+def perform_paired_wilcoxon_tests(animals_data, freq_band, brain_region, group_by='sex_learning'):
+    """
+    Pools all event-level evoked power observations (tone minus pretone)
+    across animals according to the specified grouping and performs a paired
+    Wilcoxon signed-rank test on the two dependent populations.
+
+    For each animal, the evoked power is computed as:
+      CS+ evoked = tone_plus_event['bar_value'] - pretone_plus_event['bar_value']
+      CS– evoked = tone_minus_event['bar_value'] - pretone_minus_event['bar_value']
+
+    Parameters:
+      animals_data: dictionary of animal data from collect_animals_data().
+      freq_band: frequency band label (for printing).
+      brain_region: brain region label (for printing).
+      group_by: either 'sex_learning' (grouping by sex & learning) or 'learning' (ignoring sex).
+
+    The function pools paired observations across animals in each group and then
+    performs the paired Wilcoxon test, printing out the statistic and p-value.
+    """
+    from scipy.stats import wilcoxon
+    animal_info = get_animal_info()
+    groups = {}  # Dictionary to collect data for each group.
+    
+    for animal, data in animals_data.items():
+        if animal not in animal_info:
+            continue
+        # Determine group key based on the group_by parameter.
+        if group_by == 'sex_learning':
+            group_key = f"{animal_info[animal]['sex']}_{animal_info[animal]['learning']}"
+        elif group_by == 'learning':
+            group_key = animal_info[animal]['learning']
+        else:
+            print(f"Invalid group_by argument: {group_by}.")
+            return
+        
+        # Verify that the necessary event data exists.
+        required_keys = ['tone_plus', 'pretone_plus', 'tone_minus', 'pretone_minus']
+        if not all(key in data for key in required_keys):
+            continue
+        if (len(data['tone_plus']) != len(data['pretone_plus']) or 
+            len(data['tone_minus']) != len(data['pretone_minus'])):
+            print(f"Animal {animal} has mismatched event counts; skipping.")
+            continue
+        
+        # Compute paired evoked power values for this animal.
+        evoked_plus = [tp['bar_value'] - pp['bar_value'] 
+                       for tp, pp in zip(data['tone_plus'], data['pretone_plus'])]
+        evoked_minus = [tm['bar_value'] - pm['bar_value'] 
+                        for tm, pm in zip(data['tone_minus'], data['pretone_minus'])]
+        
+        # Pool the data into the appropriate group.
+        if group_key not in groups:
+            groups[group_key] = {'evoked_plus': [], 'evoked_minus': []}
+        groups[group_key]['evoked_plus'].extend(evoked_plus)
+        groups[group_key]['evoked_minus'].extend(evoked_minus)
+    
+    # Perform the paired Wilcoxon signed-rank test for each group.
+    print(f"\nPaired Wilcoxon tests ({group_by}) for brain region {brain_region}, frequency band {freq_band}:")
+    for group, vals in groups.items():
+        evoked_plus_all = vals['evoked_plus']
+        evoked_minus_all = vals['evoked_minus']
+        if len(evoked_plus_all) != len(evoked_minus_all) or len(evoked_plus_all) == 0:
+            print(f"Group {group}: Unequal or insufficient paired events; test not performed.")
+            continue
+        stat, p = wilcoxon(evoked_plus_all, evoked_minus_all)
+        print(f"Group {group}: Wilcoxon statistic = {stat:.3f}, p-value = {p:.3f}")
+
+# =============================================================================
+# New plotting functions for combined-sex (learning-only) graphs.
+# =============================================================================
+
+def plot_evoked_bar_graph_combined(group_means, brain_region, freq_band):
+    """
+    Plots evoked bar graphs by learning style only (combining sexes).
+    """
+    learning_styles = ['bad_learner', 'discriminator', 'generalizer']
+    colors = {'bad_learner': 'r', 'discriminator': 'g', 'generalizer': 'pink'}
+    
+    fig, axs = plt.subplots(1, 3, figsize=(12, 4), sharey=True)
+    global_min = np.inf
+    global_max = -np.inf
+    
+    for j, learning in enumerate(learning_styles):
+        ax = axs[j]
+        if learning not in group_means:
+            ax.set_title(f"{learning}\n(n/a)")
+            ax.axis('off')
+            continue
+        tone_plus = group_means[learning].get('tone_plus')
+        tone_minus = group_means[learning].get('tone_minus')
+        if tone_plus is None or tone_minus is None:
+            ax.set_title(f"{learning}\n(n/a)")
+            ax.axis('off')
+            continue
+        
+        cs_plus_mean  = tone_plus['evoked_bar']
+        cs_plus_err   = tone_plus['std_evoked_bar']
+        cs_minus_mean = tone_minus['evoked_bar']
+        cs_minus_err  = tone_minus['std_evoked_bar']
+        
+        global_min = min(global_min, cs_plus_mean - cs_plus_err, cs_minus_mean - cs_minus_err)
+        global_max = max(global_max, cs_plus_mean + cs_plus_err, cs_minus_mean + cs_minus_err)
+        
+        x = np.array([0, 1])
+        bars = ax.bar(x, [cs_plus_mean, cs_minus_mean],
+                      yerr=[cs_plus_err, cs_minus_err],
+                      capsize=5,
+                      color=colors[learning])
+        bars[0].set_hatch('//')
+        ax.set_xticks(x)
+        ax.set_xticklabels(['CS+', 'CS-'])
+        ax.set_title(learning)
+        if j == 0:
+            ax.set_ylabel(f'Evoked {freq_band.title()} Power')
+    
+    if global_max > -np.inf and global_min < np.inf:
+        margin = (global_max - global_min) * 0.1 if global_max != global_min else 1
+        y_lower = global_min - margin
+        y_upper = global_max + margin
+        for ax in axs:
+            if ax.has_data():
+                ax.set_ylim(y_lower, y_upper)
+    
+    fig.suptitle(f'{brain_region.upper()} Group Evoked {freq_band.title()} Power by Learning (Combined Sex)', fontsize=16)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
+def plot_evoked_heatmaps_combined(group_means, brain_region, freq_band):
+    """
+    Plots evoked heat maps by learning style only (combining sexes).
+    Each row corresponds to a learning style; columns are CS+ and CS–.
+    """
+    learning_styles = ['discriminator', 'generalizer', 'bad_learner']
+    stimulus_types = ['tone_plus', 'tone_minus']
+    
+    nrows = len(learning_styles)
+    ncols = 2
+    fig, axs = plt.subplots(nrows, ncols, figsize=(10, 12))
+    
+    for i, learning in enumerate(learning_styles):
+        pair_vmin = np.inf
+        pair_vmax = -np.inf
+        for stim in stimulus_types:
+            if learning in group_means and stim in group_means[learning]:
+                spec = group_means[learning][stim].get('evoked_spec', None)
+                if spec is not None:
+                    pair_vmin = min(pair_vmin, np.min(spec))
+                    pair_vmax = max(pair_vmax, np.max(spec))
+        if pair_vmin == np.inf or pair_vmax == -np.inf:
+            pair_vmin, pair_vmax = None, None
+        
+        for j, stim in enumerate(stimulus_types):
+            ax = axs[i, j]
+            title_str = f"{learning.title()} - {'CS+' if stim=='tone_plus' else 'CS-'}"
+            if learning not in group_means or stim not in group_means[learning]:
+                ax.text(0.5, 0.5, "n/a", transform=ax.transAxes,
+                        ha="center", va="center", fontsize=14)
+                ax.set_title(title_str + "\n(n/a)")
+                continue
+            data = group_means[learning][stim]
+            spec = data.get('evoked_spec', None)
+            if spec is None:
+                ax.text(0.5, 0.5, "n/a", transform=ax.transAxes,
+                        ha="center", va="center", fontsize=14)
+                ax.set_title(title_str + "\n(n/a)")
+            else:
+                rel_time = data['rel_time']
+                f_vec = data['f']
+                im = ax.imshow(spec, aspect='auto', origin='lower',
+                               extent=[rel_time[0], rel_time[-1], f_vec[0], f_vec[-1]],
+                               cmap='jet', vmin=pair_vmin, vmax=pair_vmax)
+                ax.set_title(title_str)
+                ax.axvspan(0, 0.05, color='gray', alpha=0.5)
+                fig.colorbar(im, ax=ax)
+            if i == nrows - 1:
+                ax.set_xlabel("Time (s)")
+            else:
+                ax.set_xticklabels([])
+            if j == 0:
+                ax.set_ylabel("Frequency (Hz)")
+            else:
+                ax.set_yticklabels([])
+    
+    fig.suptitle(f"{brain_region.upper()} {freq_band.title()} Evoked Heat Maps by Learning (Combined Sex)", fontsize=16)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
+def plot_group_spectrum_lines_combined(group_means, brain_region, spec_label='Power', 
+                                       conditions=('tone_plus', 'tone_minus', 'pretone')):
+    """
+    Plots group spectra as line plots arranged in a 1x3 grid for each learning style (combined sexes).
+    For each learning style, plots lines for CS+, CS–, and Pretone.
+    """
+    learning_styles = ['bad_learner', 'discriminator', 'generalizer']
+    colors = {'tone_plus': 'r', 'tone_minus': 'b', 'pretone': 'gray'}
+    cond_labels = {'tone_plus': 'CS+', 'tone_minus': 'CS-', 'pretone': 'Pretone'}
+    
+    fig, axs = plt.subplots(1, 3, figsize=(15, 4), sharex=True, sharey=True)
+    
+    for idx, learning in enumerate(learning_styles):
+        ax = axs[idx]
+        if learning not in group_means:
+            ax.text(0.5, 0.5, "n/a", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=14)
+            ax.set_title(learning)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            continue
+        
+        data_group = group_means[learning]
+        f_vec = None
+        for cond in conditions:
+            if cond in data_group:
+                if f_vec is None:
+                    f_vec = data_group[cond]['f']
+                ax.plot(f_vec, data_group[cond]['mean_spec'].mean(axis=1), 
+                        color=colors.get(cond, 'k'), label=cond_labels.get(cond, cond))
+        ax.set_title(learning.title())
+        if f_vec is not None:
+            xticks = np.linspace(f_vec[0], f_vec[-1], 5)
+            xticks = np.round(xticks).astype(int)
+            ax.set_xticks(xticks)
+            ax.set_xticklabels(xticks)
+            ax.set_xlabel('Frequency (Hz)')
+        ax.legend(fontsize=10)
+        if idx == 0:
+            ax.set_ylabel(spec_label)
+    
+    fig.suptitle(f"{brain_region.upper()} Group Spectrum (Raw, Non-Evoked) by Learning (Combined Sex)", fontsize=16)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
+# =============================================================================
+# Data collection and statistics
+# =============================================================================
 
 def collect_animals_data(conditions, brain_region, freq_band, event_boundary):
     main_dir = '/Users/katie/likhtik/AS'
@@ -606,9 +909,6 @@ def collect_animals_data(conditions, brain_region, freq_band, event_boundary):
         mapping = get_electrode_mapping(animal)
         ch = mapping[brain_region]  
         
-        # Process the entire brain region time series once:
-        # processed_signal = divide_by_rms(filter_60_hz(NS3_data[ch, :], fs))
-        
         for period_idx, tone_on in enumerate(tone_period_times):
             # Define extraction windows for tone and pretone segments.
             if freq_band in ['theta', 'low frequencies']:
@@ -627,13 +927,6 @@ def collect_animals_data(conditions, brain_region, freq_band, event_boundary):
             pretone_idx_start = int(round(pretone_seg_start * fs))
             pretone_idx_end   = int(round(pretone_seg_end * fs))
             
-            # try:
-            #     tone_data = processed_signal[tone_idx_start:tone_idx_end]
-            #     pretone_data = processed_signal[pretone_idx_start:pretone_idx_end]
-            # except Exception as e:
-            #     print(f"Error extracting data for {animal} event {period_idx}: {e}")
-            #     continue
-
             try:
                 tone_data = NS3_data[ch, tone_idx_start:tone_idx_end]
                 pretone_data = NS3_data[ch, pretone_idx_start:pretone_idx_end]
@@ -651,9 +944,7 @@ def collect_animals_data(conditions, brain_region, freq_band, event_boundary):
                 print(f"Error computing mtcsg for {animal} event {period_idx}: {e}")
                 continue
             
-
             try:
-                # Now call process_event_segment without discard_start/discard_end.
                 event_tone_S, rel_time, f_restricted, tone_bar = process_event_segment(
                     S_tone, f_tone, t_tone, freq_band, freq_range, event_boundary)
                 event_pretone_S, rel_time, f_restricted, pretone_bar = process_event_segment(
@@ -705,135 +996,61 @@ def collect_animals_data(conditions, brain_region, freq_band, event_boundary):
 
 def compute_group_statistics(animals_data, conditions):
     """
+    (Original grouping by sex and learning)
     Computes group-level statistics by averaging per-animal measures.
-    
-    For each animal and condition, it computes the mean bar value and spectrogram,
-    and then for tone conditions, computes evoked measures by subtracting the pretone baseline.
-    
-    Returns:
-      group_means: dict keyed by group (e.g., "male_discriminator") containing statistics for each condition.
     """
-    animal_info = {
-        'As105': {'sex': 'male', 'learning': 'discriminator'},
-        'As106': {'sex': 'male', 'learning': 'bad_learner'},
-        'As107': {'sex': 'male', 'learning': 'generalizer'},
-        'As108': {'sex': 'male', 'learning': 'generalizer'},
-        'As110': {'sex': 'female', 'learning': 'bad_learner'},
-        'As111': {'sex': 'female', 'learning': 'generalizer'},
-        'As112': {'sex': 'female', 'learning': 'generalizer'},
-        'As113': {'sex': 'female', 'learning': 'generalizer'},
-    }
-    
-    all_animal_means = {}
-    for animal, data_by_within_subject_condition in animals_data.items():
-        animal_means = {}
-        for cond in conditions:
-            events = data_by_within_subject_condition[cond]
-            if len(events) == 0:
-                continue
-            bar_vals = np.array([ev['bar_value'] for ev in events])
-            mean_bar = np.mean(bar_vals)
-            spec_stack = np.stack([ev['event_spectrogram'] for ev in events], axis=0)
-            mean_spec = np.mean(spec_stack, axis=0)
-            animal_means[cond] = {
-                'mean_bar': mean_bar,
-                'mean_spec': mean_spec,
-                'rel_time': events[0]['rel_time'],
-                'f': events[0]['f']
-            }
-        for cond in ['tone_plus', 'tone_minus']:
-            evoked_bar = animal_means[cond]['mean_bar'] - animal_means['pretone']['mean_bar']
-            evoked_spec = animal_means[cond]['mean_spec'] - animal_means['pretone']['mean_spec']
-            animal_means[cond]['evoked_bar'] = evoked_bar
-            animal_means[cond]['evoked_spec'] = evoked_spec
-        all_animal_means[animal] = animal_means
-    
-    group_animals = {}
-    for animal, animal_means in all_animal_means.items():
-        info = animal_info[animal]
-        group_key = f"{info['sex']}_{info['learning']}"
-        group_animals.setdefault(group_key, []).append(animal_means)
-    
-    group_means = {}
-    for group_key, animal_means_list in group_animals.items():
-        group_means[group_key] = {}
-        for cond in ['tone_plus', 'tone_minus', 'pretone']:
-            bar_vals = []
-            spec_vals = []
-            evoked_bar_vals = []
-            evoked_spec_vals = []
-            rel_time = None
-            f_vec = None
-            for am in animal_means_list:
-                if cond not in am:
-                    continue
-                bar_vals.append(am[cond]['mean_bar'])
-                spec_vals.append(am[cond]['mean_spec'])
-                if cond in ['tone_plus', 'tone_minus']:
-                    evoked_bar_vals.append(am[cond]['evoked_bar'])
-                    evoked_spec_vals.append(am[cond]['evoked_spec'])
-        
-                if rel_time is None:
-                    rel_time = am[cond]['rel_time']
-                if f_vec is None:
-                    f_vec = am[cond]['f']
-            if len(bar_vals) == 0:
-                continue
-
-            def get_mean_and_std(vals, axis=None, operation=np.array):
-                if not vals:
-                    return None, None
-                vals = operation(vals)     
-                m = np.mean(vals, axis=axis)
-                std = np.std(vals, axis=axis)
-                
-                return m, std
-            
-            mean_bar, std_bar = get_mean_and_std(bar_vals)
-            mean_evoked_bar, std_evoked_bar = get_mean_and_std(evoked_bar_vals)
-
-            mean_spec, std_spec = get_mean_and_std(spec_vals, operation=np.stack, axis=0)
-            mean_evoked_spec, std_evoked_spec = get_mean_and_std(evoked_spec_vals, operation=np.stack, axis=0)
-
-            group_means[group_key][cond] = {
-                'mean_bar': mean_bar,
-                'evoked_bar': mean_evoked_bar,
-                'std_bar': std_bar,
-                'std_evoked_bar': std_evoked_bar,
-                'mean_spec': mean_spec,
-                'evoked_spec': mean_evoked_spec,
-                'std_spec': std_spec,
-                'std_evoked_spec': std_evoked_spec,
-                'rel_time': rel_time,
-                'f': f_vec
-            }
-    return group_means
+    all_animal_means = compute_individual_statistics(animals_data, conditions)
+    return group_animal_means(all_animal_means, group_by='sex_learning')
 
 # =============================================================================
-# Main processing function: iterate over animals and events, build data structures
+# Main processing function: iterate over animals and events, build data structures,
+# perform Wilcoxon tests, and generate both original and combined plots.
 # =============================================================================
 
 def main():
     conditions = ['tone_plus', 'tone_minus', 'pretone_plus', 'pretone_minus', 'pretone']
     
+    
+    
+    
     for brain_region in ['pl', 'bla', 'vhip']:
-
+        # First, plot group spectrum lines using low frequencies (original grouping).
         animals_data = collect_animals_data(conditions, brain_region, 'low frequencies', event_boundary=(0, 0.3))
         plot_group_spectrum_lines(animals_data, brain_region)
-    
+        # Also plot combined (learning-only) spectrum lines.
+        all_animal_means_lines = compute_individual_statistics(animals_data, conditions)
+        combined_lines_group_means = group_animal_means(all_animal_means_lines, group_by='learning')
+        plot_group_spectrum_lines_combined(combined_lines_group_means, brain_region)
+        
         for freq_name in ['theta', 'gamma', 'high gamma']:
-
-            # Plot bar graphs.
+            # For bar graphs and stats.
             bar_animals_data = collect_animals_data(conditions, brain_region, freq_name, event_boundary=(0, 0.3))
-            bar_graph_group_means = compute_group_statistics(bar_animals_data, conditions)
-            plot_evoked_bar_graph(bar_graph_group_means, brain_region, freq_name)
-    
-            # Plot heat maps.
-            if freq_name == 'theta':
-                freq_name = 'low frequencies'
-            heat_map_animals_data = collect_animals_data(conditions, brain_region, freq_name, event_boundary=(-0.1, 0.3))
-            heat_map_group_means = compute_group_statistics(heat_map_animals_data, conditions)
-            plot_evoked_heatmaps(heat_map_group_means, brain_region, freq_name)
+            all_animal_means = compute_individual_statistics(bar_animals_data, conditions)
+            
+            # Perform Wilcoxon tests.
+            # For grouping by sex and learning:
+            perform_paired_wilcoxon_tests(bar_animals_data, freq_band=freq_name, brain_region=brain_region, group_by='sex_learning')
+
+            # For grouping by learning only (ignoring sex):
+            perform_paired_wilcoxon_tests(bar_animals_data, freq_band=freq_name, brain_region=brain_region, group_by='learning')
+            
+            # Original grouped plots (sex + learning)
+            group_means = group_animal_means(all_animal_means, group_by='sex_learning')
+            plot_evoked_bar_graph(group_means, brain_region, freq_name)
+            
+            # Combined (learning only) bar graphs.
+            combined_group_means = group_animal_means(all_animal_means, group_by='learning')
+            plot_evoked_bar_graph_combined(combined_group_means, brain_region, freq_name)
+            
+            # For heat maps.
+            freq_plot_name = 'low frequencies' if freq_name=='theta' else freq_name
+            heat_map_animals_data = collect_animals_data(conditions, brain_region, freq_plot_name, event_boundary=(-0.1, 0.3))
+            all_animal_means_heat = compute_individual_statistics(heat_map_animals_data, conditions)
+            heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='sex_learning')
+            plot_evoked_heatmaps(heat_map_group_means, brain_region, freq_plot_name)
+            
+            combined_heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='learning')
+            plot_evoked_heatmaps_combined(combined_heat_map_group_means, brain_region, freq_plot_name)
 
 # =============================================================================
 # Run the main processing
