@@ -226,7 +226,8 @@ def freq_band_to_mtcsg_args(freq_band):
 # Plotting functions (original, splitting by sex and learning)
 # =============================================================================
 
-def plot_evoked_heatmaps(group_means, brain_region, freq_band):
+
+def plot_evoked_heatmaps(group_means, brain_region, freq_band, title_suffix=''):
     """
     Plots evoked heat maps for 12 conditions arranged as follows:
       - Rows correspond to learning styles:
@@ -241,7 +242,7 @@ def plot_evoked_heatmaps(group_means, brain_region, freq_band):
     
     [See original docstring for more details…]
     """
-    learning_styles = ['discriminator', 'generalizer', 'bad_learner']
+    learning_styles = ['discriminator', 'generalizer', 'misplaced fear']
     sexes = ['male', 'female']
     stimulus_types = ['tone_plus', 'tone_minus']
     
@@ -297,27 +298,33 @@ def plot_evoked_heatmaps(group_means, brain_region, freq_band):
                     ax.set_title(title_str)
                     ax.axvspan(0, 0.05, color='gray', alpha=0.5)
                     fig.colorbar(im, ax=ax)
+                    
+                    # Set custom x-ticks at 5 evenly spaced points
+                    x_ticks = np.linspace(rel_time[0], rel_time[-1], 5)
+                    ax.set_xticks(x_ticks)
+
             if row == nrows - 1:
                 ax.set_xlabel("Time (s)")
             else:
                 ax.set_xticklabels([])
+
             if col == 0:
                 ax.set_ylabel("Frequency (Hz)")
             else:
                 ax.set_yticklabels([])
-    
-    fig.suptitle(f"{brain_region.upper()} {freq_band.title()} Evoked Heat Maps by Sex, Learning, and CS Condition", fontsize=16)
+
+    fig.suptitle(f"{brain_region.upper()} {freq_band.title()} Evoked Heat Maps by Sex, Learning, and CS Condition" + title_suffix, fontsize=16)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
 
-def plot_evoked_bar_graph(group_means, brain_region, freq_band):
+def plot_evoked_bar_graph(group_means, brain_region, freq_band, title_suffix=''):
     """
     Plots evoked bar values for each group defined by sex and learning style,
     separately for CS+ (tone_plus; with hatch) and CS– (tone_minus).
     """
     sexes = ['male', 'female']
-    learning_styles = ['bad_learner', 'discriminator', 'generalizer']
-    colors = {'bad_learner': 'r', 'discriminator': 'g', 'generalizer': 'pink'}
+    learning_styles = ['misplaced fear', 'discriminator', 'generalizer']
+    colors = {'misplaced fear': 'r', 'discriminator': 'g', 'generalizer': 'pink'}
     
     fig, axs = plt.subplots(2, 3, figsize=(12, 8), sharey=True)
     
@@ -378,7 +385,7 @@ def plot_evoked_bar_graph(group_means, brain_region, freq_band):
             if ax.has_data():
                 ax.set_ylim(y_lower, y_upper)
     
-    fig.suptitle(f'{brain_region.upper()} Group Evoked {freq_band.title()} Power by Sex, Learning, and CS Condition', fontsize=16)
+    fig.suptitle(f'{brain_region.upper()} Group Evoked {freq_band.title()} Power by Sex, Learning, and CS Condition' + title_suffix, fontsize=16)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
 
@@ -387,17 +394,17 @@ def plot_group_spectrum_lines(all_animal_means, brain_region, spec_label='Power'
     """
     Plots group spectra (raw, non-evoked) as line plots arranged in a 2x3 grid:
       - Rows correspond to sex (male and female)
-      - Columns correspond to learning style (bad_learner, discriminator, generalizer)
+      - Columns correspond to learning style (misplaced fear, discriminator, generalizer)
     """
     # Hard-coded grouping using animal_info.
-    learning_styles = ['bad_learner', 'discriminator', 'generalizer']
+    learning_styles = ['misplaced fear', 'discriminator', 'generalizer']
     sexes = ['male', 'female']
     animal_info = {
         'As105': {'sex': 'male', 'learning': 'discriminator'},
-        'As106': {'sex': 'male', 'learning': 'bad_learner'},
+        'As106': {'sex': 'male', 'learning': 'misplaced fear'},
         'As107': {'sex': 'male', 'learning': 'generalizer'},
         'As108': {'sex': 'male', 'learning': 'generalizer'},
-        'As110': {'sex': 'female', 'learning': 'bad_learner'},
+        'As110': {'sex': 'female', 'learning': 'misplaced fear'},
         'As111': {'sex': 'female', 'learning': 'generalizer'},
         'As112': {'sex': 'female', 'learning': 'generalizer'},
         'As113': {'sex': 'female', 'learning': 'generalizer'},
@@ -508,10 +515,10 @@ def get_animal_info():
     """Return a dictionary of animal info for grouping."""
     return {
         'As105': {'sex': 'male', 'learning': 'discriminator'},
-        'As106': {'sex': 'male', 'learning': 'bad_learner'},
+        'As106': {'sex': 'male', 'learning': 'misplaced fear'},
         'As107': {'sex': 'male', 'learning': 'generalizer'},
         'As108': {'sex': 'male', 'learning': 'generalizer'},
-        'As110': {'sex': 'female', 'learning': 'bad_learner'},
+        'As110': {'sex': 'female', 'learning': 'misplaced fear'},
         'As111': {'sex': 'female', 'learning': 'generalizer'},
         'As112': {'sex': 'female', 'learning': 'generalizer'},
         'As113': {'sex': 'female', 'learning': 'generalizer'},
@@ -598,10 +605,12 @@ def group_animal_means(all_animal_means, group_by='sex_learning'):
                 'evoked_bar': np.mean(evoked_bar_vals) if evoked_bar_vals else None,
                 'std_bar': np.std(bar_vals),
                 'std_evoked_bar': np.std(evoked_bar_vals) if evoked_bar_vals else None,
+                'sem_evoked_bar': np.std(evoked_bar_vals) / np.sqrt(len(evoked_bar_vals)) if evoked_bar_vals else None,
                 'mean_spec': np.mean(spec_vals, axis=0),
                 'evoked_spec': np.mean(evoked_spec_vals, axis=0) if evoked_spec_vals else None,
                 'std_spec': np.std(spec_vals, axis=0),
                 'std_evoked_spec': np.std(evoked_spec_vals, axis=0) if evoked_spec_vals else None,
+                'sem_evoked_spec': np.std(evoked_spec_vals, axis=0) / np.sqrt(len(evoked_spec_vals)) if evoked_spec_vals else None,
                 'rel_time': rel_time,
                 'f': f_vec
             }
@@ -678,14 +687,15 @@ def perform_paired_wilcoxon_tests(animals_data, freq_band, brain_region, group_b
 # New plotting functions for combined-sex (learning-only) graphs.
 # =============================================================================
 
-def plot_evoked_bar_graph_combined(group_means, brain_region, freq_band):
+def plot_evoked_bar_graph_combined(group_means, brain_region, freq_band, title_suffix=''):
     """
     Plots evoked bar graphs by learning style only (combining sexes).
     """
-    learning_styles = ['bad_learner', 'discriminator', 'generalizer']
-    colors = {'bad_learner': 'r', 'discriminator': 'g', 'generalizer': 'pink'}
+    learning_styles = ['discriminator', 'generalizer', 'misplaced fear']
+    colors = {'discriminator': '#0434ff', 'generalizer': '#797977', 'misplaced fear': '#fffc00'}
     
-    fig, axs = plt.subplots(1, 3, figsize=(12, 4), sharey=True)
+    # Use a narrower overall figure.
+    fig, axs = plt.subplots(1, 3, figsize=(4, 4), sharey=True)
     global_min = np.inf
     global_max = -np.inf
     
@@ -703,22 +713,32 @@ def plot_evoked_bar_graph_combined(group_means, brain_region, freq_band):
             continue
         
         cs_plus_mean  = tone_plus['evoked_bar']
-        cs_plus_err   = tone_plus['std_evoked_bar']
+        cs_plus_err   = tone_plus['sem_evoked_bar']
         cs_minus_mean = tone_minus['evoked_bar']
-        cs_minus_err  = tone_minus['std_evoked_bar']
+        cs_minus_err  = tone_minus['sem_evoked_bar']
         
         global_min = min(global_min, cs_plus_mean - cs_plus_err, cs_minus_mean - cs_minus_err)
         global_max = max(global_max, cs_plus_mean + cs_plus_err, cs_minus_mean + cs_minus_err)
         
-        x = np.array([0, 1])
-        bars = ax.bar(x, [cs_plus_mean, cs_minus_mean],
-                      yerr=[cs_plus_err, cs_minus_err],
-                      capsize=5,
-                      color=colors[learning])
+        # Place two half-as-wide bars (width=0.2) within a narrow x-axis (0 to 0.5).
+        x = [0.15, 0.35]
+        bars = ax.bar(
+            x, [cs_plus_mean, cs_minus_mean],
+            yerr=[cs_plus_err, cs_minus_err],
+            capsize=5,
+            width=0.2,
+            color=colors[learning]
+        )
         bars[0].set_hatch('//')
         ax.set_xticks(x)
         ax.set_xticklabels(['CS+', 'CS-'])
+        ax.set_xlim(0, 0.5)
         ax.set_title(learning)
+        
+        # Remove top and right spines.
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
         if j == 0:
             ax.set_ylabel(f'Evoked {freq_band.title()} Power')
     
@@ -730,16 +750,23 @@ def plot_evoked_bar_graph_combined(group_means, brain_region, freq_band):
             if ax.has_data():
                 ax.set_ylim(y_lower, y_upper)
     
-    fig.suptitle(f'{brain_region.upper()} Group Evoked {freq_band.title()} Power by Learning (Combined Sex)', fontsize=16)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    # Adjust suptitle to span only the middle part of the figure.
+    fig.suptitle(f'{brain_region.upper()} Group Evoked {freq_band.title()} Power by Learning (Combined Sex)' + title_suffix,
+                 fontsize=12, x=0.5)
+    plt.tight_layout(rect=[0.25, 0.03, 0.75, 0.90])
     plt.show()
 
-def plot_evoked_heatmaps_combined(group_means, brain_region, freq_band):
+def plot_evoked_heatmaps_combined(group_means, brain_region, freq_band, title_suffix='', cbar_vmin=None, cbar_vmax=None):
     """
     Plots evoked heat maps by learning style only (combining sexes).
     Each row corresponds to a learning style; columns are CS+ and CS–.
+    
+    Optional Parameters:
+    cbar_vmin, cbar_vmax : float or None
+        If provided, these values set the colorbar range for the heat maps.
+        If None, the range is computed from the data for each learning style.
     """
-    learning_styles = ['discriminator', 'generalizer', 'bad_learner']
+    learning_styles = ['discriminator', 'generalizer', 'misplaced fear']
     stimulus_types = ['tone_plus', 'tone_minus']
     
     nrows = len(learning_styles)
@@ -747,16 +774,20 @@ def plot_evoked_heatmaps_combined(group_means, brain_region, freq_band):
     fig, axs = plt.subplots(nrows, ncols, figsize=(10, 12))
     
     for i, learning in enumerate(learning_styles):
-        pair_vmin = np.inf
-        pair_vmax = -np.inf
-        for stim in stimulus_types:
-            if learning in group_means and stim in group_means[learning]:
-                spec = group_means[learning][stim].get('evoked_spec', None)
-                if spec is not None:
-                    pair_vmin = min(pair_vmin, np.min(spec))
-                    pair_vmax = max(pair_vmax, np.max(spec))
-        if pair_vmin == np.inf or pair_vmax == -np.inf:
-            pair_vmin, pair_vmax = None, None
+        # Calculate the colorbar range if not provided
+        if cbar_vmin is None or cbar_vmax is None:
+            pair_vmin = np.inf
+            pair_vmax = -np.inf
+            for stim in stimulus_types:
+                if learning in group_means and stim in group_means[learning]:
+                    spec = group_means[learning][stim].get('evoked_spec', None)
+                    if spec is not None:
+                        pair_vmin = min(pair_vmin, np.min(spec))
+                        pair_vmax = max(pair_vmax, np.max(spec))
+            if pair_vmin == np.inf or pair_vmax == -np.inf:
+                pair_vmin, pair_vmax = None, None
+        else:
+            pair_vmin, pair_vmax = cbar_vmin, cbar_vmax
         
         for j, stim in enumerate(stimulus_types):
             ax = axs[i, j]
@@ -785,12 +816,12 @@ def plot_evoked_heatmaps_combined(group_means, brain_region, freq_band):
                 ax.set_xlabel("Time (s)")
             else:
                 ax.set_xticklabels([])
-            if j == 0:
-                ax.set_ylabel("Frequency (Hz)")
-            else:
-                ax.set_yticklabels([])
+            #if j == 0:
+            ax.set_ylabel("Frequency (Hz)")
+            #else:
+            #ax.set_yticklabels([])
     
-    fig.suptitle(f"{brain_region.upper()} {freq_band.title()} Evoked Heat Maps by Learning (Combined Sex)", fontsize=16)
+    fig.suptitle(f"{brain_region.upper()} {freq_band.title()} Evoked Heat Maps by Learning (Combined Sex)" + title_suffix, fontsize=16)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
 
@@ -800,7 +831,7 @@ def plot_group_spectrum_lines_combined(group_means, brain_region, spec_label='Po
     Plots group spectra as line plots arranged in a 1x3 grid for each learning style (combined sexes).
     For each learning style, plots lines for CS+, CS–, and Pretone.
     """
-    learning_styles = ['bad_learner', 'discriminator', 'generalizer']
+    learning_styles = ['misplaced fear', 'discriminator', 'generalizer']
     colors = {'tone_plus': 'r', 'tone_minus': 'b', 'pretone': 'gray'}
     cond_labels = {'tone_plus': 'CS+', 'tone_minus': 'CS-', 'pretone': 'Pretone'}
     
@@ -843,7 +874,7 @@ def plot_group_spectrum_lines_combined(group_means, brain_region, spec_label='Po
 # Data collection and statistics
 # =============================================================================
 
-def collect_animals_data(conditions, brain_region, freq_band, event_boundary):
+def collect_animals_data(conditions, brain_region, freq_band, event_boundary, num_periods=6):
     main_dir = '/Users/katie/likhtik/AS'
     valid_animals = ['As111', 'As107', 'As112', 'As106', 'As105','As108','As110','As113']
     matlab_path = '/Applications/MATLAB_R2022a.app/bin/matlab'  # Use MATLAB executable path
@@ -968,8 +999,8 @@ def collect_animals_data(conditions, brain_region, freq_band, event_boundary):
                 'bar_value': tone_bar,
                 'animal': animal,
                 'event_index': period_idx,
-                'learning': {'As105': 'discriminator','As106': 'bad_learner','As107': 'generalizer','As108': 'generalizer',
-                             'As110': 'bad_learner','As111': 'generalizer','As112': 'generalizer','As113': 'generalizer'}[animal],
+                'learning': {'As105': 'discriminator','As106': 'misplaced fear','As107': 'generalizer','As108': 'generalizer',
+                             'As110': 'misplaced fear','As111': 'generalizer','As112': 'generalizer','As113': 'generalizer'}[animal],
                 'sex': ('male' if animal in (['As107', 'As108'] + ['As105', 'As106'])
                         else 'female')
             }
@@ -980,8 +1011,8 @@ def collect_animals_data(conditions, brain_region, freq_band, event_boundary):
                 'bar_value': pretone_bar,
                 'animal': animal,
                 'event_index': period_idx,
-                'learning': {'As105': 'discriminator','As106': 'bad_learner','As107': 'generalizer','As108': 'generalizer',
-                             'As110': 'bad_learner','As111': 'generalizer','As112': 'generalizer','As113': 'generalizer'}[animal],
+                'learning': {'As105': 'discriminator','As106': 'misplaced fear','As107': 'generalizer','As108': 'generalizer',
+                             'As110': 'misplaced fear','As111': 'generalizer','As112': 'generalizer','As113': 'generalizer'}[animal],
                 'sex': ('male' if animal in (['As107', 'As108'] + ['As105', 'As106'])
                         else 'female')
             }
@@ -991,6 +1022,8 @@ def collect_animals_data(conditions, brain_region, freq_band, event_boundary):
             data_by_within_subject_condition['pretone'].append(pretone_event)
         
         animals_data[animal] = data_by_within_subject_condition
+        for condition in animals_data[animal]:
+            animals_data[animal][condition] = animals_data[animal][condition][0:num_periods]
     
     return animals_data
 
@@ -1009,48 +1042,68 @@ def compute_group_statistics(animals_data, conditions):
 
 def main():
     conditions = ['tone_plus', 'tone_minus', 'pretone_plus', 'pretone_minus', 'pretone']
-    
-    
-    
-    
-    for brain_region in ['pl', 'bla', 'vhip']:
-        # First, plot group spectrum lines using low frequencies (original grouping).
-        animals_data = collect_animals_data(conditions, brain_region, 'low frequencies', event_boundary=(0, 0.3))
-        plot_group_spectrum_lines(animals_data, brain_region)
-        # Also plot combined (learning-only) spectrum lines.
-        all_animal_means_lines = compute_individual_statistics(animals_data, conditions)
-        combined_lines_group_means = group_animal_means(all_animal_means_lines, group_by='learning')
-        plot_group_spectrum_lines_combined(combined_lines_group_means, brain_region)
-        
-        for freq_name in ['theta', 'gamma', 'high gamma']:
-            # For bar graphs and stats.
-            bar_animals_data = collect_animals_data(conditions, brain_region, freq_name, event_boundary=(0, 0.3))
-            all_animal_means = compute_individual_statistics(bar_animals_data, conditions)
-            
-            # Perform Wilcoxon tests.
-            # For grouping by sex and learning:
-            perform_paired_wilcoxon_tests(bar_animals_data, freq_band=freq_name, brain_region=brain_region, group_by='sex_learning')
 
-            # For grouping by learning only (ignoring sex):
-            perform_paired_wilcoxon_tests(bar_animals_data, freq_band=freq_name, brain_region=brain_region, group_by='learning')
+    for brain_region in ['pl']:
+        # animals_data = collect_animals_data(conditions, brain_region, 'theta', event_boundary=(0, 0.3), num_periods=3)
+        # all_animal_means = compute_individual_statistics(animals_data, conditions)
+        # group_means = group_animal_means(all_animal_means, group_by='sex_learning')
+        # plot_evoked_bar_graph(group_means, brain_region, 'theta', title_suffix=' Three Periods')
+        # perform_paired_wilcoxon_tests(animals_data, freq_band='theta', brain_region=brain_region, group_by='learning')
+        # combined_group_means = group_animal_means(all_animal_means, group_by='learning')
+        # plot_evoked_bar_graph_combined(combined_group_means, brain_region, 'theta', title_suffix=' Three Periods')
+        # perform_paired_wilcoxon_tests(animals_data, freq_band='theta', brain_region=brain_region, group_by='learning')
+
+
+        heat_map_animals_data = collect_animals_data(conditions, brain_region, 'low frequencies', event_boundary=(-0.1, 0.3), num_periods=3)
+        all_animal_means_heat = compute_individual_statistics(heat_map_animals_data, conditions)
+        # heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='sex_learning')
+        # plot_evoked_heatmaps(heat_map_group_means, brain_region, 'low frequencies', title_suffix=' Three Periods')
+        combined_heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='learning')
+        plot_evoked_heatmaps_combined(combined_heat_map_group_means, brain_region, 'low frequencies', title_suffix=' Three Periods') #, cbar_vmin=-10, cbar_vmax=15)
             
-            # Original grouped plots (sex + learning)
-            group_means = group_animal_means(all_animal_means, group_by='sex_learning')
-            plot_evoked_bar_graph(group_means, brain_region, freq_name)
+
+        
+
+    
+    
+    # for brain_region in ['pl', 'bla', 'vhip']:
+    #     # First, plot group spectrum lines using low frequencies (original grouping).
+    #     animals_data = collect_animals_data(conditions, brain_region, 'low frequencies', event_boundary=(0, 0.3))
+    #     plot_group_spectrum_lines(animals_data, brain_region)
+    #     # Also plot combined (learning-only) spectrum lines.
+    #     all_animal_means_lines = compute_individual_statistics(animals_data, conditions)
+    #     combined_lines_group_means = group_animal_means(all_animal_means_lines, group_by='learning')
+    #     plot_group_spectrum_lines_combined(combined_lines_group_means, brain_region)
+        
+    #     for freq_name in ['theta', 'gamma', 'high gamma']:
+    #         # For bar graphs and stats.
+    #         bar_animals_data = collect_animals_data(conditions, brain_region, freq_name, event_boundary=(0, 0.3))
+    #         all_animal_means = compute_individual_statistics(bar_animals_data, conditions)
             
-            # Combined (learning only) bar graphs.
-            combined_group_means = group_animal_means(all_animal_means, group_by='learning')
-            plot_evoked_bar_graph_combined(combined_group_means, brain_region, freq_name)
+    #         # Perform Wilcoxon tests.
+    #         # For grouping by sex and learning:
+    #         perform_paired_wilcoxon_tests(bar_animals_data, freq_band=freq_name, brain_region=brain_region, group_by='sex_learning')
+
+    #         # For grouping by learning only (ignoring sex):
+    #         perform_paired_wilcoxon_tests(bar_animals_data, freq_band=freq_name, brain_region=brain_region, group_by='learning')
             
-            # For heat maps.
-            freq_plot_name = 'low frequencies' if freq_name=='theta' else freq_name
-            heat_map_animals_data = collect_animals_data(conditions, brain_region, freq_plot_name, event_boundary=(-0.1, 0.3))
-            all_animal_means_heat = compute_individual_statistics(heat_map_animals_data, conditions)
-            heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='sex_learning')
-            plot_evoked_heatmaps(heat_map_group_means, brain_region, freq_plot_name)
+    #         # Original grouped plots (sex + learning)
+    #         group_means = group_animal_means(all_animal_means, group_by='sex_learning')
+    #         plot_evoked_bar_graph(group_means, brain_region, freq_name)
             
-            combined_heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='learning')
-            plot_evoked_heatmaps_combined(combined_heat_map_group_means, brain_region, freq_plot_name)
+    #         # Combined (learning only) bar graphs.
+    #         combined_group_means = group_animal_means(all_animal_means, group_by='learning')
+    #         plot_evoked_bar_graph_combined(combined_group_means, brain_region, freq_name)
+            
+    #         # For heat maps.
+    #         freq_plot_name = 'low frequencies' if freq_name=='theta' else freq_name
+    #         heat_map_animals_data = collect_animals_data(conditions, brain_region, freq_plot_name, event_boundary=(-0.1, 0.3))
+    #         all_animal_means_heat = compute_individual_statistics(heat_map_animals_data, conditions)
+    #         heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='sex_learning')
+    #         plot_evoked_heatmaps(heat_map_group_means, brain_region, freq_plot_name)
+            
+    #         combined_heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='learning')
+    #         plot_evoked_heatmaps_combined(combined_heat_map_group_means, brain_region, freq_plot_name)
 
 # =============================================================================
 # Run the main processing
