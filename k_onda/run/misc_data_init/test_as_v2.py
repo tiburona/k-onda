@@ -958,15 +958,14 @@ def collect_animals_data(conditions, brain_region, freq_band, event_boundary, nu
             pretone_idx_start = int(round(pretone_seg_start * fs))
             pretone_idx_end   = int(round(pretone_seg_end * fs))
             
+            filtered_data = divide_by_rms(filter_60_hz(NS3_data[ch, :], fs))
+
             try:
-                tone_data = NS3_data[ch, tone_idx_start:tone_idx_end]
-                pretone_data = NS3_data[ch, pretone_idx_start:pretone_idx_end]
+                tone_data = filtered_data[tone_idx_start:tone_idx_end]
+                pretone_data = filtered_data[ pretone_idx_start:pretone_idx_end]
             except Exception as e:
                 print(f"Error extracting data for {animal} event {period_idx}: {e}")
                 continue
-            
-            tone_data = divide_by_rms(filter_60_hz(tone_data, fs))
-            pretone_data = divide_by_rms(filter_60_hz(pretone_data, fs))
             
             try:
                 S_tone, f_tone, t_tone = run_matlab_mtcsg(tone_data, matlab_path, brain_region, animal, period_idx, 'tone', mtcsg_args)
@@ -1054,7 +1053,7 @@ def main():
         # perform_paired_wilcoxon_tests(animals_data, freq_band='theta', brain_region=brain_region, group_by='learning')
 
 
-        heat_map_animals_data = collect_animals_data(conditions, brain_region, 'low frequencies', event_boundary=(-0.1, 0.3), num_periods=3)
+        heat_map_animals_data = collect_animals_data(conditions, brain_region, 'low frequencies', event_boundary=(-0.1, 0.3), num_periods=6)
         all_animal_means_heat = compute_individual_statistics(heat_map_animals_data, conditions)
         # heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='sex_learning')
         # plot_evoked_heatmaps(heat_map_group_means, brain_region, 'low frequencies', title_suffix=' Three Periods')

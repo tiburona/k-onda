@@ -8,6 +8,10 @@ import scipy.io
 import matplotlib.pyplot as plt
 from matplotlib.transforms import blended_transform_factory
 import scipy.stats as stats  # For the Wilcoxon signed-rank test
+import pandas as pd
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+
 
 # =============================================================================
 # Helper functions
@@ -449,6 +453,36 @@ def gather_data(region_set, num_periods):
     
     return animals_data, animal_info, learning_dict, fs, cs_minus_ids, coh_low, coh_high
 
+
+def anova_tone_learning(animals_data, animal_info):
+    """
+    Performs a two-way ANOVA on evoked coherence values with factors:
+      - tone_type: tone_plus vs. tone_minus
+      - learning: the learning style as given in animal_info
+
+    Uses individual period observations (averaged over the frequency band) as the dependent variable,
+    ignoring the clustering within animals.
+
+    Returns:
+        anova_table (DataFrame): Full ANOVA table.
+        df (DataFrame): The DataFrame of observations used for the analysis.
+    """
+    rows = []
+    for animal, data in animals_data.items():
+        learning = animal_info[animal]['learning']
+        for tone in ['tone_plus', 'tone_minus']:
+            for event in data.get(tone, []):
+                rows.append({
+                    'evoked_coh': event['evoked_coh'],
+                    'tone_type': tone,
+                    'learning': learning
+                })
+    df = pd.DataFrame(rows)
+    # Fit the two-way ANOVA model with interaction using statsmodels
+    model = smf.ols('evoked_coh ~ C(tone_type) * C(learning)', data=df).fit()
+    anova_table = sm.stats.anova_lm(model, typ=2)
+    return anova_table, df
+
 # =============================================================================
 # Main Function: Call gather_data for different region sets and period limits
 # =============================================================================
@@ -507,8 +541,16 @@ def main():
                     'sem_coh': np.array(sems)
                 }
         
+        anova_table, df = anova_tone_learning(animals_data, animal_info)
+        print(region_set)
+        print(anova_table)
+        print(df.head)
+        print("")
+        
         # Plot the results.
         plot_group_bar_graph(animals_data, animal_info, region_set, num_periods)
+        
+
 
 if __name__ == "__main__":
     main()
