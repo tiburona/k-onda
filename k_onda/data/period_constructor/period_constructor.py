@@ -154,9 +154,8 @@ class PeriodConstructor:
             else:
                 shift = period_info['shift']
                 duration = period_info.get('duration')
-            # if self is animal this is an lfp period
-            if self.name == 'animal':  
-                shift -= sum(self.calc_opts['lfp_padding']) # type: ignore
+            if self.identifier == 'As105':
+                a = 'foo'
             shift_in_samples = shift * self.sampling_rate
             onset = paired_period.onset + shift_in_samples
             event_starts = []

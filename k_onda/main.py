@@ -39,6 +39,7 @@ def timeout_handler(signum, frame):
     raise TimeoutError
 
 
+
 def profile_run(timeout=1000):
     # Set the signal handler for the alarm signal
     signal.signal(signal.SIGALRM, timeout_handler)

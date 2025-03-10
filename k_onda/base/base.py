@@ -340,6 +340,7 @@ class Base:
             elif '|' in field:
                 field_type, field_key = field.split('|')
                 constructor[field] = getattr(self, f'selected_{field_type}')[field_key]
+                
             else:
                 constructor[field] = getattr(self, field)
         

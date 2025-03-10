@@ -11,6 +11,8 @@ import scipy.stats as stats  # For the Wilcoxon signed-rank test
 import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+from statsmodels.formula.api import ols
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
 
 # =============================================================================
@@ -481,8 +483,128 @@ def anova_tone_learning(animals_data, animal_info):
     # Fit the two-way ANOVA model with interaction using statsmodels
     model = smf.ols('evoked_coh ~ C(tone_type) * C(learning)', data=df).fit()
     anova_table = sm.stats.anova_lm(model, typ=2)
-    return anova_table, df
+    return model, anova_table, df
 
+import numpy as np
+import scipy.stats as stats
+
+import numpy as np
+import pandas as pd
+import scipy.stats as stats
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
+
+def wilcoxon_followup_test(animals_data, animal_info, by_tone_type=False):
+    """
+    Performs follow-up tests on evoked coherence values with two components:
+      1. A non-parametric Mann–Whitney U test comparing:
+           - Group 1: Pooled CS+ and CS– events from Discriminators and Generalizers (combined)
+           - Group 2: Pooled CS+ and CS– events from Bad Learners.
+      2. A Tukey HSD test comparing all three learning groups (discriminator, generalizer, bad_learner)
+         pairwise.
+    
+    Parameters:
+        animals_data (dict): Data for each animal with keys 'tone_plus' and 'tone_minus',
+                             where each event has an 'evoked_coh' value.
+        animal_info (dict): Dictionary with animal learning style information.
+        by_tone_type (bool): 
+            If False (default), pools CS+ and CS– values together.
+            If True, runs the tests separately for CS+ and CS– events.
+    
+    Returns:
+        If by_tone_type is False, returns a dictionary with key 'pooled' containing:
+            - 'mann_whitney': Dictionary with Mann–Whitney U test results (U statistic, p-value, sample sizes).
+            - 'data': The pooled data used for the Mann–Whitney test (lists for group1 and group2).
+            - 'tukey': A dictionary with:
+                - 'summary': The Tukey HSD test summary as a string.
+                - 'df': A DataFrame of observations used for the Tukey test (columns: evoked_coh, learning).
+                
+        If by_tone_type is True, returns a dictionary with keys 'tone_plus' and 'tone_minus', where
+        each value is a dictionary structured as above.
+    """
+    if not by_tone_type:
+        # For Mann–Whitney, combine discriminators and generalizers vs. bad learners
+        group1 = []  # discriminators and generalizers
+        group2 = []  # bad learners
+        # For Tukey, we want to keep all three groups separate.
+        tukey_rows = []
+        
+        for animal, data in animals_data.items():
+            learning = animal_info[animal]['learning']
+            for tone in ['tone_plus', 'tone_minus']:
+                if tone in data:
+                    for event in data[tone]:
+                        val = event['evoked_coh']
+                        tukey_rows.append({'evoked_coh': val, 'learning': learning})
+                        if learning in ['discriminator', 'generalizer']:
+                            group1.append(val)
+                        elif learning == 'bad_learner':
+                            group2.append(val)
+        
+        if len(group1) == 0 or len(group2) == 0:
+            raise ValueError("One of the groups has no data for Mann–Whitney testing.")
+        
+        stat, p_value = stats.mannwhitneyu(group1, group2, alternative='two-sided')
+        mann_whitney_result = {
+            'U_statistic': stat,
+            'p_value': p_value,
+            'n_group1': len(group1),
+            'n_group2': len(group2)
+        }
+        
+        df_tukey = pd.DataFrame(tukey_rows)
+        tukey_result = pairwise_tukeyhsd(endog=df_tukey['evoked_coh'], groups=df_tukey['learning'], alpha=0.05)
+        tukey_summary_str = tukey_result.summary().as_text()
+        
+        result = {
+            'pooled': {
+                'mann_whitney': mann_whitney_result,
+                'data': {'group1': group1, 'group2': group2},
+                'tukey': {'summary': tukey_summary_str, 'df': df_tukey}
+            }
+        }
+        return result
+    
+    else:
+        # Separate the analysis for each tone type.
+        results_by_tone = {}
+        for tone in ['tone_plus', 'tone_minus']:
+            group1 = []  # discriminators and generalizers
+            group2 = []  # bad learners
+            tukey_rows = []
+            
+            for animal, data in animals_data.items():
+                learning = animal_info[animal]['learning']
+                if tone in data:
+                    for event in data[tone]:
+                        val = event['evoked_coh']
+                        tukey_rows.append({'evoked_coh': val, 'learning': learning})
+                        if learning in ['discriminator', 'generalizer']:
+                            group1.append(val)
+                        elif learning == 'bad_learner':
+                            group2.append(val)
+            
+            if len(group1) == 0 or len(group2) == 0:
+                raise ValueError(f"One of the groups has no data for Mann–Whitney testing for tone {tone}.")
+            
+            stat, p_value = stats.mannwhitneyu(group1, group2, alternative='two-sided')
+            mann_whitney_result = {
+                'U_statistic': stat,
+                'p_value': p_value,
+                'n_group1': len(group1),
+                'n_group2': len(group2)
+            }
+            
+            df_tukey = pd.DataFrame(tukey_rows)
+            tukey_result = pairwise_tukeyhsd(endog=df_tukey['evoked_coh'], groups=df_tukey['learning'], alpha=0.05)
+            tukey_summary_str = tukey_result.summary().as_text()
+            
+            results_by_tone[tone] = {
+                'mann_whitney': mann_whitney_result,
+                'data': {'group1': group1, 'group2': group2},
+                'tukey': {'summary': tukey_summary_str, 'df': df_tukey}
+            }
+        return results_by_tone
+    
 # =============================================================================
 # Main Function: Call gather_data for different region sets and period limits
 # =============================================================================
@@ -495,7 +617,7 @@ def main():
         ('bla', 'vhip')
     ]
     # Specify how many periods (per condition) to use.
-    num_periods = 3
+    num_periods = 6
     
     for region_set in region_sets:
         print(f"\n=== Processing region set: {region_set} with {num_periods} periods per condition ===")
@@ -541,11 +663,17 @@ def main():
                     'sem_coh': np.array(sems)
                 }
         
-        anova_table, df = anova_tone_learning(animals_data, animal_info)
+        model, anova_table, df = anova_tone_learning(animals_data, animal_info)
         print(region_set)
         print(anova_table)
         print(df.head)
         print("")
+
+        tukey_result = pairwise_tukeyhsd(endog=df['evoked_coh'], groups=df['learning'], alpha=0.05)
+        print(tukey_result)
+
+        print(wilcoxon_followup_test(animals_data, animal_info))
+        print(wilcoxon_followup_test(animals_data, animal_info, by_tone_type=True))
         
         # Plot the results.
         plot_group_bar_graph(animals_data, animal_info, region_set, num_periods)

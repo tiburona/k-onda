@@ -26,7 +26,7 @@ class Data(Base):
             return self.evoked
         else:
             self.calc_mode = 'normal'  # the other cases set calc_mode later
-            return getattr(self, f"get_{calc_type}")()
+            return getattr(self, f"get_{calc_type}")(exclude=True)
        
     def resolve_calc_fun(self, calc_type):
         stop_at=self.calc_opts.get('base', 'event')
@@ -83,6 +83,9 @@ class Data(Base):
             
     def select(self, filters, check_ancestors=False):
 
+        if self.selected_conditions:
+            a = 'foo'
+
         if not check_ancestors and self.name not in filters:
             return True
               
@@ -100,7 +103,7 @@ class Data(Base):
         return True
     
     @cache_method
-    def get_average(self, base_method, stop_at='event', level=0, axis=0, *args, **kwargs):
+    def get_average(self, base_method, stop_at='event', level=0, axis=0, exclude=True, *args, **kwargs):
         """
         Recursively calculates the average of the values of the computation in the base method on the object's
         descendants.
@@ -116,7 +119,7 @@ class Data(Base):
         float or np.array: The mean of the data values from the object's descendants.
         """
 
-        if not self.include():
+        if not self.include() and exclude:
             return float('nan')  
 
         if self.name == stop_at:  # we are at the base case and will call the base method
@@ -131,7 +134,7 @@ class Data(Base):
         child_vals = []
 
         for child in self.children:
-            if not child.include():
+            if not child.include() and exclude:
                 continue
             child_val = child.get_average(
                 base_method, level=level+1, stop_at=stop_at, axis=axis, **kwargs)

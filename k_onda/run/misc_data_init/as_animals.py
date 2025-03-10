@@ -47,7 +47,7 @@ for animals, group_name, conditions in animals_and_groups:
 period_info = {
     'pretone_plus': {'relative': True, 'target': 'cs_plus', 'shift': -30, 'duration': 30,
                      'conditions': {'tone': 'off', 'cs': 'plus'}},
-    'pretone_minus': {'relative': True, 'target': 'cs_plus', 'shift': -30, 'duration': 30,
+    'pretone_minus': {'relative': True, 'target': 'cs_minus', 'shift': -30, 'duration': 30,
                       'conditions': {'tone': 'off', 'cs': 'minus'}},
     'cs_plus': {'relative': False, 'reference_period_type': 'pretone', 'event_duration': 1, 
              'duration': 30, 'events': {'start': 'period_onset', 'pattern': {'range_args': [30]}},
@@ -67,8 +67,8 @@ animal_info_list = [info | {'identifier': id} for id, info in animal_info.items(
 exp_info = {}
 
 exp_info['animals'] = animal_info_list
-exp_info['group_names'] = ['male_stressed', 'female_stressed', 'male_non_stressed', 
-                          'female_non_stressed']
+# exp_info['group_names'] = ['male_stressed', 'female_stressed', 'male_non_stressed', 
+#                           'female_non_stressed']
 exp_info['sampling_rate'] = 30000
 exp_info['lfp_sampling_rate'] = 2000
 exp_info['frequency_bands'] = {

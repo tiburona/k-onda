@@ -17,7 +17,7 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
         self.exp_info = info
         self.identifier = info['identifier'] 
         self.now = formatted_now
-        self.group_names = info['group_names']
+        self.group_names = info.get('group_names', [])
         self._sampling_rate = info.get('sampling_rate')
         self._lfp_sampling_rate = info.get('lfp_sampling_rate')
         self.stimulus_duration = info.get('stimulus_duration')
@@ -39,7 +39,7 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
     
     @property
     def children(self):
-        return self.groups
+        return self.groups if self.groups else [an for an in self.all_animals if an.include()]
     
     @property
     def all_units(self):
@@ -86,11 +86,17 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
     def all_mrl_calculators(self):
         return [mrl_calc for unit in self.all_units for mrl_calc in unit.get_all('mrl_calculators') 
                 if mrl_calc.include(check_ancestors=True)]
+    
+    def initialize_data_sources(self, animals, groups=None):
+        self.all_animals = animals
+        self.groups = groups or []
+        self.all_groups = groups or []
+        if not self.groups:
+            for animal in self.all_animals:
+                animal.parent = self
+        self.initialize_period_and_neuron_types
 
-    def initialize_groups(self, groups):
-        self.groups = groups
-        self.all_groups = groups
-        self.all_animals = [animal for group in self.groups for animal in group.animals]
+    def initialize_period_and_neuron_types(self):
         self.period_types = set(period_type for animal in self.all_animals 
                                 for period_type in animal.period_info)
         self.neuron_types = set([unit.neuron_type for unit in self.all_units])
@@ -155,12 +161,12 @@ class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
 class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, MRLMethods, BinMethods):
     _name = 'animal'
 
-    def __init__(self, identifier, group_name, animal_info, neuron_types=None):
+    def __init__(self, identifier, animal_info, neuron_types=None):
         super().__init__()
         PeriodConstructor().__init__()
         self.identifier = identifier
-        self.group_name = group_name
         self.animal_info = animal_info
+        self.group_name = animal_info.get('group_name')
         self.experiment.all_animals.append(self)
         self.conditions = animal_info.get('conditions')
         self.group = None

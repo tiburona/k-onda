@@ -572,17 +572,17 @@ animal_plots =  {'series': {
                            {'calc_opts': {'calc_type': 'proportion'}}],
             }}
 
-
+# TODO: Add something that prevents lost signal errors
 AS_POWER_OPTS = {
     'kind_of_data': 'lfp', 'calc_type': 'power', 'validate_events': False,
-    'frequency_bands': [ 'theta_1'], 
-    'brain_regions': ['pl', 'bla', 'vhip'], 
+    'frequency_bands': [(0, 20)], 
+    'brain_regions': ['pl'], 
     'power_arg_set': (2048, 2000, 1000, 980, 2),
-    'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.75, .75], 'bin_size': .01,
-    'periods': {'pretone_plus': {'event_pre_post': (.1, .3)}, 
-                'pretone_minus': {'event_pre_post': (.1, .3)},
-                'cs_plus': {'event_pre_post': (.1, .3)},
-                'cs_minus': {'event_pre_post': (.1, .3)}},
+    'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.25, .25], 'bin_size': .01,
+    'periods': {'pretone_plus': {'event_pre_post': (0, .3)}, 
+                'pretone_minus': {'event_pre_post': (0, .3)},
+                'cs_plus': {'event_pre_post': (0, .3)},
+                'cs_minus': {'event_pre_post': (0, .3)}},
     'matlab_configuration': MATLAB_CONFIG,  
     'evoked': {'level': 'animal', 'reference': ['pretone_plus', 'pretone_minus']}
     }
@@ -610,7 +610,9 @@ AS_SPECTRUM_PLOT_SPEC = {
     'section': {
         'divisions': [
             {'divider_type': 'conditions',
-             'members': [{'sex': 'female'}, {'sex': 'male'}],
+             'members': [{'learning_style': 'discriminator'}, 
+                         {'learning_style': 'generalizer'}, 
+                         {'learning_style': 'bad_learner'}],
              'dim': 0}],
         'label': {'y': {'text': 'Power', 
                         'space_within': .08}, 
@@ -622,21 +624,14 @@ AS_SPECTRUM_PLOT_SPEC = {
             'divisions':[
                 {'divider_type': 'period_type',
                 'members': ['cs_plus', 'cs_minus'],
-                'dim': 1},
-                {'divider_type': 'conditions',
-                'members': [{'treatment': 'stressed'}, {'treatment': 'non_stressed'}],
-                'dim': 0
-            }],
+                'dim': 1}],
             'subfigure': {'hspace': .08, 'wspace': 0},
             'legend': {'colorbar': {'share': 'global', 'position': 'right'}},
             'label': {'title': 
-                      {'text':'{conditions|sex}', 
+                      {'text':'{conditions|learning_style}', 
                        'space_within': .15,
                        'space_between': .08,
                        'kwargs':  {'x': .45}},
-                       'y_ax': 
-                       {'text': '{conditions|treatment}',
-                        'which': 'absolute_first'},
                        'x_ax': 
                        {'text': '{period_type}',
                         'space_within': .02,
@@ -654,7 +649,7 @@ AS_POWER_PLOT_SPEC = {
     'section': {
         'divisions': [
             {'divider_type': 'conditions',
-             'members': [{'sex': 'female'}, {'sex': 'male'}],
+             'members': [{'sex': 'male'}, {'sex': 'female'}],
              'dim': 0}],
         'label': {'y': {'text': 'Power',
                         'space_between': 0, 
@@ -669,12 +664,12 @@ AS_POWER_PLOT_SPEC = {
                 {'divider_type': 'period_type',
                 'members': ['cs_plus', 'cs_minus']},
                 {'divider_type': 'conditions',
-                'members': [{'learning_style': 'discriminator'}, {'learning_style': 'generalizer'},
+                'members': [{'learning_style': 'generalizer'}, {'learning_style': 'discriminator'},
                             {'learning_style': 'bad_learner'}]
             }],
             'subfigure': {'hspace': .08, 'wspace': 0},
             'label': {'title': 
-                      {'text':'{conditions|sex}', 
+                      {'text':'{conditions|learning_style}', 
                        'space_within': .15,
                        'space_between':  .08}
                         }},
@@ -736,10 +731,10 @@ AS_COHERENCE_PLOT_SPEC = {
 
 AS_TEST_POWER_OPTS = {
     'kind_of_data': 'lfp', 'calc_type': 'power', 'validate_events': False,
-    'frequency_bands': [ 'theta_1'], 
+    'frequency_bands': [(0, 21)], 
     'brain_regions': ['pl'], 
     'power_arg_set': (2048, 2000, 1000, 980, 2),
-    'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.75, .75], 'bin_size': .01,
+    'store': 'pkl', 'lfp_padding': [1, 1], 'lost_signal': [.25, .25], 'bin_size': .01,
     'periods': {'pretone_plus': {'event_pre_post': (.0, .3)}, 
                 'pretone_minus': {'event_pre_post': (.0, .3)},
                 'cs_plus': {'event_pre_post': (.0, .3)},
@@ -754,7 +749,7 @@ AS_OPTS = {
                   'fields': ['brain_region', 'frequency_band']}
     },
     'calc_opts': AS_POWER_OPTS,
-    'plot_spec': AS_POWER_PLOT_SPEC
+    'plot_spec': AS_SPECTRUM_PLOT_SPEC
 }
 
 # AS_TEST_POWER_PLOT_SPEC = {

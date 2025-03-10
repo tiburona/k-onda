@@ -52,10 +52,15 @@ def cache_method(method):
             return method(self, *args, **kwargs)
             
         # TODO: make sure as selected period types evolve that there can't be any
-        # key overlap between different calculations    
+        # key overlap between different calculations  
+        
+        if hasattr(self, 'period_type'):
+            period_keys = [self.period_type]
+        else:
+            period_keys = self.selected_period_types + [self.selected_period_type]
+          
         key_list = [self.calc_type, method.__name__, 
-                    self.selected_neuron_type, self.selected_period_type, 
-                    *(self.selected_period_types), 
+                    self.selected_neuron_type, *period_keys, 
                     *(f'{k}_{v}' for k, v in self.selected_conditions.items()), 
                     *(arg for arg in args), 
                     *(kwarg for kwarg in kwargs)]
