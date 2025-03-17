@@ -61,8 +61,6 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
                  target_period=None, is_relative=False, experiment=None):
         super().__init__(index, period_type, period_info, onset, experiment=experiment, 
                          target_period=target_period, is_relative=is_relative, events=events)
-        if self.identifier == 'As105' and 'pretone' in period_type:
-            a = 'foo'
         self.animal = animal
         self.parent = animal
         padding = self.calc_opts['lfp_padding']
@@ -83,7 +81,6 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         
     @property
     def padded_data(self):
-        a = 'foo'
         return self.get_data_from_animal_dict(self.animal.processed_lfp, 
                                               self.pad_start, self.pad_stop)
         
@@ -103,15 +100,6 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
     def spectrogram(self):
         if self._spectrogram is None:
             self._spectrogram = self.calc_cross_spectrogram()
-            if self.animal.identifier == 'As107' and self.period_type == 'cs_plus' and int(self.identifier) == 0:
-                import os
-                with open('/Users/katie/likhtik/data/temp/k_onda_log.txt', 'w') as f:
-                    f.write(f"just calculated spectrogram\n {self._spectrogram[0][0][0:10]}\n")
-                    f.write(f"the first pip should begin\n {self._spectrogram[0][0][75:85]}\n")
-                    f.write(f"the first pip does begin\n {self.events[0].get_power()[0][0:10]}\n")
-                    f.write(f"period power self.get_power()\n {self.get_power()[0][0:10]}\n")
-                    if self.selected_period_type == 'cs_plus':
-                        f.write(f"animal power {self.animal.get_power()[0][0:10]}\n")
         last_frequency = self.freq_range[1]
         index_of_last_frequency = np.where(self._spectrogram[1] > last_frequency)[0][0]
         self._spectrogram[0] = self._spectrogram[0][0:index_of_last_frequency, :]
@@ -121,8 +109,6 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         padding, lost_signal, bin_size = self.fetch_opts(['lfp_padding', 'lost_signal', 'bin_size'])
 
         true_beginning = padding[0] - lost_signal[0]
-        if self.animal.identifier == 'As107' and self.period_type == 'cs_plus' and int(self.identifier) == 0:
-            a = 'foo'
 
         time_bins = np.array(self.spectrogram[2])
         events = []
@@ -187,8 +173,6 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
             self.period.identifier][self.identifier]
     
     def get_power(self):
-        if self.period.animal.identifier == 'As107' and self.period.period_type == 'cs_plus' and int(self.period.identifier) == 0:
-            a = 'foo'
         return np.array(self.sliced_spectrogram)[:, self.mask]
     
 

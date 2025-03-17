@@ -143,10 +143,7 @@ class MRLCalculator(Data, EventValidator):
             return circ_r2_unbiased(alpha, w, dim=dim)
         else:
             return compute_mrl(alpha, w, dim=dim)
-        
-
-
-        
+         
 
 class MRLPrepMethods(SpikePrepMethods, LFPPrepMethods):
     

@@ -1,5 +1,6 @@
-import numpy as np
 from collections import defaultdict
+import numpy as np
+import xarray as xr
 
 from k_onda.base import Base
 from k_onda.utils import cache_method, always_last, operations, sem
@@ -83,9 +84,6 @@ class Data(Base):
             
     def select(self, filters, check_ancestors=False):
 
-        if self.selected_conditions:
-            a = 'foo'
-
         if not check_ancestors and self.name not in filters:
             return True
               
@@ -102,6 +100,16 @@ class Data(Base):
                         return False
         return True
     
+    @staticmethod
+    def xmean(child_vals, axis=None):
+        if not child_vals:
+            return xr.DataArray(float('nan'))  
+        aggregated = xr.concat(child_vals, dim='child')
+        if axis is None:
+            return aggregated.mean(dim=None, skipna=True)  # Mean over all dimensions
+        axis_name = aggregated.dims[axis] if isinstance(axis, int) else axis
+        return aggregated.mean(dim=axis_name, skipna=True)
+        
     @cache_method
     def get_average(self, base_method, stop_at='event', level=0, axis=0, exclude=True, *args, **kwargs):
         """
@@ -118,7 +126,7 @@ class Data(Base):
         Returns:
         float or np.array: The mean of the data values from the object's descendants.
         """
-
+        
         if not self.include() and exclude:
             return float('nan')  
 
@@ -151,16 +159,16 @@ class Data(Base):
                     result_dict[key].append(value)
 
             # Calculate average of the list of values for each key
-            return_dict = {key: np.nanmean(values, axis) 
+            return_dict = {key: self.xmean(values, axis) 
                             for key, values in result_dict.items()}
             return return_dict
                 
         else:
-            return np.nanmean(child_vals, axis)
-        
+            return self.xmean(child_vals, axis)
+    
     @property
     def mean(self):
-        return np.mean(self.calc)
+        return self.xmean(self.calc)
     
     @property
     def sem(self):
@@ -171,41 +179,30 @@ class Data(Base):
         return self.get_sem(collapse_sem_data=False)
     
     def get_mean(self, axis=0):
-        return np.mean(self.calc, axis=axis)
+        return self.xmean(self.calc, axis=axis)
         
     def get_sem(self, collapse_sem_data=False):
         """
-        Calculates the standard error of an object's data. If object's data is a vector, it will always return a float.
-        If object's data is a matrix, the `collapse_sem_data` argument will determine whether it returns the standard
-        error of its children's average data points or whether it computes the standard error over children maintaining
-        the original shape of children's data, as you would want, for instance, if graphing a standard error envelope
-        around firing rate over time.
+        Calculates the standard error of an object's data.
+
+        - If `collapse_sem_data=True`, first computes the mean for each child before computing SEM.
+        - If the data is a dictionary (e.g., multiple conditions), computes SEM for each key separately.
         """
 
-        if self.calc_opts.get('sem_level'):
-            sem_children = self.get_descendants(stop_at=self.calc_opts.get('sem_level'))
-        else:
-            sem_children = self.children
+        def agg_and_calc(vals):
+            return sem([val.mean(skipna=True) for val in vals] if collapse_sem_data else vals)
 
-        if isinstance(sem_children[0].calc, dict):
+        sem_children = (self.get_descendants(stop_at=self.calc_opts.get('sem_level'))
+                        if self.calc_opts.get('sem_level') else self.children)
 
-            return_dict = {}
+        first_calc = sem_children[0].calc  
 
-            for key in sem_children[0]:
-                vals = [child.calc[key] for child in sem_children if not self.is_nan(child.calc)]
-                if collapse_sem_data:
-                    vals = [np.mean(val) for val in vals]
-                return_dict[key] = sem(vals) 
+        if isinstance(first_calc, dict):
+            return {key: agg_and_calc([child.calc[key] for child in sem_children 
+                                       if not self.is_nan(child.calc)]) 
+                                       for key in first_calc}
 
-            return return_dict
-
-        else:
-            vals = [child.calc for child in sem_children if not self.is_nan(child.calc)]
-
-            if collapse_sem_data:
-                vals = [np.mean(val) for val in vals]
-
-            return sem(vals)
+        return agg_and_calc([child.calc for child in sem_children if not self.is_nan(child.calc)])
                 
     @staticmethod
     def extend_into_bins(sources, extend_by):
@@ -220,7 +217,12 @@ class Data(Base):
             stop_at = self.calc_opts.get('stop_at')
         vals_to_summarize = self.get_descendants(stop_at=stop_at)
         vals_to_summarize = self.extend_into_bins(vals_to_summarize, extend_by)
-        return np.median([obj.calc for obj in vals_to_summarize])
+        arrays = [obj.calc for obj in vals_to_summarize]
+        if arrays:
+            concatenated = xr.concat(arrays, dim="child")
+            return concatenated.median(dim="child", skipna=True)
+        else:
+            return xr.DataArray(float("nan"))
 
     def is_nan(self, value):
         if isinstance(value, float) and np.isnan(value):
@@ -237,36 +239,54 @@ class Data(Base):
         kwargs = self.calc_opts['concatenation']
         return self.concatenate(**kwargs)
     
-    def concatenate(self, concatenator=None, concatenated=None, attr='calc', method=None, 
-                    started=False):
+    def concatenate(self, concatenator=None, concatenated=None, attr='calc', method=None, started=False):
+        """Concatenates data from descendant nodes using xarray."""
+
+        # TODO: what's going to happen if, say, an animal is missing a period
+
+        # TODO: rewrite this to use accumulator
+
         f = lambda x: (
             getattr(x, method)() if method else getattr(x, attr)
             ) if hasattr(x, method if method else attr) else None
-        
+
         if self.name == concatenator:
-            print(self.identifier)
-            print(id(self))
             started = True
-            return np.array([child.concatenate(concatenator=concatenator, concatenated=concatenated, 
-                                               attr=attr, method=method, started=started) 
-                             for child in self.children if child.include()])
+            children_data = [
+                child.concatenate(concatenator=concatenator, concatenated=concatenated, 
+                                attr=attr, method=method, started=started)
+                for child in self.children if child.include()
+            ]
+            return xr.concat(children_data, dim="child") if children_data else xr.DataArray([])
         
         elif self.name != concatenated and not started:
-            return np.nanmean([val for val in [child.concatenate(concatenator=concatenator, concatenated=concatenated, 
-                                              attr=attr, method=method, started=started) 
-                            for child in self.children if child.include()] 
-                            if not (isinstance(val, float) and np.isnan(val))], axis=0)
-        # TODO: the above nan filtering is made necessary by the fact that groups are not excluded by the 
-        # conditions filter.  Fix that or better, move away from having groups now that there are conditions
-        
-        elif self.name != concatenated and started:
-            return np.array([child.concatenate(concatenator=concatenator, concatenated=concatenated, 
-                                               attr=attr, method=method, started=started) 
-                             for child in self.children if child.include()]).flatten()
-        else: # self.name == concatenated
-            return f(self)
+            children_data = [
+                child.concatenate(concatenator=concatenator, concatenated=concatenated, 
+                                attr=attr, method=method, started=started)
+                for child in self.children if child.include()
+            ]
+            if children_data:
+                return xr.concat(children_data, dim="child").stack(flat=("child",))
+            else:
+                return xr.DataArray([])
 
-        # TODO: what's going to happen if, say, an animal is missing a period
+        elif self.name != concatenated and started:
+            children_data = [
+                child.concatenate(concatenator=concatenator, concatenated=concatenated, 
+                                attr=attr, method=method, started=started)
+                for child in self.children if child.include()
+            ]
+            valid_data = [val for val in children_data if not (isinstance(val, float) and np.isnan(val))]
+            
+            if valid_data:
+                concatenated_data = xr.concat(valid_data, dim="child")
+                return concatenated_data.mean(dim="child", skipna=True)
+            else:
+                return xr.DataArray(float("nan"))
+
+        else:  # self.name == concatenated
+            return f(self)
+    
          
     @property
     def stack(self):
@@ -434,9 +454,7 @@ class Data(Base):
             self.selected_period_type = orig_vals[0]
         else:
             self.selected_period_types = orig_vals[1]
-        
-        #[setattr(self, attr, orig_val) for attr, orig_val in zip(period_attrs, orig_vals)]
-        
+                
         return reference_calc
 
 

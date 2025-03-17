@@ -57,10 +57,13 @@ class Initializer(PrepMethods):
             if codes_and_onsets is None:
                 codes_and_onsets = self.get_onsets_from_nev(animal)
             nev = period_info['nev']
+            indices = nev.get('indices')
+            if not indices:
+                indices = range(len(codes_and_onsets[nev['code']]))
             period_info['onsets'] = [
                 onset 
                 for i, onset in enumerate(codes_and_onsets[nev['code']]) 
-                if i in nev['indices']
+                if i in indices
                 ]
      
     def get_onsets_from_nev(self, animal):

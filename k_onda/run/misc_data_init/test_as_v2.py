@@ -77,7 +77,7 @@ exit;
     os.remove(script_filename)
 
 def run_matlab_mtcsg(data, matlab_path, brain_region,
-                     animal, period_number, period_type, params=('2048', '2000', '1000', '980', '2'),
+                     animal, period_number, period_type, filter_first, rms, params=('2048', '2000', '1000', '980', '2'),
                      output_dir='/Users/katie/likhtik/data/temp'):
     """
     Calls MATLAB's mtcsg on the provided data.
@@ -103,7 +103,7 @@ def run_matlab_mtcsg(data, matlab_path, brain_region,
 
     os.makedirs(output_dir, exist_ok=True)
     
-    base_filename = f"{brain_region}_{animal}_period{period_number}_{period_type}_mtcsg_{'_'.join(params)}"
+    base_filename = f"{brain_region}_{animal}_period{period_number}_{period_type}_mtcsg_filt_1st_{filter_first}_rms_{rms}_{'_'.join(params)}"
     S_file_name = os.path.join(output_dir, base_filename + '_S.txt')
     f_file_name = os.path.join(output_dir, base_filename + '_f.txt')
     t_file_name = os.path.join(output_dir, base_filename + '_t.txt')
@@ -549,8 +549,6 @@ def compute_individual_statistics(animals_data, conditions):
             mean_bar = np.mean(bar_vals)
             spec_stack = np.stack([ev['event_spectrogram'] for ev in events], axis=0)
             mean_spec = np.mean(spec_stack, axis=0)
-            if animal == 'As107':
-                a = 'foo'
             animal_means[cond] = {
                 'mean_bar': mean_bar,
                 'mean_spec': mean_spec,
@@ -880,11 +878,58 @@ def plot_group_spectrum_lines_combined(group_means, brain_region, spec_label='Po
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
 
+
+def plot_evoked_by_period_single_animal(animal_data, animal_name):
+    """
+    Plots CS+ and CS– evoked values period by period for a single animal.
+    
+    The evoked value for each event is computed as:
+       evoked_value = tone_event['bar_value'] - pretone_event['bar_value']
+    
+    The function extracts events stored under 'tone_plus'/'pretone_plus' (CS+)
+    and 'tone_minus'/'pretone_minus' (CS–), then plots them versus the event index.
+    
+    Parameters:
+        animal_data: dict, event data for a single animal (as produced by collect_animals_data)
+        animal_name: string, identifier of the animal.
+    """
+    # Extract CS+ events
+    tone_plus_events = animal_data.get('tone_plus', [])
+    pretone_plus_events = animal_data.get('pretone_plus', [])
+    cs_plus_periods = []
+    cs_plus_evoked = []
+    for t_event, p_event in zip(tone_plus_events, pretone_plus_events):
+        cs_plus_periods.append(t_event['event_index'])
+        cs_plus_evoked.append(t_event['bar_value'] - p_event['bar_value'])
+    
+    # Extract CS– events
+    tone_minus_events = animal_data.get('tone_minus', [])
+    pretone_minus_events = animal_data.get('pretone_minus', [])
+    cs_minus_periods = []
+    cs_minus_evoked = []
+    for t_event, p_event in zip(tone_minus_events, pretone_minus_events):
+        cs_minus_periods.append(t_event['event_index'])
+        cs_minus_evoked.append(t_event['bar_value'] - p_event['bar_value'])
+    
+    # Sort the data by period index (if not already sorted)
+    cs_plus_periods, cs_plus_evoked = zip(*sorted(zip(cs_plus_periods, cs_plus_evoked)))
+    cs_minus_periods, cs_minus_evoked = zip(*sorted(zip(cs_minus_periods, cs_minus_evoked)))
+    
+    plt.figure(figsize=(10, 5))
+    plt.plot(cs_plus_periods, cs_plus_evoked, marker='o', linestyle='-', color='red', label='CS+')
+    plt.plot(cs_minus_periods, cs_minus_evoked, marker='o', linestyle='-', color='blue', label='CS–')
+    plt.xlabel('Period')
+    plt.ylabel('Evoked Value (tone - pretone)')
+    plt.title(f'CS+ and CS– Evoked Values by Period for {animal_name}')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
 # =============================================================================
 # Data collection and statistics
 # =============================================================================
 
-def collect_animals_data(conditions, brain_region, freq_band, event_boundary, num_periods=6):
+def collect_animals_data(conditions, brain_region, freq_band, event_boundary, num_periods=6, filter_first=True, rms=True):
     main_dir = '/Users/katie/likhtik/AS'
     valid_animals = ['As107', 'As112', 'As106', 'As105','As108','As110', 'As111', 'As113']
     matlab_path = '/Applications/MATLAB_R2022a.app/bin/matlab'  # Use MATLAB executable path
@@ -972,28 +1017,43 @@ def collect_animals_data(conditions, brain_region, freq_band, event_boundary, nu
             pretone_idx_start = round(pretone_seg_start * fs)
             pretone_idx_end   = round(pretone_seg_end * fs)
             
-            filtered_data = divide_by_rms(filter_60_hz(NS3_data[ch, :], fs))
+            if filter_first:
+                filtered_data = filter_60_hz(NS3_data[ch, :], fs)
+                if rms:
+                    filtered_data = divide_by_rms(filtered_data)
+
+                try:
+                    tone_data = filtered_data[tone_idx_start:tone_idx_end]
+                    pretone_data = filtered_data[pretone_idx_start:pretone_idx_end]
+                except Exception as e:
+                    print(f"Error extracting data for {animal} event {period_idx}: {e}")
+                    continue
+
+
+            else:
+                try:
+                    tone_data = NS3_data[ch, tone_idx_start:tone_idx_end]
+                    tone_data = filter_60_hz(tone_data, fs)
+                    if rms:
+                        tone_data = divide_by_rms(tone_data)
+                    pretone_data = NS3_data[ch, pretone_idx_start:pretone_idx_end]
+                    pretone_data = filter_60_hz(pretone_data, fs)
+                    if rms:
+                        pretone_data = divide_by_rms(pretone_data)
+                except Exception as e:
+                    print(f"Error extracting data for {animal} event {period_idx}: {e}")
+                    continue
 
             try:
-                tone_data = filtered_data[tone_idx_start:tone_idx_end]
-                pretone_data = filtered_data[ pretone_idx_start:pretone_idx_end]
-            except Exception as e:
-                print(f"Error extracting data for {animal} event {period_idx}: {e}")
-                continue
-            
-            try:
-                S_tone, f_tone, t_tone = run_matlab_mtcsg(tone_data, matlab_path, brain_region, animal, period_idx, 'tone', mtcsg_args)
-                S_pretone, f_pretone, t_pretone = run_matlab_mtcsg(pretone_data, matlab_path, brain_region, animal, period_idx, 'pretone', mtcsg_args)
-                if animal == "As107" and period_idx == 1:
-                    with open('/Users/katie/likhtik/data/temp/test_as_log.txt', 'w') as g:
-                        g.write(f"just calculated spectrogram\n {S_tone[0][0:10]}\n")
+                S_tone, f_tone, t_tone = run_matlab_mtcsg(tone_data, matlab_path, brain_region, animal, period_idx, 'tone', str(filter_first), str(rms), mtcsg_args)
+                S_pretone, f_pretone, t_pretone = run_matlab_mtcsg(pretone_data, matlab_path, brain_region, animal, period_idx, 'pretone', str(filter_first), str(rms), mtcsg_args)
+        
             except Exception as e:
                 print(f"Error computing mtcsg for {animal} event {period_idx}: {e}")
                 continue
             
+            
             try:
-                if animal == "As107" and period_idx == 1:
-                    a = 'foo'
                 event_tone_S, rel_time, f_restricted, tone_bar = process_event_segment(
                     S_tone, f_tone, t_tone, freq_band, freq_range, event_boundary)
                 event_pretone_S, rel_time, f_restricted, pretone_bar = process_event_segment(
@@ -1066,28 +1126,25 @@ def compute_group_statistics(animals_data, conditions):
 
 def main():
     conditions = ['tone_plus', 'tone_minus', 'pretone_plus', 'pretone_minus', 'pretone']
+    discriminator_animal = 'As105'
 
     for brain_region in ['pl']:
-        # animals_data = collect_animals_data(conditions, brain_region, 'theta', event_boundary=(0, 0.3))
-        # all_animal_means = compute_individual_statistics(animals_data, conditions)
-        # group_means = group_animal_means(all_animal_means, group_by='sex_learning')
-        # plot_evoked_bar_graph(group_means, brain_region, 'theta')
-        # perform_paired_wilcoxon_tests(animals_data, freq_band='theta', brain_region=brain_region, group_by='learning')
-        # combined_group_means = group_animal_means(all_animal_means, group_by='learning')
-        # plot_evoked_bar_graph_combined(combined_group_means, brain_region, 'theta', title_suffix=' Three Periods')
-        # perform_paired_wilcoxon_tests(animals_data, freq_band='theta', brain_region=brain_region, group_by='learning')
+        filter_first_animals_data = collect_animals_data(conditions, brain_region, 'theta', event_boundary=(0, 0.3), num_periods=3, filter_first=True, rms=False)
+        plot_evoked_by_period_single_animal(filter_first_animals_data[discriminator_animal], discriminator_animal)
 
+        filter_first_all_animal_means = compute_individual_statistics(filter_first_animals_data, conditions)
+        perform_paired_wilcoxon_tests(filter_first_animals_data, freq_band='theta', brain_region=brain_region, group_by='learning')
+        filter_first_combined_group_means = group_animal_means(filter_first_all_animal_means, group_by='learning')
+        plot_evoked_bar_graph_combined(filter_first_combined_group_means, brain_region, 'theta', title_suffix=' Three Periods Filter First')
 
-        heat_map_animals_data = collect_animals_data(conditions, brain_region, 'low frequencies', event_boundary=(0, 0.3), num_periods=6)
-        with open('/Users/katie/likhtik/data/temp/test_as_log.txt', 'a') as g:
-            g.write(f"executed collect_animals_data\nthis is the event-wise average, equivalent of <period>.get_power() "
-                    f"{heat_map_animals_data['As107']['tone_plus'][0]['event_spectrogram'][0][0:10]}")
-        all_animal_means_heat = compute_individual_statistics(heat_map_animals_data, conditions)
-        heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='learning')
-        a = 'foo'
-        # plot_evoked_heatmaps(heat_map_group_means, brain_region, 'low frequencies', title_suffix=' Three Periods')
-        #combined_heat_map_group_means = group_animal_means(all_animal_means_heat, group_by='learning')
-        #plot_evoked_heatmaps_combined(combined_heat_map_group_means, brain_region, 'low frequencies', title_suffix=' Three Periods') #, cbar_vmin=-10, cbar_vmax=15)
+        filter_second_animals_data = collect_animals_data(conditions, brain_region, 'theta', event_boundary=(0, 0.3), num_periods=3, filter_first=False, rms=False)
+        plot_evoked_by_period_single_animal(filter_second_animals_data[discriminator_animal], discriminator_animal)
+
+        filter_second_all_animal_means = compute_individual_statistics(filter_second_animals_data, conditions)
+        perform_paired_wilcoxon_tests(filter_second_animals_data, freq_band='theta', brain_region=brain_region, group_by='learning')
+        filter_second_combined_group_means = group_animal_means(filter_second_all_animal_means, group_by='learning')
+        plot_evoked_bar_graph_combined(filter_second_combined_group_means, brain_region, 'theta', title_suffix=' Three Periods Filter Second')
+       
             
 
         

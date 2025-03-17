@@ -26,10 +26,10 @@ def run(log=True):
     config_file =  '/Users/katie/likhtik/AS/init_config.json'
     # config_file = ('/Users/katie/likhtik/likhtik_scripts/spike_data_processing/' 
     #               'documentation/tutorials/psth/data/init_config.json')
-    # config_file = '/Users/katie/likhtik/CH27mice/init_config.json'
+    config_file = '/Users/katie/likhtik/CH27mice/init_config.json'
     runner = Runner(config_file=config_file)
 
-    runner.run(AS_OPTS)
+    runner.run(CH27_GROUP_PSTH_OPTS)
  
     if log:
         log_directory_contents('/Users/katie/likhtik/data/logdir')

@@ -24,11 +24,11 @@ class PeriStimulusPlotter(FeaturePlotter):
         self.marker_names = []
     
     def plot_entry(self, ax, val, aesthetic_args):
-            data_divisions, ax_list, x_slices = self.handle_broken_axes(val)
-            row = 'foo' # TODO fix this
-            for i, (ax, data, _) in enumerate(zip(ax_list, data_divisions, x_slices)):
-                self.plot_line(ax, data, row, i, aesthetic_args, data_source=row['data_source'])
-                self.place_indicator(ax, aesthetic_args)
+        data_divisions, ax_list, x_slices = self.handle_broken_axes(val)
+        row = 'foo' # TODO fix this
+        for i, (ax, data, _) in enumerate(zip(ax_list, data_divisions, x_slices)):
+            self.plot_line(ax, data, row, i, aesthetic_args, data_source=row['data_source'])
+            self.place_indicator(ax, aesthetic_args)
                   
 
     def plot_line(self, ax, val, aesthetic_args):
@@ -72,7 +72,6 @@ class PeriStimulusPlotter(FeaturePlotter):
         ax.set_xticklabels([f"{label:.2f}" for label in tick_range])  # Labels in seconds
             
 
-    
     def place_indicator(self, ax, aesthetic_args):
         indicator = aesthetic_args.get('indicator', {})
         if not indicator:
@@ -91,6 +90,19 @@ class PeriStimulusPlotter(FeaturePlotter):
                     transform=transform,  # Apply the transformation
                     zorder=10
                 ))
+
+    
+    def split_data_for_break_axes(self, val, break_axes):
+        x = np.linspace(-self.pre, self.post, len(val))
+        if not break_axes:
+            return [x], [val]
+        break_axes, num_rows, num_cols = break_axes
+        x_splits = []
+        val_splits = []
+        if 0 in break_axes:
+            x_splits = [[p for p in x if lower <= p <= upper] for lower, upper in break_axes[0]]
+            val_splits = [[v for p, v in zip(x, val) if lower <= p <= upper] for lower, upper in break_axes[0]]
+        return x_splits, val_splits
                 
 
 class RasterPlotter(PeriStimulusPlotter):
@@ -122,33 +134,27 @@ class RasterPlotter(PeriStimulusPlotter):
                 
 class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
     
-    def plot_entry(self, ax, val, aesthetic_args):
+    def plot_entry(self, ax, val, aesthetic_args, break_axes=None):
         if val.ndim > 1:
             val = val[0]
-        x = np.linspace(-self.pre, self.post, len(val)+1)[:-1]
-        y = val
-        self.plot_hist(x, y, self.calc_opts['bin_size'], ax, aesthetic_args)
+
+        for x_split, val_split in self.split_data_for_break_axes(val, break_axes):
+            self.plot_hist(x_split, val_split, self.calc_opts['bin_size'], ax, aesthetic_args)
 
 
 class PeriStimulusHeatMapPlotter(HeatMapPlotter, PeriStimulusPlotter):
 
-    def plot_entry(self, entry, aesthetics, norm):
+    def plot_entry(self, entry, aesthetics, norm, break_axes=None):
+        if break_axes:
+            raise NotImplementedError("Break axes not yet implemented for heat maps")
         img, ax = HeatMapPlotter.plot_entry(self, entry, aesthetics, norm)
         aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
+
+        ax.imshow(entry['data'], aspect='auto', extent=[-self.pre, self.post, 0, entry['data'].shape[0]], norm=norm, **aesthetic_args)
+
         self.place_indicator(ax, aesthetic_args)
         return img, ax
     
-    def process_calc(self, calc_config):
-        HeatMapPlotter.process_calc(self, calc_config)
-        
-        
-        # info = calc_config['info']
-
-        # for entry in info:
-        #     ax = entry['cell']
-        #     data = entry[entry['attr']]
-        #     self.set_x_ticks(ax, data)
-
 
 class PeriStimulusPowerSpectrumPlotter(PeriStimulusHeatMapPlotter):
 

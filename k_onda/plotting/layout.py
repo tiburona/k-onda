@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from matplotlib.gridspec import  GridSpecFromSubplotSpec
+from matplotlib.gridspec import  GridSpec, GridSpecFromSubplotSpec
 import numpy as np
 
 from k_onda.base import Base
@@ -117,9 +117,15 @@ class Layout(Base, ColorbarMixin):
         self.figure = grid[new_figure_ind]
         
     def make_all_cells(self):
+             #fig, parent_layout, index, break_axes, aspect=None)
+        if self.spec.get('break_axis'):
+            creation_func = lambda i, j: BrokenAxes(self.subfigure_grid[i, j], self, (i, j), self.spec['break_axis'])
+        else:
+            creation_func = lambda i, j: AxWrapper(self.subfigure_grid[i, j].subfigures(1, 1).add_subplot(),
+                                                   (i, j), self)
         
         return np.array([
-            [AxWrapper(self.subfigure_grid[i,j].subfigures(1, 1).add_subplot(), (i, j), self) 
+            [creation_func(i, j) 
              for j in range(self.dimensions[1])] 
              for i in range(self.dimensions[0])
         ])
@@ -193,6 +199,7 @@ class SubfigWrapper(Wrapper):
     def __init__(self, subfig, index, layout):
         super().__init__(subfig, index, layout)
 
+
 class AxWrapper(Wrapper):
     def __init__(self, ax, index, layout):
         super().__init__(ax, index, layout)
@@ -200,37 +207,40 @@ class AxWrapper(Wrapper):
 
 class BrokenAxes(Base):
     
-    def __init__(self, fig, parent_gridspec, index, break_axes, aspect=None):
+    def __init__(self, fig, parent_layout, index, break_axes, aspect=None):
         self.break_axes = {
             key: [np.array(t) for t in value] 
             for key, value in break_axes.items()}
         self.index = index
         self.fig = fig
+        self.layout = parent_layout
         self.aspect = aspect
 
-        dim0_breaks = len(self.break_axes.get(1, [])) or 1
-        dim1_breaks = len(self.break_axes.get(0, [])) or 1
-
-        self.gs = GridSpecFromSubplotSpec(
-            dim0_breaks, dim1_breaks, 
-            subplot_spec=parent_gridspec[self.index],  
-        )
+        self.dim0_breaks = len(self.break_axes.get(1, [])) or 1
+        self.dim1_breaks = len(self.break_axes.get(0, [])) or 1
+        
+        self.subfig = SubfigWrapper(self.fig, index, self.layout)
+        self.gs = GridSpec(self.dim0_breaks, self.dim1_breaks, figure=self.subfig.obj)
 
         self.axes, self.ax_list = self._create_subplots()
 
         self._share_axes_and_hide_spines()
 
+    def __getattr__(self, name):
+        # Forward any unknown attribute access to the subfigure
+        return getattr(self.subfig, name)
+
     def _create_subplots(self):
         axes = []
         ax_list = []
-        for i0 in range(len(self.break_axes.get(1, [0]))):
+        for i0 in range(self.dim0_breaks):
             row = []
-            for j1 in range(len(self.break_axes.get(0, [0]))):
+            for j1 in range(self.dim1_breaks):
                 gridspec_slice = self.gs[i0, j1]
-                ax = self.fig.add_subplot(gridspec_slice)
+                ax = self.subfig.add_subplot(gridspec_slice)
                 if self.aspect:
                     ax.set_box_aspect(self.aspect)
-                ax_wrapper = AxWrapper(ax, (i0, j1))
+                ax_wrapper = AxWrapper(ax, (i0, j1), self.layout)
                 row.append(ax_wrapper)
                 ax_list.append(ax_wrapper)
             axes.append(row)
@@ -242,7 +252,7 @@ class BrokenAxes(Base):
             if i in self.break_axes:
                 first, *rest = self.ax_list
                 for ax in rest:
-                    getattr(ax, f"share{dim_num}")(first.ax)
+                    getattr(ax, f"share{dim_num}")(first.obj)
 
         # Hide spines and add diagonal lines to indicate breaks
         d = .015  # size of diagonal lines

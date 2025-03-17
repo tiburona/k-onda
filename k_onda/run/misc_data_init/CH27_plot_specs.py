@@ -173,10 +173,44 @@ group_psth_plots = {
 
 }
 
+group_psth_plots_whole_axis = {
+    'plot_type': 'psth',
+    'section': {
+        'attr': 'calc',
+        'aesthetics': {
+            'ax': {'border': {'top': {'visible': 'FFF'}, 'right': {'visible': 'FFF'}}},
+            'default': 
+                    {'marker': {'color': 'black'},
+                    }},
+        'break_axis': {0: [(-10, 10), (25, 45)]},
+        'label': {'x': 
+                  {'text': 'Seconds'}, 
+                  'y': {'text': 'Firing Rate (Spikes per Second)'}},        
+        'divisions': [
+            {
+                'divider_type': 'period_type',
+                'members': ['light']
+            }]
+    }}
+
+
+
+
+# AS_OPTS = {
+#     'procedure': 'make_plots',
+#     'write_opts': {
+#         'fname': {'template': '/Users/katie/likhtik/AS/power_{brain_region}_{frequency_band}',
+#                   'fields': ['brain_region', 'frequency_band']}
+#     },
+#     'calc_opts': AS_POWER_OPTS,
+#     'plot_spec': AS_SPECTRUM_PLOT_SPEC
+# }
+
 CH27_GROUP_PSTH_OPTS = {
     
     'procedure': 'make_plots',
-    'graph_opts': group_psth_plots,
+    'plot_spec': group_psth_plots_whole_axis,
+    'write_opts': '/Users/katie/likhtik/ch27/psth',
     'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'raster_type': 'spike_train', 
                   'base': 'period', 'bin_size': .5, 
                   'periods': {'light': {'period_pre_post': (10, 10)}}}
@@ -184,7 +218,7 @@ CH27_GROUP_PSTH_OPTS = {
 
 
 units_waveform_plots = {
-    'graph_dir': '/Users/katie/likhtik/CH27',
+    'graph_dir': '/Users/katie/likhtik/CH27/psth.png',
     'fname': 'units_waveform',
     'plot_type': 'waveform',
     'plot_spec': {

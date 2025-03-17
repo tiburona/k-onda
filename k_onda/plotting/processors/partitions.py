@@ -16,12 +16,13 @@ class Partition(Processor):
     def __init__(self, config):
         super().__init__(config)
         
+      
+
+    def setup_unique(self):
         # self.info_by_division_by_layers is a list with these same unique values, repeated for
         # each unique layer
         self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
-        
         self.assign_data_sources()
-
         if self.global_colorbar:
             self.legend_info_list.append((self.figure, self.colorbar_spec, []))
 
@@ -134,11 +135,8 @@ class Partition(Processor):
         # you start a processor if you see that something is set that's nowhere in your 
         # running list of already encountered divisions, you unset it.
         for key in ['neuron_type', 'period_type', 'period_group', 'period_types', 'conditions']:
-            if key in info: 
-                
+            if key in info:     
                 setattr(self, f"selected_{key}", info[key])
-                if key == 'conditions':
-                    a = 'foo'
 
 
     def get_calcs(self, info):

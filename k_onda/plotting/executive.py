@@ -100,6 +100,11 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
                 return spec[k].get('margins', {})
 
     def construct_path(self):
+        
+        if isinstance(self.write_opts, str):
+            self.file_path = self.write_opts
+            return
+        
         # Fill fields
         root, fname, path = [
             self.fill_fields(self.write_opts.get(key)) 

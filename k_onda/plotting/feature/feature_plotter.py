@@ -20,17 +20,25 @@ class FeaturePlotter(Base, PlottingMixin):
         unique_axs = defaultdict(lambda: {'ax': None, 'entries': []})
 
         for i, entry in enumerate(info):
-            ax = entry['cell']
-            unique_axs[id(ax)]['ax'] = ax
-            unique_axs[id(ax)]['entries'].append(entry)
+            cell = entry['cell']
+            unique_axs[id(cell)]['cell'] = cell
+            unique_axs[id(cell)]['entries'].append(entry)
 
             aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
             ax_args = aesthetic_args.get('ax', {})
-            self.apply_ax_args(ax, ax_args, i, spec_type)
+            if hasattr(cell, 'break_axes'):
+                for nrow, row in enumerate(cell.axes):
+                    for ncol, ax in enumerate(row):
+                        self.apply_ax_args(ax, ax_args, i, spec_type)
+                        # Plot entry with a temporary label for each ax in break_axes
+                        val = entry[entry['attr']]
+                        self.plot_entry(ax, val, aesthetic_args, break_axes=(cell.break_axes, nrow, ncol))
+            else:
+                self.apply_ax_args(cell, ax_args, i, spec_type)
+                # Plot entry with a temporary label
+                val = entry[entry['attr']]
+                self.plot_entry(cell, val, aesthetic_args)
 
-            # Plot entry with a temporary label
-            val = entry[entry['attr']]
-            self.plot_entry(ax, val, aesthetic_args)
             entry['legend_label'] = self.get_entry_label(entry)
 
         self.make_legend(unique_axs)
@@ -145,4 +153,5 @@ class FeaturePlotter(Base, PlottingMixin):
         
         # Apply remaining border arguments to the spine
         ax.spines[side].set(**border_args)
+
     

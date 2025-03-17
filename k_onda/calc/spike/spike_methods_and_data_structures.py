@@ -3,6 +3,7 @@ from bisect import bisect_left as bs_left, bisect_right as bs_right
 from collections import defaultdict
 
 import numpy as np
+import xarray as xr
 
 from k_onda.utils import calc_hist, cross_correlation, correlogram
 from k_onda.interfaces import PhyInterface
@@ -18,15 +19,16 @@ class SpikeMethods:
     def get_psth(self):
         return self.get_average('get_psth', stop_at=self.calc_opts.get('base', 'event'))
     
-    def get_firing_rates(self):
-        return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'))
+    def get_firing_rates(self, exclude=True):
+        return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'), 
+                                exclude=exclude)
     
     def get_spike_counts(self):
         return self.get_average('get_spike_counts', stop_at=self.calc_opts.get('base', 'event'))
     
     def get_proportion(self):
         return self.get_average('get_proportion', stop_at=self.calc_opts.get('base', 'event'))
-    
+  
     
 class RateMethods:
 
@@ -65,13 +67,16 @@ class RateMethods:
         if 'counts' in self.private_cache:
             counts = self.private_cache['counts']
         else:
-            counts = calc_hist(self.spikes, self.num_bins_per, self.spike_range)[0]
+            raw_counts = calc_hist(self.spikes, self.num_bins_per, self.spike_range)[0]
+            # Wrap the raw counts in a DataArray with 'time' as the dimension.
+            time_coords = np.linspace(self.start, self.stop, self.num_bins_per + 1)
+            counts = xr.DataArray(raw_counts, dims=['time'], coords={'time': time_coords})
         if self.calc_type == 'psth':
             self.private_cache['counts'] = counts
         return counts
-    
+
     def get_spike_train_(self):
-        return np.where(self.get_spike_counts_() != 0, 1, 0)
+        return xr.where(self.get_spike_counts_() != 0, 1, 0)
         
     def get_psth_(self):
         rates = self.get_firing_rates() 
@@ -85,14 +90,22 @@ class RateMethods:
         return self.get_spike_counts_()/self.calc_opts.get('bin_size', .01)
 
     def get_proportion_(self):
-        return [1 if rate > 0 else 0 for rate in self.get_psth()]
+        return xr.where(self.get_psth() > 0, 1, 0)
     
     def get_cross_correlations(self, pair=None):
         other = self.get_other(pair)
-        cross_corr = cross_correlation(self.get_unadjusted_rates(), other.get_firing_rates_(), mode='full')
+        raw_cross_corr = cross_correlation(self.get_unadjusted_rates(),
+                                            other.get_firing_rates_(),
+                                            mode='full')
+        n = raw_cross_corr.shape[0]
+        midpoint = n // 2
+        # Create lag coordinates so that 0 is at the midpoint.
+        lag_coords = np.arange(-midpoint, n - midpoint)
+        cross_corr = xr.DataArray(raw_cross_corr, dims=['lags'], coords={'lags': lag_coords})
+        
         boundary = round(self.calc_opts['max_lag'] / self.calc_opts['bin_size'])
-        midpoint = cross_corr.size // 2
-        return cross_corr[midpoint - boundary:midpoint + boundary + 1]
+        # Now select lags from -boundary to boundary using .sel (coordinate-based slicing)
+        return cross_corr.sel(lags=slice(-boundary, boundary))
 
     def get_correlogram(self, pair=None, num_pairs=None):
         max_lag, bin_size = (self.calc_opts[opt] for opt in ['max_lag', 'bin_size'])
@@ -172,11 +185,19 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         return np.std([self.concatenate(method='get_firing_rates', depth=depth)])
 
     def get_cross_correlations(self, axis=0):
-        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
-                        for pair in self.unit_pairs], axis=axis)
+        cross_corrs = [pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
+                    for pair in self.unit_pairs]
+        combined = xr.concat(cross_corrs, dim='_neutral_dim')
+        return combined.mean(dim='_neutral_dim', skipna=True)
 
     def get_correlogram(self, axis=0):
-        return np.mean([pair.get_correlogram(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
+        correlograms = [pair.get_correlogram(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
+                        for pair in self.unit_pairs]
+        combined = xr.concat(correlograms, dim='_neutral_dim')
+        return combined.mean(dim='_neutral_dim', skipna=True)
+
+    def get_cross_correlations(self, axis=0):
+        return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
     
     def get_waveform(self):

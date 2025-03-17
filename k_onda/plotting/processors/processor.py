@@ -52,12 +52,21 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
     """
 
     def __init__(self, config):
+        self.setup_common(config)
+        self.setup_unique()
+        self.finalize_init()
+        
+    def setup_common(self, config):
         self.__dict__.update(config.__dict__)
-
         self.layers = self.init_layers()
         self.aesthetics = self.init_aesthetics()
         self.label = self.get_label()
 
+    def setup_unique(self):
+        # Intended to be overridden by subclasses
+        pass
+
+    def finalize_init(self):
         self.child_layout = Layout(
             self.parent_layout,
             self.current_index,
