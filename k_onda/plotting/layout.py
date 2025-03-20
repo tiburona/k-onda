@@ -198,26 +198,26 @@ class SubfigWrapper(Wrapper):
 
     def __init__(self, subfig, index, layout):
         super().__init__(subfig, index, layout)
+        self.subfig = subfig
 
 
 class AxWrapper(Wrapper):
     def __init__(self, ax, index, layout):
         super().__init__(ax, index, layout)
+        self.ax = ax
     
 
 class BrokenAxes(Base):
     
     def __init__(self, fig, parent_layout, index, break_axes, aspect=None):
-        self.break_axes = {
-            key: [np.array(t) for t in value] 
-            for key, value in break_axes.items()}
+        self.break_axes = break_axes
         self.index = index
         self.fig = fig
         self.layout = parent_layout
         self.aspect = aspect
-
-        self.dim0_breaks = len(self.break_axes.get(1, [])) or 1
-        self.dim1_breaks = len(self.break_axes.get(0, [])) or 1
+        
+        self.dim0_breaks = len(self.break_axes.get(1, {}).get('splits', [])) or 1
+        self.dim1_breaks = len(self.break_axes.get(0, {}).get('splits', [])) or 1
         
         self.subfig = SubfigWrapper(self.fig, index, self.layout)
         self.gs = GridSpec(self.dim0_breaks, self.dim1_breaks, figure=self.subfig.obj)

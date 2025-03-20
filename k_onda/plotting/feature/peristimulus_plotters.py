@@ -18,9 +18,7 @@ class HistogramPlotter:
 
 class PeriStimulusPlotter(FeaturePlotter):
     
-    def __init__(self ):
-        self.base = self.calc_opts.get('base', 'event') 
-        self.pre, self.post = (getattr(self, f"{opt}_{self.base}") for opt in ('pre', 'post'))
+    def __init__(self ):  
         self.marker_names = []
     
     def plot_entry(self, ax, val, aesthetic_args):
@@ -66,7 +64,6 @@ class PeriStimulusPlotter(FeaturePlotter):
         ax.set_xticks(manual_ticks)
 
        
-
         # Create a time range that matches the visible ticks
         tick_range = np.linspace(beginning, self.post, len(visible_ticks))
         ax.set_xticklabels([f"{label:.2f}" for label in tick_range])  # Labels in seconds
@@ -91,18 +88,27 @@ class PeriStimulusPlotter(FeaturePlotter):
                     zorder=10
                 ))
 
-    
-    def split_data_for_break_axes(self, val, break_axes):
-        x = np.linspace(-self.pre, self.post, len(val))
+    def split_data_for_break_axes(self, cell, val, break_axes):
+        base = self.calc_opts.get('base', 'event')
+        x_coords = self.calc_opts.get('x_coords', f'{base}_time')
+        x = val.coords[x_coords]
+
         if not break_axes:
-            return [x], [val]
-        break_axes, num_rows, num_cols = break_axes
-        x_splits = []
-        val_splits = []
+            return [cell.obj], [x], [val]
+
         if 0 in break_axes:
-            x_splits = [[p for p in x if lower <= p <= upper] for lower, upper in break_axes[0]]
-            val_splits = [[v for p, v in zip(x, val) if lower <= p <= upper] for lower, upper in break_axes[0]]
-        return x_splits, val_splits
+            brk = break_axes[0]
+    
+            dim = brk.get('dim', x_coords)
+
+            get_splits = lambda arr: [
+                arr.where((arr[dim] >= lower) & (arr[dim] < upper), drop=True) 
+                for lower, upper in brk['splits']
+            ]
+
+            return zip(cell.ax_list, get_splits(x), get_splits(val))
+
+        return [cell.obj], [x], [val]
                 
 
 class RasterPlotter(PeriStimulusPlotter):
@@ -134,11 +140,11 @@ class RasterPlotter(PeriStimulusPlotter):
                 
 class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
     
-    def plot_entry(self, ax, val, aesthetic_args, break_axes=None):
+    def plot_entry(self, cell, val, aesthetic_args):
         if val.ndim > 1:
             val = val[0]
-
-        for x_split, val_split in self.split_data_for_break_axes(val, break_axes):
+        break_axes = getattr(cell, 'break_axes', None)
+        for ax, x_split, val_split in self.split_data_for_break_axes(cell, val, break_axes):
             self.plot_hist(x_split, val_split, self.calc_opts['bin_size'], ax, aesthetic_args)
 
 

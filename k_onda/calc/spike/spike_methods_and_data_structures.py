@@ -16,8 +16,8 @@ from k_onda.data.period_event import Period, Event
 
 class SpikeMethods:
 
-    def get_psth(self):
-        return self.get_average('get_psth', stop_at=self.calc_opts.get('base', 'event'))
+    def get_psth(self, exclude=True):
+        return self.get_average('get_psth', stop_at=self.calc_opts.get('base', 'event'), exclude=exclude)
     
     def get_firing_rates(self, exclude=True):
         return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'), 
@@ -62,15 +62,37 @@ class RateMethods:
     
     def get_proportion(self):
         return self.resolve_calc_fun('proportion')
+    
+    def get_coords(self, length):
+        index = np.arange(length)
+        absolute_time = index * self.calc_opts['bin_size'] + self.start
+        relative_time = absolute_time - self._start
+        period_time = relative_time - self.parent._start if self.name == 'event' else relative_time
+
+        coord_dict = {
+            'time': index,
+            'absolute_time': ('time', absolute_time),
+            'period_time': ('time', period_time)
+        }
+
+        if self.name == 'event':
+            coord_dict['event_time'] = ('time', relative_time)
+
+        return coord_dict
         
     def get_spike_counts_(self):
         if 'counts' in self.private_cache:
             counts = self.private_cache['counts']
         else:
             raw_counts = calc_hist(self.spikes, self.num_bins_per, self.spike_range)[0]
+            coords = self.get_coords(len(raw_counts))
+            
             # Wrap the raw counts in a DataArray with 'time' as the dimension.
-            time_coords = np.linspace(self.start, self.stop, self.num_bins_per + 1)
-            counts = xr.DataArray(raw_counts, dims=['time'], coords={'time': time_coords})
+            counts = xr.DataArray(
+                raw_counts,
+                dims=['time'],  
+                coords=coords
+            )
         if self.calc_type == 'psth':
             self.private_cache['counts'] = counts
         return counts
@@ -79,12 +101,12 @@ class RateMethods:
         return xr.where(self.get_spike_counts_() != 0, 1, 0)
         
     def get_psth_(self):
-        rates = self.get_firing_rates() 
+        firing_rates = self.get_firing_rates() 
         reference_rates = self.reference.get_firing_rates()
-        rates -= reference_rates
-        rates /= self.unit.get_firing_std_dev()  # same as dividing unit psth by std dev 
+        corrected_rates = (firing_rates - reference_rates)/self.unit.get_firing_std_dev() 
+        corrected_rates = corrected_rates.assign_coords(**firing_rates.coords)
         self.private_cache = {}
-        return rates
+        return corrected_rates
 
     def get_firing_rates_(self):
         return self.get_spike_counts_()/self.calc_opts.get('bin_size', .01)
@@ -181,8 +203,8 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         return [event.spikes for period in self.children for event in period.children]
 
     def get_firing_std_dev(self):
-        depth = 2 if self.has_grandchildren else 1
-        return np.std([self.concatenate(method='get_firing_rates', depth=depth)])
+        concatenated = self.calc_opts.get('base', 'event')
+        return np.std([self.concatenate(concatenator='unit', concatenated=concatenated, method='get_firing_rates')])
 
     def get_cross_correlations(self, axis=0):
         cross_corrs = [pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
@@ -247,6 +269,14 @@ class SpikePeriod(Period, RateMethods):
         
     def get_other(self, pair):
         return pair.spike_periods[self.period_type][self.identifier]
+    
+    def index_transformation_function(self, concatenator):
+        if concatenator == 'unit':
+            return lambda calc: calc.assign_coords(
+                time=calc.coords['time'] + self.onset
+                ) if isinstance(calc, xr.DataArray) else calc
+        else:
+            raise NotImplementedError("Period concatenation is only supported by unit.")
 
         
 class SpikeEvent(Event, RateMethods, BinMethods):
@@ -272,6 +302,19 @@ class SpikeEvent(Event, RateMethods, BinMethods):
     
     def get_other(self, pair):
         return pair.spike_periods[self.period_type][self.period.identifier].events[self.identifier]
+    
+    def index_transformation_function(self, concatenator):
+        if concatenator == 'period':
+            return lambda calc: calc.assign_coords(
+                time=calc.coords['time'] + self.identifier * self.duration
+                ) if isinstance(calc, xr.DataArray) else calc
+        elif concatenator == 'unit':
+            return lambda calc: calc.assign_coords(
+                time=calc.coords['time'] + self.identifier * self.duration + self.period.onset
+                ) if isinstance(calc, xr.DataArray) else calc
+        else:
+            raise NotImplementedError("Event concatenation is only supported by period and unit.")
+
 
 
 class UnitPair(Data):

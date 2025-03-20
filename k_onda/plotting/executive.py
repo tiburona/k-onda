@@ -103,37 +103,43 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         
         if isinstance(self.write_opts, str):
             self.file_path = self.write_opts
-            return
-        
-        # Fill fields
-        root, fname, path = [
-            self.fill_fields(self.write_opts.get(key)) 
-            for key in ['root', 'fname', 'path']
-        ]
-        
-        # If user explicitly set 'path', we skip building our own path
-        if path:
-            self.file_path = path
-    
+           
+
         else:
-            # Fallback to some default root
-            if not root:
-                root = self.experiment.exp_info.get('data_path', os.getcwd())
+        
+            # Fill fields
+            root, fname, path = [
+                self.fill_fields(self.write_opts.get(key)) 
+                for key in ['root', 'fname', 'path']
+            ]
             
-            # Fallback to some default fname
-            if not fname:
-                fname = '_'.join([self.kind_of_data, self.calc_type])
-            
-            self.title = smart_title_case(fname.replace('_', ' '))
-            
-            # Build partial path (no extension yet)
-            self.file_path = os.path.join(root, self.kind_of_data, fname)
+            # If user explicitly set 'path', we skip building our own path
+            if path:
+                self.file_path = path
+        
+            else:
+                # Fallback to some default root
+                if not root:
+                    root = self.experiment.exp_info.get('data_path', os.getcwd())
+                
+                # Fallback to some default fname
+                if not fname:
+                    fname = '_'.join([self.kind_of_data, self.calc_type])
+                
+                self.title = smart_title_case(fname.replace('_', ' '))
+                
+                # Build partial path (no extension yet)
+                self.file_path = os.path.join(root, self.kind_of_data, fname)
 
         self.handle_collisions()
         
         # Build final file path and an opts file
-        ext = self.write_opts.get('extension', '.png')
         self.opts_file_path = self.file_path + '.txt'
+
+        if isinstance(self.write_opts, dict):
+            ext = self.write_opts.get('extension', '.png')
+        else:
+            ext = '.png'
         self.file_path += ext
 
     def handle_collisions(self):

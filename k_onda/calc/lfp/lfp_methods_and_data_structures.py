@@ -1,4 +1,5 @@
 import numpy as np
+import xarray as xr
 
 from k_onda.data.period_event import Period, Event
 from k_onda.data.data import Data
@@ -21,18 +22,6 @@ class LFPMethods:
 
 class LFPDataSelector:
     """A class with methods shared by LFPPeriod and LFPEvent that are used to return portions of their data."""
-
-    @property
-    def mean_over_time_bins(self):
-        return np.mean(self.data, axis=1)
-
-    @property
-    def mean_over_frequency(self):
-        return np.mean(self.data, axis=0)
-
-    @property
-    def mean(self):
-        return np.mean(self.data)
 
     def slice_spectrogram(self):
         tolerance = .2  # TODO: this might change with different mtcsg args
@@ -154,6 +143,14 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
             self.save(result, pickle_path)
         return [np.array(arr) for arr in result]
     
+    def index_transformation_function(self, concatenator):
+        if concatenator == 'animal':
+            return lambda calc: calc.assign_coords(
+                time=calc.coords['time'] + self.onset
+                ) if isinstance(calc, xr.DataArray) else calc
+        else:
+            raise NotImplementedError("Period concatenation is currently only supported by animal.")
+    
 
 class LFPEvent(Event, LFPMethods, LFPDataSelector):
 
@@ -175,8 +172,20 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
     def get_power(self):
         return np.array(self.sliced_spectrogram)[:, self.mask]
     
+    def index_transformation_function(self, concatenator):
+        if concatenator == 'period':
+            return lambda identifier, calc: calc.assign_coords(
+                time=calc.coords['time'] + identifier * self.duration
+                )
+        elif concatenator == 'animal':
+            return lambda identifier, calc: calc.assign_coords(
+                time=calc.coords['time'] + identifier * self.duration + self.period.onset
+                )
+        else:
+            raise NotImplementedError("Event concatenation is currently only supported by period and animal.")
+    
 
-class RegionRelationshipCalculator(Data, EventValidator): # TODO: make the data lazy attributes
+class RegionRelationshipCalculator(Data, EventValidator):
 
     def __init__(self, period, regions):
         self.period = period
@@ -232,6 +241,9 @@ class RegionRelationshipCalculator(Data, EventValidator): # TODO: make the data 
                                for data in self.regions_data)))
         len_sets = [len(a) for a, _ in valid_sets]
         return valid_sets, len_sets
+    
+    def index_transformation_function(self, concatenator):
+        raise NotImplementedError("Not yet implemented for RegionRelationshipCalculator.")
     
 
 class RelationshipCalculatorEvent(Event):

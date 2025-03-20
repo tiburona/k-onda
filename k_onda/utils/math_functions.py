@@ -4,6 +4,7 @@ import numpy as np
 from scipy import signal
 from scipy.signal import hilbert, butter, filtfilt, firwin, lfilter, correlate, coherence
 from scipy.optimize import curve_fit
+import xarray as xr
 
 
 def calc_hist(spikes, num_bins, spike_range):
@@ -67,13 +68,18 @@ def spectrum(series, freq_range, max_lag, bin_size):
 
 
 def sem(children_vals):
-    """Take the standard error by columns, over rows of a matrix"""
+    """
+    Compute the standard error using xarray, preserving dimension names.
+    - Assumes input is a list of xarray.DataArrays.
+    - Uses ddof=1 for sample standard deviation.
+    """
+
     if len(children_vals) == 0:
         return np.nan
-    all_series = np.vstack(children_vals)
-    # Compute standard deviation along the vertical axis (each point in time)
-    std_dev = np.nanstd(all_series, axis=0, ddof=1)  # ddof=1 to compute sample standard deviation
-    return std_dev / np.sqrt(len(all_series))
+
+    all_series = xr.concat(children_vals, dim="child")
+    std_dev = all_series.std(dim="child", skipna=True, ddof=1)
+    return std_dev / np.sqrt(all_series.sizes["child"])
 
 
 def filter_60_hz(signal_with_noise, fs):

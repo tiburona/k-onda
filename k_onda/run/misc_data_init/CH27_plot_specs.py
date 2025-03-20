@@ -182,7 +182,7 @@ group_psth_plots_whole_axis = {
             'default': 
                     {'marker': {'color': 'black'},
                     }},
-        'break_axis': {0: [(-10, 10), (25, 45)]},
+        'break_axis': {0: {'splits': [(-10, 10), (25, 45)], 'dim': 'period_time'}},
         'label': {'x': 
                   {'text': 'Seconds'}, 
                   'y': {'text': 'Firing Rate (Spikes per Second)'}},        
@@ -211,10 +211,10 @@ CH27_GROUP_PSTH_OPTS = {
     'procedure': 'make_plots',
     'plot_spec': group_psth_plots_whole_axis,
     'write_opts': '/Users/katie/likhtik/ch27/psth',
-    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 'raster_type': 'spike_train', 
+    'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'psth', 'raster_type': 'spike_train', 
                   'base': 'period', 'bin_size': .5, 
-                  'periods': {'light': {'period_pre_post': (10, 10)}}}
-    }
+                  'periods': {'light': {'period_pre_post': (10, 10)}, 'prelight': {'period_pre_post': (10, 10)}} 
+    }}
 
 
 units_waveform_plots = {

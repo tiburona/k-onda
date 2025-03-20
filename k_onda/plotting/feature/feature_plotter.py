@@ -26,19 +26,10 @@ class FeaturePlotter(Base, PlottingMixin):
 
             aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
             ax_args = aesthetic_args.get('ax', {})
-            if hasattr(cell, 'break_axes'):
-                for nrow, row in enumerate(cell.axes):
-                    for ncol, ax in enumerate(row):
-                        self.apply_ax_args(ax, ax_args, i, spec_type)
-                        # Plot entry with a temporary label for each ax in break_axes
-                        val = entry[entry['attr']]
-                        self.plot_entry(ax, val, aesthetic_args, break_axes=(cell.break_axes, nrow, ncol))
-            else:
-                self.apply_ax_args(cell, ax_args, i, spec_type)
-                # Plot entry with a temporary label
-                val = entry[entry['attr']]
-                self.plot_entry(cell, val, aesthetic_args)
-
+            self.apply_ax_args(cell, ax_args, i, spec_type)
+            # Plot entry with a temporary label
+            val = entry[entry['attr']]
+            self.plot_entry(cell, val, aesthetic_args)
             entry['legend_label'] = self.get_entry_label(entry)
 
         self.make_legend(unique_axs)
@@ -97,16 +88,18 @@ class FeaturePlotter(Base, PlottingMixin):
     def get_aesthetic_args(self, entry, aesthetics):
         return self.construct_spec_based_on_conditions(aesthetics, entry=entry)
     
-    def apply_ax_args(self, ax, ax_args, i, spec_name):
-        if spec_name == 'segment' and i > 0:
-            return
-        if 'border' in ax_args:
-            self.apply_borders(ax, ax_args['border'])
-        if 'aspect' in ax_args:
-            ax.set_box_aspect(ax_args['aspect'])
-        if 'axis_position' in ax_args:
-            for side in ax_args['axis_position']:
-                ax.spines[side].set_position(ax_args['axis_position'][side])
+    def apply_ax_args(self, cell, ax_args, i, spec_name):
+        ax_list = cell.ax_list if hasattr(cell, 'break_axes') else [cell.obj]
+        for ax in ax_list:
+            if spec_name == 'segment' and i > 0:
+                return
+            if 'border' in ax_args:
+                self.apply_borders(ax, ax_args['border'])
+            if 'aspect' in ax_args:
+                ax.set_box_aspect(ax_args['aspect'])
+            if 'axis_position' in ax_args:
+                for side in ax_args['axis_position']:
+                    ax.spines[side].set_position(ax_args['axis_position'][side])
     
     def apply_borders(self, ax, border):
         border = deepcopy(border)

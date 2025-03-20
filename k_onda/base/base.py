@@ -237,6 +237,11 @@ class Base:
             return [source for source in data_sources if source.identifier == identifier][0]
 
     @property
+    def post(self):
+        if self.calc_opts.get('base') == 'period':
+            return self.post_period
+        
+    @property
     def pre_event(self):
         return self.get_pre_post(0, 'event')
     

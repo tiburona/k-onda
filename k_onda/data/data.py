@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import copy
 import numpy as np
 import xarray as xr
 
@@ -238,55 +239,50 @@ class Data(Base):
     def concatenation(self):
         kwargs = self.calc_opts['concatenation']
         return self.concatenate(**kwargs)
-    
-    def concatenate(self, concatenator=None, concatenated=None, attr='calc', method=None, started=False):
+        
+    def concatenate(self, concatenator=None, concatenated=None, attr='calc', method=None):
         """Concatenates data from descendant nodes using xarray."""
-
-        # TODO: what's going to happen if, say, an animal is missing a period
-
-        # TODO: rewrite this to use accumulator
 
         f = lambda x: (
             getattr(x, method)() if method else getattr(x, attr)
             ) if hasattr(x, method if method else attr) else None
-
-        if self.name == concatenator:
-            started = True
-            children_data = [
-                child.concatenate(concatenator=concatenator, concatenated=concatenated, 
-                                attr=attr, method=method, started=started)
-                for child in self.children if child.include()
-            ]
-            return xr.concat(children_data, dim="child") if children_data else xr.DataArray([])
         
-        elif self.name != concatenated and not started:
+        if self.hierarchy.index(self.name) < self.hierarchy.index(concatenator):
+            raise ValueError(f"Can't concatenate values at a data level higher than {concatenator}")
+        
+        if self.name == concatenator:
+           
+            # Fetch descendants from the correct level of the accumulator (base case)
+            depth_index = self.hierarchy.index(concatenated) - self.hierarchy.index(self.name)
+            # Apply the function to each descendant
             children_data = [
-                child.concatenate(concatenator=concatenator, concatenated=concatenated, 
-                                attr=attr, method=method, started=started)
-                for child in self.children if child.include()
+                f(child) for child in self.accumulate(max_depth=depth_index)[concatenated]
             ]
-            if children_data:
-                return xr.concat(children_data, dim="child").stack(flat=("child",))
-            else:
+            if not children_data:
                 return xr.DataArray([])
+            
+            if isinstance(children_data[0], xr.DataArray):
+                if ((concatenator == 'animal' and self.calc_type != 'spike') or 
+                    concatenator in ['unit', 'period']):
 
-        elif self.name != concatenated and started:
+                    result = xr.concat(children_data, dim="time")
+                    new_time = np.arange(result.sizes["time"])
+                    result = result.assign_coords(time=("time", new_time))
+                    return result
+
+                else:
+                    raise NotImplementedError(f"Concatenation not implemented for {concatenator}")              
+
+        else:
+            # Successively average levels of the hierarchy until we reach the concatenator (recursive case)
             children_data = [
                 child.concatenate(concatenator=concatenator, concatenated=concatenated, 
-                                attr=attr, method=method, started=started)
+                                attr=attr, method=method)
                 for child in self.children if child.include()
             ]
-            valid_data = [val for val in children_data if not (isinstance(val, float) and np.isnan(val))]
             
-            if valid_data:
-                concatenated_data = xr.concat(valid_data, dim="child")
-                return concatenated_data.mean(dim="child", skipna=True)
-            else:
-                return xr.DataArray(float("nan"))
-
-        else:  # self.name == concatenated
-            return f(self)
-    
+            concatenated_data = xr.concat(children_data, dim="child") if children_data else xr.DataArray([])
+            return concatenated_data.mean(dim="child", skipna=True)
          
     @property
     def stack(self):
@@ -316,6 +312,8 @@ class Data(Base):
                     if sort_by[1] == 'descending':
                         accumulated[level].reverse()
         return accumulated
+    
+   
 
     @property
     def grandchildren_stack(self):
@@ -338,20 +336,29 @@ class Data(Base):
         if accumulator is None:
             accumulator = defaultdict(list)
         
-        accumulator[depth].append(self)
+        accumulator[self.name].append(self)
         
         if depth != max_depth and self.included_children:
             for child in self.included_children:
                 child.accumulate(max_depth, depth + 1, accumulator)
         
-        return accumulator    
+        return accumulator   
 
     @property
-    def hierarchy(self):
+    def ancestors(self):
         if self.name == 'experiment':
-            return [self.name]
+            return [self]
         if hasattr(self, 'parent'):
-            return self.parent.hierarchy + [self.name]
+            return self.parent.ancestors + [self]
+        
+    @property
+    def hierarchy(self):
+        ancestor_names = [obj.name for obj in self.ancestors]
+        obj = self
+        while len(getattr(obj, 'children', [])):
+            obj = obj.children[0]
+            ancestor_names.append(obj.name)
+        return ancestor_names
  
     @property
     def sampling_rate(self):
@@ -366,10 +373,6 @@ class Data(Base):
             return self._lfp_sampling_rate
         else:
             return self.experiment.lfp_sampling_rate
-
-    @property
-    def ancestors(self):
-        return [self] + self.parent.ancestors
         
     def get_descendants(self, stop_at=None, descendants=None, all=False):
    
