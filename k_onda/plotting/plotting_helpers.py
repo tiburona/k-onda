@@ -84,7 +84,7 @@ def is_condition_met(category, member, entry=None):
 class PlottingMixin:
 
     def construct_spec_based_on_conditions(self, spec_dict, entry=None):
-        config_keys = ['default', 'conditional', 'override', 'invariant']
+        config_keys = ['default', 'conditional', 'positional', 'override', 'invariant']
 
         # there's no varying configuration; all the config should be applied to all elements
         if not any(key in spec_dict for key in config_keys):
@@ -93,7 +93,7 @@ class PlottingMixin:
         # treat all keys not in one of the config keys as an implicit default (default by default)
         spec_to_return = {k: v for k, v in spec_dict.items() if k not in config_keys}
 
-        default, conditional, override, invariant = (
+        default, conditional, positional, override, invariant = (
             spec_dict.get(k, {}) for k in config_keys)
 
         recursive_update(spec_to_return, default)
@@ -102,6 +102,13 @@ class PlottingMixin:
             for member, vals in members.items():
                 if is_condition_met(category, member, entry=entry):
                     recursive_update(spec_to_return, vals)
+
+        if entry['cell']:
+            for position, members in positional.items():
+                if isinstance(position, tuple):
+                    if entry['cell'].is_in_extreme_position(
+                        position[0], 'last' in position[1], 'absolute' in position[1]):
+                        recursive_update(spec_to_return, members)
 
         for combination, overrides in override.items():
             pairs = list(zip(combination.split('|')[::2], combination.split('|')[1::2]))

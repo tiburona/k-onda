@@ -26,10 +26,11 @@ class FeaturePlotter(Base, PlottingMixin):
 
             aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
             ax_args = aesthetic_args.get('ax', {})
-            self.apply_ax_args(cell, ax_args, i, spec_type)
+            
             # Plot entry with a temporary label
             val = entry[entry['attr']]
             self.plot_entry(cell, val, aesthetic_args)
+            self.apply_ax_args(cell, ax_args, i, spec_type)
             entry['legend_label'] = self.get_entry_label(entry)
 
         self.make_legend(unique_axs)
@@ -126,25 +127,23 @@ class FeaturePlotter(Base, PlottingMixin):
             visible = (visible + [True] * 3)[:3]
             spine_visible, tick_visible, label_visible = visible
 
-            # Set spine visibility
-            if spine_visible in is_falsy:
-                ax.spines[side].set_visible(False)
-            else:
-                ax.spines[side].set_visible(True)
+            sides = ['top', 'bottom', 'left', 'right'] if side == 'all' else [side]
 
-            # Set tick visibility
-            if tick_visible in is_falsy:
-                ax.tick_params(**{side: False})  # Disable bottom ticks
+            for side in sides:
 
-            # Determine axis based on the side
-            axis = 'x' if side in ['top', 'bottom'] else 'y'
+                if sides == ['bottom']:
+                    a = 'foo'
 
-            # Set label visibility
-            if label_visible in is_falsy:
-                if label_visible in is_falsy:
-                    ax.tick_params(axis=axis, which='both', **{'label' + side: False})
-        
-        # Apply remaining border arguments to the spine
-        ax.spines[side].set(**border_args)
+                is_truthy = lambda x: x not in is_falsy
+
+                ax.spines[side].set_visible(is_truthy(spine_visible))
+
+                ax.tick_params(**{side: is_truthy(tick_visible)})
+
+                # Determine axis based on the side
+                axis = 'x' if side in ['top', 'bottom'] else 'y'
+                ax.tick_params(axis=axis, which='both', **{'label' + side: is_truthy(label_visible)})
+                
+                ax.spines[side].set(**border_args)
 
     

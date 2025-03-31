@@ -5,10 +5,11 @@ from datetime import datetime
 import json
 import pickle
 from copy import deepcopy
-import string
+import string 
 
 import numpy as np
 import h5py
+import xarray as xr
 
 DEBUG_MODE = 0
 
@@ -30,6 +31,19 @@ def make_class_property(attr_name, setter=True):
         return classproperty(getter, setter)
     else:
         return classproperty(getter)
+    
+
+def sorted_prop(key):
+    """Decorator to automatically fetch the sort key and apply sorting."""
+    def decorator(func):
+        @property
+        @functools.wraps(func)
+        def wrapper(self):
+            items = func(self)
+            sort = self.calc_opts.get('sort', {}).get(key)
+            return self.sort(items, sort)
+        return wrapper
+    return decorator
 
 
 def cache_method(method):
@@ -65,7 +79,7 @@ def cache_method(method):
                     *(arg for arg in args), 
                     *(kwarg for kwarg in kwargs)]
 
-        for obj in list(reversed(self.ancestors))[1:]:
+        for obj in list(reversed(self.ancestors)):
             key_list.append(obj.name)
             key_list.append(obj.identifier)
         
@@ -287,15 +301,13 @@ def print_common_dict_references(obj1, obj2):
             print(f"  In obj1 at: {paths_in_obj1}")
             print(f"  In obj2 at: {paths_in_obj2}")
 
+
 def is_truthy(obj):
-    if isinstance(obj, np.ndarray):
+    if isinstance(obj, (np.ndarray, xr.DataArray)):
         return obj.size > 0  # True if the array has elements
     return bool(obj)  # General truthiness check for other types
 
 
-# Example usage:
-# Suppose obj1 and obj2 share a dictionary reference somewhere deep inside.
-# print_common_dict_references(obj1, obj2)
 
 operations = {
             '==': lambda a, b: a == b,

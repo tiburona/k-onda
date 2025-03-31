@@ -131,9 +131,13 @@ class CategoryPlotter(FeaturePlotter):
             position = self.label_to_pos[composite_label]
 
             aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
-            ax.axhline(y=0, color='black', linewidth=1)
-
+            
             ax_args = aesthetic_args.get('ax', {})
+            
+            zero_line = ax_args.get('zero_line', True)
+            if zero_line in [True, 'T', 'true', 'True']:
+                ax.axhline(y=0, color='black', linewidth=1)
+
             self.apply_ax_args(ax, ax_args, i, spec_type)
             marker_args = aesthetic_args.get('marker', {})
 

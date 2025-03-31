@@ -1,7 +1,6 @@
 from copy import copy, deepcopy
 
 from .processor import Processor
-from ..layout import Layout
 from k_onda.utils import recursive_update
 
 
@@ -15,8 +14,6 @@ class Partition(Processor):
 
     def __init__(self, config):
         super().__init__(config)
-        
-      
 
     def setup_unique(self):
         # self.info_by_division_by_layers is a list with these same unique values, repeated for
@@ -31,10 +28,20 @@ class Partition(Processor):
             self.selected_period_type = self.spec['default_period_type']
         self.process_divisions(self.spec['divisions'])
         if top_level:
-            self.executive_plotter.delegate(
-                info=self.info_by_division, spec=self.spec, spec_type=self.name, 
-                plot_type=self.plot_type, aesthetics=self.aesthetics, 
-                legend_info_list=self.legend_info_list)
+            if self.layers:
+                for i, layer in enumerate(self.layers):
+                    self.executive_plotter.delegate(
+                        info=self.info_by_division_by_layers[i], 
+                        spec=recursive_update(deepcopy(self.spec), layer), 
+                        aesthetics=recursive_update(
+                            deepcopy(self.aesthetics), layer.get('aesthetics', {})),
+                        plot_type=layer.get('plot_type', self.plot_type)
+                    )
+            else:
+                self.executive_plotter.delegate(
+                    info=self.info_by_division, spec=self.spec, spec_type=self.name, 
+                    plot_type=self.plot_type, aesthetics=self.aesthetics, 
+                    legend_info_list=self.legend_info_list)
 
     def assign_data_sources(self):
         """
@@ -52,6 +59,15 @@ class Partition(Processor):
             if 'all' in division.get('members', []):
                 division['members'] = [
                     s.identifier for s in getattr(self.experiment, division['members'])]
+                
+    def copy_info(self, info):
+        # can't deepcopy info with cell in it; causes infinite loop 
+        cell = info.pop('cell', None)
+        new_info = deepcopy(info) 
+        info['cell'] = cell
+        new_info['cell'] = cell
+        return new_info
+
             
     def process_divisions(self, divisions, info=None):
         """
@@ -66,10 +82,7 @@ class Partition(Processor):
         """
         
         if not info:
-            # can't deepcopy info with cell in it; causes infinite loop 
-            cell = self.inherited_division_info.pop('cell', None)
-            info = deepcopy(self.inherited_division_info) 
-            info['cell'] = cell
+            info = self.copy_info(self.inherited_division_info)   
 
         # we hit a leaf in the recursion
         if not divisions:
@@ -80,12 +93,14 @@ class Partition(Processor):
         # Otherwise, take the first divider in the list
         divider = divisions[0]
         divider_type = divider['divider_type']
+        info['data_source'] = divider.get('data_source', self.inherited_division_info.get('data_source'))
 
         # Go through each of its members
         for i, member in enumerate(divider['members']):
 
             # Merge it into our accumulated info
             if not isinstance(member, str):
+                # member is dict, as in conditions, period_types, etc.
                 updated_info = {**info, divider_type: {**info.get(divider_type, {}), **member}}
             else:
                 updated_info = {**info, divider_type: member}
@@ -112,7 +127,7 @@ class Partition(Processor):
         # labels are applied at every level so they go on the appropriate subfigure
         # TODO: something here needs to be tracking the index in the larger figure 
        
-        self.set_label(cell=cell)
+        self.set_label(cell, updated_info)
 
         if self.colorbar_for_each_plot:
             self.legend_info_list.append((cell, self.colorbar_spec, [updated_info]))
@@ -121,11 +136,15 @@ class Partition(Processor):
             updated_info['cell'] = cell
             updated_info['index'] = copy(self.current_index) 
             updated_info['last_spec'] = self.spec
-            self.info_by_division.append(updated_info)
-            self.get_calcs(updated_info)
+            
+            if self.layers:
+                self.get_layer_calcs(updated_info)
+            else:
+                self.info_by_division.append(updated_info)
+                self.get_calcs(updated_info)
             
         else:
-            self.start_next_processor(self.next, updated_info, self.info_by_division)
+            self.start_next_processor(self.next, updated_info, self.info_by_division, self.info_by_division_by_layers)
 
     def set_vals(self, info):
         # TODO: Make sure you've thoroughly thought through *unsetting* attributes 
@@ -141,11 +160,11 @@ class Partition(Processor):
 
     def get_calcs(self, info):
         
-        if 'data_source' not in info:
+        if not info.get('data_source'):
             data_source = self.experiment
         else:
-            data_source = self.get_data_sources(data_object_type = info['data_object_type'], 
-                                            identifier=info['data_source'])
+            data_source = self.get_data_sources(data_object_type = info['data_source'], 
+                                            identifier=info[info['data_source']])
         
         attr = self.spec.get('attr', 'calc')
 

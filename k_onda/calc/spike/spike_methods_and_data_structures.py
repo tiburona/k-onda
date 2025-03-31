@@ -28,6 +28,10 @@ class SpikeMethods:
     
     def get_proportion(self):
         return self.get_average('get_proportion', stop_at=self.calc_opts.get('base', 'event'))
+    
+    def get_spike_train(self, exclude=True):
+        return self.get_average('get_spike_train', stop_at=self.calc_opts.get('base', 'event'))
+
   
     
 class RateMethods:
@@ -51,7 +55,7 @@ class RateMethods:
     def get_psth(self):
         return self.resolve_calc_fun('psth')
     
-    def get_firing_rates(self):
+    def get_firing_rates(self, exclude=True):
         return self.resolve_calc_fun('firing_rates')
     
     def get_spike_counts(self):
@@ -189,6 +193,23 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         else:
             return [unit_pair for unit_pair in all_unit_pairs if ','.join(
                 [unit_pair.unit.neuron_type, unit_pair.pair.neuron_type]) == pairs_to_select]
+        
+    def get_coords(self, length):
+        index = np.arange(length)
+        absolute_time = index * self.calc_opts['bin_size'] + self.start
+        relative_time = absolute_time - self._start
+        period_time = relative_time - self.parent._start if self.name == 'event' else relative_time
+
+        coord_dict = {
+            'time': index,
+            'absolute_time': ('time', absolute_time),
+            'period_time': ('time', period_time)
+        }
+
+        if self.name == 'event':
+            coord_dict['event_time'] = ('time', relative_time)
+
+        return coord_dict
  
     def spike_prep(self):
         self.prepare_periods()
@@ -231,14 +252,13 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
             wf = phy.get_mean_waveforms(self.cluster_id, electrodes)
             self.waveform = wf
             return wf
-        
-    def get_raster(self):
+    
+    def get_raster(self, exclude=True):
         base = self.calc_opts.get('base', 'event')
         # raster type can be spike_train for binarized data or spike_counts for gradations
         raster_type = self.calc_opts.get('raster_type', 'spike_train')
         depth = 1 if base == 'period' else 2
-        raster = self.get_stack(method=f"get_{raster_type}", depth=depth)
-        
+        raster = self.get_stack(method=f"get_{raster_type}", depth=depth)        
         return raster
     
     def get_mrl(self):

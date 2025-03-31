@@ -823,7 +823,7 @@ def main():
     
         for freq_name in ['theta', 'gamma', 'high gamma']:
 
-            # Plot bar graphs.
+            # PlPperot bar graphs.
             bar_animals_data = collect_animals_data(conditions, brain_region, freq_name, event_boundary=(0, 0.3))
             bar_graph_group_means = compute_group_statistics(bar_animals_data, conditions)
             plot_evoked_bar_graph(bar_graph_group_means, brain_region, freq_name)

@@ -13,7 +13,8 @@ class ProcessorConfig(Base):
     """
 
     def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
-                 figure=None, division_info=None, info_by_division=None, index=None, aesthetics=None, layers=None, 
+                 figure=None, division_info=None, info_by_division=None, info_by_division_by_layers=None, 
+                 index=None, aesthetics=None, layers=None, 
                  is_first=False, plot_type=None, legend_info_list=None):
         
         self.executive_plotter = executive_plotter
@@ -26,6 +27,7 @@ class ProcessorConfig(Base):
         self.figure = figure
         self.division_info = division_info
         self.info_by_division = info_by_division
+        self.info_by_division_by_layers = info_by_division_by_layers
         self.index = index
         self.aesthetics = aesthetics    
         self.layers = layers
@@ -40,9 +42,10 @@ class ProcessorConfig(Base):
         self.index = index
         self.starting_index = [0, 0]
 
-        self.inherited_division_info = self.division_info if self.division_info is not None else {}
-        self.info_by_division = self.info_by_division if self.info_by_division is not None else []
-        self.legend_info_list = legend_info_list if legend_info_list is not None else []
+        self.inherited_division_info = self.division_info or {}
+        self.info_by_division = self.info_by_division or []
+        self.info_by_division_by_layers = self.info_by_division_by_layers or []
+        self.legend_info_list = legend_info_list or []
         self.current_index = copy(self.starting_index)
         
 class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin, LegendMixin):
@@ -58,7 +61,7 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
         
     def setup_common(self, config):
         self.__dict__.update(config.__dict__)
-        self.layers = self.init_layers()
+        self.layers = self.init_layers() or self.layers
         self.aesthetics = self.init_aesthetics()
         self.label = self.get_label()
 
@@ -79,7 +82,7 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
         """Provides additional arguments for Layout."""
         return {}  # Default implementation provides no extra arguments
         
-    def next_processor_config(self, spec, updated_division_info, info_by_division):
+    def next_processor_config(self, spec, updated_division_info, info_by_division, info_by_division_by_layers):
         cell = self.child_layout.cells[*self.current_index]
 
         processor_config = dict(
@@ -91,12 +94,13 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
             layout=self.child_layout, 
             division_info=updated_division_info, 
             info_by_division=info_by_division,
+            info_by_division_by_layers=info_by_division_by_layers,
             legend_info_list=self.legend_info_list
             )
         
         return ProcessorConfig(self.executive_plotter, spec, **processor_config)
         
-    def start_next_processor(self, spec, updated_division_info, info_by_division):
+    def start_next_processor(self, spec, updated_division_info, info_by_division, info_by_division_by_layers):
 
         from .processor_map import PROCESSOR_MAP as processor_map
 
@@ -104,7 +108,7 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
             self.calc_opts = spec['calc_opts']
             self.experiment.initialize_data()
 
-        config = self.next_processor_config(spec, updated_division_info, info_by_division)
+        config = self.next_processor_config(spec, updated_division_info, info_by_division, info_by_division_by_layers)
         
         processor = processor_map[config.spec_type](config)
         processor.start()
@@ -134,7 +138,7 @@ class Container(Processor):
                 kind = self.check_type(spec)
 
                 if kind == 'processor':
-                    self.start_next_processor(spec, self.inherited_info, self.info_by_division)
+                    self.start_next_processor(spec, self.inherited_info, self.info_by_division, self.info_by_division_by_layers)
 
                 else:
                     current_cell = self.child_layout[*self.current_index]

@@ -178,10 +178,7 @@ class Wrapper(Base):
         return True
     
     def is_extreme_within_parent(self, dim, last):
-        if self.processor.spec_type == 'section':
-            return True
-        else:
-            return self.is_extreme_index(self.index, self.layout, dim, last)
+        return self.is_extreme_index(self.index, self.layout, dim, last)
     
     def is_in_extreme_position(self, axis, last, absolute):
         dim = int(not axis == 'x')

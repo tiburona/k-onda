@@ -4,39 +4,44 @@ from ..plotting_helpers import smart_title_case
 
 
 class ProcessorMixin:
-
-    def init_spec_element(self, element):
-        element_dict = deepcopy(self.spec.get(element, {}))
-        if self.parent_processor:
-            element_dict.update(getattr(self.parent_processor, element, {}))
-        return element_dict
+    pass
 
 
-class LayerMixin(ProcessorMixin):
-
-    def __init__(self):
-        self.info_by_division_by_layers = []
+class LayerMixin(ProcessorMixin):        
 
     def init_layers(self):
-        return self.init_spec_element('layer')
+        layers = deepcopy(self.spec.get('layers', {}) or self.layers)
+        if not layers:
+            return
+        if not self.info_by_division_by_layers:
+            self.info_by_division_by_layers = [[] for _ in layers]
+        return layers
+     
     
-    def get_layer_calcs(self, d, data_source):
+    def get_layer_calcs(self, info):
         for i, layer in enumerate(self.layers):
 
-            attr = layer.get('attr', self.active_spec.get('attr', 'calc'))
+
+            attr = layer.get('attr', self.spec.get('attr', 'calc'))
 
             if 'calc_opts' in layer:
                 recursive_update(self.calc_opts, layer['calc_opts'])
                 self.calc_opts = self.calc_opts
 
-            new_d = deepcopy(d)
+            if not info.get('data_source'):
+                data_source = self.experiment
+            else:
+                data_source = self.get_data_sources(data_object_type = info['data_source'], 
+                                            identifier=info[info['data_source']])
+
+            new_d = self.copy_info(info)
             new_d.update({
                 'layer': i, 
                 'attr': attr,
                 attr: getattr(data_source, attr), 
                 data_source.name: data_source.identifier})
             
-            self.info_by_division_by_layers.append(new_d)
+            self.info_by_division_by_layers[i].append(new_d)
     
 
 class AestheticsMixin(ProcessorMixin):
@@ -88,16 +93,21 @@ class LabelMixin:
             next_spec = list(self.next.values())[0]
             return next_spec.get('label', {})
         
-    def set_label(self, cell):
+    def set_label(self, cell, updated_info):
         if not self.label:
             return
+        
+        data_source = updated_info.get('data_source')
+        if data_source:
+            data_source = self.get_data_sources(data_object_type=data_source, 
+                                                identifier=updated_info[data_source])
         
         kwargs = {}
         
         for position in self.label:
 
             # get text of label
-            text = self.fill_fields(self.label[position]['text'])
+            text = self.fill_fields(self.label[position]['text'], obj=data_source)
             if not self.label.get('smart_label', False):
                 text = smart_title_case(text.replace('_', ' '))
 
@@ -110,8 +120,6 @@ class LabelMixin:
                 if position in 'xy':
                     label_setter = getattr(label_figure, f'sup{position}label')   
                 elif position in ['x_ax', 'y_ax']:
-                    if position in 'y_ax':
-                        print(f'y_ax {self.current_index}')
                     which = self.label[position].get('which', 'all')
                     if which and which != 'all':
                         if not cell.is_in_extreme_position(
@@ -122,7 +130,8 @@ class LabelMixin:
                     raise ValueError(f"Unknown label position: {position}")
                 
             # set label
-            label_setter(text, **kwargs)
+            label = label_setter(text, **kwargs)
+
 
     def is_condition_met(self, category, member, **_):
         

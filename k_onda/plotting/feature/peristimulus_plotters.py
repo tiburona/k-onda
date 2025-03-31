@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import matplotlib.transforms as transforms
 import numpy as np
 
@@ -10,6 +11,9 @@ plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial'] 
 
 
+
+
+
 class HistogramPlotter:
     
     def plot_hist(self, x, y, width, ax, aesthetic_args):
@@ -19,22 +23,7 @@ class HistogramPlotter:
 class PeriStimulusPlotter(FeaturePlotter):
     
     def __init__(self ):  
-        self.marker_names = []
-    
-    def plot_entry(self, ax, val, aesthetic_args):
-        data_divisions, ax_list, x_slices = self.handle_broken_axes(val)
-        row = 'foo' # TODO fix this
-        for i, (ax, data, _) in enumerate(zip(ax_list, data_divisions, x_slices)):
-            self.plot_line(ax, data, row, i, aesthetic_args, data_source=row['data_source'])
-            self.place_indicator(ax, aesthetic_args)
-                  
-
-    def plot_line(self, ax, val, aesthetic_args):
-        data_divisions, ax_list, x_slices = self.handle_broken_axes(val)
-        row = 'foo' # TODO fix this
-        for i, (ax, data, _) in enumerate(zip(ax_list, data_divisions, x_slices)):
-            self.plot_row(ax, data, row, i, aesthetic_args, data_source=row['data_source'])
-            self.place_indicator(ax, aesthetic_args)
+        self.marker_names = []                  
                 
     def set_x_ticks(self, ax, data):
 
@@ -94,7 +83,7 @@ class PeriStimulusPlotter(FeaturePlotter):
         x = val.coords[x_coords]
 
         if not break_axes:
-            return [cell.obj], [x], [val]
+            return ([cell.obj, x, val],)
 
         if 0 in break_axes:
             brk = break_axes[0]
@@ -108,34 +97,37 @@ class PeriStimulusPlotter(FeaturePlotter):
 
             return zip(cell.ax_list, get_splits(x), get_splits(val))
 
-        return [cell.obj], [x], [val]
+        return ([cell.obj, x, val],)
                 
 
 class RasterPlotter(PeriStimulusPlotter):
-    
-    def process_calc(self, calc_config):
-        super().process_calc(calc_config)
+        
+    def plot_entry(self, cell, val, aesthetic_args, break_axes=None):
+       
+        for ax, x_split, val_split in self.split_data_for_break_axes(cell, val, break_axes):
+
+            def custom_format(x, pos):
+                # x is the tick location (a float)
+                idx = int(round(x))
+                coord_vals = x_split.coords[f"{self.calc_opts.get('base')}_time"].values
+                if 0 <= idx < len(coord_vals):
+                    val = coord_vals[idx]
+                    if isinstance(val, (float, int)):
+                        return f"{val:.1f}"
+                    return str(val)
+                return ''
+            
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(custom_format))
+
+            self.plot_line(ax, val_split, aesthetic_args)
+            self.place_indicator(ax, aesthetic_args)
                 
-    def plot_line(self, ax, data, row, slice_no, aesthetic_args, data_source=None):
-        ax.set_ylim(0, len(data))  # Set ylim based on the number of rows
+    def plot_line(self, ax, data, aesthetic_args):
         line_length = aesthetic_args.get('line_length', .9)   
         marker_args = aesthetic_args.get('marker', {})  
-        row_label_spec = safe_get(aesthetic_args, ['label', 'ax', 'row_labels'])
-        if data_source and row_label_spec and slice_no == 0:
-            if isinstance(row_label_spec, str) and row_label_spec.startswith('lambda'):
-                row_label_func = eval(row_label_spec)
-                row_labels = row_label_func(row['data_source'])
-            else:
-                row_labels = format_label(row_label_spec, data_source)
-        else:
-            row_labels = ['' for _ in range(len(data))]
-
-        # Plot spikes on the vlines
-        for i, spiketrain in enumerate(data):
-            ax.text(-3, i + line_length / 2, row_labels[i], ha='right', va='center', rotation=45, fontsize=8)  # Adjust x-coordinate to position label
-            for j, spike in enumerate(spiketrain):
-                if spike:
-                    ax.vlines(j, i, i + line_length, **marker_args)
+        for j, spike in enumerate(data):
+            if spike:
+                ax.vlines(j, 0, line_length, **marker_args)
     
                 
 class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):

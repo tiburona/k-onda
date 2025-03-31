@@ -1,4 +1,5 @@
 from collections import defaultdict
+import functools
 
 from ..data import Data
 from ..bins import BinMethods
@@ -7,6 +8,19 @@ from k_onda.calc import (LFPPeriod, LFPMethods, SpikePeriod, SpikeMethods, Spike
                          NeuronClassifier, MRLPrepMethods, MRLMethods)
 from k_onda.utils import formatted_now
 
+
+# can't import this from utils for some weird reason
+def sorted_prop(key):
+    """Decorator to automatically fetch the sort key and apply sorting."""
+    def decorator(func):
+        @property
+        @functools.wraps(func)
+        def wrapper(self):
+            items = func(self)
+            sort = self.calc_opts.get('sort', {}).get(key)
+            return self.sort(sort, items)
+        return wrapper
+    return decorator
 
 class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
 
@@ -37,52 +51,52 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
     def ancestors(self):
         return self._ancestors
     
-    @property
+    @sorted_prop('group')
     def children(self):
         return self.groups if self.groups else [an for an in self.all_animals if an.include()]
     
-    @property
+    @sorted_prop('unit')
     def all_units(self):
         return [unit for animal in self.all_animals 
                 for unit in animal.all_units if unit.include(check_ancestors=True)]
 
-    @property
+    @sorted_prop('period')
     def all_spike_periods(self):
         return [period for unit in self.all_units for period in unit.all_periods 
                 if period.include(check_ancestors=True)]
 
-    @property
+    @sorted_prop('event')
     def all_spike_events(self):
         return [event for period in self.all_spike_periods for event in period.events 
                 if event.include(check_ancestors=True)]
 
-    @property
+    @sorted_prop('unit_pair')
     def all_unit_pairs(self):
         return [unit_pair for unit in self.all_units for unit_pair in unit.get_pairs() 
                 if unit_pair.include(check_ancestors=True)]
     
-    @property
+    @sorted_prop('period')
     def all_lfp_periods(self):
         return [period for animal in self.all_animals for period in animal.get_all('lfp_periods') 
                 if period.include(check_ancestors=True)]
     
-    @property
+    @sorted_prop('coherence_calculator')
     def all_coherence_calculators(self):
         return self.get_data_calculated_by_period('coherence_calculators')
     
-    @property
+    @sorted_prop('correlation_calculator')
     def all_correlation_calculators(self):
         return self.get_data_calculated_by_period('correlation_calculators')
     
-    @property
+    @sorted_prop('granger_calculator')
     def all_granger_calculators(self):
         return self.get_data_calculated_by_period('granger_calculators')
     
-    @property
+    @sorted_prop('phase_relationship_calculator')
     def all_phase_relationship_calculators(self):
         return self.get_data_calculated_by_period('phase_relationship_calculators')
     
-    @property
+    @sorted_prop('mrl_calculator')
     def all_mrl_calculators(self):
         return [mrl_calc for unit in self.all_units for mrl_calc in unit.get_all('mrl_calculators') 
                 if mrl_calc.include(check_ancestors=True)]
@@ -189,7 +203,12 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, 
 
     @property
     def children(self):
-        return getattr(self, f"select_{self.kind_of_data}_children")()
+        children = getattr(self, f"select_{self.kind_of_data}_children")()
+        sort = self.calc_opts.get('sort', {})
+        if sort:
+            return self.sort(children)
+        else:
+            return children
     
     @property
     def all_units(self):

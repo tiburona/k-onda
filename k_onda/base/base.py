@@ -326,27 +326,39 @@ class Base:
         processed_constructor['template'] = processed_constructor['template'].replace(".", placeholder)
         return processed_constructor
     
-    def fill_fields(self, constructor):
-        
+    def fill_fields(self, constructor, obj=None):
         if not constructor:
             return
-        
+        if not obj:
+            obj = self
+
         if isinstance(constructor, str):
             if '{' not in constructor:
                 return constructor
             else:
                 constructor = {
                     'template': constructor, 
-                    'fields': re.findall(r'\{(.*?)\}', constructor)}
-        
+                    'fields': re.findall(r'\{(.*?)\}', constructor)
+                }
+
+        new_fields = {}
+        lambda_counter = 0
+
         for field in constructor['fields']:
-            if field in self.selectable_variables:
-                constructor[field] = getattr(self, field, getattr(self, f'selected_{field}'))
+            if 'lambda' in field:
+                # Create a valid placeholder key.
+                key = f'_lambda{lambda_counter}'
+                lambda_counter += 1
+                # Replace the lambda expression placeholder in the template.
+                constructor['template'] = constructor['template'].replace(f'{{{field}}}', f'{{{key}}}')
+                new_fields[key] = eval(field)(obj)
+            elif field in obj.selectable_variables:
+                new_fields[field] = getattr(obj, field, getattr(self, f'selected_{field}'))
             elif '|' in field:
                 field_type, field_key = field.split('|')
-                constructor[field] = getattr(self, f'selected_{field_type}')[field_key]
-                
+                new_fields[field] = getattr(obj, f'selected_{field_type}')[field_key]
             else:
-                constructor[field] = getattr(self, field)
-        
+                new_fields[field] = getattr(obj, field)
+
+        constructor.update(new_fields)
         return constructor['template'].format(**constructor)

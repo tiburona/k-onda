@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 
 from k_onda.base import Base
-from k_onda.utils import cache_method, always_last, operations, sem
+from k_onda.utils import cache_method, always_last, operations, sem, is_truthy
 
 # TODO a lot of methods in here need to deal with dictionaries for the granger case,
 # like sem, mean, etc.
@@ -82,6 +82,38 @@ class Data(Base):
         
     def get_child_by_identifier(self, id):
         return [child for child in self.children if child.identifier == id][0]
+    
+    @property
+    def experiment_wise_index(self):
+        if self.name in ['period', 'event']:
+            name = f'{self.calc_type}_{self.name}'
+        else:
+            name = self.name
+        return getattr(self.experiment, f'all_{name}s').index(self)
+        
+
+    def sort(self, sort, items):
+        if not sort:
+            return items
+        sort_key, order = sort
+        sorted_lst = sorted(
+            items, 
+            key=lambda x: getattr(x, sort_key), 
+            reverse=(order == 'descending'))
+        return sorted_lst
+
+    
+    def sort_children(self, children):
+        sort = self.calc_opts.get('sort', {}).get(self.name)
+        if not sort:
+            return children
+        else:
+            sort_key, order = sort
+            sorted_children = sorted(
+                children, 
+                key=lambda x: getattr(x, sort_key), 
+                reverse=(order == 'descending'))
+            return sorted_children
             
     def select(self, filters, check_ancestors=False):
 
@@ -103,7 +135,7 @@ class Data(Base):
     
     @staticmethod
     def xmean(child_vals, axis=None):
-        if not child_vals:
+        if not is_truthy(child_vals):
             return xr.DataArray(float('nan'))  
         aggregated = xr.concat(child_vals, dim='child')
         if axis is None:
@@ -296,8 +328,8 @@ class Data(Base):
         f = lambda x: (
             getattr(x, method)() if method else getattr(x, attr)
             ) if hasattr(x, method if method else attr) else None
-        
-        sources = self.sort_accumulated(self.accumulate(max_depth=depth))[depth]
+        key = self.hierarchy[self.hierarchy.index(self.name) + depth]
+        sources = self.sort_accumulated(self.accumulate(max_depth=depth))[key]
         results = [f(source) for source in sources]
         return fun(results)
     
@@ -325,7 +357,8 @@ class Data(Base):
     
     @property
     def grandchildren_scatter(self):
-        return [gchild.mean for gchild in self.accumulate(max_depth=2)[2]]
+        key = self.hierarchy[self.hierarchy.index(self.name) + 2]
+        return [gchild.mean for gchild in self.accumulate(max_depth=2)[key]]
     
     @property
     def greatgrandchildren_scatter(self):
