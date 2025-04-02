@@ -28,6 +28,7 @@ class ProcessorConfig(Base):
         self.division_info = division_info
         self.info_by_division = info_by_division
         self.info_by_division_by_layers = info_by_division_by_layers
+        self.legend_info_list = legend_info_list
         self.index = index
         self.aesthetics = aesthetics    
         self.layers = layers
@@ -43,9 +44,11 @@ class ProcessorConfig(Base):
         self.starting_index = [0, 0]
 
         self.inherited_division_info = self.division_info or {}
-        self.info_by_division = self.info_by_division or []
-        self.info_by_division_by_layers = self.info_by_division_by_layers or []
-        self.legend_info_list = legend_info_list or []
+
+        for attr_name in ["info_by_division", "info_by_division_by_layers", "legend_info_list"]:
+            if getattr(self, attr_name) is None:
+                setattr(self, attr_name, [])
+      
         self.current_index = copy(self.starting_index)
         
 class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, MarginMixin, LegendMixin):

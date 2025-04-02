@@ -243,7 +243,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
     
-    def get_waveform(self):
+    def get_waveform(self, exclude=True):
         if self.waveform is not None:
             return self.waveform
         else:

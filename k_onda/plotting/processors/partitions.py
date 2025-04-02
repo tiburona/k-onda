@@ -4,7 +4,22 @@ from .processor import Processor
 from k_onda.utils import recursive_update
 
 
-class Partition(Processor):
+class Watcher:
+    def __setattr__(self, name, value):
+        # If it's the target variable
+        if name == 'info_by_division':
+            old_value = getattr(self, name, None)
+
+            # Check if it existed before and went from non-empty to empty
+            if isinstance(old_value, list) and old_value and isinstance(value, list) and not value:
+                print(f"target_list changed from non-empty to empty")
+                breakpoint()
+
+        # Set as usual
+        super().__setattr__(name, value)
+
+
+class Partition(Processor, Watcher):
     """
     A Processor that divides the data into parts. It recurses through a list of `divisions`, each of 
     which is a dictionary with a `divider_type` and a list of `members`. Once the partition has 
