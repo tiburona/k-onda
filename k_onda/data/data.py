@@ -28,7 +28,7 @@ class Data(Base):
             return self.evoked
         else:
             self.calc_mode = 'normal'  # the other cases set calc_mode later
-            return getattr(self, f"get_{calc_type}")(exclude=True)
+            return getattr(self, f"get_{calc_type}")()
        
     def resolve_calc_fun(self, calc_type):
         stop_at=self.calc_opts.get('base', 'event')
@@ -252,10 +252,17 @@ class Data(Base):
         vals_to_summarize = self.extend_into_bins(vals_to_summarize, extend_by)
         arrays = [obj.calc for obj in vals_to_summarize]
         if arrays:
-            concatenated = xr.concat(arrays, dim="child")
-            return concatenated.median(dim="child", skipna=True)
+            np_arrays = []
+            for a in arrays:
+                if hasattr(a, "values"):
+                    a = a.values
+                if np.isscalar(a):
+                    a = np.array([a])
+                np_arrays.append(np.ravel(a))
+            flattened = np.concatenate(np_arrays)
+            return np.nanmedian(flattened)
         else:
-            return xr.DataArray(float("nan"))
+            return float("nan")
 
     def is_nan(self, value):
         if isinstance(value, float) and np.isnan(value):
@@ -269,18 +276,20 @@ class Data(Base):
     
     @property
     def concatenation(self):
-        kwargs = self.calc_opts['concatenation']
+        kwargs = self.calc_opts.get('concatenation', {})
+        if not kwargs.get('concatenator'):
+            kwargs['concatenator'] = self.name
+        if not kwargs.get('concatenated'):
+            kwargs['concatenated'] = self.children[0].name
         return self.concatenate(**kwargs)
         
-    def concatenate(self, concatenator=None, concatenated=None, attr='calc', method=None):
+    def concatenate(self, concatenator=None, concatenated=None, attr='calc', method=None, 
+                    dim_xform=None):
         """Concatenates data from descendant nodes using xarray."""
 
         f = lambda x: (
             getattr(x, method)() if method else getattr(x, attr)
             ) if hasattr(x, method if method else attr) else None
-        
-        if self.hierarchy.index(self.name) < self.hierarchy.index(concatenator):
-            raise ValueError(f"Can't concatenate values at a data level higher than {concatenator}")
         
         if self.name == concatenator:
            
@@ -299,6 +308,8 @@ class Data(Base):
 
                     result = xr.concat(children_data, dim="time")
                     new_time = np.arange(result.sizes["time"])
+                    if dim_xform:
+                        new_time = eval(dim_xform)(new_time)
                     result = result.assign_coords(time=("time", new_time))
                     return result
 
@@ -309,7 +320,7 @@ class Data(Base):
             # Successively average levels of the hierarchy until we reach the concatenator (recursive case)
             children_data = [
                 child.concatenate(concatenator=concatenator, concatenated=concatenated, 
-                                attr=attr, method=method)
+                                attr=attr, method=method, dim_xform=dim_xform)
                 for child in self.children if child.include()
             ]
             

@@ -151,8 +151,8 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
                 continue
             getattr(animal, f"{self.kind_of_data}_prep")()
           
-    def validate_lfp_events(self, calc_opts):
-        self.calc_opts = calc_opts
+    def validate_lfp_events(self, opts):
+        self.calc_opts = opts['calc_opts']
         self.initialize_data()
         for animal in self.all_animals:
             animal.validate_events()
@@ -169,7 +169,10 @@ class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
         for animal in self.animals:
             animal.parent = self
             animal.group = self
-        self.children = self.animals
+
+    @property
+    def children(self):
+        return [an for an in self.animals if an.include()]
 
 
 class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, MRLMethods, BinMethods):

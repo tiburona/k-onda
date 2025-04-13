@@ -28,8 +28,10 @@ class LFPDataSelector:
         indices = np.where(self.spectrogram[1] - tolerance <= self.freq_range[0])
         ind1 = indices[0][-1] if indices[0].size > 0 else None  # last index that's <= start of the freq range
         ind2 = np.argmax(self.spectrogram[1] > self.freq_range[1] + tolerance)  # first index > end of freq range
-        val_to_return = self.spectrogram[0][ind1:ind2, :]
-        return val_to_return
+        raw_data = self.spectrogram[0][ind1:ind2, :]
+        freqs = self.spectrogram[1][ind1:ind2]
+        times = self.spectrogram[2]
+        return xr.DataArray(raw_data, dims=['frequency', 'time'], coords={'frequency': freqs, 'time': times})
 
     @property
     def sliced_spectrogram(self):
@@ -170,7 +172,13 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
             self.period.identifier][self.identifier]
     
     def get_power(self):
-        return np.array(self.sliced_spectrogram)[:, self.mask]
+        indices = np.where(self.mask)[0]  # Convert boolean mask to integer indices
+        power = self.sliced_spectrogram.isel(time=indices)
+        if self.calc_opts.get('frequency_type') == 'block':
+            power = power.mean(dim='frequency')
+        if self.calc_opts.get('time_type') == 'block':
+            power = power.mean(dim='time')
+        return power
     
     def index_transformation_function(self, concatenator):
         if concatenator == 'period':

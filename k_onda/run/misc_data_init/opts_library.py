@@ -20,10 +20,6 @@ SPREADSHEET_OPTS = {'kind_of_data': 'spike', 'data_path': '/Users/katie/likhtik/
 
 
 
-GRAPH_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'tick_step': 0.1, 'sem': False,
-              'footer': True, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'},
-              'force_recalc': False}
-
 ROSE_PLOT_OPTS = {'graph_dir': '/Users/katie/likhtik/data/graphs', 'units_in_fig': 4, 'sem': False,
               'footer': False, 'equal_y_scales': True, 'group_colors': {'control': '#76BD4E', 'stressed': '#F2A354'},
               'force_recalc': False, 'superimpose': False}
@@ -510,7 +506,7 @@ VALIDATION_DATA_OPTS = {
     'power_arg_set': (2048, 2000, 1000, 980, 2), 
     'bin_size': .01, 
     'lfp_padding': [1, 1],
-    'lost_signal': [.75, .75],
+    'lost_signal': [.25, .25],
     'matlab_configuration': MATLAB_CONFIG,
     'frequency_band': (0, 8),
     'threshold': 20,

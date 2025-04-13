@@ -27,40 +27,45 @@ class LFPPrepMethods(PrepMethods):
         if data_label not in self.initialized:
             self.process_lfp()
             self.initialized.append(data_label)
-        
-    def get_raw_lfp(self):
-        if all(k not in self.animal_info for k in ('lfp_electrodes', 'lfp_from_stereotrodes')):
-            return {}
+
+    def read_blackrock_file(self, nsx_to_load=3):
+        if self.identifier == 'IG161':
+            a = 'foo'
         file_path = self.construct_path('lfp')
         try:
-            reader = BlackrockRawIO(filename=file_path, nsx_to_load=3)
+            reader = BlackrockRawIO(filename=file_path, nsx_to_load=nsx_to_load)
             reader.parse_header()
-            data = reader.nsx_datas[3][0]
+            data = reader.nsx_datas[nsx_to_load][0]
         except OSError:
             return {}
         except KeyError as e:
             print(f"KeyError: {e}") 
             file_dir = os.path.dirname(file_path)
-            h5_path = os.path.join(file_dir, 'output_data.h5')
+            h5_path = os.path.join(file_dir, f'output_data_ns{nsx_to_load}.h5')
             ml = MatlabInterface(self.calc_opts['matlab_configuration'])
-            if not os.path.exists(os.path.join(file_dir, 'output_data.h5')):
-                ml.open_nsx(file_path)
+            if not os.path.exists(h5_path):
+                ml.open_nsx(file_path, nsx_to_load)
             with h5py.File(h5_path, 'r') as f:
-                data = f['/NS3_Data'][:]
-                
+                key = f'/NS{str(nsx_to_load)}_Data'
+                data = f[key][:]
+        return data
+        
+    def get_raw_lfp(self):
+        if all(k not in self.animal_info for k in ('lfp_electrodes', 'lfp_from_stereotrodes')):
+            return {}
+        data = self.read_blackrock_file(nsx_to_load=3)         
         data_to_return = {region: data[:, val]
                           for region, val in self.animal_info['lfp_electrodes'].items()}
         if self.animal_info.get('lfp_from_stereotrodes') is not None:
-            data_to_return = self.get_lfp_from_stereotrodes(self, data_to_return, file_path)
+            data_to_return = self.get_lfp_from_stereotrodes(self, data_to_return)
         return data_to_return
 
-    def get_lfp_from_stereotrodes(self, animal, data_to_return, file_path):
+    def get_lfp_from_stereotrodes(self, animal, data_to_return):
         lfp_from_stereotrodes_info = animal.animal_info['lfp_from_stereotrodes']
-        nsx_num = lfp_from_stereotrodes_info['nsx_num']
-        reader = self.load_blackrock_file(file_path, nsx_to_load=nsx_num)
+        data = self.read_blackrock_file(lfp_from_stereotrodes_info['nsx_num'])
         for region, region_data in lfp_from_stereotrodes_info['electrodes'].items():
             electrodes = region_data if isinstance(region_data, list) else region_data[animal.identifier]
-            data = np.mean([reader.nsx_datas[nsx_num][0][:, electrode] for electrode in electrodes], axis=0)
+            data = np.mean([data[:, electrode] for electrode in electrodes], axis=0)
             downsampled_data = downsample(data, self.experiment.exp_info['sampling_rate'], 
                                           self.experiment.exp_info['lfp_sampling_rate'])
             data_to_return[region] = downsampled_data
@@ -79,6 +84,9 @@ class LFPPrepMethods(PrepMethods):
     def process_lfp(self):
         
         raw_lfp = self.get_raw_lfp()
+
+        if self.identifier == 'IG161':
+            a = 'foo'
 
         for brain_region in raw_lfp:
             data = raw_lfp[brain_region]/4
@@ -101,7 +109,7 @@ class LFPPrepMethods(PrepMethods):
     def validate_events(self):
         if not self.include():
             return 
-        region = self.current_brain_region
+        region = self.selected_brain_region
 
         saved_calc_exists, validity, pickle_path = self.load('validity', [region, self.identifier])
         if saved_calc_exists:

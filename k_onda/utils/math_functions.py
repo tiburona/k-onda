@@ -275,19 +275,13 @@ def extreme_point(midpoint, mean_waveform, range_wrt_midpoint, func):
 
 
 def downsample(data, orig_freq, dest_freq):
-    # Design a low-pass FIR filter
-    nyquist_rate = dest_freq/ 2
-    cutoff_frequency = nyquist_rate - 100  # For example, 900 Hz to have some margin
-    numtaps = 101  # Number of taps in the FIR filter, adjust based on your needs
-    fir_coeff = firwin(numtaps, cutoff_frequency, nyq=nyquist_rate)
-
-    # Apply the filter
+    nyquist_rate = dest_freq / 2
+    cutoff_frequency = nyquist_rate - 100  
+    numtaps = 101  
+    fir_coeff = firwin(numtaps, cutoff_frequency, fs=dest_freq)
     filtered_data = lfilter(fir_coeff, 1.0, data)
-
-    ratio = round(orig_freq/dest_freq)
-
+    ratio = round(orig_freq / dest_freq)
     return filtered_data[::ratio]
-
 
 def calc_coherence(data_1, data_2, sampling_rate, low, high):
 

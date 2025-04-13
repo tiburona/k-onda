@@ -117,7 +117,6 @@ class Layout(Base, ColorbarMixin):
         self.figure = grid[new_figure_ind]
         
     def make_all_cells(self):
-             #fig, parent_layout, index, break_axes, aspect=None)
         if self.spec.get('break_axis'):
             creation_func = lambda i, j: BrokenAxes(self.subfigure_grid[i, j], self, (i, j), self.spec['break_axis'])
         else:

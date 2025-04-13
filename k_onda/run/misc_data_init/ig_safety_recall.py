@@ -20,16 +20,16 @@ control_just_behavior = ['INED02', 'INED03', 'INED15', 'INED19', 'INED20', 'IG15
 defeat_just_behavior = ['INED08', 'INED10', 'INED13', 'INED34', 'INED35']
 
 control_no_brain_dict, defeat_no_brain_dict = ({
-    animal: {'condition': condition} for animal in animals} 
-    for condition, animals in [('control', control_just_behavior), ('defeat', defeat_just_behavior)]
+    animal: {'group_name': group_name} for animal in animals} 
+    for group_name, animals in [('control', control_just_behavior), ('defeat', defeat_just_behavior)]
 )
 
 control_ined = ['INED18', 'INED17', 'INED16', 'INED05', 'INED04']
 defeat_ined = ['INED01', 'INED06', 'INED07', 'INED09', 'INED11', 'INED12']
 
-control_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'condition': 'control'} 
+control_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'group_name': 'control'} 
                      for animal in control_ined}
-defeat_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'condition': 'defeat'} 
+defeat_ined_dict = {animal: {'lfp_electrodes': ined_lfp_electrodes, 'group_name': 'defeat'} 
                     for animal in defeat_ined}
 
 defeat_ig_st = ['IG154', 'IG155', 'IG156', 'IG158', 'IG175', 'IG177', 'IG179']
@@ -39,10 +39,10 @@ animals_with_units = ['IG160', 'IG163', 'IG176', 'IG178', 'IG180', 'IG154', 'IG1
                       'IG177', 'IG179']
 
 control_ig_dict, defeat_ig_dict = ({
-    animal: {'condition': condition, 'lfp_electrodes': ig_electrodes,
+    animal: {'group_name': group_name, 'lfp_electrodes': ig_electrodes,
              'lfp_from_stereotrodes': {'nsx_num': 6, 'electrodes': {'pl': pl_electrodes[animal]}}}
     for animal in animals} 
-    for condition, animals in [('control', control_ig_st), ('defeat', defeat_ig_st)])
+    for group_name, animals in [('control', control_ig_st), ('defeat', defeat_ig_st)])
 
 for d in control_ig_dict, defeat_ig_dict:
     for animal in d:
@@ -53,9 +53,9 @@ for d in control_ig_dict, defeat_ig_dict:
 control_ig_no_st = ['IG171', 'IG173']
 defeat_ig_no_st = ['IG172', 'IG174']
 
-control_ig_no_st_dict = {animal: {'condition': 'control', 'lfp_electrodes': no_st_electrodes} 
+control_ig_no_st_dict = {animal: {'group_name': 'control', 'lfp_electrodes': no_st_electrodes} 
                          for animal in control_ig_no_st}
-defeat_ig_no_st_dict = {animal: {'condition': 'defeat', 'lfp_electrodes': no_st_electrodes} 
+defeat_ig_no_st_dict = {animal: {'group_name': 'defeat', 'lfp_electrodes': no_st_electrodes} 
                         for animal in defeat_ig_no_st}
 
 animal_info = {**control_ined_dict, **defeat_ined_dict, **control_ig_dict, **defeat_ig_dict, 
@@ -73,26 +73,47 @@ period_info = {
 }
 
 for animal, info in animal_info.items():
+    animal_period_info = deepcopy(period_info)
     tone_on_code = 65502 if animal not in mice_with_alt_code else 65436
-    period_info['tone']['code'] = tone_on_code
-    info['period_info'] = deepcopy(period_info)
+    animal_period_info['tone']['code'] = tone_on_code
     if animal not in control_just_behavior + defeat_just_behavior:
-        info['period_info']['instructions'] = ['periods_from_nev']
+       animal_period_info['tone']['nev'] = {'code': tone_on_code}
+    info['period_info'] = animal_period_info
+
+
+# exp_info['animals'] = animals
+# exp_info['group_names'] = ['foo']
+# exp_info['sampling_rate'] = 30000
+# exp_info['identifier'] = 'CH27mice'
+# exp_info['path_constructors'] = {
+#     'nev' : 
+#         {'template': '/Users/katie/likhtik/CH27mice/{identifier}/{identifier}_HABCTXB.mat', 'fields': ['identifier']},
+#     'phy': 
+#         {'template': '/Users/katie/likhtik/CH27mice/{identifier}', 'fields': ['identifier']},
+#     'spike':
+#         {'template': '/Users/katie/likhtik/CH27mice/spike/{identifier}', 'fields': ['identifier']}}
+    
+# exp_info['get_units_from_phy'] = True
+
+# period_info = {
+#     'prelight': {'relative': True, 'target': 'light', 'shift': -35, 'duration': 35},
+#     'light': {'relative': False, 'reference_period_type': 'prelight', 
+#              'duration': 35, 'code': 65534, 'nev': {'code': 65534}}}
 
 animal_info_list = [info | {'identifier': id} for id, info in animal_info.items()]
 
 exp_info = {}
 
 exp_info['animals'] = animal_info_list
-exp_info['conditions'] = ['control', 'defeat']
+exp_info['group_names'] = ['control', 'defeat']
 exp_info['sampling_rate'] = 30000
 exp_info['lfp_sampling_rate'] = 2000
 exp_info['frequency_bands'] = {
-    'theta_1': (0, 4),
+    'theta_1': (4, 8),
     'theta_2': (8, 12)
 }
 exp_info['identifier'] = 'IG_SAFETY_RECALL'
-exp_info['data_path'] = 'Users/katie/likhtik/IG_INED_Safety_Recall'
+exp_info['data_path'] = '/Users/katie/likhtik/IG_INED_Safety_Recall'
 exp_info['path_constructors'] = {
     'nev' : 
         {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/{identifier}/{identifier}.mat', 'fields': ['identifier']},
@@ -103,6 +124,7 @@ exp_info['path_constructors'] = {
     'lfp': 
         {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/{identifier}/{identifier}', 'fields': ['identifier']}  
 }
+exp_info['get_units_from_phy'] = True
 
     
 exp_info['categorize_neurons'] = {

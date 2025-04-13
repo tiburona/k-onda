@@ -2,6 +2,8 @@ from copy import deepcopy
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter, MaxNLocator
+
 import numpy as np
 
 from ..plotting_helpers import PlottingMixin
@@ -17,7 +19,7 @@ class FeaturePlotter(Base, PlottingMixin):
         info, spec_type, aesthetics = (
             calc_config[k] for k in ('info', 'spec_type', 'aesthetics'))
         aesthetics = deepcopy(aesthetics) if aesthetics else None
-        unique_axs = defaultdict(lambda: {'ax': None, 'entries': []})
+        unique_axs = defaultdict(lambda: {'cell': None, 'entries': []})
 
         for i, entry in enumerate(info):
             cell = entry['cell']
@@ -37,7 +39,7 @@ class FeaturePlotter(Base, PlottingMixin):
 
     def make_legend(self, unique_axs):
         for i, data in enumerate(unique_axs.values()):
-            ax = data['ax']
+            ax = data['cell']
             entries = data['entries']
 
             if not entries or 'last_spec' not in entries[0]:
@@ -53,7 +55,41 @@ class FeaturePlotter(Base, PlottingMixin):
                 print("Manually collected handles:", handles)
                 custom_labels = [e['legend_label'] for e in entries]
                 print(custom_labels)
+                anchor_y = self.calculate_legend_y_position(entries)
+                # Combine with any pre-existing legend key parameters
+                legend_key = legend.get('key', {}).copy()  # copy to avoid modifying the original
+                # Set location and bbox_to_anchor to position the legend above your data.
+                legend_key.update({
+                    'loc': 'lower center',  # or any other preferred location relative to bbox_to_anchor
+                    'bbox_to_anchor': (0.8, anchor_y)
+                })
+                ax.legend(handles, custom_labels, **legend_key)
                 ax.legend(handles, custom_labels, **legend['key'])
+
+    def calculate_legend_y_position(self, entries):
+        # Collect all y-data from the entries based on the attribute indicated in each entry.
+        all_y_data = []
+        for entry in entries:
+            attr = entry.get('attr')
+            if attr and attr in entry:
+                data_points = entry[attr]
+                # If data_points is an iterable (like a list or array), extend the list
+                try:
+                    iter(data_points)
+                    all_y_data.extend(data_points)
+                except TypeError:
+                    all_y_data.append(data_points)
+
+        # Compute a safe anchor point for the legend.
+        if all_y_data:
+            max_y = max(all_y_data)
+            min_y = min(all_y_data)
+            y_range = max_y - min_y
+            # Increase the y coordinate by 5% of the range above the top data point.
+            anchor_y = max_y + 0.05 * y_range
+        else:
+            anchor_y = .9  # default anchor if no data is found
+        return anchor_y
 
     def plot_entry(self, ax, val, aesthetic_args=None):
         # Pass a temporary label to ensure the legend can register the line
@@ -101,6 +137,19 @@ class FeaturePlotter(Base, PlottingMixin):
             if 'axis_position' in ax_args:
                 for side in ax_args['axis_position']:
                     ax.spines[side].set_position(ax_args['axis_position'][side])
+            if 'tick_labels' in ax_args:
+                self.apply_tick_label_formatting(ax, ax_args['tick_labels'])
+
+    def apply_tick_label_formatting(self, ax, tick_labels):
+
+        if 'x' in tick_labels:
+            x_opts = tick_labels['x']
+
+            if x_opts.get('only_whole_numbers', False):
+                ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+            if x_opts.get('formatter'):
+                ax.xaxis.set_major_formatter(FuncFormatter(eval(x_opts['formatter'])))
     
     def apply_borders(self, ax, border):
         border = deepcopy(border)

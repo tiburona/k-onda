@@ -156,7 +156,7 @@ class CalcOptsProcessor(OptsValidator):
         if current_index >= len(remaining_loop_lists):
             # Optionally apply rules if needed
             if self.current_calc_opts_.get('rules'):
-                self.apply_rules()
+                self.apply_rules(self.current_calc_opts_)
             
             accumulated_results.append(deepcopy(self.current_calc_opts_))
             return accumulated_results

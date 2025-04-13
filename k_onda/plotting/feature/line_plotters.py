@@ -10,7 +10,8 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 class LinePlotter(FeaturePlotter):
     
     def plot_entry(self, ax, val, aesthetic_args=None):
-        ax.plot(np.arange(len(val)), val, label='', **aesthetic_args.get('marker', {}))
+        coord_vals = val.coords[val.dims[0]].values
+        ax.plot(coord_vals, val, label='', **aesthetic_args.get('marker', {}))
 
     def get_handles(self, ax):
         return ax.get_lines()

@@ -39,18 +39,20 @@ class MatlabInterface:
         result = self.execute_function(data, execution_line, results=['yo', 'fo', 'to'])
         return result
     
-    def open_nsx(self, file_path):
+    def open_nsx(self, file_path, nsx_to_load=3):
+        x = str(nsx_to_load)
         file_dir = os.path.dirname(file_path)
-        file_path += '.ns3'
+        file_path += f'.ns{x}'
+        h5_path = os.path.join(file_dir, f'output_data_ns{x}.h5')
 
         execution_line = f"""
             openNSx('{file_path}');\n
-            data = NS3.Data;\n
-            h5create('{file_dir}/output_data.h5', '/NS3_Data', size(data), 'Datatype', 'int16');\n
-            h5write('{file_dir}/output_data.h5', '/NS3_Data', data);\n
+            data = NS{x}.Data;\n
+            h5create('{h5_path}', '/NS{x}_Data', size(data), 'Datatype', 'int16');\n
+            h5write('{h5_path}', '/NS{x}_Data', data);\n
         """
         self.execute_function('', execution_line, input_type='string')
-        return os.path.join(file_dir, 'output_data.h5')
+        return h5_path
 
     def filter(self, data):
         execution_line = f"filtered_data = removeLineNoise_SpectrumEstimation(data', 2000, ['NH=5','LF=60']);"
