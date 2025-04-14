@@ -76,7 +76,7 @@ THETA_POWER_OPTS = {
 
 
 POWER_PLOT_SPEC = {
-    'plot_type': 'line_plot',
+    
     'section': {
         'divisions': [
             {'divider_type': 'group',
@@ -96,7 +96,11 @@ POWER_PLOT_SPEC = {
                 'space_between': .1,
                 'x': .60},
             },
+        'layers': [
+                {'plot_type': 'line_plot', 'calc_opts': {'concatenation': {'attrs': ['calc']}}}, 
+                {'plot_type': 'vertical_line', 'calc_opts': {'concatenation': {'attrs': ['mean', 'sem']}}}],
         'segment': {
+    
             'attr': 'concatenation',
             'divisions':[
                 {'divider_type': 'period_type',
@@ -107,7 +111,7 @@ POWER_PLOT_SPEC = {
                 'x_top': {'text': '{identifier} Group', 'target': 'subfigure'}
                 },
             'legend': {'key': { 'loc': 'upper right'},
-                       'which': 1},
+                       'which': 1, 'y_coord': .95},
             'aesthetics': {
                 'ax': {
                     'border': {'top': {'visible': 'FFF'}, 
@@ -132,3 +136,68 @@ POWER_PLOT_OPTS = {
 
 
 
+SPECTRUM_OPTS = {
+    'kind_of_data': 'lfp', 
+    'calc_type': 'power', 
+    'brain_regions': ['pl', 'hpc', 'bla'], 
+    'frequency_bands': [(0, 20)], 
+    'power_arg_set': (2048, 2000, 1000, 980, 2),
+    'lfp_padding': [1, 1],
+    'lost_signal': [.25, .25],
+    'row_type': 'event', 
+    'time_type': 'continous', 
+    'frequency_type': 'continuous', 
+    'bin_size': .01,
+    'filter': 'filtfilt', 
+    'store': 'pkl',  
+    'validate_events': True,
+    'periods': {'tone': {'event_pre_post': (.15, .3)}, 'pretone': {'event_pre_post': (.15, .3)}},
+    'rules': {
+        'brain_region': 
+        {'pl': [('filter', {'animal': {'identifier': ('in', PFC_THETA_POWER_ANIMALS)}})],
+         'bla': [('filter', {'animal': {'identifier': ('in', BLA_THETA_POWER_ANIMALS)}})], 
+         'hpc': [('filter', {'animal': {'identifier': ('in', HPC_THETA_POWER_ANIMALS)}})]
+                               }},
+    'matlab_configuration': MATLAB_CONFIG, 
+    }
+
+
+SPECTRUM_PLOT_SPEC = {
+    'plot_type': 'peristimulus_power_spectrum',
+    'section': {
+        'divisions': [
+            {'divider_type': 'period_type',
+             'members': ['pretone', 'tone'],
+             'dim': 0}],
+        'label': { 
+            'title': {
+                'target': 'subfigure',
+                'text': '{brain_region} {frequency_band} Spectrogram',
+                'space_between': .1,
+                'x': .60}},
+        'section': {
+        'divisions': [
+            {'divider_type': 'group',
+             'data_source': 'group',
+             'members': ['control', 'defeat'],
+             'dim': 1}],
+        'label': {
+            'x_top': {
+                'target': 'axes',
+                'text': '{identifier} {period_type}',
+                'space_between': .3,
+                'space_within': 0.5, 
+                'which': 'all'}},
+        'legend': {'colorbar': {'share': 'global', 'position': 'right'}},
+        'aesthetics': {'indicator': {'type': 'patch', 'when': [0, 0.05]}}
+        }}}
+
+SPECTRUM_PLOT_OPTS = {
+    'procedure': 'make_plots',
+    'write_opts': {
+        'fname': {'template': '/Users/katie/likhtik/IG_INED_Safety_Recall/power/spectrum_{brain_region}_{frequency_band}',
+                  'fields': ['brain_region', 'frequency_band']}
+    },
+    'calc_opts': SPECTRUM_OPTS,
+    'plot_spec': SPECTRUM_PLOT_SPEC
+}

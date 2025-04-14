@@ -60,7 +60,8 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
     def __init__(self, config):
         self.setup_common(config)
         self.setup_unique()
-        self.finalize_init()
+        self.finalize_init_common()
+        self.finalize_init_unique()
         
     def setup_common(self, config):
         self.__dict__.update(config.__dict__)
@@ -72,7 +73,7 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
         # Intended to be overridden by subclasses
         pass
 
-    def finalize_init(self):
+    def finalize_init_common(self):
         self.child_layout = Layout(
             self.parent_layout,
             self.current_index,
@@ -80,6 +81,10 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
             figure=self.figure,
             **self.get_layout_args()  # Dynamically include additional arguments
         )
+
+    def finalize_init_unique(self):
+        # Intended to be overridden by subclasses
+        pass    
         
     def get_layout_args(self):
         """Provides additional arguments for Layout."""

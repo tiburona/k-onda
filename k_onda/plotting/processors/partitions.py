@@ -35,6 +35,8 @@ class Partition(Processor, Watcher):
         # each unique layer
         self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
         self.assign_data_sources()
+
+    def finalize_init_unique(self):
         if self.global_colorbar:
             self.legend_info_list.append((self.figure, self.colorbar_spec, []))
 

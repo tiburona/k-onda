@@ -174,6 +174,10 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
     def get_power(self):
         indices = np.where(self.mask)[0]  # Convert boolean mask to integer indices
         power = self.sliced_spectrogram.isel(time=indices)
+        # Extract the first time coordinate (the event start relative to the period start)
+        event_start = power.coords['time'].values[0] + self.pre_event
+        # Create a new coordinate "relative_time" by subtracting the event start time
+        power = power.assign_coords(relative_time=power.coords['time'] - event_start)
         if self.calc_opts.get('frequency_type') == 'block':
             power = power.mean(dim='frequency')
         if self.calc_opts.get('time_type') == 'block':

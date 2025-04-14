@@ -7,6 +7,7 @@ import pickle
 from copy import deepcopy
 import string 
 
+from collections.abc import Iterable
 import numpy as np
 import h5py
 import xarray as xr
@@ -306,6 +307,10 @@ def is_truthy(obj):
     if isinstance(obj, (np.ndarray, xr.DataArray)):
         return obj.size > 0  # True if the array has elements
     return bool(obj)  # General truthiness check for other types
+
+
+def is_iterable(obj):
+    return isinstance(obj, Iterable) and not isinstance(obj, (str, bytes))
 
 
 

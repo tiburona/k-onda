@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 
 from k_onda.base import Base
-from k_onda.utils import cache_method, always_last, operations, sem, is_truthy
+from k_onda.utils import cache_method, always_last, operations, sem, is_truthy, is_iterable
 
 # TODO a lot of methods in here need to deal with dictionaries for the granger case,
 # like sem, mean, etc.
@@ -136,12 +136,31 @@ class Data(Base):
     @staticmethod
     def xmean(child_vals, axis=None):
         if not is_truthy(child_vals):
-            return xr.DataArray(float('nan'))  
-        aggregated = xr.concat(child_vals, dim='child')
+            return xr.DataArray(np.nan)
+        
+        try:
+            _ = iter(child_vals)
+        except TypeError:
+            return child_vals
+
+        # Align each child using its 'relative_time' coordinate if available.
+        aligned_vals = []
+        for child in child_vals:
+            if 'relative_time' in child.coords:
+                # Replace the 'time' coordinate with the 'relative_time' coordinate
+                common_time = np.around(child.coords['relative_time'].values, decimals=4)
+                child = child.assign_coords(time=common_time)
+            aligned_vals.append(child)
+        
+        # Concatenate along a new "child" dimension using an inner join so that only common coordinate values are kept.
+        aggregated = xr.concat(aligned_vals, dim='child', join='inner')
+        
         if axis is None:
-            return aggregated.mean(dim=None, skipna=True)  # Mean over all dimensions
-        axis_name = aggregated.dims[axis] if isinstance(axis, int) else axis
-        return aggregated.mean(dim=axis_name, skipna=True)
+            axis = 'child'
+        elif isinstance(axis, int):
+            axis = aggregated.dims[axis]
+        
+        return aggregated.mean(dim=axis, skipna=True)
         
     @cache_method
     def get_average(self, base_method, stop_at='event', level=0, axis=0, exclude=True, *args, **kwargs):
@@ -159,6 +178,9 @@ class Data(Base):
         Returns:
         float or np.array: The mean of the data values from the object's descendants.
         """
+
+        # TODO: methods that return dicts are currently broken but they will be fixed when
+        # they return xr data sets
         
         if not self.include() and exclude:
             return float('nan')  
@@ -181,23 +203,8 @@ class Data(Base):
                 base_method, level=level+1, stop_at=stop_at, axis=axis, **kwargs)
             if not self.is_nan(child_val):
                 child_vals.append(child_val)
-            
-        if len(child_vals) and isinstance(child_vals[0], dict):
-            # Initialize defaultdict to automatically start lists for new keys
-            result_dict = defaultdict(list)
-
-            # Aggregate values from each dictionary under their corresponding keys
-            for child_val in child_vals:
-                for key, value in child_val.items():
-                    result_dict[key].append(value)
-
-            # Calculate average of the list of values for each key
-            return_dict = {key: self.xmean(values, axis) 
-                            for key, values in result_dict.items()}
-            return return_dict
-                
-        else:
-            return self.xmean(child_vals, axis)
+       
+        return self.xmean(child_vals, axis)
     
     @property
     def mean(self):
@@ -206,6 +213,10 @@ class Data(Base):
     @property
     def sem(self):
         return self.get_sem(collapse_sem_data=True)
+    
+    @property
+    def mean_and_sem(self):
+        return xr.Dataset({'mean': self.mean, 'sem': self.sem})
     
     @property
     def sem_envelope(self):
@@ -283,26 +294,40 @@ class Data(Base):
             kwargs['concatenated'] = self.children[0].name
         return self.concatenate(**kwargs)
         
-    def concatenate(self, concatenator=None, concatenated=None, attr='calc', method=None, 
-                    dim_xform=None):
+    def concatenate(self, concatenator=None, concatenated=None, attrs=None, dim_xform=None):
         """Concatenates data from descendant nodes using xarray."""
 
-        f = lambda x: (
-            getattr(x, method)() if method else getattr(x, attr)
-            ) if hasattr(x, method if method else attr) else None
+        if attrs is None:
+            attrs = ['calc']
         
+        def get_func(attr):
+            def func(obj):
+                # Try to get the attribute from the object
+                val = getattr(obj, attr, None)
+                # If the attribute exists and is callable (i.e. a bound method), call it
+                return val() if callable(val) else val
+            return func
+            
         if self.name == concatenator:
            
             # Fetch descendants from the correct level of the accumulator (base case)
             depth_index = self.hierarchy.index(concatenated) - self.hierarchy.index(self.name)
+
             # Apply the function to each descendant
-            children_data = [
-                f(child) for child in self.accumulate(max_depth=depth_index)[concatenated]
-            ]
+            if len(attrs) == 1:
+                children_data = [
+                    get_func(attrs[0])(child) for child in self.accumulate(max_depth=depth_index)[concatenated]
+                ]
+                a = 'foo'
+            else:
+                children_data = [
+                    xr.Dataset({attr: get_func(attr)(child) for attr in attrs}) 
+                    for child in self.accumulate(max_depth=depth_index)[concatenated]
+                ]
             if not children_data:
                 return xr.DataArray([])
             
-            if isinstance(children_data[0], xr.DataArray):
+            if isinstance(children_data[0], (xr.DataArray, xr.Dataset)):
                 if ((concatenator == 'animal' and self.calc_type != 'spike') or 
                     concatenator in ['unit', 'period']):
 
@@ -320,7 +345,7 @@ class Data(Base):
             # Successively average levels of the hierarchy until we reach the concatenator (recursive case)
             children_data = [
                 child.concatenate(concatenator=concatenator, concatenated=concatenated, 
-                                attr=attr, method=method, dim_xform=dim_xform)
+                                attrs=attrs, dim_xform=dim_xform)
                 for child in self.children if child.include()
             ]
             

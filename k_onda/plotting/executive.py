@@ -11,7 +11,7 @@ from .processors.processor import Container, ProcessorConfig
 from .processors.processor_mixins import MarginMixin
 from .layout import Layout
 from .feature import (
-    CategoricalScatterPlotter, LinePlotter, BarPlotter, WaveformPlotter, CategoricalLinePlotter, 
+    CategoricalScatterPlotter, LinePlotter, VerticalLinePlotter, BarPlotter, WaveformPlotter, CategoricalLinePlotter, 
     RasterPlotter, PeriStimulusHistogramPlotter, HeatMapPlotter, PeriStimulusHeatMapPlotter, 
     PeriStimulusPowerSpectrumPlotter)
 from k_onda.utils import to_serializable, PrepMethods
@@ -23,6 +23,7 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 
 PLOT_TYPES = {'categorical_scatter': CategoricalScatterPlotter,
               'line_plot': LinePlotter,
+              'vertical_line': VerticalLinePlotter,
               'bar_plot': BarPlotter,
               'waveform': WaveformPlotter,
               'categorical_line': CategoricalLinePlotter,

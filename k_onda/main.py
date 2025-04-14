@@ -16,7 +16,7 @@ from k_onda.run import Runner
 from k_onda.run.misc_data_init.opts_library import  RUNNER_OPTS,  GROUP_PSTH_OPTS, MRL_OPTS, MRL_PREP_OPTS, PSTH_CSV_OPTS, AS_OPTS
 from k_onda.run.misc_data_init.CH27_plot_specs import *
 
-from k_onda.run.misc_data_init.ig_ined_safety_power_opts import PREP_OPTS, POWER_PLOT_OPTS
+from k_onda.run.misc_data_init.ig_ined_safety_power_opts import PREP_OPTS, POWER_PLOT_OPTS, SPECTRUM_PLOT_OPTS
 
 
 

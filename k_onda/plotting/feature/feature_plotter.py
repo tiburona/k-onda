@@ -55,12 +55,12 @@ class FeaturePlotter(Base, PlottingMixin):
                 print("Manually collected handles:", handles)
                 custom_labels = [e['legend_label'] for e in entries]
                 print(custom_labels)
-                anchor_y = self.calculate_legend_y_position(entries)
+                anchor_y = legend.get('anchor_y', 0.9)
                 # Combine with any pre-existing legend key parameters
                 legend_key = legend.get('key', {}).copy()  # copy to avoid modifying the original
                 # Set location and bbox_to_anchor to position the legend above your data.
                 legend_key.update({
-                    'loc': 'lower center',  # or any other preferred location relative to bbox_to_anchor
+                    'loc': legend.get('loc', 'lower center'),  
                     'bbox_to_anchor': (0.8, anchor_y)
                 })
                 ax.legend(handles, custom_labels, **legend_key)

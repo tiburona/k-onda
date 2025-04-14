@@ -147,9 +147,6 @@ class PeriStimulusHeatMapPlotter(HeatMapPlotter, PeriStimulusPlotter):
             raise NotImplementedError("Break axes not yet implemented for heat maps")
         img, ax = HeatMapPlotter.plot_entry(self, entry, aesthetics, norm)
         aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
-
-        ax.imshow(entry['data'], aspect='auto', extent=[-self.pre, self.post, 0, entry['data'].shape[0]], norm=norm, **aesthetic_args)
-
         self.place_indicator(ax, aesthetic_args)
         return img, ax
     

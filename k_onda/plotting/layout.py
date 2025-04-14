@@ -72,6 +72,7 @@ class Layout(Base, ColorbarMixin):
 
         if self.global_colorbar:
             self.create_outer_and_subgrid()
+            a = 'foo'
 
         subfigure_args = self.spec.get('subfigure', {}) if self.processor else {}
             

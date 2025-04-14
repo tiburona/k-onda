@@ -1,4 +1,4 @@
-from .line_plotters import LinePlotter,  WaveformPlotter
+from .line_plotters import LinePlotter,  WaveformPlotter, VerticalLinePlotter
 from .peristimulus_plotters import (
     PeriStimulusPlotter, PeriStimulusHistogramPlotter, RasterPlotter, 
     PeriStimulusHeatMapPlotter, PeriStimulusPowerSpectrumPlotter)
