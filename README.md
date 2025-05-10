@@ -6,7 +6,7 @@ _modular electrophysiology analysis pipeline_
 **License & usage:** All rights reserved – shared *read-only* for evaluation.
 Contact Katie Surrence for permission before using this code in any project.
 
-K-Onda is an application for analyzing electrophysiology experiments in Python, and in time it will be extended/abstracted to other kinds of data.  It takes as input curated spike data, raw local field potential data, and/or behavioral data and outputs plots and/or csv files for further data analysis. 
+K-Onda is an applicatsion for analyzing electrophysiology experiments in Python, and in time it will be extended/abstracted to other kinds of data.  It takes as input curated spike data, raw local field potential data, and/or behavioral data and outputs plots and/or csv files for further data analysis. 
 
 
 ## Setup Instructions
@@ -33,7 +33,6 @@ runner = Runner(config_file="example_experiment_config.json")
 runner.run(opts=OPTS)
 ```
 
-<details>
 <br>
 <summary>Configuration structure & commit helper</summary>
 
@@ -49,11 +48,29 @@ Use `Runner(config_root=...)` to point to your config directory.
 To commit both repos together:
 
 ./devtools/commit_both.sh "Your commit message"
-</details>
+
 
 ## Requirements
 
-In addition to the Python packages specified in requirements.txt, some functionality depends on having Matlab installed on your computer.  Calculations of power and coherence from raw LFP data depend on having a working version of Matlab installed, along with two scripts from Professor Kenneth Harris's lab (`mtcsg.m` and `mtchg.m`) and their dependencies. You can also choose to filter your LFP data using the Matlab script `removeLineNoise_SpectrumEstimation.m`. These scripts are not distributed with this repo; if you need them, please email the author if you are someone reading this who is not in the Likhtik lab, or if you are, Whatsapp her. This functionality was tested with Matlab 2022a.
+Some functionality (esp. LFP analysis) requires Matlab — see details below.
+
+<details>
+<summary>⚠️ Matlab dependency (for LFP analysis)</summary>
+
+Some core functionality—like calculating power and coherence from raw LFP data—**requires Matlab**.
+
+Specifically:
+- A working Matlab installation (tested with Matlab 2022a)
+- Scripts from Professor Kenneth Harris's lab:
+  - `mtcsg.m`
+  - `mtchg.m`
+- (Optional) `removeLineNoise_SpectrumEstimation.m` for filtering
+
+These scripts are **not included**.  
+If you are in the Likhtik lab, contact the author via WhatsApp.  
+Others may request access via email.
+
+</details>
 
 
 
