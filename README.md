@@ -34,20 +34,25 @@ runner.run(opts=OPTS)
 ```
 
 <br>
+<details>
 <summary>Configuration structure & commit helper</summary>
 
-This project expects analysis-specific configuration files to live **outside** the main repo.  
-We recommend this layout:
+ 
+We recommend saving your config files outside the K-Onda directory structure. For example:
+
 ```
 your_workspace/
 ├── k-onda/                        # main code (this repo)
 └── analysis-config-for-k-onda/   # your private configs
 ```
-Use `Runner(config_root=...)` to point to your config directory.
+Use `Runner(config_file=...)` to point to the experiment `config_file`.
 
-To commit both repos together:
+This layout is supported by a script to commit both repos (we recommend a commit of both configuration and the K-Onda code every time you perform an analysis):
 
 ./devtools/commit_both.sh "Your commit message"
+
+If you'd prefer to save your config files elsewhere, edit the path in `commit_both.sh`
+</details>
 
 
 ## Requirements
