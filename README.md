@@ -1,3 +1,11 @@
+# k-onda  
+_modular electrophysiology analysis pipeline_
+
+[![Python](https://img.shields.io/badge/python-3.9+-blue)](https://www.python.org/)
+
+**License & usage:** All rights reserved – shared *read-only* for evaluation.
+Contact Katie Surrence for permission before using this code in any project.
+
 K-Onda is an application for analyzing electrophysiology experiments in Python, and in time it will be extended/abstracted to other kinds of data.  It takes as input curated spike data, raw local field potential data, and/or behavioral data and outputs plots and/or csv files for further data analysis. 
 
 
