@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set the relative path to the second repo (e.g., config files)
-CONFIG_REPO="../../analysis-config-for-k-onda"
+CONFIG_REPO="../analysis-config-for-k-onda"
 
 msg="$1"
 if [ -z "$msg" ]; then
