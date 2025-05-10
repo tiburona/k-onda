@@ -58,6 +58,8 @@ class LFPPrepMethods(PrepMethods):
                           for region, val in self.animal_info['lfp_electrodes'].items()}
         if self.animal_info.get('lfp_from_stereotrodes') is not None:
             data_to_return = self.get_lfp_from_stereotrodes(self, data_to_return)
+        if self.identifier == 'IG160':
+            a = 'foo'
         return data_to_return
 
     def get_lfp_from_stereotrodes(self, animal, data_to_return):

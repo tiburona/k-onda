@@ -264,13 +264,15 @@ class Data(Base):
         arrays = [obj.calc for obj in vals_to_summarize]
         if arrays:
             np_arrays = []
-            for a in arrays:
-                if hasattr(a, "values"):
-                    a = a.values
-                if np.isscalar(a):
-                    a = np.array([a])
-                np_arrays.append(np.ravel(a))
+            for arr in arrays:
+                if hasattr(arr, "values"):
+                    arr = arr.values
+                if np.isscalar(arr):
+                    arr = np.array([arr])
+                np_arrays.append(np.ravel(arr))
             flattened = np.concatenate(np_arrays)
+            if self.selected_brain_region == 'bla' and self.identifier == 'IG160':
+                a = 'foo'
             return np.nanmedian(flattened)
         else:
             return float("nan")

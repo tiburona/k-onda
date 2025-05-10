@@ -114,12 +114,3 @@ class MatlabInterface:
         # shutil.rmtree(self.session_directory)
 
         return result
-
-
-
-
-
-
-
-
-

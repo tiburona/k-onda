@@ -12,6 +12,8 @@ from k_onda.utils import (calc_coherence, amp_crosscorr, compute_phase,
 class LFPMethods:
  
     def get_power(self, exclude=True):
+        if self.selected_frequency_band == 'theta_1':
+            a = 'foo'
         return self.get_average('get_power', stop_at=self.calc_opts.get('base', 'event'), 
                                 exclude=exclude)
     
@@ -91,6 +93,8 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
     def spectrogram(self):
         if self._spectrogram is None:
             self._spectrogram = self.calc_cross_spectrogram()
+        if self.animal.identifier == 'IG160':
+            a = 'foo'
         last_frequency = self.freq_range[1]
         index_of_last_frequency = np.where(self._spectrogram[1] > last_frequency)[0][0]
         self._spectrogram[0] = self._spectrogram[0][0:index_of_last_frequency, :]
@@ -161,27 +165,37 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
         self.event_times = event_times
         self.mask = mask
         if sum(self.mask) == 0:
-            a = 'foo'
+            raise ValueError("Event mask is empty!")
         self.animal = period.animal
         self.period_type = self.parent.period_type
         self.spectrogram = self.parent.spectrogram
 
     @property
-    def is_valid(self):        
-        return self.animal.lfp_event_validity[self.selected_brain_region][self.period_type][
+    def is_valid(self): 
+        a = 'foo'       
+        val = self.animal.lfp_event_validity[self.selected_brain_region][self.period_type][
             self.period.identifier][self.identifier]
-    
+        if not val:
+            print(f"Event {self.animal.identifier} {self.period_type} {self.period.identifier} {self.identifier} is not valid!")
+        return val
+
     def get_power(self):
+        
         indices = np.where(self.mask)[0]  # Convert boolean mask to integer indices
         power = self.sliced_spectrogram.isel(time=indices)
+
         # Extract the first time coordinate (the event start relative to the period start)
         event_start = power.coords['time'].values[0] + self.pre_event
+
         # Create a new coordinate "relative_time" by subtracting the event start time
         power = power.assign_coords(relative_time=power.coords['time'] - event_start)
+
         if self.calc_opts.get('frequency_type') == 'block':
             power = power.mean(dim='frequency')
+
         if self.calc_opts.get('time_type') == 'block':
-            power = power.mean(dim='time')
+            power = power.mean(dim='time')      
+
         return power
     
     def index_transformation_function(self, concatenator):
