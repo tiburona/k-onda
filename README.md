@@ -6,39 +6,37 @@ _modular electrophysiology analysis pipeline_
 **License & usage:** All rights reserved – shared *read-only* for evaluation.
 Contact Katie Surrence for permission before using this code in any project.
 
-K-Onda is an applicatsion for analyzing electrophysiology experiments in Python, and in time it will be extended/abstracted to other kinds of data.  It takes as input curated spike data, raw local field potential data, and/or behavioral data and outputs plots and/or csv files for further data analysis. 
+K-Onda is a modular Python application for analyzing electrophysiology experiments.  
+It takes as input curated spike data, raw local field potential (LFP) recordings, and/or behavioral data, and outputs publication-quality plots and structured CSVs for downstream analysis.
+
+The architecture is designed to generalize over time to support other experimental domains. 
 
 
-## Setup Instructions
-
-Basic setup requires Python 3.7+ and `pip`. 
-
-For a quick setup:
-1. Create a virtual environment: `python -m venv env`
-2. Activate the virtual environment:
-   - On macOS/Linux: `source env/bin/activate`
-   - On Windows: `env\Scripts\activate`
-3. Install dependencies: `pip install -r requirements.txt`
-
-If you're new to Python or need more detailed instructions, refer to the [Python Environment Setup Guide](https://realpython.com/python-virtual-environments-a-primer/).
-
-## Execution
-
+## Minimal Example
 ```
 from k_onda.main import Runner
 
-OPTS = {'example_opt': 'val'}
+OPTS = {"your": "options_go_here"}  # Replace with analysis-specific options
 
 runner = Runner(config_file="example_experiment_config.json")
 runner.run(opts=OPTS)
 ```
+
+## Features
+
+- Modular pipeline for spike, LFP, and behavioral data
+- Hierarchical object model: Experiment → Animal → (Unit, for spike data) -> Event -> Time Bin
+- Experimental Design: Animals can have Conditions and Periods can be of different Period Types
+- Publication-quality plotting engine with customizable layout
+- Optional Matlab integration for spectral analysis
+
 
 <br>
 <details>
 <summary>Configuration structure & commit helper</summary>
 
  
-We recommend saving your config files outside the K-Onda directory structure. For example:
+We recommend organizing your config files outside the K-Onda directory structure (even though the tool currently just uses a direct config_file= argument). For example:
 
 ```
 your_workspace/
@@ -49,11 +47,20 @@ Use `Runner(config_file=...)` to point to the experiment `config_file`.
 
 This layout is supported by a script to commit both repos (we recommend a commit of both configuration and the K-Onda code every time you perform an analysis):
 
-./devtools/commit_both.sh "Your commit message"
+`./devtools/commit_both.sh "Your commit message"`
 
 If you'd prefer to save your config files elsewhere, edit the path in `commit_both.sh`
 </details>
 
+## Setup Instructions
+
+Basic setup requires Python 3.9+ and `pip`. 
+
+On MacOS/Linux:
+
+```
+python -m venv .venv && source .venv/bin/activate
+```
 
 ## Requirements
 
