@@ -52,6 +52,8 @@ from .utils import (
 
 from .prep_methods import PrepMethods
 
+from .xarray_helpers import drop_inconsistent_coords, standardize
+
 __all__ = [
     # From math_functions
     "calc_hist",
@@ -101,5 +103,7 @@ __all__ = [
     "operations",
     "is_truthy",
     "is_iterable",
-    "PrepMethods"
+    "PrepMethods",
+    "drop_inconsistent_coords",
+    "standardize"
 ]

@@ -5,7 +5,7 @@ from collections import defaultdict
 import numpy as np
 import xarray as xr
 
-from k_onda.utils import calc_hist, cross_correlation, correlogram
+from k_onda.utils import calc_hist, cross_correlation, correlogram, standardize
 from k_onda.interfaces import PhyInterface
 from k_onda.data import Data
 from k_onda.data.period_constructor import PeriodConstructor
@@ -69,13 +69,15 @@ class RateMethods:
     
     def get_coords(self, length):
         index = np.arange(length)
-        absolute_time = index * self.calc_opts['bin_size'] + self.start
-        relative_time = absolute_time - self._start
-        period_time = relative_time - self.parent._start if self.name == 'event' else relative_time
+        absolute_time = standardize(index * self.calc_opts['bin_size'] + self.start)
+        relative_time = standardize(absolute_time - self._start)
+        period_time = standardize(absolute_time - self.parent._start 
+                                  if self.name == 'event' else relative_time)
 
         coord_dict = {
             'time': index,
             'absolute_time': ('time', absolute_time),
+            'relative_time': ('time', relative_time),
             'period_time': ('time', period_time)
         }
 
@@ -90,7 +92,8 @@ class RateMethods:
         else:
             raw_counts = calc_hist(self.spikes, self.num_bins_per, self.spike_range)[0]
             coords = self.get_coords(len(raw_counts))
-            
+            if self.num_bins_per != 11:
+                a = 'foo'
             # Wrap the raw counts in a DataArray with 'time' as the dimension.
             counts = xr.DataArray(
                 raw_counts,
@@ -196,14 +199,13 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         
     def get_coords(self, length):
         index = np.arange(length)
-        absolute_time = index * self.calc_opts['bin_size'] + self.start
-        relative_time = absolute_time - self._start
-        period_time = relative_time - self.parent._start if self.name == 'event' else relative_time
+        absolute_time = standardize(index * self.calc_opts['bin_size'] + self.start)
+        relative_time = standardize(absolute_time - self._start)
+    
 
         coord_dict = {
             'time': index,
             'absolute_time': ('time', absolute_time),
-            'period_time': ('time', period_time)
         }
 
         if self.name == 'event':

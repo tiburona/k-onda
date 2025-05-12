@@ -304,9 +304,21 @@ def print_common_dict_references(obj1, obj2):
 
 
 def is_truthy(obj):
-    if isinstance(obj, (np.ndarray, xr.DataArray)):
-        return obj.size > 0  # True if the array has elements
-    return bool(obj)  # General truthiness check for other types
+    if isinstance(obj, xr.DataArray):
+        if obj.ndim == 0:
+            return bool(obj.item())  
+        return obj.size > 0 and any(is_truthy(el) for el in obj.values)
+
+    elif isinstance(obj, np.ndarray):
+        if obj.ndim == 0:
+            return bool(obj.item())
+        return obj.size > 0 and any(is_truthy(el) for el in obj)
+
+    elif isinstance(obj, list):
+        return len(obj) > 0 and any(is_truthy(el) for el in obj)
+
+    else:
+        return bool(obj)
 
 
 def is_iterable(obj):

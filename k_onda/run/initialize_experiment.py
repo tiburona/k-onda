@@ -1,6 +1,7 @@
 import json
 from copy import deepcopy
 from collections import defaultdict
+from pathlib import PosixPath
 
 from scipy.signal import firwin, lfilter
 import h5py
@@ -14,7 +15,7 @@ class Initializer(PrepMethods):
     def __init__(self, config):
         if type(config) == dict:
             self.exp_info = config
-        elif type(config) == str:
+        elif type(config) in [str, PosixPath]:
             with open(config, 'r',  encoding='utf-8') as file:
                 data = file.read()
                 self.exp_info = json.loads(data)

@@ -1,10 +1,10 @@
 from collections import defaultdict
-from copy import copy
 import numpy as np
+from typing import Sequence, Union, Optional
 import xarray as xr
 
 from k_onda.base import Base
-from k_onda.utils import cache_method, always_last, operations, sem, is_truthy, is_iterable
+from k_onda.utils import cache_method, always_last, operations, sem, is_truthy, drop_inconsistent_coords
 
 # TODO a lot of methods in here need to deal with dictionaries for the granger case,
 # like sem, mean, etc.
@@ -132,36 +132,30 @@ class Data(Base):
                     if not function(object_value, target_value):
                         return False
         return True
-    
+
     @staticmethod
-    def xmean(child_vals, axis=None):
-        if not is_truthy(child_vals):
+    def xmean(child_vals, axis: None):
+       
+        if not is_truthy(child_vals):                       
             return xr.DataArray(np.nan)
         
-        try:
-            _ = iter(child_vals)
-        except TypeError:
-            return child_vals
-
-        # Align each child using its 'relative_time' coordinate if available.
-        aligned_vals = []
-        for child in child_vals:
-            if 'relative_time' in child.coords:
-                # Replace the 'time' coordinate with the 'relative_time' coordinate
-                common_time = np.around(child.coords['relative_time'].values, decimals=4)
-                child = child.assign_coords(time=common_time)
-            aligned_vals.append(child)
-        
-        # Concatenate along a new "child" dimension using an inner join so that only common coordinate values are kept.
-        aggregated = xr.concat(aligned_vals, dim='child', join='inner')
-        
         if axis is None:
-            axis = 'child'
-        elif isinstance(axis, int):
-            axis = aggregated.dims[axis]
+            return child_vals.mean(skipna=True)
         
-        return aggregated.mean(dim=axis, skipna=True)
+        if isinstance(child_vals, xr.DataArray): 
+
+            # resolve axis name if an int was passed
+            axis_name = (
+                child_vals.dims[axis] if isinstance(axis, int) else axis
+            )
+            return child_vals.mean(dim=axis_name, skipna=True)
         
+        cleaned = drop_inconsistent_coords(child_vals)
+
+        agg = xr.concat(cleaned, dim="child", coords="minimal", compat="no_conflicts")
+        axis_name = agg.dims[axis] if isinstance(axis, int) else axis or "child"
+        return agg.mean(dim=axis_name, skipna=True, keep_attrs=True)
+            
     @cache_method
     def get_average(self, base_method, stop_at='event', level=0, axis=0, exclude=True, *args, **kwargs):
         """
@@ -382,8 +376,6 @@ class Data(Base):
                     if sort_by[1] == 'descending':
                         accumulated[level].reverse()
         return accumulated
-    
-   
 
     @property
     def grandchildren_stack(self):
