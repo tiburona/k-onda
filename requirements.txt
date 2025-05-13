@@ -1,1 +1,11 @@
--r demo/demo_requirements.txt
+debugpy==1.8.14
+h5py==3.11.0
+matplotlib==3.8.0
+neo==0.13.0
+numpy==2.2.5
+pandas==2.2.3
+phylib==2.4.3
+scikit_learn==1.4.2
+scipy==1.15.3
+setuptools==68.2.2
+xarray==2025.1.2
