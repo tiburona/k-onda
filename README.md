@@ -1,7 +1,7 @@
 # K-Onda  
 _Modular Electrophysiology Analysis Pipeline_
 
-[![Python](https://img.shields.io/badge/python-3.9+-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org/)
 
 K-Onda is a modular Python application for analyzing electrophysiology experiments.  It takes as input curated spike data, raw local field potential (LFP) recordings, and/or behavioral data, and outputs publication-quality plots and structured CSVs for downstream analysis.
 
