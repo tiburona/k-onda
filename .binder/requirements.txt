@@ -1,1 +1,4 @@
--r demo/demo_requirements.txt
+jupyter
+matplotlib
+numpy
+xarray
