@@ -1,15 +1,13 @@
-# k-onda  
-_modular electrophysiology analysis pipeline_
+# K-Onda  
+_Modular Electrophysiology Analysis Pipeline_
 
 [![Python](https://img.shields.io/badge/python-3.9+-blue)](https://www.python.org/)
 
-**License & usage:** All rights reserved – shared *read-only* for evaluation.
-Contact Katie Surrence for permission before using this code in any project.
-
-K-Onda is a modular Python application for analyzing electrophysiology experiments.  
-It takes as input curated spike data, raw local field potential (LFP) recordings, and/or behavioral data, and outputs publication-quality plots and structured CSVs for downstream analysis.
+K-Onda is a modular Python application for analyzing electrophysiology experiments.  It takes as input curated spike data, raw local field potential (LFP) recordings, and/or behavioral data, and outputs publication-quality plots and structured CSVs for downstream analysis.
 
 The architecture is designed to generalize over time to support other experimental domains. 
+
+**License & usage:** All rights reserved – shared *read-only* for evaluation. Contact Katie Surrence for permission before using this code.
 
 
 ## Minimal Example
@@ -25,10 +23,10 @@ runner.run(opts=OPTS)
 ## Features
 
 - Modular pipeline for spike, LFP, and behavioral data
-- Hierarchical object model: Experiment → Animal → (Unit, for spike data) -> Event -> Time Bin
+- Hierarchical object model: Experiment → Animal → (Unit, for spike data) -> Period -> Event -> Time Bin
 - Experimental Design: Animals can have Conditions and Periods can be of different Period Types
 - Publication-quality plotting engine with customizable layout
-- Optional Matlab integration for spectral analysis
+- Integrations with Matlab, Phy, and R
 
 
 <br>
