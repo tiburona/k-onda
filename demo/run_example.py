@@ -15,7 +15,7 @@ import random
 
 # --- Automatically populate demo spike times and update firing rate ---
 DURATION_SECONDS = 100  # total recording duration for the demo
-FIRING_RATE_HZ = 5      # mean firing rate (spikes per second)
+FIRING_RATE_HZ = 10      # mean firing rate (spikes per second)
 NUM_SPIKES = DURATION_SECONDS * FIRING_RATE_HZ
 
 # Use a fixed seed so the demo is reproducible every time it’s run
@@ -40,19 +40,15 @@ psth_plot = {
         'attr': 'calc',
         'aesthetics': {
             'ax': {'border': {'top': {'visible': 'FFF'}, 'right': {'visible': 'FFF'}}},
-            'default': 
-                    {'marker': {'color': 'black'},
-                    }},
-        'label': {'x_bottom': 
-                  {'text': 'Seconds'}, 
-                  'y_left': {'text': 'Firing Rate (Spikes per Second)'}},        
-        'divisions': [
-            {
-                'divider_type': 'period_type',
-                'members': ['stim']
-            }]
-    }}
-
+            'default': {
+                'marker': {'color': '#1f77b4'},
+                'indicator': {'type': 'patch', 'when': (0, .05)}}},
+        'label': {'x_bottom': {'text': 'Seconds'},
+                  'y_left': {'text': 'Firing Rate (Spikes per Second)'},
+                  'title': {'text': 'Peristimulus Time Histogram', 'kwargs': {'y': 1.05}}},
+        'divisions': [{'divider_type': 'period_type', 'members': ['stim']}]
+    }
+}
 
 
 PSTH_OPTS = {

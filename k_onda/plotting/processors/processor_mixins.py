@@ -137,22 +137,29 @@ class LabelMixin:
 
     def _get_ax_label_setter(self, cell, position, config):
         """Gets the setter function for AXES labels based on position.
-        Supports 'x_bottom', 'x_top', 'y_left', and 'y_right'.
+        Supports 'x_bottom', 'x_top', 'y_left', 'y_right', and 'title'.
         """
         kwargs = config.get('kwargs', {}).copy()
-        mapping = {
-            'x_bottom': ('bottom', cell.set_xlabel, 'xaxis'),
-            'x_top':    ('top', cell.set_xlabel, 'xaxis'),
-            'y_left':   ('left', cell.set_ylabel, 'yaxis'),
-            'y_right':  ('right', cell.set_ylabel, 'yaxis')
-        }
+        mapping = dict.fromkeys(['x', 'x_bottom'], ('bottom', cell.set_xlabel, 'xaxis'))
+        mapping.update(dict.fromkeys(['x_top'], ('top',    cell.set_xlabel, 'xaxis')))
+        mapping.update(dict.fromkeys(['y', 'y_left'], ('left',  cell.set_ylabel, 'yaxis')))
+        mapping.update(dict.fromkeys(['y_right'],  ('right', cell.set_ylabel, 'yaxis')))
+        mapping.update(dict.fromkeys(['title', 'title_center'], ('center', cell.set_title)))
+        mapping.update(dict.fromkeys(['title_left'], ('left', cell.set_title)))  
+        mapping.update(dict.fromkeys(['title_right'], ('right', cell.set_title)))  
+        
         if position not in mapping:
             print(f"Warning: _get_ax_label_setter called with invalid position: {position}")
             return None
-        pos, set_label_func, axis_attr = mapping[position]
-        def setter(text, **extra_kwargs):
-            getattr(cell, axis_attr).set_label_position(pos)
-            set_label_func(text, **{**kwargs, **extra_kwargs})
+        if position[0:5] == 'title':
+            pos, set_label_func = mapping[position] 
+            def setter(text, **extra_kwargs):
+                cell.set_title(text, loc=pos, **{**kwargs, **extra_kwargs})
+        else:
+            pos, set_label_func, axis_attr = mapping[position]
+            def setter(text, **extra_kwargs):
+                getattr(cell, axis_attr).set_label_position(pos)
+                set_label_func(text, **{**kwargs, **extra_kwargs})
         return setter
     
     def _get_label_setter_and_kwargs(self, position, config, cell):

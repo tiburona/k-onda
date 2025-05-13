@@ -72,7 +72,7 @@ class PeriStimulusPlotter(FeaturePlotter):
                 transform = transforms.blended_transform_factory(ax.transData, ax.transAxes)
                 ax.add_patch(plt.Rectangle(
                     (when[0], 0), width, 1,
-                    facecolor='gray', alpha=0.2,
+                    facecolor='gray', alpha=0.4,
                     transform=transform,  # Apply the transformation
                     zorder=10
                 ))
@@ -138,6 +138,7 @@ class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
         break_axes = getattr(cell, 'break_axes', None)
         for ax, x_split, val_split in self.split_data_for_break_axes(cell, val, break_axes):
             self.plot_hist(x_split, val_split, self.calc_opts['bin_size'], ax, aesthetic_args)
+            self.place_indicator(ax, aesthetic_args)
 
 
 class PeriStimulusHeatMapPlotter(HeatMapPlotter, PeriStimulusPlotter):

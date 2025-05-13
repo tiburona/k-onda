@@ -1,0 +1,5 @@
+jupyter
+matplotlib
+numpy
+xarray
+k_onda @ git+https://github.com/tiburona/k-onda.git@main

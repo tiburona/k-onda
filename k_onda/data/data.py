@@ -136,7 +136,8 @@ class Data(Base):
     @staticmethod
     def xmean(child_vals, axis: None):
        
-        if not is_truthy(child_vals):                       
+        if not is_truthy(child_vals):
+            a = 'foo'                       
             return xr.DataArray(np.nan)
         
         if axis is None:
@@ -197,7 +198,8 @@ class Data(Base):
                 base_method, level=level+1, stop_at=stop_at, axis=axis, **kwargs)
             if not self.is_nan(child_val):
                 child_vals.append(child_val)
-       
+        if self.name == 'unit':
+            a = 'foo'
         return self.xmean(child_vals, axis)
     
     @property
