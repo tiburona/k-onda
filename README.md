@@ -3,11 +3,11 @@ _Modular Electrophysiology Analysis Pipeline_
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org/)
 
-K-Onda is a modular Python application for analyzing electrophysiology experiments.  It takes as input curated spike data, raw local field potential (LFP) recordings, and/or behavioral data, and outputs publication-quality plots and structured CSVs for downstream analysis.
+K-Onda is a Python application for analyzing electrophysiology experiments.  It takes as input curated spike recordings, local field potential (LFP) recordings, and/or behavioral data, and outputs publication-quality plots and structured CSVs for downstream analysis. It performs calculations such as firing rate, auto- and cross-correlations of firing rates, LFP power, amplitude cross correlation, coherence, granger causality between brain regions, and mean resultant length (MRL) calculations of the relationship between LFP and firing rate.
 
-The architecture is designed to generalize over time to support other experimental domains. 
+The architecture is designed to generalize over time to support other kinds of data. 
 
-**License & usage:** All rights reserved – shared *read-only* for evaluation. Contact Katie Surrence for permission before using this code.
+**License & usage:** All rights reserved – shared read-only for evaluation purposes. Contact Katie Surrence for permission before using this code.
 
 
 ## Minimal Example
@@ -20,12 +20,34 @@ runner = Runner(config_file="example_experiment_config.json")
 runner.run(opts=OPTS)
 ```
 
+## Demo
+
+A small demo showing how to generate a peristimulus time histogram of firing rates is included in the demo directory. You can run it via the Python script (demo.py), the Jupyter notebook, or [directly on Binder](mybinder.org/v2/gh/tiburona/k-onda/HEAD?filepath=demo/k_onda_demo.ipynb).
+
+## Background & Goals
+
+K-Onda developed organically to support flexible, reproducible analysis of electrophysiology experiments in a behavioral neuroscience setting. Many existing tools support a small suite
+of analyses, but a goal for K-Onda is to evolve to be extensible to arbitrary analyses and data
+types, and there are no existing electrophysiology tools designed to support complex multipanel
+layouts, such that you can move from raw data to output for publication with a single application.
+
+Some publications to which K-Onda has contributed figures include:
+
+Fernandes-Henriques C.M., Guetta Y.\*, Sclar M.G.\*, Zhang R., Surrence K., Miura Y.,
+Friedman A.K., Likhtik E. (2025) Infralimbic projections to the basal forebrain constrain defensive behavior during extinction learning. Journal of Neuroscience (In press).
+
+Grunfeld I.S.\*, Surrence K.\* , Denholtz L.E., Nahmoud I., Hanif S., Burghardt N.S., Likhtik E.
+Chronic stress impairs safety cue discrimination, decreases inhibitory firing in the prelimbic
+cortex, and tunes prelimbic activity to amygdala theta oscillations. In Preparation.
+
+
+
 ## Features
 
 - Modular pipeline for spike, LFP, and behavioral data
 - Hierarchical object model: Experiment → Animal → (Unit, for spike data) -> Period -> Event -> Time Bin
 - Experimental Design: Animals can have Conditions and Periods can be of different Period Types
-- Publication-quality plotting engine with customizable layout
+- Publication-quality plotting engine with customizable layout of multipanel plots.
 - Integrations with Matlab, Phy, and R
 
 
@@ -52,7 +74,7 @@ If you'd prefer to save your config files elsewhere, edit the path in `commit_bo
 
 ## Setup Instructions
 
-Basic setup requires Python 3.9+ and `pip`. 
+Basic setup requires Python 3.11+ and `pip`. 
 
 On MacOS/Linux:
 
@@ -82,5 +104,7 @@ Others may request access via email.
 
 </details>
 
+## Status
 
+K-Onda is in active development.
 
