@@ -95,7 +95,6 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         else:
             gs_args = {}
         self.layout = Layout(self, [0, 0], figure=self.fig, gs_args=gs_args)
-        return self.fig
     
     def get_margins_from_spec(self, spec):
         for k in ['series', 'section', 'segment', 'container']:
