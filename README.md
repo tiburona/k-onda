@@ -23,6 +23,13 @@ runner.run(opts=OPTS)
 
 A small demo showing how to generate a peristimulus time histogram of firing rates is included in the demo directory. You can run it via the Python script (demo.py), the Jupyter notebook, or [directly on Binder](mybinder.org/v2/gh/tiburona/k-onda/HEAD?filepath=demo/k_onda_demo.ipynb).
 
+A Binder tip:
+<details>
+If the notebook loading bar seems like it's hanging for a long time on yellow, check the raw logs, and scroll down to the end.  If it says "Done", you can hit 
+refresh and the notebook will load.
+</details>
+
+
 ## Background & Goals
 
 K-Onda developed organically to support flexible, reproducible analysis of electrophysiology experiments in a behavioral neuroscience setting. Many existing tools support a small suite
