@@ -58,7 +58,9 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         self.write_opts = opts.get('write_opts', {}) 
         plot_spec = opts['plot_spec']
         self.process_plot_spec(plot_spec)
-        plt.show()
+        interactive = opts.get('interactive', False)
+        if interactive:
+            plt.show()
         self.close_plot(opts.get('fname', ''))
 
     def process_plot_spec(self, plot_spec):
@@ -155,7 +157,6 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         
         if not fig:
             fig = self.fig  
-        plt.show()
         self.save_and_close_fig(fig, basename)
        
     def save_and_close_fig(self, fig, do_title=True):

@@ -9,7 +9,6 @@ The architecture is designed to generalize over time to support other kinds of d
 
 **License & usage:** All rights reserved – shared read-only for evaluation purposes. Contact Katie Surrence for permission before using this code.
 
-
 ## Minimal Example
 ```
 from k_onda.main import Runner
@@ -39,8 +38,6 @@ Friedman A.K., Likhtik E. (2025) Infralimbic projections to the basal forebrain 
 Grunfeld I.S.\*, Surrence K.\* , Denholtz L.E., Nahmoud I., Hanif S., Burghardt N.S., Likhtik E.
 Chronic stress impairs safety cue discrimination, decreases inhibitory firing in the prelimbic
 cortex, and tunes prelimbic activity to amygdala theta oscillations. In Preparation.
-
-
 
 ## Features
 

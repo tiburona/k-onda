@@ -32,8 +32,6 @@ with open(CONFIG_PATH, "r+", encoding="utf-8") as f:
     json.dump(config, f, indent=2)
     f.truncate()
 
-
-
 psth_plot = {
     'plot_type': 'psth',
     'section': {

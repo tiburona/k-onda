@@ -1,0 +1,1 @@
+{"kind_of_data": "spike", "calc_type": "firing_rates", "base": "event", "bin_size": 0.01, "periods": {"stim": {"period_pre_post": [1, 0], "event_pre_post": [0.05, 1]}}}
