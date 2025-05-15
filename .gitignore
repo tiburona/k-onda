@@ -35,3 +35,4 @@ __pycache__/
 # Ignore egg-info
 *.egg-info/
 k_onda/run/misc_data_init/
+k_onda.zip
