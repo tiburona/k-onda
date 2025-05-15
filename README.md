@@ -2,6 +2,8 @@
 _Modular Electrophysiology Analysis Pipeline_
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org/)
+[![CI](https://github.com/tiburona/k-onda/actions/workflows/ci.yml/badge.svg)](https://github.com/tiburona/k-onda/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/tiburona/k-onda/branch/main/graph/badge.svg)](https://codecov.io/gh/tiburona/k-onda)
 
 K-Onda is a Python application for analyzing electrophysiology experiments.  It takes as input curated spike recordings, local field potential (LFP) recordings, and/or behavioral data, and outputs publication-quality plots and structured CSVs for downstream analysis. It performs calculations such as firing rate, auto- and cross-correlations of firing rates, LFP power, amplitude cross correlation, coherence, granger causality between brain regions, and mean resultant length (MRL) calculations of the relationship between LFP and firing rate.
 
