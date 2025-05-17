@@ -44,7 +44,7 @@ Some publications to which K-Onda has contributed figures include:
 Fernandes-Henriques C.M., Guetta Y.\*, Sclar M.G.\*, Zhang R., Surrence K., Miura Y.,
 Friedman A.K., Likhtik E. (2025) Infralimbic projections to the basal forebrain constrain defensive behavior during extinction learning. Journal of Neuroscience (In press).
 
-Grunfeld I.S.\*, Surrence K.\* , Denholtz L.E., Nahmoud I., Hanif S., Burghardt N.S., Likhtik E.
+Grunfeld I.S.\*, Surrence K.R.\* , Denholtz L.E., Nahmoud I., Hanif S., Burghardt N.S., Likhtik E.
 Chronic stress impairs safety cue discrimination, decreases inhibitory firing in the prelimbic
 cortex, and tunes prelimbic activity to amygdala theta oscillations. In Preparation.
 
@@ -54,7 +54,7 @@ cortex, and tunes prelimbic activity to amygdala theta oscillations. In Preparat
 - Hierarchical object model: Experiment → Animal → (Unit, for spike data) -> Period -> Event -> Time Bin
 - Experimental Design: Animals can have Conditions and Periods can be of different Period Types
 - Publication-quality plotting engine with customizable layout of multipanel plots.
-- Integrations with Matlab, Phy, and R
+- Integrations with Matlab and Phy.
 
 
 <br>
