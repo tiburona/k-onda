@@ -47,7 +47,8 @@ from .utils import (
     print_common_dict_references,
     operations,
     is_truthy,
-    is_iterable
+    is_iterable, 
+    load_config_py
 )
 
 from .prep_methods import PrepMethods
@@ -105,5 +106,6 @@ __all__ = [
     "is_iterable",
     "PrepMethods",
     "drop_inconsistent_coords",
-    "standardize"
+    "standardize",
+    "load_config_py"
 ]

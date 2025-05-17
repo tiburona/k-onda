@@ -62,20 +62,20 @@ cortex, and tunes prelimbic activity to amygdala theta oscillations. In Preparat
 <summary>Configuration structure & commit helper</summary>
 
  
-We recommend organizing your config files outside the K-Onda directory structure (even though the tool currently just uses a direct config_file= argument). For example:
+We recommend organizing your config files and data output outside the K-Onda directory structure. For example:
 
 ```
 your_workspace/
 ├── k-onda/                        # main code (this repo)
-└── analysis-config-for-k-onda/   # your private configs
+└── k-onda-analysis/               # your private configs and data
 ```
 Use `Runner(config_file=...)` to point to the experiment `config_file`.
 
-This layout is supported by a script to commit both repos (we recommend a commit of both configuration and the K-Onda code every time you perform an analysis):
+This layout is supported by a script to commit two or more repos.  
 
-`./devtools/commit_both.sh "Your commit message"`
+`./scripts/commit_all.sh "Your commit message"`
 
-If you'd prefer to save your config files elsewhere, edit the path in `commit_both.sh`
+If you'd prefer to save your config files and data files elsewhere, or save them in separate directories, edit the path in `commit_all.sh`
 </details>
 
 ## Setup Instructions

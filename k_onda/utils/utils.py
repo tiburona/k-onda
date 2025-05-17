@@ -5,6 +5,8 @@ from datetime import datetime
 import json
 import pickle
 from copy import deepcopy
+import importlib.util
+import pathlib
 
 from collections.abc import Iterable
 import numpy as np
@@ -338,3 +340,14 @@ operations = {
         }
 
 
+def load_config_py(path_to_py_file):
+    path = pathlib.Path(path_to_py_file).resolve()
+    module_name = path.stem  # just the filename without .py
+
+    spec = importlib.util.spec_from_file_location(module_name, str(path))
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load config file from {path}")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
