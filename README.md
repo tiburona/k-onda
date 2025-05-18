@@ -76,6 +76,19 @@ This layout is supported by a script to commit two or more repos.
 `./scripts/commit_all.sh "Your commit message"`
 
 If you'd prefer to save your config files and data files elsewhere, or save them in separate directories, edit the path in `commit_all.sh`
+
+Experiment configuration is ideally pretty static, but analysis configuration changes frequently.  If you want to both be able to write your analysis configuration in Python, rather than dealing with JSON, and store your analysis configuration in a separate repository, K-Onda allows you to import from outside the repository like so:
+
+```
+# analysis_config.py
+SOME_SETTING = "alpha"
+```
+
+```
+config = load_config_py("../my-configs/analysis_config.py")
+print(config.SOME_SETTING)
+```
+
 </details>
 
 ## Setup Instructions

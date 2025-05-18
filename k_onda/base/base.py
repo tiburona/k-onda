@@ -13,6 +13,8 @@ class Base:
     
     _experiment = None
     _calc_opts = {}
+    _io_opts = {}
+    _env_config = {}
     _cache = defaultdict(dict)
     _filter = {}
     _selected_conditions = {}
@@ -53,6 +55,22 @@ class Base:
         Base._calc_opts = value
         self.set_filter_from_calc_opts()
         Base._cache = defaultdict(dict)
+
+    @property
+    def io_opts(self):
+        return Base._io_opts
+    
+    @io_opts.setter
+    def io_opts(self, value):
+        Base._io_opts = value
+
+    @property
+    def env_config(self):
+        return Base._env_config
+    
+    @env_config.setter
+    def env_config(self, value):
+        Base._env_config = value
 
     @property
     def cache(self):

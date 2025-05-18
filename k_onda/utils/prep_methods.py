@@ -15,7 +15,7 @@ class PrepMethods:
         except KeyError as e:
             print(f"KeyError: {e}")
             file_dir = os.path.dirname(file_path)
-            ml = MatlabInterface(self.calc_opts['matlab_configuration'])
+            ml = MatlabInterface(self.env_config['matlab_config'])
             if not os.path.exists(os.path.join(file_dir, 'output_data.h5')):
                 ml.open_nsx(file_dir)
         return reader

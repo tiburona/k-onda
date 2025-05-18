@@ -14,7 +14,7 @@ from .feature import (
     CategoricalScatterPlotter, LinePlotter, VerticalLinePlotter, BarPlotter, WaveformPlotter, CategoricalLinePlotter, 
     RasterPlotter, PeriStimulusHistogramPlotter, HeatMapPlotter, PeriStimulusHeatMapPlotter, 
     PeriStimulusPowerSpectrumPlotter)
-from k_onda.utils import to_serializable, PrepMethods
+from k_onda.utils import to_serializable, PrepMethods, safe_make_dir
 
 
 plt.rcParams['font.family'] = 'sans-serif'
@@ -43,6 +43,7 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
 
     def __init__(self, experiment):
         self.experiment = experiment
+        self.io_opts = None
         self.write_opts = None
               
     def plot(self, opts):
@@ -51,11 +52,10 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         initializes the experiment data, kicks off the top-level processor, and saves the figure to 
         disk.
         """
-
         if 'calc_opts' in opts:
             self.calc_opts = opts['calc_opts']
             self.experiment.initialize_data()
-        self.write_opts = opts.get('write_opts', {}) 
+ 
         plot_spec = opts['plot_spec']
         self.process_plot_spec(plot_spec)
         interactive = opts.get('interactive', False)
@@ -103,10 +103,11 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
 
     def construct_path(self):
         
+        self.write_opts = self.io_opts.get('write_opts')
+
         if isinstance(self.write_opts, str):
             self.file_path = self.write_opts
            
-
         else:
         
             # Fill fields
@@ -165,7 +166,9 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
         if do_title:
             bbox = fig.axes[0].get_position()
             fig.suptitle(self.title, fontsize=16, y=bbox.ymax + 0.1)
-       
+        
+        safe_make_dir(self.file_path)
+        
         fig.savefig(self.file_path, bbox_inches='tight', dpi=300)
 
         with open(self.opts_file_path, 'w') as file:

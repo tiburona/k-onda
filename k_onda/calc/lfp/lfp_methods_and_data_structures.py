@@ -12,8 +12,6 @@ from k_onda.utils import (calc_coherence, amp_crosscorr, compute_phase,
 class LFPMethods:
  
     def get_power(self, exclude=True):
-        if self.selected_frequency_band == 'theta_1':
-            a = 'foo'
         return self.get_average('get_power', stop_at=self.calc_opts.get('base', 'event'), 
                                 exclude=exclude)
     
@@ -93,8 +91,6 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
     def spectrogram(self):
         if self._spectrogram is None:
             self._spectrogram = self.calc_cross_spectrogram()
-        if self.animal.identifier == 'IG160':
-            a = 'foo'
         last_frequency = self.freq_range[1]
         index_of_last_frequency = np.where(self._spectrogram[1] > last_frequency)[0][0]
         self._spectrogram[0] = self._spectrogram[0][0:index_of_last_frequency, :]
@@ -144,7 +140,7 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         pickle_args = [item for sublist in arg_set for item in sublist]
         saved_calc_exists, result, pickle_path = self.load('spectrogram', pickle_args)
         if not saved_calc_exists:
-            ml = MatlabInterface(self.calc_opts['matlab_configuration'])
+            ml = MatlabInterface(self.env_config['matlab_config'])
             result = ml.mtcsg(self.padded_data, *power_arg_set)
             self.save(result, pickle_path)
         return [np.array(arr) for arr in result]
@@ -447,7 +443,7 @@ class PhaseRelationshipEvent(RelationshipCalculatorEvent):
 class GrangerFunctions:
 
     def fetch_granger_stat(self, d1, d2, tags, proc_name, do_weight=True, max_len_sets=None):
-        ml = MatlabInterface(self.calc_opts['matlab_configuration'], tags=tags)
+        ml = MatlabInterface(self.env_config['matlab_config'], tags=tags)
         data = np.vstack((d1, d2))
         proc = getattr(ml, proc_name)
         result = proc(data)
@@ -594,7 +590,7 @@ class GrangerEvent(RelationshipCalculatorEvent):
     name = 'granger_event'
 
     def get_granger_model_order(self):
-        ml = MatlabInterface(self.calc_opts['matlab_configuration'])
+        ml = MatlabInterface(self.env_config['matlab_config'])
         data = np.vstack((self.region_1_data, self.region_2_data))
         result = ml.tsdata_to_info_crit(data)
         return result

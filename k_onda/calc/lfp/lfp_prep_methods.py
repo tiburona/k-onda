@@ -1,4 +1,5 @@
 from neo.rawio import BlackrockRawIO
+from neo.io import NixIO
 import numpy as np
 import h5py
 import os
@@ -28,9 +29,7 @@ class LFPPrepMethods(PrepMethods):
             self.process_lfp()
             self.initialized.append(data_label)
 
-    def read_blackrock_file(self, nsx_to_load=3):
-        if self.identifier == 'IG161':
-            a = 'foo'
+    def load_blackrock_file(self, nsx_to_load=3):
         file_path = self.construct_path('lfp')
         try:
             reader = BlackrockRawIO(filename=file_path, nsx_to_load=nsx_to_load)
@@ -39,32 +38,44 @@ class LFPPrepMethods(PrepMethods):
         except OSError:
             return {}
         except KeyError as e:
-            print(f"KeyError: {e}") 
+            print(f"KeyError: {e}.  We'll try to handle this exception by opening the file in Matlab.") 
             file_dir = os.path.dirname(file_path)
             h5_path = os.path.join(file_dir, f'output_data_ns{nsx_to_load}.h5')
-            ml = MatlabInterface(self.calc_opts['matlab_configuration'])
+            ml = MatlabInterface(self.env_config['matlab_config'])
             if not os.path.exists(h5_path):
                 ml.open_nsx(file_path, nsx_to_load)
             with h5py.File(h5_path, 'r') as f:
                 key = f'/NS{str(nsx_to_load)}_Data'
                 data = f[key][:]
         return data
+    
+    def load_neo_file(self):
+        """Load LFP data from a Neo-supported file (e.g., .nix, .h5)."""
+        file_path = self.construct_path('lfp')
+        ext = file_path.split('.')[-1].lower()
+        if ext == 'nix':
+            io = NixIO(file_path, mode='ro')
+        else:
+            raise ValueError(f"Unsupported file extension: {ext}")
+
+        with io:
+            block = io.read_block()
+            return block.segments[0].analogsignals[0]
+
         
     def get_raw_lfp(self):
         if all(k not in self.animal_info for k in ('lfp_electrodes', 'lfp_from_stereotrodes')):
             return {}
-        data = self.read_blackrock_file(nsx_to_load=3)         
+        data = self.load_blackrock_file(nsx_to_load=3)         
         data_to_return = {region: data[:, val]
                           for region, val in self.animal_info['lfp_electrodes'].items()}
         if self.animal_info.get('lfp_from_stereotrodes') is not None:
             data_to_return = self.get_lfp_from_stereotrodes(self, data_to_return)
-        if self.identifier == 'IG160':
-            a = 'foo'
         return data_to_return
 
     def get_lfp_from_stereotrodes(self, animal, data_to_return):
         lfp_from_stereotrodes_info = animal.animal_info['lfp_from_stereotrodes']
-        data = self.read_blackrock_file(lfp_from_stereotrodes_info['nsx_num'])
+        data = self.load_blackrock_file(lfp_from_stereotrodes_info['nsx_num'])
         for region, region_data in lfp_from_stereotrodes_info['electrodes'].items():
             electrodes = region_data if isinstance(region_data, list) else region_data[animal.identifier]
             data = np.mean([data[:, electrode] for electrode in electrodes], axis=0)
@@ -87,9 +98,6 @@ class LFPPrepMethods(PrepMethods):
         
         raw_lfp = self.get_raw_lfp()
 
-        if self.identifier == 'IG161':
-            a = 'foo'
-
         for brain_region in raw_lfp:
             data = raw_lfp[brain_region]/4
             filter = self.calc_opts.get('remove_noise', 'filtfilt')
@@ -99,7 +107,7 @@ class LFPPrepMethods(PrepMethods):
                 ids = [self.identifier, brain_region]
                 saved_calc_exists, filtered, pickle_path = self.load('filter', ids)
                 if not saved_calc_exists:
-                    ml = MatlabInterface(self.calc_opts['matlab_configuration'])
+                    ml = MatlabInterface(self.env_config['matlab_config'])
                     filtered = ml.filter(data)
                     self.save(filtered, pickle_path)
                 filtered = np.squeeze(np.array(filtered))

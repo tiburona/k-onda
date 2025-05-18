@@ -48,7 +48,8 @@ from .utils import (
     operations,
     is_truthy,
     is_iterable, 
-    load_config_py
+    load_config_py,
+    safe_make_dir
 )
 
 from .prep_methods import PrepMethods
@@ -107,5 +108,6 @@ __all__ = [
     "PrepMethods",
     "drop_inconsistent_coords",
     "standardize",
-    "load_config_py"
+    "load_config_py",
+    "safe_make_dir"
 ]

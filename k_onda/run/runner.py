@@ -3,7 +3,7 @@ import os
 from copy import deepcopy
 from collections import defaultdict
 
-from ..spreadsheet import Stats
+from ..tabulation import Stats
 from ..plotting import ExecutivePlotter
 from .opts_validator import OptsValidator
 from .initialize_experiment import Initializer
@@ -29,8 +29,6 @@ class Runner(OptsValidator):
         self.opts = self.load(opts)
         if follow_up:
             self.follow_up = self.load(follow_up)
-        elif self.opts['procedure'] == 'make_csv':
-            self.follow_up = {'procedure': 'write_csv', 'calc_opts': {}}
         else:
             self.follow_up = None
 
@@ -61,7 +59,8 @@ class Runner(OptsValidator):
         ]
 
         if opts['procedure'] == 'make_csv':
-            self.executing_method(expanded_calc_opts)
+            opts['calc_opts'] = expanded_calc_opts
+            self.executing_method(opts)
 
         else:
             for i, each_opts in enumerate(expanded_calc_opts):
@@ -102,7 +101,7 @@ class Runner(OptsValidator):
 
         executors = {
             'make_plots': (ExecutivePlotter, 'plot'),
-            'make_csv': (Stats, 'make_df'),
+            'make_csv': (Stats, 'make_csv'),
             'validate_lfp_events': (self.experiment, 'validate_lfp_events'),
             'write_csv': (self.experiment, 'write_csv')
         }
@@ -117,6 +116,9 @@ class Runner(OptsValidator):
                 self.executing_instance = self.executing_class(self.experiment)
         else:
             self.executing_instance = executor
+
+        self.executing_instance.io_opts = opts.get('io_opts')
+        self.executing_instance.env_config = opts.get('env_config')
         self.executing_method = getattr(self.executing_instance, method)
 
     def run(self, opts, prep=None, follow_up=None):

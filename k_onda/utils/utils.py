@@ -351,3 +351,13 @@ def load_config_py(path_to_py_file):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def safe_make_dir(path):
+    """
+    Create all intermediate-level directories needed to contain the path.
+    If 'path' is a file path, create the directory that would contain it.
+    """
+    dir_path = path if os.path.splitext(path)[1] == '' else os.path.dirname(path)
+    if dir_path and not os.path.exists(dir_path):
+        os.makedirs(dir_path, exist_ok=True)
