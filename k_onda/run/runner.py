@@ -3,7 +3,7 @@ import os
 from copy import deepcopy
 from collections import defaultdict
 
-from ..tabulation import Stats
+from ..tabulation import CSVTabulator
 from ..plotting import ExecutivePlotter
 from .opts_validator import OptsValidator
 from .initialize_experiment import Initializer
@@ -101,7 +101,7 @@ class Runner(OptsValidator):
 
         executors = {
             'make_plots': (ExecutivePlotter, 'plot'),
-            'make_csv': (Stats, 'make_csv'),
+            'make_csv': (CSVTabulator, 'make_csv'),
             'validate_lfp_events': (self.experiment, 'validate_lfp_events'),
             'write_csv': (self.experiment, 'write_csv')
         }

@@ -1,3 +1,3 @@
-from .csv_tabulator import Stats
+from .csv_tabulator import CSVTabulator
 
-__all__ = ["Stats"]
+__all__ = ["CSVTabulator"]

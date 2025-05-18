@@ -135,9 +135,6 @@ class Data(Base):
 
     @staticmethod
     def xmean(child_vals, axis=None):
-
-        if self.name == 'period':
-            a = 'foo'
        
         if not is_truthy(child_vals):
             return xr.DataArray(np.nan)

@@ -1,4 +1,3 @@
-import subprocess
 import pandas as pd
 import csv
 import os
@@ -11,8 +10,8 @@ from k_onda.base import Base
 from k_onda.utils import safe_make_dir
 
 
-class Stats(Base):
-    """A class to construct dataframes, write out csv files, and call R for statistical tests."""
+class CSVTabulator(Base):
+    """A class to construct dataframes and write out csv files."""
     def __init__(self, experiment):
         self.experiment = experiment
         self.dfs = []
@@ -162,14 +161,8 @@ class Stats(Base):
         """
 
         rows = []
-        if self.kind_of_data == 'lfp':
-            experiment = self.lfp
-        elif self.kind_of_data == 'behavior':
-            experiment = self.behavior
-        else:
-            experiment = self.experiment
 
-        sources = [source for source in getattr(experiment, f'all_{level}s') if source.include()]
+        sources = [source for source in getattr(self.experiment, f'all_{level}s') if source.include()]
 
         if self.calc_opts.get('frequency_type') == 'continuous':
             other_attributes.append('frequency')
@@ -182,7 +175,7 @@ class Stats(Base):
 
         for source in sources:
 
-            result = getattr(source, attr)
+            result = float(getattr(source, attr).values)
             if isinstance(result, dict):
                 row_dict = {f"{self.data_col}_{key}": val for key, val in result.items()}
             else:
@@ -202,43 +195,42 @@ class Stats(Base):
                 if found_attr:
                     continue
 
-
             rows.append(row_dict)
 
         return rows
 
-    def make_csv(self, expanded_calc_opts):
+    def make_csv(self, opts):
+        
+        expanded_calc_opts = opts['calc_opts']
 
         for opts in expanded_calc_opts:
-
-            self.calc_opts = opts['calc_opts']
+            self.calc_opts = opts
             self.make_df()
 
         self.merge_dfs_animal_by_animal()
+        self.write_csv()
 
     def write_csv(self):
         path_constructor = self.io_opts['write_opts']['fname']
-        path = self.construct_path(path_constructor)
+        path = self.fill_fields(path_constructor)
         safe_make_dir(path)
         force_recalc = self.io_opts.get('force_recalc', True)
 
-        if os.path.exists(self.spreadsheet_fname) and not force_recalc:
+        if os.path.exists(path) and not force_recalc:
             return
-        with open(self.spreadsheet_fname, 'w', newline='') as f:
-            self.write_csv(f)
+        with open(path, 'w', newline='') as f:
+            
+            for opts_dict in self.opts_dicts:
+                line = ', '.join([f"{str(key).replace(',', '_')}: {str(value).replace(',', '_')}" for key, value in
+                                opts_dict.items()])
+                f.write(f"# {line}\n")
+                f.write("\n")
 
-        if df is None:
             df = self.dfs[-1]
-        for opts_dict in self.opts_dicts:
-            line = ', '.join([f"{str(key).replace(',', '_')}: {str(value).replace(',', '_')}" for key, value in
-                              opts_dict.items()])
-            f.write(f"# {line}\n")
-            f.write("\n")
-
-        header = list(df.columns)
-        writer = csv.DictWriter(f, fieldnames=header)
-        writer.writeheader()
-        for index, row in df.iterrows():
-            writer.writerow(row.to_dict())
+            header = list(df.columns)
+            writer = csv.DictWriter(f, fieldnames=header)
+            writer.writeheader()
+            for index, row in df.iterrows():
+                writer.writerow(row.to_dict())
 
 
