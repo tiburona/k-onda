@@ -13,7 +13,7 @@ def test_run_pipeline_demo_config():
     out_dir = tempfile.mkdtemp()
 
     # Patch the output path
-    PSTH_OPTS["write_opts"] = f"{out_dir}/psth"
+    PSTH_OPTS["io_opts"]["write_opts"] = f"{out_dir}/psth"
 
     run_pipeline(config_file=config_file, opts=PSTH_OPTS)
 
