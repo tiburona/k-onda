@@ -53,7 +53,7 @@ PSTH_OPTS = {
     
     'procedure': 'make_plots',
     'plot_spec': psth_plot,
-    'write_opts': './psth',
+    'io_opts': {'paths': {'out': './psth'}},
     'calc_opts': {'kind_of_data': 'spike', 'calc_type': 'firing_rates', 
                   'base': 'event', 'bin_size': .01, 
                   'periods': {'stim': {'period_pre_post': (1, 0), 'event_pre_post': (.05, 1)}} 

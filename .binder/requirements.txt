@@ -8,3 +8,4 @@ phylib
 scikit_learn
 scipy
 xarray
+mne
