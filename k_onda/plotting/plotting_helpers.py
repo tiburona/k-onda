@@ -90,56 +90,10 @@ class PlottingMixin:
         recursive_update(spec_to_return, invariant)
 
         return spec_to_return
-    
-    def get_default_labels(self):
-       
-        sps = '(Spikes per Second)'
-
-        adjustment = ''
-
-        for comp in ['evoked', 'percent_change']:
-            if self.calc_opts.get(comp):
-                adjustment = comp
-                if adjustment == 'percent_change':
-                    adjustment += ' in'
-                adjustment = adjustment.replace('_', ' ')
-                if comp == 'percent_change':
-                    sps = ''
-        
-        base = self.calc_opts.get('base') if self.calc_opts.get('base') else ''
-
-        label_dict = {'psth': ['Time (s)', 'Normalized Firing Rate'],
-              'firing_rates': ['', f'{adjustment} Firing Rate {sps}'],
-              'proportion': ['Time (s)', f'Proportion Positive {base.capitalize() + "s"}'],
-              'raster': ['Time (s)', f"{self.calc_opts.get('base', 'event').capitalize()}s"],
-              'autocorr': ['Lags (s)', 'Autocorrelation'],
-              'spectrum': ['Frequencies (Hz)', 'One-Sided Spectrum'],
-              'cross_correlations': ['Lags (s)', 'Cross-Correlation'],
-              'correlogram':  ['Lags (s)', 'Spikes'],
-              'waveform': ['', '']}
-
-        
-        for vals in label_dict.values():
-            for i, label in enumerate(vals):
-                vals[i] = smart_title_case(label) 
-
-        return label_dict
-    
-      
-    @staticmethod
-    def divide_data_sources_into_sets(data_sources, max):
-        sets = []
-        counter = 0
-        while counter < max:
-            sets.append(data_sources[counter:counter + max])
-            counter += max  
-        return sets
 
 
 class LabelMethods:
 
-
-    
     def adjust_label_position(self, ax, label, axis='x'):
         # Get the bounding box of the label
         renderer = ax.figure.canvas.get_renderer()

@@ -1,5 +1,5 @@
 import numpy as np
-import xarray as xr
+
 
 def drop_inconsistent_coords(arrs, tol=1e-8):
     """
@@ -40,28 +40,12 @@ def drop_inconsistent_coords(arrs, tol=1e-8):
     return tuple(cleaned)
 
 
-# ----------------------------------------------------------------------
-# helper
-# ----------------------------------------------------------------------
 def _is_none_coord(vals):
     """True if the coord is the scalar object() placeholder xarray uses for None."""
     return (
         hasattr(vals, "shape") and vals.shape == ()
         and vals.dtype == object and vals.item() is None
     )
-
-
-def canonise_coords(arrs, names):
-    """Return new list where each coord in *names* is copied from arrs[0]."""
-    ref = arrs[0]
-    canon = []
-    for a in arrs:
-        a2 = a
-        for name in names:
-            if name in a2.coords and name in ref.coords:
-                a2 = a2.assign_coords({name: ref.coords[name].values})
-        canon.append(a2)
-    return canon
 
 
 def round_coords(arrs, *, decimals=8):
@@ -97,8 +81,6 @@ def round_coords(arrs, *, decimals=8):
         out.append(a2)
 
     return out
-
-
 
 
 def standardize(num_array):

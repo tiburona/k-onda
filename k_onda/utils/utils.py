@@ -14,25 +14,6 @@ import h5py
 import xarray as xr
 
 DEBUG_MODE = 0
-
-class classproperty(property):
-    def __get__(self, instance, owner):
-        return super().__get__(owner)
-
-    def __set__(self, instance, value):
-        return super().__set__(instance, value)
-
-
-def make_class_property(attr_name, setter=True):
-    def getter(cls):
-        return getattr(cls, attr_name, None)  # Retrieve class-level attribute
-
-    if setter:
-        def setter(cls, value):
-            setattr(cls, attr_name, value)  # Set class-level attribute
-        return classproperty(getter, setter)
-    else:
-        return classproperty(getter)
     
 
 def sorted_prop(key):
@@ -140,16 +121,6 @@ def find_ancestor_attribute(obj, ancestor_type, attribute):
     return None
 
 
-def pad_axes_if_nec(arr, dim='row'):
-    if arr.ndim == 1:
-        if dim == 'row':
-            return arr[np.newaxis, :]
-        else:
-            return arr[:, np.newaxis]
-    else:
-        return arr
-
-
 def to_serializable(val):
     """
     Convert non-serializable objects to serializable format.
@@ -179,27 +150,6 @@ def formatted_now():
     now = datetime.now()
     return now.strftime("%Y-%m-%d %H:%M:%S")
     
-
-def safe_get(d, keys, default=None):
-    """
-    Safely get a value from a nested dictionary using a list of keys.
-    
-    :param d: The dictionary to search.
-    :param keys: A list of keys representing the path to the desired value.
-    :param default: The default value to return if any key is missing.
-    :return: The value found at the specified path or the default value.
-    """
-    assert isinstance(keys, list), "keys must be provided as a list"
-    
-    for key in keys:
-        try:
-            if isinstance(d, dict):
-                d = d.get(key, default)
-            else:
-                return default
-        except Exception:
-            return default
-    return d
 
 def group_to_dict(group):
     result = {}
@@ -267,45 +217,6 @@ def recursive_update(d1, d2):
         else:
             d1[key] = deepcopy(value)  # Overwrite or add new key-value pair
     return d1
-
-
-def collect_dict_references(obj, prefix="root", refs=None):
-    """Collect all dictionary references (with their paths) from obj.
-    Returns a dict mapping: id(obj) -> list_of_paths."""
-    if refs is None:
-        refs = {}
-    if isinstance(obj, dict):
-        # Record this dictionary
-        refs.setdefault(id(obj), []).append(prefix)
-        # Recurse into dictionary values
-        for k, v in obj.items():
-            collect_dict_references(v, f"{prefix}.{k}", refs)
-    elif isinstance(obj, list):
-        # Recurse into list items
-        for i, item in enumerate(obj):
-            collect_dict_references(item, f"{prefix}[{i}]", refs)
-    # For other types, do nothing
-    return refs
-
- 
-
-def print_common_dict_references(obj1, obj2):
-    # Collect references from both objects
-    refs1 = collect_dict_references(obj1, prefix="obj1")
-    refs2 = collect_dict_references(obj2, prefix="obj2")
-    
-    # Find common dictionary references
-    common_ids = set(refs1.keys()) & set(refs2.keys())
-    
-    if not common_ids:
-        print("No common dictionary references found.")
-    else:
-        for cid in common_ids:
-            paths_in_obj1 = refs1[cid]
-            paths_in_obj2 = refs2[cid]
-            print(f"Common dictionary id={cid} found:")
-            print(f"  In obj1 at: {paths_in_obj1}")
-            print(f"  In obj2 at: {paths_in_obj2}")
 
 
 def is_truthy(obj):

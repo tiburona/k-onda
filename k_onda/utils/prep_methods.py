@@ -20,5 +20,3 @@ class PrepMethods:
                 ml.open_nsx(file_dir)
         return reader
     
-  
-
