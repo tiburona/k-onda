@@ -49,12 +49,14 @@ from .utils import (
     is_truthy,
     is_iterable, 
     load_config_py,
-    safe_make_dir
+    safe_make_dir, 
+    smart_title_case
 )
 
 from .prep_methods import PrepMethods
 
-from .xarray_helpers import drop_inconsistent_coords, standardize
+from .xarray_helpers import drop_inconsistent_coords, standardize, round_coords
+
 
 __all__ = [
     # From math_functions
@@ -109,5 +111,7 @@ __all__ = [
     "drop_inconsistent_coords",
     "standardize",
     "load_config_py",
-    "safe_make_dir"
+    "safe_make_dir", 
+    "smart_title_case", 
+    "round_coords"
 ]

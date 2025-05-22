@@ -1,6 +1,6 @@
 from copy import deepcopy, copy
 
-from k_onda.base import Base
+from k_onda.core import Base
 from ..layout import Layout
 from .processor_mixins import AestheticsMixin, LayerMixin, MarginMixin, LabelMixin, LegendMixin
 from ..plotting_helpers import PlottingMixin

@@ -3,8 +3,10 @@ import numpy as np
 from typing import Sequence, Union, Optional
 import xarray as xr
 
-from k_onda.base import Base
-from k_onda.utils import cache_method, always_last, operations, sem, is_truthy, drop_inconsistent_coords
+from k_onda.core import Base
+from k_onda.utils import cache_method, always_last, operations, sem, is_truthy, drop_inconsistent_coords, round_coords
+
+
 
 # TODO a lot of methods in here need to deal with dictionaries for the granger case,
 # like sem, mean, etc.
@@ -151,6 +153,7 @@ class Data(Base):
             return child_vals.mean(dim=axis_name, skipna=True)
         
         cleaned = drop_inconsistent_coords(child_vals)
+        cleaned = round_coords(cleaned, decimals=8)
 
         agg = xr.concat(cleaned, dim="child", coords="minimal", compat="no_conflicts")
         axis_name = agg.dims[axis] if isinstance(axis, int) else axis or "child"
@@ -197,8 +200,6 @@ class Data(Base):
                 base_method, level=level+1, stop_at=stop_at, axis=axis, **kwargs)
             if not self.is_nan(child_val):
                 child_vals.append(child_val)
-        if self.name == 'unit':
-            a = 'foo'
         return self.xmean(child_vals, axis)
     
     @property

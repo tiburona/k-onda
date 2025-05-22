@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .feature_plotter import FeaturePlotter
-from ..plotting_helpers import smart_title_case
+from k_onda.utils import smart_title_case
 
 
 plt.rcParams['font.family'] = 'sans-serif'

@@ -3,7 +3,7 @@ from copy import deepcopy
 from matplotlib.gridspec import  GridSpec, GridSpecFromSubplotSpec
 import numpy as np
 
-from k_onda.base import Base
+from k_onda.core import Base
 from .legend import ColorbarMixin
 from .plotting_helpers import reshape_subfigures
 

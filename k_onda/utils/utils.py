@@ -7,7 +7,7 @@ import pickle
 from copy import deepcopy
 import importlib.util
 import pathlib
-
+import re
 from collections.abc import Iterable
 import numpy as np
 import h5py
@@ -166,6 +166,10 @@ def to_serializable(val):
     elif isinstance(val, list):
         # Recursively apply to each item in the list
         return [to_serializable(item) for item in val]
+    elif isinstance(val, np.ndarray):
+        return [to_serializable(item) for item in val]
+    elif isinstance(val, np.integer):
+        return int(val)
     else:
         # Return the value as is if it's already serializable
         return val
@@ -361,3 +365,29 @@ def safe_make_dir(path):
     dir_path = path if os.path.splitext(path)[1] == '' else os.path.dirname(path)
     if dir_path and not os.path.exists(dir_path):
         os.makedirs(dir_path, exist_ok=True)
+
+
+def smart_title_case(s):
+    lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 
+                       'as', 'but', 'or', 'nor', 'is'}
+    acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl', 'il', 'bf', 'mua', 'cs'}
+    tokens = re.findall(r'\b\w+\b|[^\w\s]', s)  # Find words and punctuation separately
+    title_words = []
+
+    for i, word in enumerate(tokens):
+        if word.lower() in lowercase_words and i != 0 and i != len(tokens) - 1:
+            title_words.append(word.lower())
+        elif word.lower() in acronyms:
+            title_words.append(word.upper())
+        elif not word.isupper():
+            title_words.append(word.capitalize())
+        else:
+            title_words.append(word)
+
+    # Join words carefully to avoid adding spaces before parentheses
+    title = ''
+    for i in range(len(title_words)):
+        if i > 0 and title_words[i] not in {')', ',', '.', '!', '?', ':'} and title_words[i - 1] not in {'(', '-', '/'}:
+            title += ' '
+        title += title_words[i]
+    return title

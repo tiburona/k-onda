@@ -60,13 +60,16 @@ class LFPPrepMethods(PrepMethods):
 
         with io:
             block = io.read_block()
-            return block.segments[0].analogsignals[0]
+            return block.segments[0].analogsignals[0].magnitude
 
         
     def get_raw_lfp(self):
         if all(k not in self.animal_info for k in ('lfp_electrodes', 'lfp_from_stereotrodes')):
             return {}
-        data = self.load_blackrock_file(nsx_to_load=3)         
+        if self.io_opts.get('read_opts', {}).get('lfp_file_load') == 'neo':
+            data = self.load_neo_file()
+        else:
+            data = self.load_blackrock_file(nsx_to_load=3)         
         data_to_return = {region: data[:, val]
                           for region, val in self.animal_info['lfp_electrodes'].items()}
         if self.animal_info.get('lfp_from_stereotrodes') is not None:
@@ -105,7 +108,7 @@ class LFPPrepMethods(PrepMethods):
                 filtered = filter_60_hz(data, self.lfp_sampling_rate)
             elif filter == 'spectrum_estimation':
                 ids = [self.identifier, brain_region]
-                saved_calc_exists, filtered, pickle_path = self.load('filter', ids)
+                saved_calc_exists, filtered, pickle_path = self.load('lfp_output', 'filter', ids)
                 if not saved_calc_exists:
                     ml = MatlabInterface(self.env_config['matlab_config'])
                     filtered = ml.filter(data)
@@ -121,7 +124,7 @@ class LFPPrepMethods(PrepMethods):
             return 
         region = self.selected_brain_region
 
-        saved_calc_exists, validity, pickle_path = self.load('validity', [region, self.identifier])
+        saved_calc_exists, validity, pickle_path = self.load('lfp_output', 'validity', [region, self.identifier])
         if saved_calc_exists:
             self.lfp_event_validity[region] = validity
             return

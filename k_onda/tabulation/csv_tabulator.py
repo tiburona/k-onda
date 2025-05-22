@@ -6,13 +6,13 @@ import random
 import string
 from functools import reduce
 
-from k_onda.base import Base
-from k_onda.utils import safe_make_dir
+from k_onda.core import OutputGenerator
 
 
-class CSVTabulator(Base):
+class CSVTabulator(OutputGenerator):
     """A class to construct dataframes and write out csv files."""
     def __init__(self, experiment):
+        super().__init__()
         self.experiment = experiment
         self.dfs = []
         self.data_col = None
@@ -21,6 +21,7 @@ class CSVTabulator(Base):
         self.script_path = None
         self.opts_dicts = []
         self.name_suffix = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(6))
+        self.init_file_writer_mixin()
 
     def initialize(self):
         """Both initializes values on self and sets values for the context."""
@@ -211,14 +212,14 @@ class CSVTabulator(Base):
         self.write_csv()
 
     def write_csv(self):
-        path_constructor = self.io_opts['write_opts']['fname']
-        path = self.fill_fields(path_constructor)
-        safe_make_dir(path)
+
+        self.build_write_path('csv')
+
         force_recalc = self.io_opts.get('force_recalc', True)
 
-        if os.path.exists(path) and not force_recalc:
+        if os.path.exists(self.file_path) and not force_recalc:
             return
-        with open(path, 'w', newline='') as f:
+        with open(self.file_path, 'w', newline='') as f:
             
             for opts_dict in self.opts_dicts:
                 line = ', '.join([f"{str(key).replace(',', '_')}: {str(value).replace(',', '_')}" for key, value in

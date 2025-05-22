@@ -1,11 +1,8 @@
-import os
 import json
-import uuid
-
 import matplotlib.pyplot as plt
 
-from .plotting_helpers import smart_title_case, PlottingMixin
-from k_onda.base import Base
+from .plotting_helpers import  PlottingMixin
+from k_onda.core import OutputGenerator
 from .processors.partitions import Section, Segment, Series
 from .processors.processor import Container, ProcessorConfig
 from .processors.processor_mixins import MarginMixin
@@ -34,7 +31,7 @@ PLOT_TYPES = {'categorical_scatter': CategoricalScatterPlotter,
               'peristimulus_power_spectrum': PeriStimulusPowerSpectrumPlotter}  
 
 
-class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
+class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin):
     """
     The class to orchestrate the plotting of data. Sets `calc_opts` and initializes the 
     experiment data, creates the figure, starts the top-level processor, upon completion of the last 
@@ -42,6 +39,7 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
     """
 
     def __init__(self, experiment):
+        super().__init__()
         self.experiment = experiment
         self.io_opts = None
         self.write_opts = None
@@ -101,58 +99,6 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
             if k in spec:
                 return spec[k].get('margins', {})
 
-    def construct_path(self):
-        
-        self.write_opts = self.io_opts.get('write_opts')
-
-        if isinstance(self.write_opts, str):
-            self.file_path = self.write_opts
-           
-        else:
-        
-            # Fill fields
-            root, fname, path = [
-                self.fill_fields(self.write_opts.get(key)) 
-                for key in ['root', 'fname', 'path']
-            ]
-            
-            # If user explicitly set 'path', we skip building our own path
-            if path:
-                self.file_path = path
-        
-            else:
-                # Fallback to some default root
-                if not root:
-                    root = self.experiment.exp_info.get('data_path', os.getcwd())
-                
-                # Fallback to some default fname
-                if not fname:
-                    fname = '_'.join([self.kind_of_data, self.calc_type])
-                
-                self.title = smart_title_case(fname.replace('_', ' '))
-                
-                # Build partial path (no extension yet)
-                self.file_path = os.path.join(root, self.kind_of_data, fname)
-
-        self.handle_collisions()
-        
-        # Build final file path and an opts file
-        self.opts_file_path = self.file_path + '.txt'
-
-        if isinstance(self.write_opts, dict):
-            ext = self.write_opts.get('extension', '.png')
-        else:
-            ext = '.png'
-        self.file_path += ext
-
-    def handle_collisions(self):
-        if os.path.exists(self.file_path) and not self.write_opts.get('allow_overwrite', True):
-            uuid_str = str(uuid.uuid4())[:self.write_opts.get('unique_hash', 8)]
-            basename = os.path.basename(self.file_path)
-            dir_ = os.path.dirname(self.file_path)
-            new_name = f"{basename}_{uuid_str}"
-            self.file_path = os.path.join(dir_, new_name)
-
     def close_plot(self, basename='', fig=None):
         
         if not fig:
@@ -161,7 +107,7 @@ class ExecutivePlotter(Base, PlottingMixin, PrepMethods, MarginMixin):
        
     def save_and_close_fig(self, fig, do_title=True):
         
-        self.construct_path()
+        self.build_write_path()
 
         if do_title:
             bbox = fig.axes[0].get_position()

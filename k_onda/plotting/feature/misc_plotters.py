@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-from k_onda.base import Base
+from k_onda.core import Base
 
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial'] 

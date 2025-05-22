@@ -7,7 +7,7 @@ from matplotlib.ticker import FuncFormatter, MaxNLocator
 import numpy as np
 
 from ..plotting_helpers import PlottingMixin
-from k_onda.base import Base
+from k_onda.core import Base
 
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial'] 
