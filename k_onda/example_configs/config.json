@@ -8,7 +8,7 @@
       "identifier": "FAKE_ANIMAL_001",
       "group_name": "demo",
       "lfp_electrodes": {
-          "bla": 0
+        "bla": 0
       },
       "units": {
         "good": [
@@ -1061,7 +1061,9 @@
   "group_names": [
     "demo"
   ],
-  "paths": {"lfp":  "./lfp_demo.nix"},
+  "paths": {
+    "lfp": "./lfp_demo.nix"
+  },
   "sampling_rate": 30000,
   "lfp_sampling_rate": 2000
 }
