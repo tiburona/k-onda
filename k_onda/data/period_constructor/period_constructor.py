@@ -6,7 +6,9 @@ import numpy as np
 
 class PeriodConstructor:
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
         self.target_periods = {}
         self.reference_periods = defaultdict(list)
 
@@ -51,7 +53,7 @@ class PeriodConstructor:
                 periods[period_type] = function(period_type, filtered_period_info[period_type])
             for k, v in period_info.items():
                 if v.get('reference'):
-                    self.target_periods[v] = v['reference']
+                    self.target_periods[k] = v['reference']
                     self.reference_periods[v['reference']].append(k)
 
 
@@ -154,8 +156,6 @@ class PeriodConstructor:
             else:
                 shift = period_info['shift']
                 duration = period_info.get('duration')
-            if self.identifier == 'As105':
-                a = 'foo'
             shift_in_samples = shift * self.sampling_rate
             onset = paired_period.onset + shift_in_samples
             event_starts = []

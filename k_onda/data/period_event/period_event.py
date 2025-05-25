@@ -38,7 +38,7 @@ class Period(Data, BinMethods, TimeLineMethods):
         self.conditions = period_info.get('conditions')
         self.shift = period_info.get('shift')
         self.duration = period_info.get('duration')
-        self.reference_period_type = period_info.get('reference_period_type')
+        self.reference_period_type = period_info.get('reference')
         self.event_duration = period_info.get('event_duration')
         if target_period and hasattr(target_period, 'event_duration'):
             self.event_duration = target_period.event_duration

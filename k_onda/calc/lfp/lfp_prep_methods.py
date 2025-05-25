@@ -4,7 +4,7 @@ import numpy as np
 import h5py
 import os
 
-from k_onda.utils import filter_60_hz, divide_by_rms, downsample, PrepMethods
+from k_onda.utils import filter_60_hz, divide_by_rms, downsample, PrepMethods, safe_get
 from k_onda.interfaces import MatlabInterface
 from .lfp_methods_and_data_structures import AmpCrossCorrCalculator, GrangerCalculator, CoherenceCalculator
 

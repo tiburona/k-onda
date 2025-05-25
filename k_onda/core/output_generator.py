@@ -15,14 +15,13 @@ class OutputGenerator(Base):
         default_ext = 'png' if file_type == 'plot' else 'csv'
 
         if isinstance(self.write_opts, str):
-            if '{' not in self.write_opts:
-                if '.' in self.write_opts:
+            if '{'  in self.write_opts:
+                self.write_opts = self.fill_fields(self.write_opts)
+            
+            if '.' in self.write_opts:
                     self.file_path = self.write_opts
-                else:
-                    self.file_path = self.write_opts + f'.{default_ext}'
-
             else:
-                self.fill_fields(self.write_opts)
+                self.file_path = self.write_opts + f'.{default_ext}'
 
             self.opts_file_path = self.file_path[0:-3] + 'txt'
             return

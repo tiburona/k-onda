@@ -5,9 +5,12 @@ from k_onda.utils import load_config_py
 
 
 DEFAULT_CONFIG = '/path/to/init_config.json'
+CONFIG = '/Users/katie/likhtik/k-onda-analysis/IG_INED_SAFETY/config/init_config.json'
+OPTS = load_config_py('/Users/katie/likhtik/k-onda-analysis/IG_INED_SAFETY/config/ig_ined_safety_power_opts.py')
+PREP_OPTS = OPTS.PREP_OPTS
+PLOT_OPTS = OPTS.POWER_PLOT_OPTS
 
-
-def run_pipeline(config_file=DEFAULT_CONFIG, opts=None, prep=None, logdir=None):
+def run_pipeline(config_file=CONFIG, opts=PLOT_OPTS, prep=PREP_OPTS, logdir=None):
     """Run the core analysis pipeline using user-supplied options."""
     runner = Runner(config_file=config_file)
 

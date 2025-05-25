@@ -42,6 +42,8 @@ class RateMethods:
     def spikes(self):
         if self._spikes is None:
             self._spikes = self.unit.find_spikes(*self.spike_range)
+        if self.period_type == 'prestim':
+            a = 'foo'
         return self._spikes
  
     @property
@@ -92,8 +94,6 @@ class RateMethods:
         else:
             raw_counts = calc_hist(self.spikes, self.num_bins_per, self.spike_range)[0]
             coords = self.get_coords(len(raw_counts))
-            if self.num_bins_per != 11:
-                a = 'foo'
             # Wrap the raw counts in a DataArray with 'time' as the dimension.
             counts = xr.DataArray(
                 raw_counts,
@@ -151,10 +151,10 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
 
     _name = 'unit'
     
-    def __init__(self, animal, category, spike_times, cluster_id, waveform=None, experiment=None, 
-                 neuron_type=None, quality=None, firing_rate=None, fwhm_seconds=None):
-        super().__init__()
-        PeriodConstructor().__init__()
+    def __init__(self, animal, category, spike_times, cluster_id, waveform=None, 
+                 experiment=None, neuron_type=None, quality=None, firing_rate=None, 
+                 fwhm_seconds=None, **kwargs):
+        super().__init__(**kwargs)
         self.animal = animal
         self.category = category
         self.spike_times = np.array(spike_times)
@@ -227,7 +227,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
 
     def get_firing_std_dev(self):
         concatenated = self.calc_opts.get('base', 'event')
-        return np.std([self.concatenate(concatenator='unit', concatenated=concatenated, method='get_firing_rates')])
+        return np.std([self.concatenate(concatenator='unit', concatenated=concatenated, attrs=['get_firing_rates'])])
 
     def get_cross_correlations(self, axis=0):
         cross_corrs = [pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))

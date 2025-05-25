@@ -1,13 +1,14 @@
 import numpy as np
 import xarray as xr
 from mne.time_frequency import tfr_array_multitaper
+from copy import deepcopy
 
 from k_onda.data.period_event import Period, Event
 from k_onda.data.data import Data
 from k_onda.data.bins import TimeBin
 from k_onda.interfaces import MatlabInterface
 from k_onda.utils import (calc_coherence, amp_crosscorr, compute_phase, 
-                          bandpass_filter, compute_mrl, regularize_angles)
+                          bandpass_filter, compute_mrl, regularize_angles, is_iterable)
 
 
 class LFPMethods:
@@ -148,43 +149,72 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
             data = np.concatenate((data, event.data), axis=1)
         return data
     
+    def generate_spectrogram_cache_args(self, power_arg_set, calc_method):
+        cache_args = deepcopy(power_arg_set)
+        if isinstance(power_arg_set, dict):
+            freqs = cache_args['freqs']
+            n_cycles = cache_args['n_cycles']
+            if is_iterable(freqs):
+                cache_args['freqs'] = [freqs[0], freqs[1], freqs[1] - freqs[0]]
+            if is_iterable(n_cycles):
+                cache_args['n_cycles'] = [n_cycles[0], n_cycles[1], n_cycles[1] - n_cycles[0]]
+            flat_args = [str(i) for item in list(cache_args.items()) for i in item]
+        else:
+            flat_args = [str(i) for i in cache_args]
+
+        arg_set = [self.animal.identifier, self.selected_brain_region, calc_method, 
+                   *flat_args, self.period_type, str(self.identifier), 'padding', 
+                   *[str(pad) for pad in self.calc_opts.get('lfp_padding', [0, 0])]]
+        return arg_set
+    
     def calc_spectrogram(self):                                             
         power_arg_set   = self.calc_opts['power_arg_set']
         calc_method     = self.calc_opts.get('calc_method', 'matlab')
 
-        # --- run the calculation -------------
-        if calc_method == 'matlab':
-            ml      = MatlabInterface(self.env_config['matlab_config'])
-            power, freqs, times = ml.mtcsg(self.padded_data, *power_arg_set)
-        else:
-            data_3d = self.padded_data[np.newaxis, np.newaxis, :]
-            power   = tfr_array_multitaper(data_3d, **power_arg_set).squeeze()
-            freqs = power_arg_set['freqs']
-            times = np.arange(power.shape[-1]) * power_arg_set['decim'] / power_arg_set['sfreq']
- 
-
-        # --- WRAP in xarray ----------------------------------------------  # 
-        da = xr.DataArray(
-            power,
-            dims=['frequency', 'time_raw'],
-            coords={'frequency': freqs, 'time_raw': times},
-            attrs={'calc_method': calc_method}
-        )
+        cache_args = self.generate_spectrogram_cache_args(power_arg_set, calc_method)
         
-        true_beginning = self.lfp_padding[0] - self.lost_signal[0]
+        saved_calc_exists, spectrogram, pickle_path = self.load(
+            'lfp_output', 'spectrogram', cache_args)
+        
+        if saved_calc_exists:
+            return spectrogram
+        
+        else:
 
-        da = (
-            da.assign_coords(time_idx=('time_raw', np.arange(da.sizes['time_raw'])))
-            .swap_dims({'time_raw': 'time_idx'})
-            .rename({'time_idx': 'time'})
-)
-        da = da.assign_coords(
-                spectrogram_time=('time', da['time_raw'].values),
-                period_time=('time', da['time_raw'].values - true_beginning)
-            ).drop_vars('time_raw')                                                 
+            # --- run the calculation -------------
+            if calc_method == 'matlab':
+                ml      = MatlabInterface(self.env_config['matlab_config'])
+                power, freqs, times = ml.mtcsg(self.padded_data, *power_arg_set)
+            else:
+                data_3d = self.padded_data[np.newaxis, np.newaxis, :]
+                power   = tfr_array_multitaper(data_3d, **power_arg_set).squeeze()
+                freqs = power_arg_set['freqs']
+                times = np.arange(power.shape[-1]) * power_arg_set['decim'] / power_arg_set['sfreq']
+    
+            # --- WRAP in xarray ----------------------------------------------  # 
+            da = xr.DataArray(
+                power,
+                dims=['frequency', 'time_raw'],
+                coords={'frequency': freqs, 'time_raw': times},
+                attrs={'calc_method': calc_method}
+            )
+            
+            true_beginning = self.lfp_padding[0] - self.lost_signal[0]
+
+            da = (
+                da.assign_coords(time_idx=('time_raw', np.arange(da.sizes['time_raw'])))
+                .swap_dims({'time_raw': 'time_idx'})
+                .rename({'time_idx': 'time'})
+    )
+            da = da.assign_coords(
+                    spectrogram_time=('time', da['time_raw'].values),
+                    period_time=('time', da['time_raw'].values - true_beginning)
+                ).drop_vars('time_raw')    
+
+            self.save(da, pickle_path)                                             
 
         return da      
-
+    
     def index_transformation_function(self, concatenator):
         if concatenator == 'animal':
             return lambda calc: calc.assign_coords(

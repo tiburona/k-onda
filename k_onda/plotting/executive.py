@@ -53,7 +53,9 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
         if 'calc_opts' in opts:
             self.calc_opts = opts['calc_opts']
             self.experiment.initialize_data()
- 
+
+        print("got here")
+
         plot_spec = opts['plot_spec']
         self.process_plot_spec(plot_spec)
         interactive = opts.get('interactive', False)
@@ -130,10 +132,3 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
         calc_config = dict(info=info, spec=spec, plot_type=plot_type, aesthetics=aesthetics, ax=ax,
                   spec_type=spec_type, legend_info_list=legend_info_list)
         PLOT_TYPES[plot_type]().process_calc(calc_config)
-      
-            
-
-        
-        
-
-        

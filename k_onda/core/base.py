@@ -40,6 +40,9 @@ class Base:
         'frequency_band'
         ]
     
+    def __init__(self, **_):
+        super().__init__()
+    
     @property
     def experiment(self):
         return Base._experiment
@@ -294,9 +297,8 @@ class Base:
     def load(self, path_id, calc_name, other_identifiers):
         store = self.calc_opts.get('store', 'pkl')
         data_path = self.construct_path(path_id)
-        d = os.path.join(data_path, self.kind_of_data)
-        store_dir = os.path.join(d, f"{calc_name}_{store}s")
-        for p in [d, store_dir]:
+        store_dir = os.path.join(data_path, f"{calc_name}_{store}s")
+        for p in [data_path, store_dir]:
             if not os.path.exists(p):
                 os.mkdir(p)
         store_path = os.path.join(store_dir, '_'.join(other_identifiers) + f".{store}")

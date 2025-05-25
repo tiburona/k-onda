@@ -26,8 +26,8 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
 
     _name = 'experiment'
 
-    def __init__(self, info):
-        super().__init__()
+    def __init__(self, info, **kwargs):
+        super().__init__(**kwargs)
         self.exp_info = info
         self.identifier = info['identifier'] 
         self.now = formatted_now
@@ -166,8 +166,8 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
 class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
     _name = 'group'
 
-    def __init__(self, name, animals=None):
-        super().__init__()
+    def __init__(self, name, animals=None, **kwargs):
+        super().__init__(**kwargs)
         self.identifier = name
         self.animals = animals if animals else []
         self.parent = self.experiment
@@ -183,9 +183,9 @@ class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
 class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, MRLMethods, BinMethods):
     _name = 'animal'
 
-    def __init__(self, identifier, animal_info, neuron_types=None):
-        super().__init__()
-        PeriodConstructor().__init__()
+    def __init__(self, identifier, animal_info, neuron_types=None, **kwargs):
+        super().__init__(**kwargs)
+        PeriodConstructor().__init__(**kwargs)
         self.identifier = identifier
         self.animal_info = animal_info
         self.group_name = animal_info.get('group_name')

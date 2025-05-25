@@ -1,6 +1,5 @@
 from collections import defaultdict
 import numpy as np
-from typing import Sequence, Union, Optional
 import xarray as xr
 
 from k_onda.core import Base
@@ -14,7 +13,8 @@ from k_onda.utils import cache_method, always_last, operations, sem, is_truthy, 
 
 class Data(Base):
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.parent = None
 
     @property
@@ -316,7 +316,7 @@ class Data(Base):
                 children_data = [
                     get_func(attrs[0])(child) for child in self.accumulate(max_depth=depth_index)[concatenated]
                 ]
-                a = 'foo'
+               
             else:
                 children_data = [
                     xr.Dataset({attr: get_func(attr)(child) for attr in attrs}) 
