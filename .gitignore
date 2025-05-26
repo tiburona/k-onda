@@ -37,3 +37,6 @@ __pycache__/
 k_onda/run/misc_data_init/
 k_onda.zip
 k_onda.zip
+
+# Ignore scratch files
+scratch*

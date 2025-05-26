@@ -108,14 +108,18 @@ Some functionality (esp. LFP analysis) requires Matlab — see details below.
 <details>
 <summary>⚠️ Matlab dependency (for LFP analysis)</summary>
 
-Some core functionality—like calculating power and coherence from raw LFP data—**requires Matlab**.
+Some functionality gives you the option to use Matlab routines, and for some 
+functionality (for instance, Granger causality), it is still required.
 
-Specifically:
+In order to use the Matlab functionality, you need
 - A working Matlab installation (tested with Matlab 2022a)
-- Scripts from Professor Kenneth Harris's lab:
+
+and the scripts the particular function calls.  
+
+- Some that are not publically available include scripts from Professor Kenneth Harris's lab:
   - `mtcsg.m`
   - `mtchg.m`
-- (Optional) `removeLineNoise_SpectrumEstimation.m` for filtering
+  - `removeLineNoise_SpectrumEstimation.m` for filtering
 
 These scripts are **not included**.  
 If you are in the Likhtik lab, contact the author via WhatsApp.  
