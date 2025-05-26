@@ -8,5 +8,5 @@ setup(
     description="A package for electrophysiology data analyses", 
     packages=find_packages(),  
     install_requires=[],  
-    python_requires=">=3.7",  
+    python_requires=">=3.11",  
 )
