@@ -5,6 +5,7 @@ from copy import deepcopy
 import random
 import string
 from functools import reduce
+from xarray import DataArray
 
 from k_onda.core import OutputGenerator
 
@@ -21,7 +22,6 @@ class CSVTabulator(OutputGenerator):
         self.script_path = None
         self.opts_dicts = []
         self.name_suffix = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(6))
-        self.init_file_writer_mixin()
 
     def initialize(self):
         """Both initializes values on self and sets values for the context."""
@@ -190,6 +190,8 @@ class CSVTabulator(OutputGenerator):
                 for src in source.ancestors:
                     val = getattr(src, other_attr, None)
                     if val is not None:
+                        if isinstance(val, DataArray):
+                            val = val.values
                         row_dict[other_attr] = val
                         found_attr = True
                         break

@@ -54,8 +54,6 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
             self.calc_opts = opts['calc_opts']
             self.experiment.initialize_data()
 
-        print("got here")
-
         plot_spec = opts['plot_spec']
         self.process_plot_spec(plot_spec)
         interactive = opts.get('interactive', False)

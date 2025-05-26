@@ -72,7 +72,7 @@ class FrequencyBin(Bin, TimeBinMethods):
          
         if parent.name == 'period':
             representative = parent
-        if 'calculator' in parent.name or parent.name == 'event':
+        elif 'calculator' in parent.name or parent.name == 'event':
             representative = parent.period
         elif parent.name == 'animal':
             representative = parent.children[0]
@@ -82,7 +82,7 @@ class FrequencyBin(Bin, TimeBinMethods):
             raise ValueError("Unexpected Object Type")
         
         if self.calc_type == 'power': 
-            self.frequency = representative.spectrogram[1][index]
+            self.frequency = float(representative.spectrogram.coords['frequency'][index].values)
         elif 'phase' in self.calc_type:
             self.frequency = representative.frequency_bands[index][0]
         else:
