@@ -1,9 +1,11 @@
-from collections import defaultdict
+from collections import defaultdict, Counter
 import numpy as np
 import xarray as xr
+import inspect
 
 from k_onda.core import Base
-from k_onda.utils import cache_method, always_last, operations, sem, is_truthy, drop_inconsistent_coords, round_coords
+from k_onda.utils import cache_method, always_last, operations, sem, is_truthy, \
+    drop_inconsistent_coords, round_coords, fill_missing_arrays
 
 
 
@@ -55,6 +57,7 @@ class Data(Base):
     
     @property
     def included_children(self):
+        
         if hasattr(self, 'children'):
             return [child for child in self.children if child.include()]
         else:
@@ -118,6 +121,7 @@ class Data(Base):
             return sorted_children
             
     def select(self, filters, check_ancestors=False):
+     
 
         if not check_ancestors and self.name not in filters:
             return True
@@ -267,8 +271,6 @@ class Data(Base):
                     arr = np.array([arr])
                 np_arrays.append(np.ravel(arr))
             flattened = np.concatenate(np_arrays)
-            if self.selected_brain_region == 'bla' and self.identifier == 'IG160':
-                a = 'foo'
             return np.nanmedian(flattened)
         else:
             return float("nan")
@@ -285,6 +287,7 @@ class Data(Base):
     
     @property
     def concatenation(self):
+        
         kwargs = self.calc_opts.get('concatenation', {})
         if not kwargs.get('concatenator'):
             kwargs['concatenator'] = self.name
@@ -294,12 +297,14 @@ class Data(Base):
         
     def concatenate(self, concatenator=None, concatenated=None, attrs=None, dim_xform=None):
         """Concatenates data from descendant nodes using xarray."""
-
+        
         if attrs is None:
             attrs = ['calc']
         
         def get_func(attr):
             def func(obj):
+                if not obj.include():
+                    return float('nan')
                 # Try to get the attribute from the object
                 val = getattr(obj, attr, None)
                 # If the attribute exists and is callable (i.e. a bound method), call it
@@ -317,6 +322,7 @@ class Data(Base):
                     get_func(attrs[0])(child) for child in self.accumulate(max_depth=depth_index)[concatenated]
                 ]
                
+               
             else:
                 children_data = [
                     xr.Dataset({attr: get_func(attr)(child) for attr in attrs}) 
@@ -324,6 +330,8 @@ class Data(Base):
                 ]
             if not children_data:
                 return xr.DataArray([])
+            
+            children_data = fill_missing_arrays(children_data)
             
             if isinstance(children_data[0], (xr.DataArray, xr.Dataset)):
                 if ((concatenator == 'animal' and self.calc_type != 'spike') or 
@@ -396,17 +404,24 @@ class Data(Base):
     def greatgrandchildren_scatter(self):
         return [ggchild.mean for ggchild in self.accumulate(max_depth=3)[3]]
     
-    def accumulate(self, max_depth=1, depth=0, accumulator=None):
+    def accumulate(self, max_depth=1, depth=0, accumulator=None, filter=False): 
         
         if accumulator is None:
             accumulator = defaultdict(list)
         
         accumulator[self.name].append(self)
+
+        if filter:
+            included_children = self.included_children
         
-        if depth != max_depth and self.included_children:
-            for child in self.included_children:
-                child.accumulate(max_depth, depth + 1, accumulator)
-        
+            if depth != max_depth and included_children:
+                for child in included_children:
+                    child.accumulate(max_depth, depth + 1, accumulator)
+        else:
+            if depth != max_depth:
+                for child in self.children:
+                    child.accumulate(max_depth, depth + 1, accumulator)
+
         return accumulator   
 
     @property

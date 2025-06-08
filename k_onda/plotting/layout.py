@@ -37,24 +37,99 @@ class Layout(Base, ColorbarMixin):
             self.cells = self.subfigure_grid
         
 
+    # def subfigures(self, nrows, ncols, **kwargs):
+    #     subfigures = self.figure.subfigures(nrows, ncols, **kwargs)
+
+    #     # If it's a single SubFigure, wrap it in a 2D array
+    #     if not isinstance(subfigures, (list, np.ndarray)):
+    #         return np.full((nrows, ncols), [SubfigWrapper(subfigures, (0, 0), self)])
+
+    #     elif isinstance(subfigures, np.ndarray) and subfigures.ndim == 1: 
+    #         return np.array([SubfigWrapper(subfig, (nrows, ncols), self) 
+    #                          for subfig in subfigures]).reshape(nrows, ncols)
+            
+    #     elif isinstance(subfigures, np.ndarray) and subfigures.ndim == 2:
+    #         return np.array([[SubfigWrapper(subfig, (i, j), self) 
+    #                           for j, subfig in enumerate(row)] 
+    #                           for i, row in enumerate(subfigures)])
+            
+    #     else:
+    #         raise ValueError("Unexpected dimensions for subfigures")
+
     def subfigures(self, nrows, ncols, **kwargs):
-        subfigures = self.figure.subfigures(nrows, ncols, **kwargs)
+        """
+        Create a (nrows x ncols) array of SubFigure wrappers.
 
-        # If it's a single SubFigure, wrap it in a 2D array
-        if not isinstance(subfigures, (list, np.ndarray)):
-            return np.full((nrows, ncols), [SubfigWrapper(subfigures, (0, 0), self)])
+        If `wspace` or `hspace` are supplied, the function inserts blank
+        sub-figures between the real ones instead of relying on
+        `subplots_adjust`, so you get predictable padding that behaves just
+        like extra columns/rows.
 
-        elif isinstance(subfigures, np.ndarray) and subfigures.ndim == 1: 
-            return np.array([SubfigWrapper(subfig, (nrows, ncols), self) 
-                             for subfig in subfigures]).reshape(nrows, ncols)
-            
-        elif isinstance(subfigures, np.ndarray) and subfigures.ndim == 2:
-            return np.array([[SubfigWrapper(subfig, (i, j), self) 
-                              for j, subfig in enumerate(row)] 
-                              for i, row in enumerate(subfigures)])
-            
-        else:
-            raise ValueError("Unexpected dimensions for subfigures")
+        Parameters
+        ----------
+        nrows, ncols : int
+            Logical grid size (counts *only* the real sub-figures).
+        wspace, hspace : float, optional
+            Relative width/height of the blank padding columns/rows
+            compared to a real sub-figure (default 0 = no padding).
+        **kwargs
+            Forwarded to `Figure.subfigures` after `wspace`/`hspace`
+            are popped.
+
+        Returns
+        -------
+        ndarray[(nrows, ncols)]
+            Array of `SubfigWrapper`s for the real sub-figures.
+        """
+        # -- pull the “spacing” options out of kwargs ---------------------
+        wspace = kwargs.pop("wspace", 0)
+        hspace = kwargs.pop("hspace", 0)
+
+        # If no extra spacing, fall back to the old behaviour -------------
+        if not wspace and not hspace:
+            raw = self.figure.subfigures(nrows, ncols, **kwargs)
+            if not isinstance(raw, (list, np.ndarray)):
+                return np.full((nrows, ncols),
+                            SubfigWrapper(raw, (0, 0), self))
+            raw = np.asarray(raw)
+            if raw.ndim == 1:                      # 1-D ⇒ reshape to 2-D
+                raw = raw.reshape(nrows, ncols)
+            return np.array([[SubfigWrapper(sf, (i, j), self)
+                            for j, sf in enumerate(row)]
+                            for i, row in enumerate(raw)])
+
+        # -- build the “big” grid with padding sub-figures ---------------
+        padded_rows = nrows + (nrows - 1) if hspace else nrows
+        padded_cols = ncols + (ncols - 1) if wspace else ncols
+
+        # width / height ratios: [real, pad, real, pad, …]
+        width_ratios = []
+        for c in range(ncols):
+            width_ratios.append(1)
+            if c < ncols - 1 and wspace:
+                width_ratios.append(wspace)
+        height_ratios = []
+        for r in range(nrows):
+            height_ratios.append(1)
+            if r < nrows - 1 and hspace:
+                height_ratios.append(hspace)
+
+        kwargs.setdefault("width_ratios", width_ratios)
+        kwargs.setdefault("height_ratios", height_ratios)
+
+        big = self.figure.subfigures(padded_rows, padded_cols, **kwargs)
+        big = np.asarray(big).reshape(padded_rows, padded_cols)
+
+        # -- pick out only the “real” slots (even indices) ---------------
+        row_idx = range(0, padded_rows, 2 if hspace else 1)
+        col_idx = range(0, padded_cols, 2 if wspace else 1)
+
+        subfig_grid = np.empty((nrows, ncols), dtype=object)
+        for i, rr in enumerate(row_idx):
+            for j, cc in enumerate(col_idx):
+                subfig_grid[i, j] = SubfigWrapper(big[rr, cc], (i, j), self)
+
+        return subfig_grid
             
     def calculate_my_dimensions(self):
         dims = [1, 1]
@@ -72,7 +147,6 @@ class Layout(Base, ColorbarMixin):
 
         if self.global_colorbar:
             self.create_outer_and_subgrid()
-            a = 'foo'
 
         subfigure_args = self.spec.get('subfigure', {}) if self.processor else {}
             

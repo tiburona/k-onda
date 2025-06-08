@@ -47,6 +47,10 @@ class Period(Data, BinMethods, TimeLineMethods):
         self.universal_res_onset = self.get_universal_res_onset()
         self.duration_in_universal_res = self.duration/self.finest_res 
 
+    def __repr__(self):
+        return (f"Period {self.animal.identifier} {self.period_type} "
+                f"{self.identifier}")
+
     @property
     def children(self):
         return self.events

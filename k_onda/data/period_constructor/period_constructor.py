@@ -21,20 +21,25 @@ class PeriodConstructor:
         return [item for sublist in getattr(self, attr).values() for item in sublist]
 
     def select_children(self, attr):
-        periods = getattr(self, attr)
+
+        periods = self.get_all(attr)
 
         if self.selected_period_type:
-            return periods[self.selected_period_type]
+            condition = lambda p: p.period_type == self.selected_period_type
     
-        if self.selected_period_types:
-            condition = lambda pt, _: pt in self.selected_period_types
+        elif self.selected_period_types:
+            condition = lambda p: p.period_type in self.selected_period_types
         elif self.selected_period_conditions:
-            condition = lambda _, p: any(cond in self.selected_period_conditions 
+            condition = lambda p: any(cond in self.selected_period_conditions 
                                          for cond in p.conditions)
         else:
-            return self.get_all(attr)
+            condition = lambda _: True
 
-        return [p for pt in periods for p in periods[pt] if condition(pt, p)]
+        if self.selected_period_group:
+            prev_condition = condition
+            condition = lambda p: int(p.identifier) in self.selected_period_group and prev_condition(p)
+
+        return [p for p in periods if condition(p)]
 
 
     def prepare_periods(self):

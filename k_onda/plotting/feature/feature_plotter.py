@@ -15,24 +15,29 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 
 class FeaturePlotter(Base, PlottingMixin):
 
+    def set_values(self, calc_config):
+        self.info, self.spec, self.spec_type, self.aesthetics, self.legend_info_list = (
+            calc_config.get(k) 
+            for k in ('info', 'spec', 'spec_type', 'aesthetics', 'legend_info_list'))
+        a = 'foo'
+
     def process_calc(self, calc_config):
-        info, spec_type, aesthetics = (
-            calc_config[k] for k in ('info', 'spec_type', 'aesthetics'))
-        aesthetics = deepcopy(aesthetics) if aesthetics else None
+        self.set_values(calc_config)
+        self.aesthetics = deepcopy(self.aesthetics) if self.aesthetics else None
         unique_axs = defaultdict(lambda: {'cell': None, 'entries': []})
 
-        for i, entry in enumerate(info):
+        for i, entry in enumerate(self.info):
             cell = entry['cell']
             unique_axs[id(cell)]['cell'] = cell
             unique_axs[id(cell)]['entries'].append(entry)
 
-            aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
+            aesthetic_args = self.get_aesthetic_args(entry)
             ax_args = aesthetic_args.get('ax', {})
             
             # Plot entry with a temporary label
             val = entry[entry['attr']]
             self.plot_entry(cell, val, aesthetic_args)
-            self.apply_ax_args(cell, ax_args, i, spec_type)
+            self.apply_ax_args(cell, ax_args, i, self.spec_type)
             entry['legend_label'] = self.get_entry_label(entry)
 
         self.make_legend(unique_axs)
@@ -122,13 +127,19 @@ class FeaturePlotter(Base, PlottingMixin):
 
         return label
     
-    def get_aesthetic_args(self, entry, aesthetics):
-        return self.construct_spec_based_on_conditions(aesthetics, entry=entry)
+    def get_aesthetic_args(self, entry):
+        return self.construct_spec_based_on_conditions(self.aesthetics, entry=entry)
     
-    def apply_ax_args(self, cell, ax_args, i, spec_name):
+    def get_tick_args(self, aesthetic_args):
+        
+        tick_args = {'fontsize': 12}
+        tick_args.update(aesthetic_args.get('tick', {}))
+        return tick_args
+    
+    def apply_ax_args(self, cell, ax_args, i):
         ax_list = cell.ax_list if hasattr(cell, 'break_axes') else [cell.obj]
         for ax in ax_list:
-            if spec_name == 'segment' and i > 0:
+            if self.spec_type == 'segment' and i > 0:
                 return
             if 'border' in ax_args:
                 self.apply_borders(ax, ax_args['border'])
@@ -142,14 +153,25 @@ class FeaturePlotter(Base, PlottingMixin):
 
     def apply_tick_label_formatting(self, ax, tick_labels):
 
-        if 'x' in tick_labels:
-            x_opts = tick_labels['x']
+        for axis in tick_labels:  # axis is 'x' or 'y'
+            ax_obj = getattr(ax, f"{axis}axis") 
 
-            if x_opts.get('only_whole_numbers', False):
-                ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            opts = tick_labels[axis]
 
-            if x_opts.get('formatter'):
-                ax.xaxis.set_major_formatter(FuncFormatter(eval(x_opts['formatter'])))
+            if opts.get('only_whole_numbers', False):
+                ax_obj.set_major_locator(MaxNLocator(integer=True))
+
+            if opts.get('formatter'):
+                ax_obj.set_major_formatter(FuncFormatter(eval(opts['formatter'])))
+
+            if opts.get('labelsize'):
+                ax.tick_params(axis=axis, labelsize=opts['labelsize'])
+
+            if opts.get('rotation'):
+                ax_obj.set_tick_params(rotation=opts['rotation'])
+
+            # TODO add number of decimal formatter
+            #ax.xaxis.set_major_formatter(FormatStrFormatter('%.2f'))  # 2 decimal places
     
     def apply_borders(self, ax, border):
         border = deepcopy(border)

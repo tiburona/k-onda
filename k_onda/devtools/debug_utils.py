@@ -1,3 +1,4 @@
+from collections import Counter
 import os
 import pstats
 import signal
@@ -49,3 +50,5 @@ def memory_profile_run():
         print("Top 10 memory consuming lines:")
         for stat in top_stats[:10]:
             print(stat)
+
+

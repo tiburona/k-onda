@@ -209,6 +209,9 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, 
         self.lfp_event_validity = defaultdict(dict)
         self.initialized = []
 
+    def __repr__(self):
+        return self.identifier
+
     @property
     def children(self):
         children = getattr(self, f"select_{self.kind_of_data}_children")()

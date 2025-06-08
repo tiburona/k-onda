@@ -143,11 +143,10 @@ class PeriStimulusHistogramPlotter(PeriStimulusPlotter, HistogramPlotter):
 
 class PeriStimulusHeatMapPlotter(HeatMapPlotter, PeriStimulusPlotter):
 
-    def plot_entry(self, entry, aesthetics, norm, break_axes=None):
+    def plot_entry(self, entry, aesthetic_args, norm, break_axes=None):
         if break_axes:
             raise NotImplementedError("Break axes not yet implemented for heat maps")
-        img, ax = HeatMapPlotter.plot_entry(self, entry, aesthetics, norm)
-        aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
+        img, ax = HeatMapPlotter.plot_entry(self, entry, aesthetic_args, norm)
         self.place_indicator(ax, aesthetic_args)
         return img, ax
     

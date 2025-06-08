@@ -22,6 +22,7 @@ class Base:
     _selected_conditions = {}
     _selected_period_type = ''
     _selected_period_types = []
+    _selected_period_group = []
     _selected_neuron_type = ''
     _selected_brain_region = ''
     _selected_frequency_band = ''
@@ -32,7 +33,7 @@ class Base:
         'period_type', 
         'period_types',
         'period_conditions', 
-        'period_groups',
+        'period_group',
         'neuron_type', 
         'conditions', 
         'brain_region', 
@@ -201,11 +202,11 @@ class Base:
 
     @property
     def selected_period_group(self):
-        return tuple(self.calc_opts['periods'][self.selected_period_type])
+        return Base._selected_period_group
     
     @selected_period_group.setter
     def selected_period_group(self, period_group):
-        self.calc_opts['periods'][self.selected_period_type] = period_group
+        Base._selected_period_group = period_group
     
     @property
     def selected_frequency_band(self):
@@ -352,7 +353,7 @@ class Base:
         processed_constructor['template'] = processed_constructor['template'].replace(".", placeholder)
         return processed_constructor
     
-    def fill_fields(self, constructor, obj=None):
+    def fill_fields(self, constructor, obj=None, **kwargs):
         if not constructor:
             return
         if not obj:
@@ -379,6 +380,8 @@ class Base:
                 # Replace the lambda expression placeholder in the template.
                 constructor['template'] = constructor['template'].replace(f'{{{field}}}', f'{{{key}}}')
                 new_fields[key] = eval(field)(obj)
+            elif field in kwargs:
+                new_fields[field] = kwargs[field]
             elif field in obj.selectable_variables:
                 new_fields[field] = getattr(obj, field, getattr(self, f'selected_{field}'))
             elif '|' in field:
@@ -386,6 +389,7 @@ class Base:
                 new_fields[field] = getattr(obj, f'selected_{field_type}')[field_key]
             else:
                 new_fields[field] = getattr(obj, field)
+               
 
         constructor.update(new_fields)
         return constructor['template'].format(**constructor)

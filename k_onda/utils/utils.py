@@ -302,3 +302,23 @@ def smart_title_case(s):
             title += ' '
         title += title_words[i]
     return title
+
+
+def find_container_with_key(data, target_key):
+    if isinstance(data, dict):
+        if target_key in data:
+            return data
+        for value in data.values():
+            result = find_container_with_key(value, target_key)
+            if result is not None:
+                return result
+    elif isinstance(data, list):
+        for item in data:
+            result = find_container_with_key(item, target_key)
+            if result is not None:
+                return result
+    return None
+
+
+
+

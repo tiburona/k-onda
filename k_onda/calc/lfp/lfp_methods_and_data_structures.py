@@ -11,6 +11,8 @@ from k_onda.utils import (calc_coherence, amp_crosscorr, compute_phase,
                           bandpass_filter, compute_mrl, regularize_angles, is_iterable)
 
 
+
+
 class LFPMethods:
  
     def get_power(self, exclude=True):
@@ -194,8 +196,8 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
             # --- WRAP in xarray ----------------------------------------------  # 
             da = xr.DataArray(
                 power,
-                dims=['frequency', 'time_raw'],
-                coords={'frequency': freqs, 'time_raw': times},
+                dims=['time_raw', 'frequency'],
+                coords={'time_raw': times, 'frequency': freqs},
                 attrs={'calc_method': calc_method}
             )
             
@@ -236,12 +238,21 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
         self.period_type = self.parent.period_type
         self.spectrogram = self.parent.spectrogram
 
-    @property
-    def is_valid(self): 
+    def __repr__(self):
+        return (f"Event {self.animal.identifier} {self.period_type} "
+                f"{self.period.identifier} {self.identifier}")
+
+   
+
+    from functools import cached_property
+    @property          # change from @property
+    def is_valid(self):
+        #record(self)    
+        #print("is_valid called", hits[self])
         val = self.animal.lfp_event_validity[self.selected_brain_region][self.period_type][
             self.period.identifier][self.identifier]
-        if not val:
-            print(f"Event {self.animal.identifier} {self.period_type} {self.period.identifier} {self.identifier} is not valid!")
+        #if not val:
+            #print(f"Event {self.animal.identifier} {self.period_type} {self.period.identifier} {self.identifier} is not valid!")
         return val
 
     def get_power(self):

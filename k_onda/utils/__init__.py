@@ -45,12 +45,13 @@ from .utils import (
     is_iterable, 
     load_config_py,
     safe_make_dir, 
-    smart_title_case
+    smart_title_case,
+    find_container_with_key
 )
 
 from .prep_methods import PrepMethods
 
-from .xarray_helpers import drop_inconsistent_coords, standardize, round_coords
+from .xarray_helpers import drop_inconsistent_coords, standardize, round_coords, fill_missing_arrays
 
 
 __all__ = [
@@ -98,9 +99,12 @@ __all__ = [
     "is_truthy",
     "is_iterable",
     "PrepMethods",
-    "drop_inconsistent_coords",
     "load_config_py",
     "safe_make_dir", 
     "smart_title_case", 
-    "round_coords"
+    "find_container_with_key"
+    # from xarray helpers
+    "drop_inconsistent_coords",
+    "round_coords",
+    "fill_missing_arrays"
 ]
