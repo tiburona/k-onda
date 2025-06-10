@@ -55,15 +55,33 @@ class HeatMapPlotter(FeaturePlotter):
         return marker_args
   
     def plot_entry(self, entry, aesthetic_args, norm):
-        marker_args = self.get_marker_args(aesthetic_args)
-        ax = entry['cell']
-        val = entry[entry['attr']]
-        img = ax.imshow(val, norm=norm, **marker_args)
+        marker_args = self.get_marker_args(aesthetic_args).copy()
+
+        aspect = marker_args.pop('aspect', None)  # pull out if present
+
+        ax  = entry['cell']
+        val = entry[entry['attr']]                
+
+        x_dim, y_dim = val.dims[:2]
+
+        img = val.plot.imshow(
+            ax=ax,
+            x=x_dim,
+            y=y_dim,
+            add_colorbar=False,
+            add_labels=False,
+            norm=norm,
+            **marker_args
+        )
+
+        if aspect is not None:
+            ax.set_aspect(aspect)
+
         return img, ax
         
     def get_norm(self, entries):
         attr = entries[0]['attr']
-        vmax, vmin = [fun([entry[attr] for entry in entries]) for fun in (np.max, np.min)]
+        vmax, vmin = [fun([entry[attr] for entry in entries]) for fun in (np.nanmax, np.nanmin)]
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
         return norm
     

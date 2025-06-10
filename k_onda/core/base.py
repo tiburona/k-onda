@@ -388,7 +388,14 @@ class Base:
                 field_type, field_key = field.split('|')
                 new_fields[field] = getattr(obj, f'selected_{field_type}')[field_key]
             else:
-                new_fields[field] = getattr(obj, field)
+                try:
+                    new_fields[field] = getattr(obj, field)
+                except AttributeError as e:
+                    ds_dict = kwargs['data_source_dict']
+                    data_sources = self.get_data_sources(data_object_type=ds_dict['data_source'], 
+                                                         identifiers=ds_dict['members'])
+                    new_fields[field] = '_'.join([getattr(ds, field) for ds in data_sources])
+
                
 
         constructor.update(new_fields)

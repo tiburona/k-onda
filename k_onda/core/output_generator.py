@@ -17,12 +17,13 @@ class OutputGenerator(Base):
         if isinstance(self.write_opts, str):
 
             if '{'  in self.write_opts:
+                data_source_dict = find_container_with_key(opts, 'data_source')
 
                 if 'identifier' in self.write_opts:
-                    data_source_dict = find_container_with_key(opts, 'data_source')
                     self.write_opts = self.fill_fields(
                         self.write_opts, 
-                        identifier='_'.join(data_source_dict['members']))
+                        identifier='_'.join(data_source_dict['members']),
+                        data_source_dict=data_source_dict)
                 else:
                     self.write_opts = self.fill_fields(self.write_opts)
             

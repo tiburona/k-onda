@@ -312,6 +312,8 @@ class Data(Base):
             return func
             
         if self.name == concatenator:
+            if self.animal.identifier == 'IG178':
+                a = 'foo'
            
             # Fetch descendants from the correct level of the accumulator (base case)
             depth_index = self.hierarchy.index(concatenated) - self.hierarchy.index(self.name)
@@ -324,6 +326,7 @@ class Data(Base):
                
                
             else:
+                
                 children_data = [
                     xr.Dataset({attr: get_func(attr)(child) for attr in attrs}) 
                     for child in self.accumulate(max_depth=depth_index)[concatenated]
@@ -336,12 +339,14 @@ class Data(Base):
             if isinstance(children_data[0], (xr.DataArray, xr.Dataset)):
                 if ((concatenator == 'animal' and self.calc_type != 'spike') or 
                     concatenator in ['unit', 'period']):
-
+                   
                     result = xr.concat(children_data, dim="time")
                     new_time = np.arange(result.sizes["time"])
                     if dim_xform:
                         new_time = eval(dim_xform)(new_time)
                     result = result.assign_coords(time=("time", new_time))
+                    # Reorder coords to match dims:
+                    result = result.assign_coords(**{dim: result.coords[dim] for dim in result.dims})
                     return result
 
                 else:

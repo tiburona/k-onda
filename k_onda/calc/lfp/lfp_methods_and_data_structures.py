@@ -251,8 +251,8 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
         #print("is_valid called", hits[self])
         val = self.animal.lfp_event_validity[self.selected_brain_region][self.period_type][
             self.period.identifier][self.identifier]
-        #if not val:
-            #print(f"Event {self.animal.identifier} {self.period_type} {self.period.identifier} {self.identifier} is not valid!")
+        if not val:
+            print(f"Event {self.animal.identifier} {self.period_type} {self.period.identifier} {self.identifier} is not valid!")
         return val
 
     def get_power(self):
