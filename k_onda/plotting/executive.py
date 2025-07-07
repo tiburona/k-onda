@@ -90,6 +90,7 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
 
         if not 'split' in plot_spec:
             self.kick_off(plot_spec)
+            self.wrap_up(opts)
         else:
             bunches = self.preprocess_split(plot_spec['split'])
             for spec in bunches:

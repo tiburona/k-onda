@@ -77,6 +77,8 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         self.event_starts_in_lfp_samples = (np.array(events) * conversion_factor).astype(int) - 1
         self.start_in_lfp_samples = self.onset_in_lfp_samples
         self.stop_in_lfp_samples = self.start_in_lfp_samples + self.duration_in_lfp_samples
+        if self.animal.identifier == 'INED18':
+            a = 'foo'
         self.pad_start = self.start_in_lfp_samples - start_pad
         self.pad_stop = self.stop_in_lfp_samples + end_pad
         self._spectrogram = None
@@ -178,6 +180,9 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         saved_calc_exists, spectrogram, pickle_path = self.load(
             'lfp_output', 'spectrogram', cache_args)
         
+        if self.animal.identifier == 'IG160':
+            a = 'foo'
+        
         if saved_calc_exists:
             return spectrogram
         
@@ -196,8 +201,8 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
             # --- WRAP in xarray ----------------------------------------------  # 
             da = xr.DataArray(
                 power,
-                dims=['time_raw', 'frequency'],
-                coords={'time_raw': times, 'frequency': freqs},
+                dims=['frequency', 'time_raw'],
+                coords={'frequency': freqs, 'time_raw': times},
                 attrs={'calc_method': calc_method}
             )
             
@@ -247,8 +252,6 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
     from functools import cached_property
     @property          # change from @property
     def is_valid(self):
-        #record(self)    
-        #print("is_valid called", hits[self])
         val = self.animal.lfp_event_validity[self.selected_brain_region][self.period_type][
             self.period.identifier][self.identifier]
         if not val:

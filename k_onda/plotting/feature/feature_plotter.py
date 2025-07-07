@@ -37,7 +37,7 @@ class FeaturePlotter(Base, PlottingMixin):
             # Plot entry with a temporary label
             val = entry[entry['attr']]
             self.plot_entry(cell, val, aesthetic_args)
-            self.apply_ax_args(cell, ax_args, i, self.spec_type)
+            self.apply_ax_args(cell, ax_args, i)
             entry['legend_label'] = self.get_entry_label(entry)
 
         self.make_legend(unique_axs)

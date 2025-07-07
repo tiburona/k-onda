@@ -54,7 +54,7 @@ class HeatMapPlotter(FeaturePlotter):
         marker_args.update(aesthetic_args.get('marker', {}))
         return marker_args
   
-    def plot_entry(self, entry, aesthetic_args, norm):
+    def plot_entry(self, entry, aesthetic_args, norm, x_dim='relative_time'):
         marker_args = self.get_marker_args(aesthetic_args).copy()
 
         aspect = marker_args.pop('aspect', None)  # pull out if present
@@ -62,12 +62,10 @@ class HeatMapPlotter(FeaturePlotter):
         ax  = entry['cell']
         val = entry[entry['attr']]                
 
-        x_dim, y_dim = val.dims[:2]
-
         img = val.plot.imshow(
             ax=ax,
             x=x_dim,
-            y=y_dim,
+            y='frequency',
             add_colorbar=False,
             add_labels=False,
             norm=norm,

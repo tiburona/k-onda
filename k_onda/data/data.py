@@ -312,8 +312,6 @@ class Data(Base):
             return func
             
         if self.name == concatenator:
-            if self.animal.identifier == 'IG178':
-                a = 'foo'
            
             # Fetch descendants from the correct level of the accumulator (base case)
             depth_index = self.hierarchy.index(concatenated) - self.hierarchy.index(self.name)

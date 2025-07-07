@@ -2,12 +2,14 @@ import pandas as pd
 import csv
 import os
 from copy import deepcopy
+import json
 import random
 import string
 from functools import reduce
 from xarray import DataArray
 
 from k_onda.core import OutputGenerator
+from k_onda.utils import safe_make_dir, to_serializable
 
 
 class CSVTabulator(OutputGenerator):
@@ -221,13 +223,14 @@ class CSVTabulator(OutputGenerator):
 
         if os.path.exists(self.file_path) and not force_recalc:
             return
+        
+        safe_make_dir(self.file_path)
+
         with open(self.file_path, 'w', newline='') as f:
-            
+
             for opts_dict in self.opts_dicts:
-                line = ', '.join([f"{str(key).replace(',', '_')}: {str(value).replace(',', '_')}" for key, value in
-                                opts_dict.items()])
-                f.write(f"# {line}\n")
-                f.write("\n")
+                safe_dict = {k: to_serializable(v) for k, v in opts_dict.items()}
+                f.write("# " + json.dumps(safe_dict, separators=(", ", ": ")) + "\n")
 
             df = self.dfs[-1]
             header = list(df.columns)
