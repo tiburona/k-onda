@@ -42,6 +42,13 @@ class Data(Base):
             return self.get_average(f"get_{calc_type}", stop_at=stop_at)
     
     @property
+    def calc_result(self):
+        if 'concatenation' in self.calc_opts:
+            return self.concatenation
+        else:
+            return self.calc
+
+    @property
     def calc(self):
         return self.get_calc()
     
@@ -207,24 +214,28 @@ class Data(Base):
         return self.xmean(child_vals, axis)
     
     @property
+    def data_set(self):
+        return xr.Dataset({k: getattr(self, k) for k in self.calc_opts.get('data_set', {})})
+    
+    @property
     def mean(self):
-        return self.xmean(self.calc)
+        return self.get_mean()
     
     @property
     def sem(self):
         return self.get_sem(collapse_sem_data=True)
     
     @property
-    def mean_and_sem(self):
-        return xr.Dataset({'mean': self.mean, 'sem': self.sem})
-    
-    @property
     def sem_envelope(self):
         return self.get_sem(collapse_sem_data=False)
     
     def get_mean(self, axis=0):
+        if self.calc_opts.get('concatenation'):
+            concatenation = self.concatenation
+            if concatenation.ndim == 1:
+                return concatenation
         return self.xmean(self.calc, axis=axis)
-        
+ 
     def get_sem(self, collapse_sem_data=False):
         """
         Calculates the standard error of an object's data.
@@ -233,20 +244,22 @@ class Data(Base):
         - If the data is a dictionary (e.g., multiple conditions), computes SEM for each key separately.
         """
 
+
         def agg_and_calc(vals):
             return sem([val.mean(skipna=True) for val in vals] if collapse_sem_data else vals)
 
         sem_children = (self.get_descendants(stop_at=self.calc_opts.get('sem_level'))
                         if self.calc_opts.get('sem_level') else self.children)
-
-        first_calc = sem_children[0].calc  
+        
+           
+        first_calc = sem_children[0].calc_result 
 
         if isinstance(first_calc, dict):
             return {key: agg_and_calc([child.calc[key] for child in sem_children 
                                        if not self.is_nan(child.calc)]) 
                                        for key in first_calc}
 
-        return agg_and_calc([child.calc for child in sem_children if not self.is_nan(child.calc)])
+        return agg_and_calc([child.calc_result for child in sem_children if not self.is_nan(child.calc_result)])
                 
     @staticmethod
     def extend_into_bins(sources, extend_by):
@@ -297,6 +310,11 @@ class Data(Base):
         
     def concatenate(self, concatenator=None, concatenated=None, attrs=None, dim_xform=None):
         """Concatenates data from descendant nodes using xarray."""
+
+        if (concatenated == 'period' 
+            and 'period' not in self.hierarchy 
+            and any('calculator' in level for level in self.hierarchy)):
+            concatenated = [level for level in self.hierarchy if 'calculator' in level][0]
         
         if attrs is None:
             attrs = ['calc']

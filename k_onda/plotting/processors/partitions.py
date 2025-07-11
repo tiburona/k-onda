@@ -168,7 +168,10 @@ class Partition(Processor):
             data_source = self.get_data_sources(data_object_type = info['data_source'], 
                                             identifier=info[info['data_source']])
         
-        attr = self.spec.get('attr', 'calc')
+        attr = info.get('attr', 'calc')
+
+        if attr == 'data_set':
+            a = 'foo'
 
         info.update({
             'attr': attr, 

@@ -19,7 +19,6 @@ class FeaturePlotter(Base, PlottingMixin):
         self.info, self.spec, self.spec_type, self.aesthetics, self.legend_info_list = (
             calc_config.get(k) 
             for k in ('info', 'spec', 'spec_type', 'aesthetics', 'legend_info_list'))
-        a = 'foo'
 
     def process_calc(self, calc_config):
         self.set_values(calc_config)

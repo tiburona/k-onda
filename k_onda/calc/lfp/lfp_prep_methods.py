@@ -99,11 +99,7 @@ class LFPPrepMethods(PrepMethods):
     
     def process_lfp(self):
         
-        if self.identifier == 'IG160':
-            a = 'foo'
         raw_lfp = self.get_raw_lfp()
-
-       
 
         for brain_region in raw_lfp:
             data = raw_lfp[brain_region]/4
