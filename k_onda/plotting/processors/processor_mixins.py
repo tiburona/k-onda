@@ -203,6 +203,13 @@ class LabelMixin:
 
         # Process each defined label position
         for position, config in label_config.items():
+            if position != 'title' and config.get('which', 'all') != 'all':
+                axis = position[0]
+                absolute = 'absolute' in config['which']
+                last = 'last' in config['which']
+                if not cell.is_in_extreme_position(axis, last, absolute):
+                    continue
+
             if not isinstance(config, dict):
                 print(f"Warning: Invalid configuration for label position '{position}'. Expected a dict.")
                 continue

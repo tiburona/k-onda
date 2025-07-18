@@ -85,6 +85,10 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
         return [event for period in self.all_lfp_periods for event in period.events 
                 if event.include(check_ancestors=True)]
     
+    def get_data_calculated_by_period(self, calc_object):
+        return [obj for animal in self.all_animals 
+                for v in getattr(animal, calc_object).values() for obj in v]
+    
     @sorted_prop('coherence_calculator')
     def all_coherence_calculators(self):
         return self.get_data_calculated_by_period('coherence_calculators')

@@ -152,6 +152,9 @@ class Data(Base):
         if not is_truthy(child_vals):
             return xr.DataArray(np.nan)
         
+        if isinstance(child_vals, float) or child_vals.size == 1:
+            return child_vals
+        
         if axis is None:
             return child_vals.mean(skipna=True)
         
@@ -308,7 +311,8 @@ class Data(Base):
             kwargs['concatenated'] = self.children[0].name
         return self.concatenate(**kwargs)
         
-    def concatenate(self, concatenator=None, concatenated=None, attrs=None, dim_xform=None):
+    def concatenate(self, concatenator=None, concatenated=None, attrs=None, 
+                    dim_xform=None, child_xform=None):
         """Concatenates data from descendant nodes using xarray."""
 
         if (concatenated == 'period' 
@@ -334,18 +338,19 @@ class Data(Base):
             # Fetch descendants from the correct level of the accumulator (base case)
             depth_index = self.hierarchy.index(concatenated) - self.hierarchy.index(self.name)
 
+            children = self.accumulate(max_depth=depth_index)[concatenated]
+
             # Apply the function to each descendant
             if len(attrs) == 1:
+              
                 children_data = [
-                    get_func(attrs[0])(child) for child in self.accumulate(max_depth=depth_index)[concatenated]
+                    get_func(attrs[0])(child) for child in children
                 ]
                
-               
             else:
-                
                 children_data = [
                     xr.Dataset({attr: get_func(attr)(child) for attr in attrs}) 
-                    for child in self.accumulate(max_depth=depth_index)[concatenated]
+                    for child in children
                 ]
             if not children_data:
                 return xr.DataArray([])
@@ -357,9 +362,13 @@ class Data(Base):
                     concatenator in ['unit', 'period']):
                    
                     result = xr.concat(children_data, dim="time")
-                    new_time = np.arange(result.sizes["time"])
+                    if child_xform:
+                        new_time = np.array([eval(child_xform)(child) for child in children])
+                    else:
+                        new_time = np.arange(result.sizes["time"])
                     if dim_xform:
                         new_time = eval(dim_xform)(new_time)
+                    
                     result = result.assign_coords(time=("time", new_time))
                     # Reorder coords to match dims:
                     result = result.assign_coords(**{dim: result.coords[dim] for dim in result.dims})
@@ -372,7 +381,7 @@ class Data(Base):
             # Successively average levels of the hierarchy until we reach the concatenator (recursive case)
             children_data = [
                 child.concatenate(concatenator=concatenator, concatenated=concatenated, 
-                                attrs=attrs, dim_xform=dim_xform)
+                                attrs=attrs, dim_xform=dim_xform, child_xform=child_xform)
                 for child in self.children if child.include()
             ]
             

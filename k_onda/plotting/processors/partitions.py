@@ -170,9 +170,6 @@ class Partition(Processor):
         
         attr = info.get('attr', 'calc')
 
-        if attr == 'data_set':
-            a = 'foo'
-
         info.update({
             'attr': attr, 
             attr: getattr(data_source, attr), 
