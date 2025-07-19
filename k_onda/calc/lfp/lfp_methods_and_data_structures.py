@@ -11,8 +11,6 @@ from k_onda.utils import (calc_coherence, amp_crosscorr, compute_phase,
                           bandpass_filter, compute_mrl, regularize_angles, is_iterable)
 
 
-
-
 class LFPMethods:
  
     def get_power(self, exclude=True):
@@ -77,8 +75,6 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         self.event_starts_in_lfp_samples = (np.array(events) * conversion_factor).astype(int) - 1
         self.start_in_lfp_samples = self.onset_in_lfp_samples
         self.stop_in_lfp_samples = self.start_in_lfp_samples + self.duration_in_lfp_samples
-        if self.animal.identifier == 'INED18':
-            a = 'foo'
         self.pad_start = self.start_in_lfp_samples - start_pad
         self.pad_stop = self.stop_in_lfp_samples + end_pad
         self._spectrogram = None
@@ -179,9 +175,6 @@ class LFPPeriod(Period, LFPMethods, LFPDataSelector, EventValidator):
         
         saved_calc_exists, spectrogram, pickle_path = self.load(
             'lfp_output', 'spectrogram', cache_args)
-        
-        if self.animal.identifier == 'IG160':
-            a = 'foo'
         
         if saved_calc_exists:
             return spectrogram

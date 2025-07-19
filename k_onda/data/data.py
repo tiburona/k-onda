@@ -152,7 +152,8 @@ class Data(Base):
         if not is_truthy(child_vals):
             return xr.DataArray(np.nan)
         
-        if isinstance(child_vals, float) or child_vals.size == 1:
+        if isinstance(child_vals, float) or \
+              isinstance(child_vals, (np.ndarray, xr.DataArray)) and child_vals.size == 1:
             return child_vals
         
         if axis is None:

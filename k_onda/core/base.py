@@ -233,9 +233,15 @@ class Base:
         self.calc_opts['region_set'] = region_set
 
     @property
+    def frequency_band_definition(self):
+        return self.calc_opts.get('frequency_band_definition') or \
+            self.experiment.exp_info['frequency_bands'] or {}
+           
+
+    @property
     def freq_range(self):
         if isinstance(self.selected_frequency_band, type('str')):
-            return self.experiment.exp_info['frequency_bands'][self.selected_frequency_band]
+            return self.frequency_band_definition[self.selected_frequency_band]
         else:
             return self.selected_frequency_band
         
