@@ -301,10 +301,12 @@ class Base:
     def bin_size(self):
         return self.calc_opts.get('bin_size', .01)
     
-    def load(self, path_id, calc_name, other_identifiers):
+    def load(self, path_id, calc_name, other_identifiers=None):
         store = self.calc_opts.get('store', 'pkl')
         data_path = self.construct_path(path_id)
         store_dir = os.path.join(data_path, f"{calc_name}_{store}s")
+        if other_identifiers is None:
+            other_identifiers = []
         for p in [data_path, store_dir]:
             if not os.path.exists(p):
                 os.mkdir(p)

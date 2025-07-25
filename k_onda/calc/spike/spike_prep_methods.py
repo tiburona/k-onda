@@ -1,5 +1,6 @@
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import os
+import numpy as np
 
 from k_onda.utils import save, load, PrepMethods
 from k_onda.interfaces import PhyInterface

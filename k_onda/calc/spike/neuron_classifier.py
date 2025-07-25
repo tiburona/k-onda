@@ -40,7 +40,7 @@ class NeuronClassifier:
         if not self.config:
             return
         saved_calc_exists, categorized_neurons, pickle_path = self.experiment.load(
-            self.experiment.construct_path('spike'), ['classified_neurons'])
+            'spike', ['classified_neurons'])
         if not saved_calc_exists:
             categorized_neurons = self.categorize_neurons(pickle_path)
         self.apply_categorization(categorized_neurons)

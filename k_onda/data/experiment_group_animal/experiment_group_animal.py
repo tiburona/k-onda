@@ -145,7 +145,6 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
         
     def lfp_prep(self):
         self.prep_animals()
-        a = 'foo'
 
     def mrl_prep(self):
         self.calc_opts['kind_of_data'] = 'spike'

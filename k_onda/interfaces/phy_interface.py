@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from phylib.io.model import load_model
+from k_onda.phylib.io.model import load_model
 from pathlib import Path
 import numpy as np
 from scipy.signal import medfilt
