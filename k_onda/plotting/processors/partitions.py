@@ -4,22 +4,7 @@ from .processor import Processor
 from k_onda.utils import recursive_update
 
 
-class Watcher:
-    def __setattr__(self, name, value):
-        # If it's the target variable
-        if name == 'info_by_division':
-            old_value = getattr(self, name, None)
-
-            # Check if it existed before and went from non-empty to empty
-            if isinstance(old_value, list) and old_value and isinstance(value, list) and not value:
-                print(f"target_list changed from non-empty to empty")
-                breakpoint()
-
-        # Set as usual
-        super().__setattr__(name, value)
-
-
-class Partition(Processor, Watcher):
+class Partition(Processor):
     """
     A Processor that divides the data into parts. It recurses through a list of `divisions`, each of 
     which is a dictionary with a `divider_type` and a list of `members`. Once the partition has 
@@ -84,6 +69,15 @@ class Partition(Processor, Watcher):
         info['cell'] = cell
         new_info['cell'] = cell
         return new_info
+    
+    def update_info(self, info, member, divider_type):
+         # Merge it into our accumulated info
+        if isinstance(member, dict):
+            # member is dict, as in conditions, period_types, etc.
+            updated_info = {**info, divider_type: {**info.get(divider_type, {}), **member}}
+        else:
+            updated_info = {**info, divider_type: member}
+        return updated_info
 
             
     def process_divisions(self, divisions, info=None):
@@ -114,20 +108,10 @@ class Partition(Processor, Watcher):
 
         # Go through each of its members
         for i, member in enumerate(divider['members']):
-
-            # Merge it into our accumulated info
-            if not isinstance(member, str):
-                # member is dict, as in conditions, period_types, etc.
-                updated_info = {**info, divider_type: {**info.get(divider_type, {}), **member}}
-            else:
-                updated_info = {**info, divider_type: member}
-
-            #print(f"self.current_index before advance index {self.current_index}")
+            # update the info dict with information about each member
+            updated_info = self.update_info(info, member, divider_type)
+            # advance the index to indicate the position of this member
             self.advance_index(divider, i)
-           # print(f"self.current_index after advance index {self.current_index}")
-           # print("")
-
-
             # Now recurse on the remainder of the list, carrying `updated_info`
             self.process_divisions(divisions[1:], info=updated_info)
 
@@ -137,7 +121,7 @@ class Partition(Processor, Watcher):
             self.current_index[dim] = self.starting_index[dim] + i
 
     def wrap_up(self, updated_info): 
-        
+         
         # set vals before you label because labels often use vals, e.g. labeling the period_type
         self.set_vals(updated_info)
         cell = self.child_layout.cells[*self.current_index]
@@ -153,13 +137,14 @@ class Partition(Processor, Watcher):
             updated_info['cell'] = cell
             updated_info['index'] = copy(self.current_index) 
             updated_info['last_spec'] = self.spec
-            
+                       
             if self.layers:
-                self.get_layer_calcs(updated_info)
+                self.get_layer_dicts(updated_info)
             else:
                 self.info_by_division.append(updated_info)
                 self.get_calcs(updated_info)
-            
+           
+
         else:
             self.start_next_processor(self.next, updated_info, self.info_by_division, self.info_by_division_by_layers)
 
@@ -176,14 +161,14 @@ class Partition(Processor, Watcher):
 
 
     def get_calcs(self, info):
-        
+
         if not info.get('data_source'):
             data_source = self.experiment
         else:
             data_source = self.get_data_sources(data_object_type = info['data_source'], 
                                             identifier=info[info['data_source']])
         
-        attr = self.spec.get('attr', 'calc')
+        attr = info.get('attr', 'calc')
 
         info.update({
             'attr': attr, 
@@ -219,10 +204,11 @@ class Series(Partition):
 class Section(Partition):
 
     name = 'section'
+  
     
     def __init__(self, config):
         super().__init__(config)
-          
+        
 
 class Segment(Partition):
 
@@ -244,5 +230,75 @@ class Segment(Partition):
         return 
            
 
-class Split:
-    pass
+class Split(Partition):
+    name = 'split'
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.splits = True
+
+    # a split is unlike other partitions in that it needs to expand the number of 
+    # entries in info, while keeping the split label on each entry.  
+    # within each split, the divider type and members should be labeled
+
+    # in this sense, a split is like layers.  The other partitions need to be split-aware
+    # and if there is a split, understand that they must iterate through splits.
+    # if there are splits, each subsequent operation must operate on each split, 
+    # and each info by division, or info by division by list
+
+    # update_info was the method that did this before.  it now must iterate through the splits
+    # 
+
+    # if divider_type is a data source than there are three options:
+    # all_x, a list of identifiers, or a list of lists (actually I think just two.  I think assign_data_sources still works)
+
+    # if divider_type is a selectable variable than there are two options:
+    # a list of identifiers, or a list of lists.  
+
+    # this class can overwrite wrap_up so the only thing it does is start the next processor
+
+    
+
+    def process_divisions(self, divisions, info=None):
+        
+        
+        if not info:
+            info = self.copy_info(self.inherited_division_info)   
+
+        # we hit a leaf in the recursion
+        if not divisions:
+            # This is the final combination of all previous divider choices.        
+            self.wrap_up(info)
+            return
+
+        # Otherwise, take the first divider in the list
+        divider = divisions[0]
+        divider_type = divider['divider_type']
+        info['data_source'] = divider.get('data_source', self.inherited_division_info.get('data_source'))
+
+        # Go through each of its members
+        for i, member in enumerate(divider['members']):
+            # update the info dict with information about each member
+            updated_info = self.update_info(info, member, divider_type, i)
+            # advance the index to indicate the position of this member
+            
+            # Now recurse on the remainder of the list, carrying `updated_info`
+            self.process_divisions(divisions[1:], info=updated_info)
+
+    def update_info(self, info, member, divider_type, index):
+         # Merge it into our accumulated info
+        if isinstance(member, dict):
+            # member is dict, as in conditions, period_types, etc.
+            updated_info = {**info, divider_type: {**info.get(divider_type, {}), **member}, 
+                            'split_index': index}
+        else:
+            updated_info = {**info, divider_type: member, 'split_index': index}
+
+        return updated_info
+    
+    def wrap_up(self, info):
+                
+        if self.next:
+            self.start_next_processor(self.next, info, self.info_by_division, self.info_by_division_by_layers)
+
+            

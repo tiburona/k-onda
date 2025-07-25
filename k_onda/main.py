@@ -1,10 +1,9 @@
 
 from k_onda.utils import log_directory_contents
 from k_onda.run import Runner
-from k_onda.utils import load_config_py
 
 
-DEFAULT_CONFIG = '/path/to/init_config.json'
+DEFAULT_CONFIG = '/patscrh/to/init_config.json'
 
 
 def run_pipeline(config_file=None, opts=None, prep=None, logdir=None):

@@ -291,8 +291,7 @@ def calc_coherence(data_1, data_2, sampling_rate, low, high):
     f, Cxy = coherence(data_1, data_2, fs=sampling_rate, window=window, nperseg=nperseg, 
                        noverlap=noverlap)
     mask = (f >= low) & (f <= high)
-    Cxy_band = Cxy[mask]
-    return Cxy_band
+    return f[mask], Cxy[mask]
 
 
 def normalized_crosscorr(data1, data2):

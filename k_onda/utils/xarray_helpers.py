@@ -1,4 +1,5 @@
 import numpy as np
+import xarray as xr
 
 
 def drop_inconsistent_coords(arrs, tol=1e-8):
@@ -85,4 +86,51 @@ def round_coords(arrs, *, decimals=8):
 
 def standardize(num_array):
     return np.round(num_array, 8).astype(np.float64)
+
+
+def _nan_like_dataarray(da):
+    """Return a DataArray with the same shape/coords but filled with NaNs."""
+    return xr.full_like(da, np.nan)
+
+def _nan_like_dataset(ds):
+    """Return a Dataset with every data var filled with NaNs."""
+    data_vars_nan = {
+        k: xr.full_like(v, np.nan) for k, v in ds.data_vars.items()
+    }
+    # coords & attrs are copied automatically when you build a new Dataset
+    return xr.Dataset(
+        data_vars=data_vars_nan,
+        coords={k: v.copy() for k, v in ds.coords.items()},
+        attrs=ds.attrs,
+    )
+
+
+def fill_missing_arrays(seq):
+    """
+    Replace scalar NaNs/None in *seq* with xr objects that match the first
+    non-NaN exemplar in structure, shape and dtype.
+    """
+    exemplar = next(
+        (o for o in seq if isinstance(o, (xr.DataArray, xr.Dataset))),
+        None,
+    )
+    if exemplar is None:
+        raise ValueError("No xr object found to infer shape from.")
+
+    if isinstance(exemplar, xr.DataArray):
+        make_nan = lambda: _nan_like_dataarray(exemplar)
+    else:  # exemplar is Dataset
+        make_nan = lambda: _nan_like_dataset(exemplar)
+
+    filled = []
+    for o in seq:
+        if isinstance(o, (xr.DataArray, xr.Dataset)):
+            filled.append(o)
+        elif o is None or (isinstance(o, float) and np.isnan(o)):
+            filled.append(make_nan())
+        else:
+            raise TypeError(
+                f"Unsupported type {type(o)}: expected xr object, None, or NaN."
+            )
+    return filled
 

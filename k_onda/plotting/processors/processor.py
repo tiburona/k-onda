@@ -15,7 +15,7 @@ class ProcessorConfig(Base):
     def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
                  figure=None, division_info=None, info_by_division=None, info_by_division_by_layers=None, 
                  index=None, aesthetics=None, layers=None, 
-                 is_first=False, plot_type=None, legend_info_list=None):
+                 is_first=False, plot_type=None, legend_info_list=None, splits=False, final_dicts=None):
         
         self.executive_plotter = executive_plotter
         self.full_spec = full_spec
@@ -28,9 +28,14 @@ class ProcessorConfig(Base):
         self.division_info = division_info
         self.info_by_division = info_by_division
         self.info_by_division_by_layers = info_by_division_by_layers
+        self.final_dicts = final_dicts
         self.legend_info_list = legend_info_list
+        self.splits = splits
         self.index = index
-        self.aesthetics = aesthetics    
+        self.child_layout = None
+        self.aesthetics = aesthetics 
+        if self.aesthetics is None:
+            self.aesthetics = {}   
         self.layers = layers
         self.is_first = is_first
         self.label = None
@@ -74,13 +79,14 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
         pass
 
     def finalize_init_common(self):
-        self.child_layout = Layout(
-            self.parent_layout,
-            self.current_index,
-            processor=self,
-            figure=self.figure,
-            **self.get_layout_args()  # Dynamically include additional arguments
-        )
+        if not self.name == 'split':
+            self.child_layout = Layout(
+                self.parent_layout,
+                self.current_index,
+                processor=self,
+                figure=self.figure,
+                **self.get_layout_args()  # Dynamically include additional arguments
+            )
 
     def finalize_init_unique(self):
         # Intended to be overridden by subclasses
@@ -90,8 +96,13 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
         """Provides additional arguments for Layout."""
         return {}  # Default implementation provides no extra arguments
         
-    def next_processor_config(self, spec, updated_division_info, info_by_division, info_by_division_by_layers):
-        cell = self.child_layout.cells[*self.current_index]
+    def next_processor_config(self, spec, updated_division_info, info_by_division, 
+                              info_by_division_by_layers):
+        if self.child_layout:
+            cell = self.child_layout.cells[*self.current_index]
+        else:
+            self.executive_plotter.make_fig(spec)
+            cell = self.executive_plotter.fig
 
         processor_config = dict(
             figure=cell, 
@@ -116,7 +127,10 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
             self.calc_opts = spec['calc_opts']
             self.experiment.initialize_data()
 
-        config = self.next_processor_config(spec, updated_division_info, info_by_division, info_by_division_by_layers)
+
+        config = self.next_processor_config(spec, updated_division_info, info_by_division, 
+                                            info_by_division_by_layers)
+
         
         processor = processor_map[config.spec_type](config)
         processor.start()
@@ -146,7 +160,12 @@ class Container(Processor):
                 kind = self.check_type(spec)
 
                 if kind == 'processor':
-                    self.start_next_processor(spec, self.inherited_info, self.info_by_division, self.info_by_division_by_layers)
+                    self.start_next_processor(
+                        spec, 
+                        self.inherited_info, 
+                        self.info_by_division, 
+                        self.info_by_division_by_layers, 
+                        self.final_dicts)
 
                 else:
                     current_cell = self.child_layout[*self.current_index]

@@ -85,6 +85,10 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
         return [event for period in self.all_lfp_periods for event in period.events 
                 if event.include(check_ancestors=True)]
     
+    def get_data_calculated_by_period(self, calc_object):
+        return [obj for animal in self.all_animals 
+                for v in getattr(animal, calc_object).values() for obj in v]
+    
     @sorted_prop('coherence_calculator')
     def all_coherence_calculators(self):
         return self.get_data_calculated_by_period('coherence_calculators')
@@ -151,6 +155,7 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
         self.prep_animals()
 
     def prep_animals(self):
+        
         for animal in self.all_animals:
             if not animal.include():
                 continue
@@ -208,6 +213,9 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, 
         self.phase_relationship_calculators = defaultdict(list)
         self.lfp_event_validity = defaultdict(dict)
         self.initialized = []
+
+    def __repr__(self):
+        return self.identifier
 
     @property
     def children(self):

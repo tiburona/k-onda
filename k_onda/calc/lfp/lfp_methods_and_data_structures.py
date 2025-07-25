@@ -236,8 +236,15 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
         self.period_type = self.parent.period_type
         self.spectrogram = self.parent.spectrogram
 
-    @property
-    def is_valid(self): 
+    def __repr__(self):
+        return (f"Event {self.animal.identifier} {self.period_type} "
+                f"{self.period.identifier} {self.identifier}")
+
+   
+
+    from functools import cached_property
+    @property          # change from @property
+    def is_valid(self):
         val = self.animal.lfp_event_validity[self.selected_brain_region][self.period_type][
             self.period.identifier][self.identifier]
         if not val:
@@ -357,16 +364,34 @@ class CoherenceCalculator(RegionRelationshipCalculator):
 
     name = 'coherence_calculator'
 
+    #  da = xr.DataArray(
+    #             power,
+    #             dims=['frequency', 'time_raw'],
+    #             coords={'frequency': freqs, 'time_raw': times},
+    #             attrs={'calc_method': calc_method}
+    #         )
+
     def get_coherence(self):
         if not self.calc_opts.get('validate_events'):
-            return calc_coherence(*self.regions_data, self.lfp_sampling_rate, 
+            f, coherence = calc_coherence(*self.regions_data, self.lfp_sampling_rate, 
                                   *self.freq_range)
         else:
             valid_sets, len_sets = self.get_valid_sets()
-            return sum([calc_coherence(*data, self.sampling_rate, *self.freq_range) * len(data[0])
-                        /sum(len_sets) 
-                for data in valid_sets
+            if len(valid_sets) == 0:
+                return np.nan
+            coherence_sets = [calc_coherence(*data, self.lfp_sampling_rate, *self.freq_range) for data in valid_sets]
+            f = coherence_sets[0][0]
+            coherence = sum(
+                [coherence_set[1] * len(valid_sets[i][0])/sum(len_sets) 
+                for i, coherence_set in enumerate(coherence_sets)
                 ])
+        da = xr.DataArray(
+            coherence,
+            dims=['frequency'],
+            coords={'frequency': f})
+        if self.calc_opts.get('frequency_type') == 'block':
+            da = da.mean(dim='frequency')
+        return da
         
     
 class AmpCrossCorrCalculator(RegionRelationshipCalculator):

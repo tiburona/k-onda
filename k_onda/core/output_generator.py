@@ -1,6 +1,6 @@
 import os, uuid
 from .base import Base
-from k_onda.utils import smart_title_case
+from k_onda.utils import smart_title_case, find_container_with_key
 
 class OutputGenerator(Base):
 
@@ -8,15 +8,24 @@ class OutputGenerator(Base):
         self.file_path = ''
         self.opts_file_path = ''
 
-    def build_write_path(self, file_type='plot'):
+    def build_write_path(self, file_type='plot', opts=None):
             
         constructors = self.io_opts['paths']
         self.write_opts = constructors.get(file_type, constructors.get('out', '.'))
         default_ext = 'png' if file_type == 'plot' else 'csv'
 
         if isinstance(self.write_opts, str):
+
             if '{'  in self.write_opts:
-                self.write_opts = self.fill_fields(self.write_opts)
+                data_source_dict = find_container_with_key(opts, 'data_source')
+
+                if 'identifier' in self.write_opts:
+                    self.write_opts = self.fill_fields(
+                        self.write_opts, 
+                        identifier='_'.join(data_source_dict['members']),
+                        data_source_dict=data_source_dict)
+                else:
+                    self.write_opts = self.fill_fields(self.write_opts)
             
             if '.' in self.write_opts:
                     self.file_path = self.write_opts

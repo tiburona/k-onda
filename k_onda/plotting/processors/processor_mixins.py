@@ -17,7 +17,7 @@ class LayerMixin(ProcessorMixin):
         return layers
      
     
-    def get_layer_calcs(self, info):
+    def get_layer_dicts(self, info):
         for i, layer in enumerate(self.layers):
 
             attr = layer.get('attr', self.spec.get('attr', 'calc'))
@@ -26,28 +26,33 @@ class LayerMixin(ProcessorMixin):
                 recursive_update(self.calc_opts, layer['calc_opts'])
                 self.calc_opts = self.calc_opts
 
-            if not info.get('data_source'):
-                data_source = self.experiment
-            else:
-                data_source = self.get_data_sources(data_object_type = info['data_source'], 
-                                            identifier=info[info['data_source']])
+            # if not info.get('data_source'):
+            #     data_source = self.experiment
+            # else:
+            #     data_source = self.get_data_sources(data_object_type = info['data_source'], 
+            #                                 identifier=info[info['data_source']])
 
             new_d = self.copy_info(info)
             new_d.update({
                 'layer': i, 
-                'attr': attr,
-                attr: getattr(data_source, attr), 
-                data_source.name: data_source.identifier})
+                'attr': attr})
+                #attr: getattr(data_source, attr), 
+                #data_source.name: data_source.identifier})
             
             self.info_by_division_by_layers[i].append(new_d)
+            self.get_calcs(new_d)
     
 
 class AestheticsMixin(ProcessorMixin):
  
     def init_aesthetics(self):
-        element_dict = deepcopy(self.spec.get('aesthetics', {}))
+        #element_dict = deepcopy(self.spec.get('aesthetics', {}))
+        if self.name == 'section':
+            a = 'foo'
+        element_dict = self.spec.get('aesthetics', {})
         if self.parent_processor:
-            return getattr(self.parent_processor, 'aesthetics', {}).update(element_dict)
+            self.parent_processor.aesthetics.update(element_dict)
+            return self.parent_processor.aesthetics
         else:
             return element_dict
     
@@ -70,7 +75,7 @@ class LegendMixin:
     def global_colorbar(self):
         return self.has_colorbar and self.colorbar_spec.get('share') == 'global'
 
-    
+
 
 class LabelMixin:
 
@@ -198,6 +203,13 @@ class LabelMixin:
 
         # Process each defined label position
         for position, config in label_config.items():
+            if position != 'title' and config.get('which', 'all') != 'all':
+                axis = position[0]
+                absolute = 'absolute' in config['which']
+                last = 'last' in config['which']
+                if not cell.is_in_extreme_position(axis, last, absolute):
+                    continue
+
             if not isinstance(config, dict):
                 print(f"Warning: Invalid configuration for label position '{position}'. Expected a dict.")
                 continue

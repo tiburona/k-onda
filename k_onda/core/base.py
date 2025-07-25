@@ -22,6 +22,7 @@ class Base:
     _selected_conditions = {}
     _selected_period_type = ''
     _selected_period_types = []
+    _selected_period_group = []
     _selected_neuron_type = ''
     _selected_brain_region = ''
     _selected_frequency_band = ''
@@ -32,7 +33,7 @@ class Base:
         'period_type', 
         'period_types',
         'period_conditions', 
-        'period_groups',
+        'period_group',
         'neuron_type', 
         'conditions', 
         'brain_region', 
@@ -201,11 +202,11 @@ class Base:
 
     @property
     def selected_period_group(self):
-        return tuple(self.calc_opts['periods'][self.selected_period_type])
+        return Base._selected_period_group
     
     @selected_period_group.setter
     def selected_period_group(self, period_group):
-        self.calc_opts['periods'][self.selected_period_type] = period_group
+        Base._selected_period_group = period_group
     
     @property
     def selected_frequency_band(self):
@@ -232,9 +233,15 @@ class Base:
         self.calc_opts['region_set'] = region_set
 
     @property
+    def frequency_band_definition(self):
+        return self.calc_opts.get('frequency_band_definition') or \
+            self.experiment.exp_info['frequency_bands'] or {}
+           
+
+    @property
     def freq_range(self):
         if isinstance(self.selected_frequency_band, type('str')):
-            return self.experiment.exp_info['frequency_bands'][self.selected_frequency_band]
+            return self.frequency_band_definition[self.selected_frequency_band]
         else:
             return self.selected_frequency_band
         
@@ -294,10 +301,12 @@ class Base:
     def bin_size(self):
         return self.calc_opts.get('bin_size', .01)
     
-    def load(self, path_id, calc_name, other_identifiers):
+    def load(self, path_id, calc_name, other_identifiers=None):
         store = self.calc_opts.get('store', 'pkl')
         data_path = self.construct_path(path_id)
         store_dir = os.path.join(data_path, f"{calc_name}_{store}s")
+        if other_identifiers is None:
+            other_identifiers = []
         for p in [data_path, store_dir]:
             if not os.path.exists(p):
                 os.mkdir(p)
@@ -352,7 +361,7 @@ class Base:
         processed_constructor['template'] = processed_constructor['template'].replace(".", placeholder)
         return processed_constructor
     
-    def fill_fields(self, constructor, obj=None):
+    def fill_fields(self, constructor, obj=None, **kwargs):
         if not constructor:
             return
         if not obj:
@@ -379,13 +388,23 @@ class Base:
                 # Replace the lambda expression placeholder in the template.
                 constructor['template'] = constructor['template'].replace(f'{{{field}}}', f'{{{key}}}')
                 new_fields[key] = eval(field)(obj)
+            elif field in kwargs:
+                new_fields[field] = kwargs[field]
             elif field in obj.selectable_variables:
                 new_fields[field] = getattr(obj, field, getattr(self, f'selected_{field}'))
             elif '|' in field:
                 field_type, field_key = field.split('|')
                 new_fields[field] = getattr(obj, f'selected_{field_type}')[field_key]
             else:
-                new_fields[field] = getattr(obj, field)
+                try:
+                    new_fields[field] = getattr(obj, field)
+                except AttributeError as e:
+                    ds_dict = kwargs['data_source_dict']
+                    data_sources = self.get_data_sources(data_object_type=ds_dict['data_source'], 
+                                                         identifiers=ds_dict['members'])
+                    new_fields[field] = '_'.join([getattr(ds, field) for ds in data_sources])
+
+               
 
         constructor.update(new_fields)
         return constructor['template'].format(**constructor)
