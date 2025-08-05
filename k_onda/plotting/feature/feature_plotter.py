@@ -1,8 +1,10 @@
 from copy import deepcopy
-from collections import defaultdict
 
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
 from matplotlib.ticker import FuncFormatter, MaxNLocator
+
 
 import numpy as np
 
@@ -16,19 +18,19 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 class FeaturePlotter(Base, PlottingMixin):
 
     def set_values(self, calc_config):
-        self.info, self.spec, self.spec_type, self.aesthetics, self.legend_info_list = (
+        self.info, self.plot_type, self.spec, self.spec_type, self.aesthetics, self.legend_info_list = (
             calc_config.get(k) 
-            for k in ('info', 'spec', 'spec_type', 'aesthetics', 'legend_info_list'))
+            for k in ('info', 'plot_type', 'spec', 'spec_type', 'aesthetics', 'legend_info_list'))
 
     def process_calc(self, calc_config):
         self.set_values(calc_config)
         self.aesthetics = deepcopy(self.aesthetics) if self.aesthetics else None
-        unique_axs = defaultdict(lambda: {'cell': None, 'entries': []})
+
+        legend = self.info[0]['last_spec'].get('legend', {})
+        cells_with_legend = []
 
         for i, entry in enumerate(self.info):
             cell = entry['cell']
-            unique_axs[id(cell)]['cell'] = cell
-            unique_axs[id(cell)]['entries'].append(entry)
 
             aesthetic_args = self.get_aesthetic_args(entry)
             ax_args = aesthetic_args.get('ax', {})
@@ -37,38 +39,72 @@ class FeaturePlotter(Base, PlottingMixin):
             val = entry[entry['attr']]
             self.plot_entry(cell, val, aesthetic_args)
             self.apply_ax_args(cell, ax_args, i)
-            entry['legend_label'] = self.get_entry_label(entry)
 
-        self.make_legend(unique_axs)
+            if legend:
+                entry['handle'] = self.get_handle(entry)
+                entry['label'] = self.get_entry_label(entry, legend)
+                index_key = ','.join(str(d) for d in entry['index'])
+                if index_key in legend or 'all' in legend:
+                    cells_with_legend.append((cell, index_key))
 
-    def make_legend(self, unique_axs):
-        for i, data in enumerate(unique_axs.values()):
-            ax = data['cell']
-            entries = data['entries']
+           
+        if legend:
+            self.make_legend(set(cells_with_legend), legend)
 
-            if not entries or 'last_spec' not in entries[0]:
-                continue
+    def make_legend(self, cells_with_legend, legend):
+        handles, labels = [set([e[key] for e in self.info]) 
+                           for key in ['handle', 'label']]
+        
+        for ax, index_key in cells_with_legend:
+            legend_key = legend.get(index_key, {})
+            legend_key['loc'] = legend_key.get('loc') or 'lower center'
+            legend_key['bbox_to_anchor'] = legend_key.get('bbox_to_anchor') or (.8, .9)
+            ax.legend(handles, labels, **legend_key)
 
-            legend = entries[0]['last_spec'].get('legend', {})
-            if legend and legend.get('which', 'all') in ['all', i]:
-                handles = self.get_handles(ax)  # Instead of get_legend_handles_labels()
-                if not handles:
-                    # Debugging output if handles are empty
-                    print("No handles found on axis:", ax)
-                    print("Lines on axis:", ax.get_lines())
-                print("Manually collected handles:", handles)
-                custom_labels = [e['legend_label'] for e in entries]
-                print(custom_labels)
-                anchor_y = legend.get('anchor_y', 0.9)
-                anchor_x = legend.get('anchor_x', 0.8)
-                # Combine with any pre-existing legend key parameters
-                legend_key = legend.get('key', {}).copy()  # copy to avoid modifying the original
-                # Set location and bbox_to_anchor to position the legend above your data.
-                legend_key.update({
-                    'loc': legend.get('loc', 'lower center'),  
-                    'bbox_to_anchor': (anchor_x, anchor_y)
-                })
-                ax.legend(handles, custom_labels, **legend_key)
+    def get_handle(self, entry):
+        if self.plot_type in ['psth', 'bar_plot']:
+            return self.make_bar_handles_from_entry(entry)
+        if self.plot_type in ['categorical_line', 'vertical_line']:
+            return self.make_line_handles_from_entry(entry)
+        else:
+            raise NotImplemented("can only make legends from handles for line and bar graphs")
+        
+
+    def make_line_handles_from_entry(self, entry):
+   
+        aesthetic_args = self.get_aesthetic_args(entry)
+        marker = aesthetic_args.get('marker', {})
+        
+        color = marker.get('color', 'CO')
+        linestyle = marker.get('linestyle', '-')  # solid line by default
+        linewidth = marker.get('linewidth', 2)
+        markerstyle = marker.get('marker', None)
+        markersize = marker.get('markersize', 6)
+        alpha = marker.get('alpha', None)
+
+        line = Line2D([0], [0],
+                    color=color,
+                    linestyle=linestyle,
+                    linewidth=linewidth,
+                    marker=markerstyle,
+                    markersize=markersize,
+                    alpha=alpha)
+      
+        return line  
+
+    def make_bar_handles_from_entry(self, entry):
+    
+        aesthetic_args = self.get_aesthetic_args(entry)
+        marker = aesthetic_args.get('marker', {})
+        color = marker.get('color', 'CO')
+        edgecolor = marker.get('edgecolor', None)
+        hatch = marker.get('hatch', None)
+        alpha = marker.get('alpha', None)
+
+        patch = mpatches.Patch(facecolor=color, edgecolor=edgecolor,
+                            hatch=hatch, alpha=alpha)
+       
+        return patch
               
 
     def calculate_legend_y_position(self, entries):
@@ -111,18 +147,20 @@ class FeaturePlotter(Base, PlottingMixin):
                 return True
         return False
         
-    def get_entry_label(self, entry):
-        relevant_divisions = entry['last_spec']['divisions']
+    def get_entry_label(self, entry, legend):
+        relevant_divider_types = legend.get('divisions')
+        if relevant_divider_types is None:
+            relevant_divider_types = [d['division_type'] for d in entry['last_spec']['divisions']]
         label = []
-        for division in relevant_divisions:
-            for member in division['members']:
-                if division['divider_type'] in ['conditions', 'period_types']:
-                    key, val = list(member.items())[0]  # Correct unpacking
-                    if entry[key] == val:
-                        label.append(val)
-                else:
-                    if entry[division['divider_type']] == member:
-                        label.append(member)
+        for division in relevant_divider_types:
+            member = entry[division]
+            if division in ['conditions', 'period_types']:
+                key, val = list(member.items())[0]  # Correct unpacking
+                if entry[key] == val:
+                    label.append(val)
+            else:
+                if entry[division] == member:
+                    label.append(member)
         label = ' '.join(label)
 
         return label

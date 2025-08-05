@@ -12,6 +12,7 @@ from collections.abc import Iterable
 import numpy as np
 import h5py
 import xarray as xr
+import numbers
 
 DEBUG_MODE = 0
     
@@ -219,22 +220,53 @@ def recursive_update(d1, d2):
     return d1
 
 
-def is_truthy(obj):
+def is_truthy(obj, *, zero_ok: bool = False):
+    """
+    Recursively test “truthiness” of lists / NumPy / xarray objects.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to check.
+    zero_ok : bool, optional
+        If True, treat numeric zeros (0, 0.0, …) as truthy.
+        Defaults to False (original behaviour).
+
+    Returns
+    -------
+    bool
+    """
+    # helper: decide scalar truthiness once
+    def _scalar_truth(val):
+        # Special-case numerics (but not bools) when zero_ok is on
+        if zero_ok and isinstance(val, numbers.Number) and not isinstance(val, bool):
+            return True
+        return bool(val)
+
     if isinstance(obj, xr.DataArray):
-        if obj.ndim == 0:
-            return bool(obj.item())  
-        return obj.size > 0 and any(is_truthy(el) for el in obj.values)
+        if obj.ndim == 0:                       # scalar DataArray
+            return _scalar_truth(obj.item())
+        return (
+            obj.size > 0
+            and any(is_truthy(el, zero_ok=zero_ok) for el in obj.values)
+        )
 
     elif isinstance(obj, np.ndarray):
-        if obj.ndim == 0:
-            return bool(obj.item())
-        return obj.size > 0 and any(is_truthy(el) for el in obj)
+        if obj.ndim == 0:                       # scalar ndarray
+            return _scalar_truth(obj.item())
+        return (
+            obj.size > 0
+            and any(is_truthy(el, zero_ok=zero_ok) for el in obj)
+        )
 
     elif isinstance(obj, list):
-        return len(obj) > 0 and any(is_truthy(el) for el in obj)
+        return (
+            len(obj) > 0
+            and any(is_truthy(el, zero_ok=zero_ok) for el in obj)
+        )
 
-    else:
-        return bool(obj)
+    else:                                       # Python scalars, pandas types, etc.
+        return _scalar_truth(obj)
 
 
 def is_iterable(obj):
@@ -280,7 +312,7 @@ def safe_make_dir(path):
 
 def smart_title_case(s):
     lowercase_words = {'a', 'an', 'the', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'and', 
-                       'as', 'but', 'or', 'nor', 'is'}
+                       'as', 'but', 'or', 'nor', 'is', 's'}
     acronyms = {'psth', 'pl', 'hpc', 'bla', 'mrl', 'il', 'bf', 'mua', 'cs'}
     tokens = re.findall(r'\b\w+\b|[^\w\s]', s)  # Find words and punctuation separately
     title_words = []

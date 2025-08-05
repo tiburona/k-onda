@@ -16,12 +16,11 @@ from k_onda.data.period_event import Period, Event
 
 class SpikeMethods:
 
-    def get_psth(self, exclude=True):
-        return self.get_average('get_psth', stop_at=self.calc_opts.get('base', 'event'), exclude=exclude)
+    def get_psth(self):
+        return self.get_average('get_psth', stop_at=self.calc_opts.get('base', 'event'))
     
-    def get_firing_rates(self, exclude=True):
-        return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'), 
-                                exclude=exclude)
+    def get_firing_rates(self):
+        return self.get_average('get_firing_rates', stop_at=self.calc_opts.get('base', 'event'))
     
     def get_spike_counts(self):
         return self.get_average('get_spike_counts', stop_at=self.calc_opts.get('base', 'event'))
@@ -57,7 +56,7 @@ class RateMethods:
     def get_psth(self):
         return self.resolve_calc_fun('psth')
     
-    def get_firing_rates(self, exclude=True):
+    def get_firing_rates(self):
         return self.resolve_calc_fun('firing_rates')
     
     def get_spike_counts(self):

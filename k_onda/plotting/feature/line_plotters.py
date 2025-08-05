@@ -36,7 +36,7 @@ class LinePlotter(FeaturePlotter):
     def plot_entry(self, ax, val, aesthetic_args=None):
         ax.plot(self.coord_vals(val), val, label='', **aesthetic_args.get('marker', {}))
 
-    def get_handles(self, ax):
+    def get_handle(self, ax):
         return ax.get_lines()
     
 class VerticalLinePlotter(LinePlotter):

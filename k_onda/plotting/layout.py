@@ -35,26 +35,6 @@ class Layout(Base, ColorbarMixin):
             self.cells = self.make_all_cells()
         else:
             self.cells = self.subfigure_grid
-        
-
-    # def subfigures(self, nrows, ncols, **kwargs):
-    #     subfigures = self.figure.subfigures(nrows, ncols, **kwargs)
-
-    #     # If it's a single SubFigure, wrap it in a 2D array
-    #     if not isinstance(subfigures, (list, np.ndarray)):
-    #         return np.full((nrows, ncols), [SubfigWrapper(subfigures, (0, 0), self)])
-
-    #     elif isinstance(subfigures, np.ndarray) and subfigures.ndim == 1: 
-    #         return np.array([SubfigWrapper(subfig, (nrows, ncols), self) 
-    #                          for subfig in subfigures]).reshape(nrows, ncols)
-            
-    #     elif isinstance(subfigures, np.ndarray) and subfigures.ndim == 2:
-    #         return np.array([[SubfigWrapper(subfig, (i, j), self) 
-    #                           for j, subfig in enumerate(row)] 
-    #                           for i, row in enumerate(subfigures)])
-            
-    #     else:
-    #         raise ValueError("Unexpected dimensions for subfigures")
 
     def subfigures(self, nrows, ncols, **kwargs):
         """
@@ -148,13 +128,14 @@ class Layout(Base, ColorbarMixin):
         if self.global_colorbar:
             self.create_outer_and_subgrid()
 
-        subfigure_args = self.spec.get('subfigure', {}) if self.processor else {}
+        subfigure_args = self.spec.get('figure', {}) if self.processor else {}
+        subplots_adjust = subfigure_args.pop('subplots_adjust', None)
+        if subplots_adjust:
+            self.figure.get_figure().subplots_adjust(**subplots_adjust)
             
         self.subfigure_grid = self.subfigures(*self.dimensions, **self.gs_args, 
                                               **subfigure_args)
         
-        if self.spec and self.spec.get('subplots_adjust'):
-            self.figure.get_figure().subplots_adjust(**self.spec['subplots_adjust'])
         
 
     def adjust_grid_for_labels(self):
@@ -198,11 +179,18 @@ class Layout(Base, ColorbarMixin):
             creation_func = lambda i, j: AxWrapper(self.subfigure_grid[i, j].subfigures(1, 1).add_subplot(),
                                                    (i, j), self)
         
-        return np.array([
+        cells = np.array([
             [creation_func(i, j) 
              for j in range(self.dimensions[1])] 
              for i in range(self.dimensions[0])
         ])
+
+        if self.spec.get('aesthetics', {}).get('ax', {}).get('share'):
+            for ax in self.spec['aesthetics']['ax']['share']:
+                first, *rest = cells.flatten()
+                for cell in rest:
+                    getattr(cell.obj, f"share{ax}")(first.obj)
+        return cells
     
     @property
     def no_more_processors(self):

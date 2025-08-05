@@ -128,10 +128,12 @@ class Data(Base):
             return sorted_children
             
     def select(self, filters, check_ancestors=False):
-     
-
+           
         if not check_ancestors and self.name not in filters:
             return True
+        
+        if self.name == 'unit':
+            a = 'foo'
               
         for obj in (self.ancestors if check_ancestors else [self]):
             if obj.name not in filters:
@@ -149,7 +151,7 @@ class Data(Base):
     @staticmethod
     def xmean(child_vals, axis=None):
        
-        if not is_truthy(child_vals):
+        if not is_truthy(child_vals, zero_ok=True):
             return xr.DataArray(np.nan)
         
         if isinstance(child_vals, float) or \

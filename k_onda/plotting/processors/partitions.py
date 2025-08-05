@@ -104,7 +104,7 @@ class Partition(Processor):
         # Otherwise, take the first divider in the list
         divider = divisions[0]
         divider_type = divider['divider_type']
-        info['data_source'] = divider.get('data_source', self.inherited_division_info.get('data_source'))
+        info['data_source'] = divider.get('data_source', info.get('data_source', self.inherited_division_info.get('data_source')))
 
         # Go through each of its members
         for i, member in enumerate(divider['members']):
