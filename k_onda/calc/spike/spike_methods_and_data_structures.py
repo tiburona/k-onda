@@ -28,7 +28,7 @@ class SpikeMethods:
     def get_proportion(self):
         return self.get_average('get_proportion', stop_at=self.calc_opts.get('base', 'event'))
     
-    def get_spike_train(self, exclude=True):
+    def get_spike_train(self):
         return self.get_average('get_spike_train', stop_at=self.calc_opts.get('base', 'event'))
 
   
