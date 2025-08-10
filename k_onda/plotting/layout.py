@@ -29,7 +29,8 @@ class Layout(Base, ColorbarMixin):
 
         self.dimensions = dimensions or self.calculate_my_dimensions()
 
-        self.create_grid()
+        if self.processor and not self.processor.spec_type == 'section':
+            self.create_grid()
 
         if self.no_more_processors:
             self.cells = self.make_all_cells()

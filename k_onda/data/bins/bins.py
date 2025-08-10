@@ -37,7 +37,13 @@ class TimeBin(Bin):
                     bin_size = parent.spectrogram_bin_size
                 except AttributeError:
                     bin_size = parent.parent.spectrogram_bin_size
-            ts = np.arange(-self.pre_event, self.post_event, bin_size)
+            if self.parent.name == 'event':
+                ts = np.arange(-self.pre_event, self.post_event, bin_size)
+            elif self.parent.name == 'period':
+                ts = np.arange(-self.pre_period, self.parent.duration + self.post_period, bin_size)
+            else:
+                raise(NotImplementedError("Time bins currently only implemented for events and periods"))
+
         
         # Round the timestamps to the nearest 10th of a microsecond
         ts = np.round(ts, decimals=7)
