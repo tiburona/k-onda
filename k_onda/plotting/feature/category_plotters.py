@@ -112,25 +112,24 @@ class CategoryPlotter(FeaturePlotter):
        
     def process_calc(self, calc_config):
 
-        info, spec, spec_type, aesthetics = (
-            calc_config[k] for k in ('info', 'spec', 'spec_type', 'aesthetics'))
+        self.set_values(calc_config)
 
         # Get x-ticks labels
-        last_spec = self.extract_deepest_dict(spec)
+        last_spec = self.extract_deepest_dict(self.spec)
         transformed_divisions = deepcopy(last_spec['divisions'])
-        self.label_to_pos = self.assign_positions(transformed_divisions, aesthetics)
+        self.label_to_pos = self.assign_positions(transformed_divisions, self.aesthetics)
         positions = list(self.label_to_pos.values())
         labels = [smart_title_case(' '.join(label).replace('_', ' ')) 
                   for label in self.label_to_pos.keys()]
 
-        for i, entry in enumerate(info):
+        for i, entry in enumerate(self.info):
 
             ax = entry['cell']
 
             composite_label = self.get_composite_label(last_spec, entry)
             position = self.label_to_pos[composite_label]
 
-            aesthetic_args = self.get_aesthetic_args(entry, aesthetics)
+            aesthetic_args = self.get_aesthetic_args(entry)
             
             ax_args = aesthetic_args.get('ax', {})
             
@@ -138,7 +137,7 @@ class CategoryPlotter(FeaturePlotter):
             if zero_line in [True, 'T', 'true', 'True']:
                 ax.axhline(y=0, color='black', linewidth=1)
 
-            self.apply_ax_args(ax, ax_args, i, spec_type)
+            self.apply_ax_args(ax, ax_args, i)
             marker_args = aesthetic_args.get('marker', {})
 
             self.cat_width = aesthetic_args.get('cat_width', 1)
@@ -157,7 +156,6 @@ class CategoricalScatterPlotter(CategoryPlotter):
 
     def plot_markers(self, ax, position, _, row, marker_args, aesthetic_args=None):
         scatter_vals = row[row['attr']]
-
         # Generate horizontal jitter
         jitter_strength = aesthetic_args.get('max_jitter', self.cat_width/6)
         jitter = np.random.uniform(-jitter_strength, jitter_strength, size=len(scatter_vals))

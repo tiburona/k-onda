@@ -150,32 +150,51 @@ class Data(Base):
 
     @staticmethod
     def xmean(child_vals, axis=None):
-       
-        if not is_truthy(child_vals, zero_ok=True):
-            return xr.DataArray(np.nan)
-        
-        if isinstance(child_vals, float) or \
-              isinstance(child_vals, (np.ndarray, xr.DataArray)) and child_vals.size == 1:
-            return child_vals
-        
-        if axis is None:
-            return child_vals.mean(skipna=True)
-        
-        if isinstance(child_vals, xr.DataArray): 
+        """
+        Always returns an xr.DataArray.
 
-            # resolve axis name if an int was passed
-            axis_name = (
-                child_vals.dims[axis] if isinstance(axis, int) else axis
-            )
-            return child_vals.mean(dim=axis_name, skipna=True)
-        
+        - If child_vals is empty/falsey (but zeros are allowed), return a NaN scalar DataArray.
+        - If child_vals is a scalar or size-1 array/DataArray, return a *scalar* (0-D) DataArray.
+        - Otherwise, compute the mean (optionally along `axis`), preserving attrs when possible.
+        """
+        if not is_truthy(child_vals, zero_ok=True):
+            # NaN scalar DA
+            return xr.DataArray(np.nan)
+
+        def _as_da_scalar(x):
+            """Coerce x to a scalar (0-D) DataArray, preserving attrs if x is a DA."""
+            if isinstance(x, xr.DataArray):
+                # squeeze to drop any size-1 dims, keep attrs
+                return x.squeeze(drop=True)
+            # np.ndarray (size==1) or python/np scalar -> scalar DA
+            return xr.DataArray(np.asarray(x).squeeze())
+
+        # Normalize scalars / size-1 inputs to a scalar DA
+        if isinstance(child_vals, (float, np.floating)) or \
+        (isinstance(child_vals, (np.ndarray, xr.DataArray)) and np.size(child_vals) == 1):
+            return _as_da_scalar(child_vals)
+
+        # From here on, we have non-trivial arrays / lists of DAs
+        if axis is None:
+            if isinstance(child_vals, xr.DataArray):
+                return child_vals.mean(skipna=True, keep_attrs=True)
+
+            cleaned = drop_inconsistent_coords(child_vals)
+            cleaned = round_coords(cleaned, decimals=8)
+            agg = xr.concat(cleaned, dim="child", coords="minimal", compat="no_conflicts")
+            return agg.mean(dim="child", skipna=True, keep_attrs=True)
+
+        # axis provided
+        if isinstance(child_vals, xr.DataArray):
+            axis_name = child_vals.dims[axis] if isinstance(axis, int) else axis
+            return child_vals.mean(dim=axis_name, skipna=True, keep_attrs=True)
+
         cleaned = drop_inconsistent_coords(child_vals)
         cleaned = round_coords(cleaned, decimals=8)
-
         agg = xr.concat(cleaned, dim="child", coords="minimal", compat="no_conflicts")
         axis_name = agg.dims[axis] if isinstance(axis, int) else axis or "child"
         return agg.mean(dim=axis_name, skipna=True, keep_attrs=True)
-            
+                
     @cache_method
     def get_average(self, base_method, stop_at='event', level=0, axis=0, exclude=True, *args, **kwargs):
         """
@@ -204,13 +223,15 @@ class Data(Base):
                 return getattr(self, base_method)(*args, **kwargs)
             else:
                 raise ValueError(f"Invalid base method: {base_method}")
+        
+        children = self.children
 
-        if not len(self.children):
+        if not len(children):
             return float('nan')
         
         child_vals = []
 
-        for child in self.children:
+        for child in children:
             if not child.include() and exclude:
                 continue
             child_val = child.get_average(
@@ -430,7 +451,10 @@ class Data(Base):
     
     @property
     def grandchildren_scatter(self):
-        key = self.hierarchy[self.hierarchy.index(self.name) + 2]
+        try:
+            key = self.hierarchy[self.hierarchy.index(self.name) + 2]
+        except IndexError:
+            return []
         return [gchild.mean for gchild in self.accumulate(max_depth=2)[key]]
     
     @property
@@ -466,12 +490,17 @@ class Data(Base):
         
     @property
     def hierarchy(self):
-        ancestor_names = [obj.name for obj in self.ancestors]
-        obj = self
-        while len(getattr(obj, 'children', [])):
-            obj = obj.children[0]
-            ancestor_names.append(obj.name)
-        return ancestor_names
+        if self.kind_of_data == 'spike':
+            hierarchy = ['experiment', 'animal', 'unit', 'period', 'event']
+        elif self.kind_of_data == 'lfp':
+            hierarchy = ['experiment', 'animal', 'period', 'event']
+        elif self.kind_of_data == 'mrl':
+            hierarchy = ['experiment', 'animal', 'unit', 'mrl_calculator']
+        else:
+            raise ValueError('Unknown kind of data')
+        if self.experiment.all_groups:
+            hierarchy.insert(1, 'group')
+        return hierarchy
  
     @property
     def sampling_rate(self):

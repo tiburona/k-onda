@@ -28,14 +28,17 @@ class Layout(Base, ColorbarMixin):
             self.spec = self.processor.spec
 
         self.dimensions = dimensions or self.calculate_my_dimensions()
-
-        if self.processor and not self.processor.spec_type == 'section':
-            self.create_grid()
+        self.create_grid()
+       
+        if self.processor and self.processor.spec_type == 'segment':
+            self.label_figure = self.parent.label_figure
 
         if self.no_more_processors:
-            self.cells = self.make_all_cells()
+            self.cells = self.make_all_axes()
         else:
             self.cells = self.subfigure_grid
+
+        
 
     def subfigures(self, nrows, ncols, **kwargs):
         """
@@ -138,6 +141,7 @@ class Layout(Base, ColorbarMixin):
                                               **subfigure_args)
         
         
+        
 
     def adjust_grid_for_labels(self):
         if self.processor and self.processor.label:
@@ -173,7 +177,7 @@ class Layout(Base, ColorbarMixin):
     
         self.figure = grid[new_figure_ind]
         
-    def make_all_cells(self):
+    def make_all_axes(self):
         if self.spec.get('break_axis'):
             creation_func = lambda i, j: BrokenAxes(self.subfigure_grid[i, j], self, (i, j), self.spec['break_axis'])
         else:

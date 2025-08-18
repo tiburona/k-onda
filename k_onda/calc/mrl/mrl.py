@@ -1,4 +1,5 @@
 import numpy as np
+import xarray as xr
 
 from k_onda.data import Data
 from k_onda.calc import EventValidator, SpikePrepMethods, LFPPrepMethods
@@ -140,9 +141,14 @@ class MRLCalculator(Data, EventValidator):
             w[np.isnan(alpha)] = np.nan
 
         if self.calc_opts.get('mrl_func') == 'ppc':
-            return circ_r2_unbiased(alpha, w, dim=dim)
+            mrl_func = 'ppc'
+            result = circ_r2_unbiased(alpha, w, dim=dim)
         else:
-            return compute_mrl(alpha, w, dim=dim)
+            mrl_func = 'mrl'
+            result = compute_mrl(alpha, w, dim=dim)
+
+        da = xr.DataArray(result, attrs={'mrl_func': mrl_func})
+        return da
          
 
 class MRLPrepMethods(SpikePrepMethods, LFPPrepMethods):
@@ -155,9 +161,13 @@ class MRLPrepMethods(SpikePrepMethods, LFPPrepMethods):
             unit.mrl_calculators = {
                 period_type: [MRLCalculator(unit, period=period) for period in periods] 
                 for period_type, periods in self.lfp_periods.items()}
-         
 
     def select_mrl_children(self):
-        return self.select_spike_children()
+        if self.selected_neuron_type:
+            units = self.neurons[self.selected_neuron_type]
+        else:
+            units = [unit for units in self.units.values() for unit in units]
+
+        return units
                   
         

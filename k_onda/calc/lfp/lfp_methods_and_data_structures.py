@@ -241,9 +241,7 @@ class LFPEvent(Event, LFPMethods, LFPDataSelector):
                 f"{self.period.identifier} {self.identifier}")
 
    
-
-    from functools import cached_property
-    @property          # change from @property
+    @property          
     def is_valid(self):
         val = self.animal.lfp_event_validity[self.selected_brain_region][self.period_type][
             self.period.identifier][self.identifier]

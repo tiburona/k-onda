@@ -109,6 +109,7 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
         }
 
         self.make_fig(spec)
+     
         config = ProcessorConfig(self, spec, layout=self.layout, 
                                   figure=self.layout.cells[0, 0], index=[0, 0], 
                                  is_first=True)
