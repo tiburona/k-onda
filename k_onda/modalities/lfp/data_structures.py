@@ -2,8 +2,8 @@ import numpy as np
 import xarray as xr
 from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
-from scipy.signal import hilbert
 
+from k_onda.math import apply_hilbert_to_padded_data
 from k_onda.model.period_event import Period, Event
 from k_onda.model import Data
 from k_onda.model.bins import TimeBin
@@ -73,6 +73,10 @@ class LFPPeriod(Period, LFPMethods, LFPProperties, LFPDataSelector, EventValidat
         self.stop_in_lfp_samples = self.start_in_lfp_samples + self.duration_in_lfp_samples
         self.pad_start = self.start_in_lfp_samples - self.lfp_padding[0]
         self.pad_stop = self.stop_in_lfp_samples + self.lfp_padding[1]
+        # Sanity check: don’t let pads run outside data bounds
+        assert self.pad_start >= 0
+        for r in self.animal.processed_lfp:
+            assert self.pad_stop <= len(self.animal.processed_lfp[r])
         self._spectrogram = None
         self.brain_region = self.selected_brain_region
         self.frequency_band = self.selected_frequency_band
@@ -277,7 +281,7 @@ class LFPEvent(Event, LFPMethods, LFPProperties, LFPDataSelector):
             raise NotImplementedError("Event concatenation is currently only supported by period and animal.")
     
 
-class RegionRelationshipCalculator(Data, EventValidator):
+class RegionRelationshipCalculator(Data, EventValidator, LFPProperties):
 
     def __init__(self, period, regions):
         self.period = period
@@ -287,14 +291,12 @@ class RegionRelationshipCalculator(Data, EventValidator):
         self.regions = regions
         self.identifier = f"{'_'.join(self.regions)}_{self.period.identifier}"
         processed_lfp = self.period.animal.processed_lfp
-        start = self.period.start_in_lfp_samples
-        stop = self.period.stop_in_lfp_samples
-        self.regions_data = [processed_lfp[r][start:stop] for r in self.regions]
+        self.regions_data = [processed_lfp[r][
+            self.period.start_in_lfp_samples:self.period.stop_in_lfp_samples] for r in self.regions]
         self.event_duration = round(self.lfp_sampling_rate * self.period.event_duration)
         self.padded_regions_data = [
-            processed_lfp[r][
-                start - self.lfp_padding[0] - self.event_duration:stop + self.lfp_padding[1]] 
-                for r in self.regions]
+            processed_lfp[r][self.period.pad_start:self.period.pad_stop]
+            for r in self.regions]
         self._children = []
         self.frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
 
@@ -308,30 +310,58 @@ class RegionRelationshipCalculator(Data, EventValidator):
         evs = [self.get_event_validity(region) for region in self.regions]
         return {i: all([ev[i] for ev in evs]) for i in evs[0]}
 
-    def divide_data_into_valid_sets(self, region_data):
+    def divide_data_into_valid_sets(self, region_data, do_pad=False):
         if not self.calc_opts.get('validate_events'):
-            return [region_data]
+            return [np.asarray(region_data)]
+
+        N = len(region_data)
+        ev_ok = self.joint_event_validity()
+        ev_len = int(self.event_duration)
+
+        # Build a boolean vector of event validity across time
+        n_events = N // ev_len
+        valid_vec = np.zeros(n_events, dtype=bool)
+        for k in range(n_events):
+            valid_vec[k] = ev_ok.get(k, False)
+
+        # Find contiguous runs of True
+        runs = []
+        i = 0
+        while i < n_events:
+            if not valid_vec[i]:
+                i += 1
+                continue
+            j = i
+            while j < n_events and valid_vec[j]:
+                j += 1
+            # events [i, j) are valid
+            runs.append((i, j))
+            i = j
+
         valid_sets = []
-        current_set = []
-        
-        # this is required for padlen in scipy.signal.filtfilt
+        # pad lengths in samples
+        padL, padR = int(self.lfp_padding[0]), int(self.lfp_padding[1])
+
+        # Minimum length (for filter stability if needed)
         min_len = 0 if self.calc_type == 'coherence' else (self.lfp_sampling_rate + 1) * 3 + 1
-    
-        for start in range(0, len(region_data), self.event_duration):
-            if self.joint_event_validity()[start // self.event_duration]:
-                current_set.extend(region_data[start:start+self.event_duration])
+
+        for ev_start, ev_stop in runs:
+            start_samp = ev_start * ev_len
+            stop_samp  = ev_stop  * ev_len
+            if do_pad:
+                left  = max(0, start_samp - padL)
+                right = min(N, stop_samp + padR)
             else:
-                if current_set and len(current_set) > min_len:  
-                    valid_sets.append(current_set)
-                    current_set = []
-    
-        if current_set and len(current_set) > min_len:  
-            valid_sets.append(current_set)
-    
+                left, right = start_samp, stop_samp
+
+            seg = np.asarray(region_data[left:right])
+            if seg.size > min_len:
+                valid_sets.append(seg)
+
         return valid_sets
     
-    def get_valid_sets(self):
-        valid_sets = list(zip(*(self.divide_data_into_valid_sets(data) 
+    def get_valid_sets(self, do_pad=False):
+        valid_sets = list(zip(*(self.divide_data_into_valid_sets(data, do_pad=do_pad) 
                                for data in self.regions_data)))
         len_sets = [len(a) for a, _ in valid_sets]
         return valid_sets, len_sets
@@ -403,42 +433,55 @@ class AmpCrossCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
         return amp_xcorr.idxmax('lag').item()
     
     def amplitude(self, signal):
-        return np.abs(hilbert(self.filter(signal)))
+        return np.abs(apply_hilbert_to_padded_data(self.filter(signal), self.lfp_padding))
      
     def get_amp_crosscorr(self):
 
         if not self.calc_opts.get('validate_events'):
-            amp1, amp2 = [self.amplitude(signal) for signal in self.regions_data]
-            result = normalized_crosscorr(amp1, amp2)
+            n1, n2 = (len(self.padded_regions_data[0]), len(self.padded_regions_data[1]))
+            assert n1 == n2, f"LFP regions mismatch: {n1} vs {n2}"
+            
+            amp1, amp2 = [self.amplitude(signal) for signal in self.padded_regions_data]
+            corr, lags = normalized_crosscorr(amp1, amp2, fs=self.lfp_sampling_rate)
+            result = corr
         else:
-            valid_sets, len_sets = self.get_valid_sets()
+            valid_sets, len_sets = self.get_valid_sets(do_pad=True)
+
             if not valid_sets:
                 return xr.DataArray(np.nan)
+
             len_longest_corr = max(len_sets) * 2 - 1
             corrs = []
+            lags = None
+
             for signal_series in valid_sets:
                 amp1, amp2 = [self.amplitude(signal) for signal in signal_series]
-                corr, lags = normalized_crosscorr(amp1, amp2, fs=self.lfp_sampling_rate)
-                weighted_corr = corr * (len(corr)/len_longest_corr)
-                padded_corr = np.full(len_longest_corr, np.nan) 
-                start_index = (len_longest_corr - len(corr)) // 2
-                end_index = start_index + len(corr)
-                padded_corr[start_index:end_index] = weighted_corr
-                corrs.append(padded_corr)
-            result = np.nansum(np.vstack(tuple(corrs)), axis=0) 
+                corr, cand_lags = normalized_crosscorr(amp1, amp2, fs=self.lfp_sampling_rate)
 
-        lags = self.calc_opts.get('lags', round(self.lfp_sampling_rate/10))
-        mid = result.size // 2
-        result = result[mid-lags:mid+lags+1]
-        arange_args = tuple(x / self.lfp_sampling_rate for x in (-lags, lags + 1, 1))
+                # Capture lags once if this segment hits the target length
+                if (lags is None) and (corr.size == len_longest_corr):
+                    lags = cand_lags
 
-        da = xr.DataArray(
-            result,
-            dims=['lag'],
-            coords={'lag': np.arange(*arange_args)})
+                weight = corr.size / len_longest_corr
+                padded = np.full(len_longest_corr, np.nan)
+                start = (len_longest_corr - corr.size) // 2
+                padded[start:start + corr.size] = corr * weight
+                corrs.append(padded)
+
+            result = np.nansum(np.vstack(corrs), axis=0)
+
+            # Fallback: synthesize lags if none matched (rare, defensive)
+            if lags is None:
+                half = (len_longest_corr - 1) // 2
+                lags = np.arange(-half, half + 1, dtype=float) / self.lfp_sampling_rate
+
+            # cross-correlation length should always be odd
+            assert result.size % 2 == 1
+
+        da = xr.DataArray(result, dims=['lag'], coords={'lag': lags})
         return da
+            
     
-
 class PhaseRelationshipCalculator(RegionRelationshipCalculator):
 
     name = 'phase_relationship_calculator'
