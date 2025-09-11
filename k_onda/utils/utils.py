@@ -273,6 +273,45 @@ def is_iterable(obj):
     return isinstance(obj, Iterable) and not isinstance(obj, (str, bytes))
 
 
+import numbers
+import numpy as np
+import xarray as xr
+import math
+
+def contains_nan(obj):
+    """
+    Recursively check whether a list / NumPy / xarray object
+    or scalar number contains any NaN values.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to check.
+
+    Returns
+    -------
+    bool
+        True if at least one NaN is found, False otherwise.
+    """
+    if isinstance(obj, xr.DataArray):
+        if obj.ndim == 0:  # scalar DataArray
+            return math.isnan(obj.item())
+        return bool(np.isnan(obj.values).any())
+
+    elif isinstance(obj, np.ndarray):
+        if obj.ndim == 0:  # scalar ndarray
+            return math.isnan(obj.item())
+        return bool(np.isnan(obj).any())
+
+    elif isinstance(obj, list):
+        return any(contains_nan(el) for el in obj)
+
+    elif isinstance(obj, numbers.Number):
+        return math.isnan(obj)
+
+    else:
+        return False
+
 
 operations = {
             '==': lambda a, b: a == b,

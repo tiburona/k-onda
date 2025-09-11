@@ -10,7 +10,6 @@ from .math_functions import (
     filter_60_hz,
     divide_by_rms,
     bandpass_filter,
-    compute_phase,
     get_wavelet_scale,
     circ_r2_unbiased,
     compute_mrl,
@@ -20,11 +19,10 @@ from .math_functions import (
     extreme_point,
     downsample,
     calc_coherence,
-    normalized_crosscorr,
-    amp_crosscorr,
     regularize_angles,
     nearest_power_of_10,
     get_round_decimals,
+    round_half_decade
 )
 
 from .utils import (
@@ -42,7 +40,8 @@ from .utils import (
     recursive_update,
     operations,
     is_truthy,
-    is_iterable, 
+    is_iterable,
+    contains_nan,
     load_config_py,
     safe_make_dir, 
     smart_title_case,
@@ -67,7 +66,6 @@ __all__ = [
     "filter_60_hz",
     "divide_by_rms",
     "bandpass_filter",
-    "compute_phase",
     "get_wavelet_scale",
     "circ_r2_unbiased",
     "compute_mrl",
@@ -77,11 +75,10 @@ __all__ = [
     "extreme_point",
     "downsample",
     "calc_coherence",
-    "normalized_crosscorr",
-    "amp_crosscorr",
     "regularize_angles",
     "nearest_power_of_10",
     "get_round_decimals",
+    "round_half_decade"
     # From utils
     "cache_method",
     "log_directory_contents",
@@ -98,6 +95,7 @@ __all__ = [
     "operations",
     "is_truthy",
     "is_iterable",
+    "contains_nan",
     "PrepMethods",
     "load_config_py",
     "safe_make_dir", 

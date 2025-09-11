@@ -3,8 +3,8 @@ import os
 from copy import deepcopy
 from collections import defaultdict
 
-from ..tabulation import CSVTabulator
-from ..plotting import ExecutivePlotter
+from k_onda.outputs.tabulation import CSVTabulator
+from k_onda.outputs.plotting import ExecutivePlotter
 from .opts_validator import OptsValidator
 from .initialize_experiment import Initializer
 

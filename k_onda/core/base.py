@@ -9,6 +9,7 @@ from pathlib import PosixPath
 
 
 from k_onda.utils import get_round_decimals
+from k_onda.math import Filter
     
 
 class Base:
@@ -18,7 +19,7 @@ class Base:
     _io_opts = {}
     _env_config = {}
     _cache = defaultdict(dict)
-    _filter = {}
+    _criteria = {}
     _selected_conditions = {}
     _selected_period_type = ''
     _selected_period_types = []
@@ -28,6 +29,7 @@ class Base:
     _selected_frequency_band = ''
     _selected_region_set = []
     _calc_mode = 'normal'
+    _shared_filters = {}
     original_periods = None
     selectable_variables = [
         'period_type', 
@@ -59,7 +61,7 @@ class Base:
     @calc_opts.setter
     def calc_opts(self, value):
         Base._calc_opts = value
-        self.set_filter_from_calc_opts()
+        self.set_criteria_from_calc_opts()
         Base._cache = defaultdict(dict)
 
     @property
@@ -86,56 +88,73 @@ class Base:
         Base._cache = defaultdict(dict)
 
     @property
-    def filter(self):
-        return Base._filter
+    def criteria(self):
+        return Base._criteria
     
-    @filter.setter
-    def filter(self, filter):
-        Base._filter = filter
+    @criteria.setter
+    def criteria(self, criteria):
+        Base._criteria = criteria
 
-    def set_filter_from_calc_opts(self):
-        self.filter = defaultdict(lambda: defaultdict(tuple))
-        filters = self.calc_opts.get('filter', {})
-        if not filters:
+    def set_criteria_from_calc_opts(self):
+        self.criteria = defaultdict(lambda: defaultdict(tuple))
+        criteria = self.calc_opts.get('criteria', {})
+        if not criteria:
             return
-        if isinstance(filters, list):
-            for filter in filters:
-                self.add_to_filters(self.parse_natural_language_filter(filter))
+        if isinstance(criteria, list):
+            for criterion in criteria:
+                self.add_to_criteria(self.parse_natural_language_criteria(criterion))
         else:
-            for object_type in filters:
-                object_filters = self.calc_opts['filter'][object_type]
-                for property in object_filters:
-                    self.filter[object_type][property] = object_filters[property]   
+            for object_type in criteria:
+                object_criteria = self.calc_opts['criteria'][object_type]
+                for property in object_criteria:
+                    self.criteria[object_type][property] = object_criteria[property]   
             if self.calc_opts.get('validate_events'):
-                self.filter['event']['is_valid'] = ('==', True)
+                self.criteria['event']['is_valid'] = ('==', True)
 
-    def add_to_filters(self, obj_name, attr, operator, target_val):
+    def add_to_criteria(self, obj_name, attr, operator, target_val):
        
-        if attr in ['conditions', 'period_types'] and attr in self.filter[obj_name]:
-            self.filter[obj_name][attr][1].update(target_val)
+        if attr in ['conditions', 'period_types'] and attr in self.criteria[obj_name]:
+            self.criteria[obj_name][attr][1].update(target_val)
 
         else:
-            self.filter[obj_name][attr] = (operator, target_val)
+            self.criteria[obj_name][attr] = (operator, target_val)
               
-    def del_all_filters(self):
-        self.filter = defaultdict(lambda: defaultdict(tuple))
+    def del_all_criteria(self):
+        self.criteria = defaultdict(lambda: defaultdict(tuple))
 
 
-    def del_from_filters(self, obj_name, attr):
-        del self.filter[obj_name][attr]
+    def del_from_criteria(self, obj_name, attr):
+        del self.criteria[obj_name][attr]
+
+    
+    @property
+    def shared_filters(self):
+        return Base._shared_filters
     
     @staticmethod
-    def parse_natural_language_filter(filter):
-        # natural language filter should be a tuple like:
-        # ex1: ('for animals, identifier must be in', ['animal1', 'animal2'])
-        # ex2L ('for units, quality must be !=', '3')] 
-        condition, target_val = filter
-        split_condition = condition.split(' ')
-        obj_name = split_condition[1][:-2]
-        attr = split_condition[3]
-        be_index = condition.find('be')
-        operator = condition[be_index + 3:]
-        return obj_name, attr, operator, target_val
+    def filter_key(cfg: dict):
+        # Only params that change coefficients go in the key
+        return (
+            float(cfg["fs"]), float(cfg["low"]), float(cfg["high"]),
+            cfg.get("method", "fir_hamming"),
+            cfg.get("numtaps"),
+            cfg.get("iir_order"),
+            cfg.get("iir_ripple_db"),
+            cfg.get("kaiser_atten_db"),
+            cfg.get("kaiser_tw_hz"),
+            cfg.get("notch_Q"),
+            cfg.get("_version", "v1"),
+        )
+    
+ 
+    def get_or_create_filter(self, cfg: dict) -> Filter:
+        k = self.filter_key(cfg)
+        flt = self.shared_filters.get(k)
+        if flt is None:
+            flt = Filter(cfg)          # designs once
+            self.shared_filters[k] = flt
+        return flt
+
     
     @property
     def kind_of_data(self):
@@ -164,7 +183,7 @@ class Base:
     @selected_conditions.setter
     def selected_conditions(self, conditions):
         Base._selected_conditions = conditions
-        self.add_to_filters('animal', 'conditions', 'partial_dict_match', conditions)
+        self.add_to_criteria('animal', 'conditions', 'partial_dict_match', conditions)
 
     @property
     def selected_neuron_type(self):
@@ -408,3 +427,5 @@ class Base:
 
         constructor.update(new_fields)
         return constructor['template'].format(**constructor)
+    
+

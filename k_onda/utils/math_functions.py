@@ -103,9 +103,7 @@ def bandpass_filter(data, lowcut, highcut, fs, order=2):
     return y
 
 
-def compute_phase(data):
-    analytic_signal = hilbert(data)
-    return np.angle(analytic_signal)
+
 
 
 def get_wavelet_scale(frequency, sampling_rate, fc=1.0):
@@ -294,47 +292,6 @@ def calc_coherence(data_1, data_2, sampling_rate, low, high):
     return f[mask], Cxy[mask]
 
 
-def normalized_crosscorr(data1, data2):
-    mean1 = np.mean(data1)
-    mean2 = np.mean(data2)
-    std1 = np.std(data1)
-    std2 = np.std(data2)
-    
-    normalization_factor = std1 * std2 * len(data1)
-    cross_correlation = correlate(data1 - mean1, data2 - mean2, mode='full')
-    normalized_cross_corr = cross_correlation / normalization_factor
-    
-    return normalized_cross_corr
-
-
-def amp_crosscorr(signal1, signal2, samp_freq, low_freq, high_freq):
-    signal1 = np.array(signal1)
-    signal2 = np.array(signal2)
-    if len(signal1) != len(signal2):
-        raise ValueError("signal1 and signal2 must be vectors of the same size.")
-
-    if signal1.ndim != 1 or signal2.ndim != 1:
-        raise ValueError("signal1 and signal2 must be one-dimensional vectors.")
-
-   # Filter design parameters
-    nyquist = samp_freq / 2
-    numtaps = round(samp_freq)  # Filter order
-    if numtaps % 2 == 0:
-        numtaps += 1  # Make order odd if necessary
-    nyquist = samp_freq / 2
-    my_filt = firwin(numtaps, [low_freq / nyquist, high_freq / nyquist], pass_zero=False)
-
-    filtered1 = filtfilt(my_filt, 1, signal1)
-    filtered2 = filtfilt(my_filt, 1, signal2)
-
-    amp1 = np.abs(hilbert(filtered1))
-    amp1 -= np.mean(amp1)
-
-    amp2 = np.abs(hilbert(filtered2))
-    amp2 -= np.mean(amp2)
-
-    return normalized_crosscorr(amp1, amp2)
-
 
 def regularize_angles(x):
     regularize = np.vectorize(lambda x: np.arctan2(np.sin(x), np.cos(x)))
@@ -368,6 +325,23 @@ def get_round_decimals(value):
         decimals = -magnitude
 
     return decimals
+
+
+def round_half_decade(x):
+    if x <= 0:
+        return x
+    exp = math.floor(math.log10(x))       # order of magnitude
+    frac = x / (10**exp)                  # between 1 and 10
+    # Possible choices: 1, 2, 5, 10
+    if frac < 1.5:
+        nice = 1
+    elif frac < 3.5:
+        nice = 2
+    elif frac < 7.5:
+        nice = 5
+    else:
+        nice = 10
+    return nice * 10**exp
 
 
 

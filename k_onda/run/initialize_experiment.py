@@ -6,7 +6,7 @@ from pathlib import PosixPath
 from scipy.signal import firwin, lfilter
 import h5py
 
-from k_onda.data.experiment_group_animal import Experiment, Group, Animal
+from k_onda.model.experiment_group_animal import Experiment, Group, Animal
 from k_onda.utils import group_to_dict, PrepMethods
 
 
