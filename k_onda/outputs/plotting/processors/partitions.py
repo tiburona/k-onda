@@ -14,7 +14,7 @@ class Partition(Processor):
 
     def __init__(self, config):
         super().__init__(config)
-
+        
     def setup_unique(self):
         # self.info_by_division_by_layers is a list with these same unique values, repeated for
         # each unique layer
@@ -30,6 +30,7 @@ class Partition(Processor):
             self.selected_period_type = self.spec['default_period_type']
         self.process_divisions(self.spec['divisions'])
         if top_level:
+            self.child_layout.root().finalize_shared_axes()
             if self.layers:
                 for i, layer in enumerate(self.layers):
                     self.executive_plotter.delegate(
@@ -112,7 +113,7 @@ class Partition(Processor):
             updated_info = self.update_info(info, member, divider_type)
             # advance the index to indicate the position of this member
             self.advance_index(divider, i)
-            # Now recurse on the remainder of the list, carrying `updated_info`
+            # recurse on the remainder of the list, carrying `updated_info`
             self.process_divisions(divisions[1:], info=updated_info)
 
     def advance_index(self, current_divider, i):
@@ -282,7 +283,7 @@ class Split(Partition):
             # update the info dict with information about each member
             updated_info = self.update_info(info, member, divider_type, i)
             # advance the index to indicate the position of this member
-            
+            self.advance_index(divider, i)
             # Now recurse on the remainder of the list, carrying `updated_info`
             self.process_divisions(divisions[1:], info=updated_info)
 

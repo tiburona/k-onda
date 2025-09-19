@@ -7,7 +7,7 @@ from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 import numpy as np
 
-from ..legend import LegendMixin
+from ..layout.layout_mixins import LegendMixin
 from ..plotting_helpers import PlottingMixin
 from k_onda.core import Base
 

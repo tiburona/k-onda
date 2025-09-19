@@ -8,7 +8,7 @@ from k_onda.core import OutputGenerator
 from .processors.partitions import Section, Segment, Series, Split
 from .processors.processor import Container, ProcessorConfig
 from .processors.processor_mixins import MarginMixin
-from .layout import Layout
+from .layout.layout import Layout
 from .feature import (
     CategoricalScatterPlotter, LinePlotter, VerticalLinePlotter, BarPlotter, WaveformPlotter, CategoricalLinePlotter, 
     RasterPlotter, PeriStimulusHistogramPlotter, HeatMapPlotter, PeriStimulusHeatMapPlotter, 
@@ -131,7 +131,7 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
             gs_args = self.calculate_margins(plot_spec['margins'])
         else:
             gs_args = {}
-        self.layout = Layout(self, [0, 0], figure=self.fig, gs_args=gs_args)
+        self.layout = Layout(None, [0, 0], figure=self.fig, gs_args=gs_args)
     
     def get_margins_from_spec(self, spec):
         for k in ['series', 'section', 'segment', 'container']:

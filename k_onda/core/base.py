@@ -252,6 +252,13 @@ class Base:
         self.calc_opts['region_set'] = region_set
 
     @property
+    def selected_brain_regions(self):
+        if self.selected_region_set is not None:
+            return self.selected_region_set.split('_')
+        else:
+            return [self.selected_brain_region]
+
+    @property
     def frequency_band_definition(self):
         return self.calc_opts.get('frequency_band_definition') or \
             self.experiment.exp_info['frequency_bands'] or {}

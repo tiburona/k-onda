@@ -2,13 +2,14 @@ import numpy as np
 import xarray as xr
 from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
+from scipy.signal.windows import tukey
 
 from k_onda.math import apply_hilbert_to_padded_data
 from k_onda.model.period_event import Period, Event
 from k_onda.model import Data
 from k_onda.model.bins import TimeBin
 from k_onda.interfaces import MatlabInterface
-from k_onda.math import normalized_crosscorr
+from k_onda.math import normalized_xcorr, pearson_xcorr
 from ...modalities.mixins import BandPassFilterMixin
 from k_onda.utils import (calc_coherence, 
                           bandpass_filter, regularize_angles, 
@@ -413,9 +414,9 @@ class CoherenceCalculator(RegionRelationshipCalculator):
         return da
         
     
-class AmpCrossCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
+class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
 
-    _name = 'amp_crosscorr_calculator'
+    _name = 'amp_xcorr_calculator'
 
     def __init__(self, period, regions):
         super().__init__(period, regions)
@@ -427,40 +428,38 @@ class AmpCrossCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
         return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.calc)]
     
     def get_lag_of_max_corr(self):
-        amp_xcorr = self.get_amp_crosscorr()
+        amp_xcorr = self.get_amp_xcorr()
         if contains_nan(amp_xcorr):
             return xr.DataArray(np.nan)
         return amp_xcorr.idxmax('lag').item()
-    
+
     def amplitude(self, signal):
-        return np.abs(apply_hilbert_to_padded_data(self.filter(signal), self.lfp_padding))
+        env = np.abs(apply_hilbert_to_padded_data(self.filter(signal), self.lfp_padding))
+        # gentle taper; alpha=0.2 is mild, won’t distort the middle
+        return env * tukey(env.size, alpha=0.2)
      
-    def get_amp_crosscorr(self):
+    def get_amp_xcorr(self):
+        fs = self.lfp_sampling_rate
 
         if not self.calc_opts.get('validate_events'):
             n1, n2 = (len(self.padded_regions_data[0]), len(self.padded_regions_data[1]))
             assert n1 == n2, f"LFP regions mismatch: {n1} vs {n2}"
-            
+
             amp1, amp2 = [self.amplitude(signal) for signal in self.padded_regions_data]
-            corr, lags = normalized_crosscorr(amp1, amp2, fs=self.lfp_sampling_rate)
+            corr, _ = normalized_xcorr(amp1, amp2, fs=fs)
             result = corr
+
         else:
             valid_sets, len_sets = self.get_valid_sets(do_pad=True)
-
             if not valid_sets:
                 return xr.DataArray(np.nan)
 
             len_longest_corr = max(len_sets) * 2 - 1
             corrs = []
-            lags = None
 
             for signal_series in valid_sets:
                 amp1, amp2 = [self.amplitude(signal) for signal in signal_series]
-                corr, cand_lags = normalized_crosscorr(amp1, amp2, fs=self.lfp_sampling_rate)
-
-                # Capture lags once if this segment hits the target length
-                if (lags is None) and (corr.size == len_longest_corr):
-                    lags = cand_lags
+                corr, _ = pearson_xcorr(amp1, amp2, fs=fs)
 
                 weight = corr.size / len_longest_corr
                 padded = np.full(len_longest_corr, np.nan)
@@ -470,16 +469,23 @@ class AmpCrossCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
 
             result = np.nansum(np.vstack(corrs), axis=0)
 
-            # Fallback: synthesize lags if none matched (rare, defensive)
-            if lags is None:
-                half = (len_longest_corr - 1) // 2
-                lags = np.arange(-half, half + 1, dtype=float) / self.lfp_sampling_rate
+        # Build lags deterministically from the final result length
+        assert result.size % 2 == 1, "Cross-corr length should be odd (2*N-1)."
+        half = (result.size - 1) // 2
+        lags = np.arange(-half, half + 1, dtype=float) / fs
 
-            # cross-correlation length should always be odd
-            assert result.size % 2 == 1
+        # Optional: support a fixed +/- lag window
+        # Back-compat: if user provided 'lags' as samples, respect it; otherwise allow 'max_lag_sec'
+        max_lag_sec = self.calc_opts.get('max_lag_sec', None)
+        if max_lag_sec is None and 'lags' in self.calc_opts:
+            max_lag_sec = self.calc_opts['lags'] / fs
+        if max_lag_sec is not None:
+            m = (lags >= -max_lag_sec) & (lags <= max_lag_sec)
+            result = result[m]
+            lags = lags[m]
 
-        da = xr.DataArray(result, dims=['lag'], coords={'lag': lags})
-        return da
+        return xr.DataArray(result, dims=['lag'], coords={'lag': lags})
+
             
     
 class PhaseRelationshipCalculator(RegionRelationshipCalculator):

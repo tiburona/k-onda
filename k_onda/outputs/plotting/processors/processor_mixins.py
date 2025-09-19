@@ -1,5 +1,5 @@
 from copy import deepcopy
-from k_onda.utils import recursive_update, smart_title_case
+from k_onda.utils import recursive_update, smart_title_case, safe_get
 
 
 class ProcessorMixin:
@@ -46,16 +46,13 @@ class LayerMixin(ProcessorMixin):
 class AestheticsMixin(ProcessorMixin):
  
     def init_aesthetics(self):
-        #element_dict = deepcopy(self.spec.get('aesthetics', {}))
-        if self.name == 'section':
-            a = 'foo'
         element_dict = self.spec.get('aesthetics', {})
         if self.parent_processor:
             self.parent_processor.aesthetics.update(element_dict)
             return self.parent_processor.aesthetics
         else:
             return element_dict
-    
+
 
 class LegendMixin:
 

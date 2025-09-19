@@ -1,24 +1,28 @@
+from collections import defaultdict
 from copy import deepcopy
 
 from matplotlib.gridspec import  GridSpec, GridSpecFromSubplotSpec
 import numpy as np
 
 from k_onda.core import Base
-from .legend import ColorbarMixin
-from .plotting_helpers import reshape_subfigures
+from .layout_mixins import ColorbarMixin, AxShareMixin
 
 
-class Layout(Base, ColorbarMixin):
+class Layout(Base, ColorbarMixin, AxShareMixin):
 
     def __init__(self, parent, index, figure=None, processor=None, dimensions=None,
                  gs_args=None):
+        
         self.parent = parent
+        if self.parent is not None:
+            self.parent.children.append(self)
+        self.children = []
+
         self.index = index
         self.figure = figure
+        self.processor = processor
         
         self.gs_args = gs_args if gs_args else {}
-
-        self.processor = processor
 
         if self.processor is None:
             self.processor_type = None
@@ -26,6 +30,10 @@ class Layout(Base, ColorbarMixin):
         else:
             self.processor_type = processor.name
             self.spec = self.processor.spec
+
+        self.shared_axes_spec = None
+        self.share_bins = None 
+        self.set_share_bins()
 
         self.dimensions = dimensions or self.calculate_my_dimensions()
         self.create_grid()
@@ -35,10 +43,15 @@ class Layout(Base, ColorbarMixin):
 
         if self.no_more_processors:
             self.cells = self.make_all_axes()
+            
         else:
             self.cells = self.subfigure_grid
 
-        
+    def root(self):
+        if self.parent is None:
+            return self
+        else:
+            return self.parent.root()
 
     def subfigures(self, nrows, ncols, **kwargs):
         """
@@ -140,9 +153,6 @@ class Layout(Base, ColorbarMixin):
         self.subfigure_grid = self.subfigures(*self.dimensions, **self.gs_args, 
                                               **subfigure_args)
         
-        
-        
-
     def adjust_grid_for_labels(self):
         if self.processor and self.processor.label:
 
@@ -190,12 +200,22 @@ class Layout(Base, ColorbarMixin):
              for i in range(self.dimensions[0])
         ])
 
-        if self.spec.get('aesthetics', {}).get('ax', {}).get('share'):
-            for ax in self.spec['aesthetics']['ax']['share']:
-                first, *rest = cells.flatten()
-                for cell in rest:
-                    getattr(cell.obj, f"share{ax}")(first.obj)
+        for cell in cells.ravel():
+            self._register_ax_to_ancestors(cell)
+
         return cells
+    
+
+    def _register_ax_to_ancestors(self, ax_wrapper):
+        node = self
+        while node is not None:
+            if node.share_bins is not None:
+                spec = node.shared_axes_spec
+                keys = spec if isinstance(spec, (list, tuple)) else spec.keys()
+                for k in ('x', 'y'):
+                    if k in keys:
+                        node.share_bins[k].append(ax_wrapper)
+            node = getattr(node, 'parent', None)
     
     @property
     def no_more_processors(self):
@@ -260,18 +280,25 @@ class Wrapper(Base):
 
 class SubfigWrapper(Wrapper):
 
+    name = 'subfig'
+
     def __init__(self, subfig, index, layout):
         super().__init__(subfig, index, layout)
         self.subfig = subfig
 
 
 class AxWrapper(Wrapper):
+
+    name = 'ax'
+
     def __init__(self, ax, index, layout):
         super().__init__(ax, index, layout)
         self.ax = ax
     
 
 class BrokenAxes(Base):
+
+    name = 'broken_axes'
     
     def __init__(self, fig, parent_layout, index, break_axes, aspect=None):
         self.break_axes = break_axes

@@ -1,7 +1,7 @@
 import numpy as np
 import xarray as xr
 
-from k_onda.math import normalized_crosscorr
+from k_onda.math import normalized_xcorr
 from k_onda.utils import standardize, calc_hist, correlogram
 
 
@@ -113,7 +113,7 @@ class RateMethods:
     
     def get_cross_correlations(self, pair=None):
         other = self.get_other(pair)
-        raw_cross_corr, _ = normalized_crosscorr(self.get_unadjusted_rates(),
+        raw_cross_corr, _ = normalized_xcorr(self.get_unadjusted_rates(),
                                             other.get_firing_rates_(),
                                             mode='full')
         n = raw_cross_corr.shape[0]

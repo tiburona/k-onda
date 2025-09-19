@@ -95,9 +95,9 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
     def all_coherence_calculators(self):
         return self.get_data_calculated_by_period('coherence_calculators')
     
-    @sorted_prop('amp_crosscorr_calculator')
-    def all_amp_crosscorr_calculators(self):
-        return self.get_data_calculated_by_period('amp_crosscorr_calculators')
+    @sorted_prop('amp_xcorr_calculator')
+    def all_amp_xcorr_calculators(self):
+        return self.get_data_calculated_by_period('amp_xcorr_calculators')
     
     @sorted_prop('granger_calculator')
     def all_granger_calculators(self):
@@ -211,7 +211,7 @@ class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, 
         self.mrl_calculators = defaultdict(lambda: defaultdict(list))
         self.granger_calculators = defaultdict(list)
         self.coherence_calculators = defaultdict(list)
-        self.amp_crosscorr_calculators = defaultdict(list)
+        self.amp_xcorr_calculators = defaultdict(list)
         self.phase_relationship_calculators = defaultdict(list)
         self.lfp_event_validity = defaultdict(dict)
         self.initialized = []

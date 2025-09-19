@@ -6,7 +6,7 @@ import os
 
 from k_onda.utils import  divide_by_rms, downsample, PrepMethods, safe_get
 from k_onda.interfaces import MatlabInterface
-from .data_structures import AmpCrossCorrCalculator, GrangerCalculator, CoherenceCalculator
+from .data_structures import AmpXCorrCalculator, GrangerCalculator, CoherenceCalculator
 
 
 class LFPPrepMethods(PrepMethods):
@@ -93,8 +93,9 @@ class LFPPrepMethods(PrepMethods):
 
     @property
     def processed_lfp(self):
-        if self.selected_brain_region not in self._processed_lfp:
-            self.process_lfp()
+        for brain_region in self.selected_brain_regions:
+            if brain_region not in self._processed_lfp:
+                self.process_lfp()
         return self._processed_lfp
     
     def delete_lfp_data(self, region):
@@ -164,7 +165,7 @@ class LFPPrepMethods(PrepMethods):
         self.coherence_calculators = self.prepare_region_relationship_calculators(cls)
 
     def prepare_amp_crosscorr_calculators(self):
-        cls = AmpCrossCorrCalculator
+        cls = AmpXCorrCalculator
         self.amp_crosscorr_calculators = self.prepare_region_relationship_calculators(cls)
 
     def prepare_granger_calculators(self):
