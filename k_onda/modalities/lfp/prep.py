@@ -12,20 +12,20 @@ from .data_structures import AmpXCorrCalculator, GrangerCalculator, CoherenceCal
 class LFPPrepMethods(PrepMethods):
 
     def select_lfp_children(self):
-        if self.calc_type in ['coherence', 'granger', 'amp_crosscorr']: # TODO: add the others
+        if self.calc_type in ['coherence', 'granger', 'amp_xcorr']: # TODO: add the others
             return self.select_children(f"{self.calc_type}_calculators")
         elif self.calc_type == 'lag_of_max_corr':
-            return self.select_children('amp_crosscorr_calculators')
+            return self.select_children('amp_xcorr_calculators')
         else:
             return self.select_children('lfp_periods')
 
     def lfp_prep(self):
         self.prep_data()
         self.prepare_periods()
-        if self.calc_type in ['phase_relationship', 'granger', 'amp_crosscorr', 'coherence']:
+        if self.calc_type in ['phase_relationship', 'granger', 'amp_xcorr', 'coherence']:
             getattr(self, f"prepare_{self.calc_type}_calculators")()
         if self.calc_type == 'lag_of_max_corr':
-            self.prepare_amp_crosscorr_calculators()
+            self.prepare_amp_xcorr_calculators()
     
     def prep_data(self):
         data_label = f"{self.selected_brain_region}_lfp"
@@ -164,9 +164,9 @@ class LFPPrepMethods(PrepMethods):
         cls = CoherenceCalculator
         self.coherence_calculators = self.prepare_region_relationship_calculators(cls)
 
-    def prepare_amp_crosscorr_calculators(self):
+    def prepare_amp_xcorr_calculators(self):
         cls = AmpXCorrCalculator
-        self.amp_crosscorr_calculators = self.prepare_region_relationship_calculators(cls)
+        self.amp_xcorr_calculators = self.prepare_region_relationship_calculators(cls)
 
     def prepare_granger_calculators(self):
         cls = GrangerCalculator

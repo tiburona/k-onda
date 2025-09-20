@@ -36,7 +36,7 @@ class CSVTabulator(OutputGenerator):
             if not isinstance(self.selected_frequency_band, str):
                 translation_table = str.maketrans({k: '_' for k in '[](),'})
                 fb = str(list(fb)).translate(translation_table)
-            if any([s in self.calc_type for s in ['coherence', 'amp_cross_corr', 'phase', 'granger', 'lag_of_max_corr']]):
+            if any([s in self.calc_type for s in ['coherence', 'amp_xcorr', 'phase', 'granger', 'lag_of_max_corr']]):
                 self.data_col = f"{self.calc_opts['region_set']}_{fb}_{self.calc_type}"
             else:
                 self.data_col = f"{self.selected_brain_region}_{fb}_{self.calc_type}"

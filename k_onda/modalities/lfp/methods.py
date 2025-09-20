@@ -8,7 +8,7 @@ class LFPMethods:
         return self.get_average('get_coherence', 
                                 stop_at=self.calc_opts.get('base', 'coherence_calculator'))
     
-    def get_amp_crosscorr(self):
+    def get_amp_xcorr(self):
         return self.get_average('get_amp_xcorr', 
                                 stop_at=self.calc_opts.get('base', 'amp_xcorr_calculator'))
     
