@@ -117,7 +117,7 @@ class CSVTabulator(OutputGenerator):
         if 'lfp' in self.kind_of_data:
             if level == 'granger_segment':
                 other_attributes.append('length')
-            if any([w in self.calc_type for w in ['coherence', 'correlation', 'phase', 'granger']]):
+            if any([w in self.calc_type for w in ['coherence', 'amp_xcorr', 'lag_of_max_corr', 'phase', 'granger']]):
                 other_attributes.append('period_id')
             else:
                 if self.calc_opts['time_type'] == 'continuous' and self.calc_opts.get('power_deviation'):

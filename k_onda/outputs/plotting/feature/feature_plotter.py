@@ -63,7 +63,7 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
     def get_entry_label(self, entry, legend):
         relevant_divider_types = legend.get('divisions')
         if relevant_divider_types is None:
-            relevant_divider_types = [d['division_type'] for d in entry['last_spec']['divisions']]
+            relevant_divider_types = [d['divider_type'] for d in entry['last_spec']['divisions']]
         label = []
         for division in relevant_divider_types:
             member = entry[division]

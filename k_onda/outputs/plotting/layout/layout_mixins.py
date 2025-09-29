@@ -85,6 +85,11 @@ class AxShareMixin:
 
 class LegendMixin:
 
+    # TODO: fix this.  It is broken.  The fundamental problem is: how does the user 
+    # specify in which cell they want the legend to fall?  How does an individual layout
+    # object have knowledge about whether it contains that cell?  More complicated than it sounds,
+    # must be thought about when I have mental energy, which is not right now.
+
     def record_entry_for_legend(self, entry, legend, cells_with_legend):
         entry['handle'] = self.get_handle(entry)
         entry['label'] = self.get_entry_label(entry, legend)
@@ -115,7 +120,8 @@ class LegendMixin:
     def get_handle(self, entry):
         if self.plot_type in ['psth', 'bar_plot']:
             return self.make_bar_handles_from_entry(entry)
-        if self.plot_type in ['categorical_line', 'vertical_line']:
+        if self.plot_type in ['categorical_line', 'vertical_line', 'line_plot']:
+            # todo: is this just getting written over by get_handle on LinePlotter?
             return self.make_line_handles_from_entry(entry)
         else:
             raise NotImplemented("can only make legends from handles for line and bar graphs")
@@ -186,14 +192,13 @@ class LegendMixin:
                 artist.get_linestyle(),
                 artist.get_marker(),
                 round(artist.get_markersize() or 0, 4),
-                None if artist.get_markerfacecolor() == 'auto' else _rgba(artist.get_markerfacecolor()),
-                None if artist.get_markeredgecolor() == 'auto' else _rgba(artist.get_markeredgecolor()),
+                None if artist.get_markerfacecolor() == 'auto' else self._rgba(artist.get_markerfacecolor()),
+                None if artist.get_markeredgecolor() == 'auto' else self._rgba(artist.get_markeredgecolor()),
             )
         # Fallback: class name only (adjust if you use other artist types)
         return (artist.__class__.__name__,)
 
-              
-
+            
     def calculate_legend_y_position(self, entries):
         # Collect all y-data from the entries based on the attribute indicated in each entry.
         all_y_data = []

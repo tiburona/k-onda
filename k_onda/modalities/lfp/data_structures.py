@@ -9,10 +9,9 @@ from k_onda.model.period_event import Period, Event
 from k_onda.model import Data
 from k_onda.model.bins import TimeBin
 from k_onda.interfaces import MatlabInterface
-from k_onda.math import normalized_xcorr, pearson_xcorr
+from k_onda.math import normalized_xcorr, pearson_xcorr, calc_coherence
 from ...modalities.mixins import BandPassFilterMixin
-from k_onda.utils import (calc_coherence, 
-                          bandpass_filter, regularize_angles, 
+from k_onda.utils import (bandpass_filter, regularize_angles, 
                           is_iterable, contains_nan)
 from .methods import LFPMethods
 
@@ -377,7 +376,7 @@ class RelationshipCalculatorEvent(Event):
 
     def __init__(self, parent_calculator, i, regions_data):
         period = self.parent_calculator.period
-        super().init(period, period.onset, i)
+        super().__init__(period, period.onset, i)
         self.parent = parent_calculator
         self.regions_data = regions_data
         self.frequency_bands = self.parent.frequency_bands
@@ -428,6 +427,10 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
         return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.calc)]
     
     def get_lag_of_max_corr(self):
+        # TODO: it is causing all kinds of special pleading elsewhere in the code to have this method
+        # I think we should move toward letting the user have a list of operations on the base calc type
+        # they can specify, argmax and argmin being two of them.  I mean, arguably that's what `histogram`
+        # already is, but it's also an `aggregate`.  I mean just mathematical operations
         amp_xcorr = self.get_amp_xcorr()
         if contains_nan(amp_xcorr):
             return xr.DataArray(np.nan)
@@ -460,7 +463,10 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
             for signal_series in valid_sets:
                 amp1, amp2 = [self.amplitude(signal) for signal in signal_series]
                 corr, _ = pearson_xcorr(amp1, amp2, fs=fs)
-
+                # todo: this len_longest_corr logic will cause an error if you
+                # are trying to average over different calculators with different lengths
+                # in practice, often not a problem since you restrict the length of the longest corr
+                # but should be fixed
                 weight = corr.size / len_longest_corr
                 padded = np.full(len_longest_corr, np.nan)
                 start = (len_longest_corr - corr.size) // 2

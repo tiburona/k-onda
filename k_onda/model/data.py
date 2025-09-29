@@ -124,6 +124,8 @@ class Data(Base, Aggregates):
         elif self.kind_of_data == 'lfp':
             if self.calc_type in ['amp_xcorr', 'lag_of_max_corr']:
                 hierarchy = ['experiment', 'animal', 'amp_xcorr_calculator']
+            elif self.calc_type == 'coherence':
+                hierarchy = ['experiment', 'animal', 'coherence_calculator']
             else:
                 hierarchy = ['experiment', 'animal', 'period', 'event']
         elif self.kind_of_data == 'mrl':
