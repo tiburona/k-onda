@@ -30,7 +30,7 @@ class LFPPrepMethods(PrepMethods):
     def prep_data(self):
         data_label = f"{self.selected_brain_region}_lfp"
         if data_label not in self.initialized:
-            self.process_lfp()
+            self.process_lfp() 
             self.initialized.append(data_label)
 
     def load_blackrock_file(self, nsx_to_load=3):

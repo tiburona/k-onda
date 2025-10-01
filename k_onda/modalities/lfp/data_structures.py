@@ -370,20 +370,6 @@ class RegionRelationshipCalculator(Data, EventValidator, LFPProperties):
         raise NotImplementedError("Not yet implemented for RegionRelationshipCalculator.")
     
 
-class RelationshipCalculatorEvent(Event):
-
-    _parent_name = 'animal'
-
-    def __init__(self, parent_calculator, i, regions_data):
-        period = self.parent_calculator.period
-        super().__init__(period, period.onset, i)
-        self.parent = parent_calculator
-        self.regions_data = regions_data
-        self.frequency_bands = self.parent.frequency_bands
-
-    def validator(self):
-        return (not self.calc_opts.get('validate_events') or 
-                self.parent.joint_event_validity()[self.identifier // self.parent.event_duration])
 
 
 class CoherenceCalculator(RegionRelationshipCalculator):
@@ -567,26 +553,6 @@ class PhaseRelationshipCalculator(RegionRelationshipCalculator):
             ) for low, high in self.frequency_bands])
         return valid_sets.transpose(1, 0, 2)
 
-
-class PhaseRelationshipEvent(RelationshipCalculatorEvent):
-
-    name = 'phase_relationship_event'
-
-
-    def __init__(self, parent_calculator, i, region_1_data, region_2_data):
-        super().__init__(parent_calculator, i, region_1_data, region_2_data)
-        self.event_duration = parent_calculator.event_duration
-
-    def get_phase_trace(self):
-        return self.get_angles()
-
-    def get_region_phases(self, region_data):
-        return np.array([compute_phase(bandpass_filter(region_data, low, high, self.sampling_rate))
-                for low, high in self.frequency_bands])
-    
-    def get_phase_phase_mrl(self):
-        data = self.get_angles()
-        return compute_mrl(data, np.ones(data.shape()), dim=1)
     
 
 class GrangerFunctions:
@@ -734,15 +700,7 @@ class GrangerSegment(Data, GrangerFunctions):
         return result
         
 
-class GrangerEvent(RelationshipCalculatorEvent):
 
-    name = 'granger_event'
-
-    def get_granger_model_order(self):
-        ml = MatlabInterface(self.env_config['matlab_config'])
-        data = np.vstack((self.region_1_data, self.region_2_data))
-        result = ml.tsdata_to_info_crit(data)
-        return result
         
     
     

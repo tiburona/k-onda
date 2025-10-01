@@ -66,13 +66,11 @@ def pearson_xcorr(x, y, fs=None, min_overlap_frac=0.5, min_overlap=None):
     # Lags: -(n-1) .. +(n-1)
     lags = correlation_lags(n, n, mode="full")
 
-    # Overlap start/stop indices for x and y at each lag
-    # lag >= 0: x[0:n-lag] vs y[lag:n]
-    # lag <  0: x[-lag:n]  vs y[0:n+lag]
-    i0 = np.where(lags >= 0, 0, -lags)
-    i1 = np.where(lags >= 0, n - lags, n)
-    j0 = np.where(lags >= 0, lags, 0)
-    j1 = np.where(lags >= 0, n, n + lags)
+    
+    i0 = np.where(lags >= 0, lags, 0)  # When lags are positive, y leads. the beginning of x is equivalent to the number of lags. When lags are negative, x leads, and the beginning of x is the first index.
+    i1 = np.where(lags >= 0, n,     n + lags)  # When lags are positive, the end of x is equivalent to the size of x.  In other words the index starts at lags and ends at the end.  When lags are negative, and x leads, the second x index is n + lags (i.e. n - |lags|)
+    j0 = np.where(lags >= 0, 0,     -lags)  # When lags are positive, y leads.  The beginning of y is 0.  When lags are negative the beginning of y is | lags | 
+    j1 = np.where(lags >= 0, n - np.maximum(lags, 0), n) # When lags are positive, y leads, and the second y index is n - lags.  When lags are negative, x leads, and the second y index is n.
     m = (i1 - i0).astype(np.int64)  # overlap length per lag
 
     # Min-overlap mask

@@ -47,9 +47,6 @@ def calc_coherence(x, y, sampling_rate, low, high,
     return f[mask], Cxy[mask]
 
 
-import numpy as np
-
-
 def coherence_from_spectra(x, y, fs, nperseg, noverlap, window='hann', detrend='constant'):
     f, Sxx = welch(x, fs=fs, window=window, nperseg=nperseg, noverlap=noverlap, detrend=detrend)
     _, Syy = welch(y, fs=fs, window=window, nperseg=nperseg, noverlap=noverlap, detrend=detrend)
