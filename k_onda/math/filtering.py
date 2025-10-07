@@ -264,3 +264,121 @@ class FilterMixin:
             self.shared_filters[alias] = flt
 
         return flt, cfg  
+
+    def visualize_filter(
+        self,
+        flt: "Filter",
+        *,
+        zoom_range: Optional[Tuple[float, float]] = None,  # e.g., (6.0, 14.0)
+        worN: int = 8192,
+        db: bool = True,
+        annotate: bool = True,
+    ):
+        """
+        Plot magnitude response of a designed Filter (FIR/IIR).
+        - zoom_range: (f_lo, f_hi) in Hz to show a zoom panel in addition to the full view.
+        - worN: frequency grid size for response.
+        - db: plot in dB (20*log10|H|) if True, otherwise linear gain.
+        - annotate: add a small text box with design metadata.
+
+        Returns
+        -------
+        (fig, axes)
+        axes is a single Axes when zoom_range is None, else a tuple (ax_full, ax_zoom).
+        """
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from scipy.signal import freqz, sosfreqz
+
+        if flt._kind == "none":
+            raise ValueError("Cannot visualize a 'none' filter.")
+
+        fs = float(flt.meta.fs_eff) if np.isfinite(getattr(flt.meta, "fs_eff", np.nan)) else None
+        if fs is None:
+            raise ValueError("Filter.meta.fs_eff is missing; cannot compute frequency response.")
+
+        # Frequency response
+        if flt._kind == "fir":
+            w, H = freqz(flt._b, worN=worN, fs=fs)
+        elif flt._kind == "sos":
+            w, H = sosfreqz(flt._sos, worN=worN, fs=fs)
+        else:
+            raise RuntimeError(f"Unknown filter kind: {flt._kind}")
+
+        mag = np.abs(H)
+        y = 20.0 * np.log10(np.maximum(mag, 1e-12)) if db else mag
+
+        # Figure layout: one panel or full+zoom
+        if zoom_range is None:
+            fig, ax = plt.subplots(figsize=(7.5, 4.0))
+            ax.plot(w, y, lw=1.6)
+            ax.set_xlabel("Frequency (Hz)")
+            ax.set_ylabel("Magnitude (dB)" if db else "Gain")
+            ax.set_title(f"Filter response: {flt.meta.method}")
+            ax.grid(True, alpha=0.3)
+            axes = ax
+        else:
+            fz0, fz1 = map(float, zoom_range)
+            mask = (w >= min(fz0, fz1)) & (w <= max(fz0, fz1))
+
+            fig, (ax_full, ax_zoom) = plt.subplots(
+                2, 1, figsize=(7.5, 6.0), height_ratios=[2, 1], sharey=True
+            )
+            # Full
+            ax_full.plot(w, y, lw=1.6)
+            ax_full.set_xlabel("Frequency (Hz)")
+            ax_full.set_ylabel("Magnitude (dB)" if db else "Gain")
+            ax_full.set_title(f"Filter response: {flt.meta.method} (full)")
+            ax_full.grid(True, alpha=0.3)
+
+            # Zoom
+            ax_zoom.plot(w[mask], y[mask], lw=1.8)
+            ax_zoom.set_xlim(min(fz0, fz1), max(fz0, fz1))
+            ax_zoom.set_xlabel("Frequency (Hz)")
+            ax_zoom.set_ylabel("Magnitude (dB)" if db else "Gain")
+            ax_zoom.set_title(f"Zoom: {min(fz0, fz1):.3g}–{max(fz0, fz1):.3g} Hz")
+            ax_zoom.grid(True, alpha=0.3)
+
+            axes = (ax_full, ax_zoom)
+
+        if annotate:
+            # Build a compact metadata blurb (only fields that exist)
+            meta = flt.meta
+            lines = [f"method: {meta.method}", f"fs: {getattr(meta, 'fs_eff', 'n/a'):g} Hz"]
+            if getattr(meta, "numtaps", None):
+                lines.append(f"numtaps: {meta.numtaps}")
+            if getattr(meta, "iir_order", None):
+                lines.append(f"iir_order: {meta.iir_order}")
+            if getattr(meta, "iir_ripple_db", None):
+                lines.append(f"rip(dB): {meta.iir_ripple_db}")
+            if getattr(meta, "kaiser_atten_db", None):
+                lines.append(f"kaiser_attn(dB): {meta.kaiser_atten_db}")
+            if getattr(meta, "kaiser_tw_hz_used", None):
+                lines.append(f"kaiser_tw_used: {meta.kaiser_tw_hz_used:g} Hz")
+            if getattr(meta, "padlen_used", None):
+                lines.append(f"padlen_used: {meta.padlen_used}")
+            if getattr(meta, "pass_median_db", None):
+                lines.append(f"pass_med(dB): {meta.pass_median_db:.1f}")
+            if getattr(meta, "stop_95_db_low", None):
+                lines.append(f"stop95 low(dB): {meta.stop_95_db_low:.1f}")
+            if getattr(meta, "stop_95_db_high", None):
+                lines.append(f"stop95 high(dB): {meta.stop_95_db_high:.1f}")
+
+            txt = "\n".join(lines)
+            # Choose the first axis for the note
+            ax0 = axes if not isinstance(axes, tuple) else axes[0]
+            ax0.text(
+                0.99, 0.02, txt,
+                transform=ax0.transAxes,
+                ha="right", va="bottom",
+                fontsize=9,
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.8, linewidth=0.5),
+            )
+
+        # Make sure a window pops up when running outside notebooks
+        import matplotlib.pyplot as plt
+        plt.tight_layout()
+        plt.show()
+
+        return fig, axes
+

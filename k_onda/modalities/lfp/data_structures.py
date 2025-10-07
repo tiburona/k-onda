@@ -448,7 +448,7 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
 
             for signal_series in valid_sets:
                 amp1, amp2 = [self.amplitude(signal) for signal in signal_series]
-                corr, _ = pearson_xcorr(amp1, amp2, fs=fs)
+                corr, _ = normalized_xcorr(amp1, amp2, fs=fs)
                 # todo: this len_longest_corr logic will cause an error if you
                 # are trying to average over different calculators with different lengths
                 # in practice, often not a problem since you restrict the length of the longest corr
