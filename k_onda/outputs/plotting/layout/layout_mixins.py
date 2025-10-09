@@ -1,6 +1,7 @@
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgba
+import numpy as np
 
 from collections import defaultdict
 
@@ -12,20 +13,45 @@ class AxShareMixin:
     def set_share_bins(self):
         if self.spec is not None:
             self.shared_axes_spec = safe_get(self.spec, ['aesthetics', 'ax', 'share'])
-        if self.shared_axes_spec:
-            self.share_bins = {'x': [], 'y': []}
+        else:
+            self.shared_axes_spec = None
 
     def finalize_shared_axes(self):
+        # finalize children first (bottom-up)
         for child in self.children:
             child.finalize_shared_axes()
-        
-        if not self.share_bins:
+
+        spec = self.shared_axes_spec
+        if not spec:
             return
-        
+
+        # collect *current* axes under this node
+        bins = {'x': [], 'y': []}
+        self._collect_axes(self, bins)
+
+        wanted = spec if isinstance(spec, (list, tuple)) else getattr(spec, 'keys', lambda: [])()
         for axis_key in ('x', 'y'):
-            groups = self.group(self.share_bins, axis_key)
+            if axis_key not in wanted:
+                continue
+            groups = self.group(bins, axis_key)
             for _, axes in groups.items():
-                self._normalize_then_share(axes, axis_key, self.shared_axes_spec or {})
+                self._normalize_then_share(axes, axis_key, spec or {})
+
+    def _collect_axes(self, node, bins):
+        # gather from this node
+        if hasattr(node, "cells") and node.cells is not None:
+            for item in np.asarray(node.cells).ravel():
+                # Plain AxWrapper
+                if getattr(item, "name", None) == "ax":
+                    bins['x'].append(item); bins['y'].append(item)
+                # BrokenAxes wrapper: include its internal AxWrapper list
+                elif getattr(item, "name", None) == "broken_axes":
+                    for axw in getattr(item, "ax_list", []):
+                        bins['x'].append(axw); bins['y'].append(axw)
+
+        # descend
+        for ch in getattr(node, "children", []):
+            self._collect_axes(ch, bins)
 
     def group(self, bins, axis_key):
         spec = self.shared_axes_spec
@@ -40,48 +66,7 @@ class AxShareMixin:
             
         return {'all': bins[axis_key]}
     
-    def _apply_scale(self, ax, axis_key, spec_val, anchor_scale):
-        set_scale = getattr(ax.obj, f"set_{axis_key}scale")
-        if isinstance(spec_val, dict):
-            scale = spec_val.get('scale', anchor_scale or 'linear')
-            kw = {k: v for k, v in spec_val.items() if k != 'scale'}
-            set_scale(scale, **kw)
-        elif isinstance(spec_val, str):
-            set_scale(spec_val)
-        else:
-            # No explicit spec → copy anchor
-            set_scale(anchor_scale)
-
-    def _harmonize_inversion(self, ax, axis_key, anchor_inverted):
-        is_inv = getattr(ax.obj, f"{axis_key}axis_inverted")()
-        if is_inv != anchor_inverted:
-            getattr(ax.obj, f"invert_{axis_key}axis")()
-
-    def _normalize_then_share(self, axes, axis_key, share_spec):
-        if len(axes) < 2:
-            return
-        first, *rest = axes
-
-        # 1) choose canonical scale
-        anchor_scale = getattr(first.obj, f"get_{axis_key}scale")()
-        spec_val = None
-        if isinstance(share_spec, dict) and axis_key in share_spec:
-            spec_val = share_spec[axis_key]
-
-        # 2) normalize everyone’s scale to canonical
-        #    (either explicit spec, or anchor’s scale)
-        for ax in [first, *rest]:
-           self._apply_scale(ax, axis_key, spec_val, anchor_scale)
-
-        # 3) match inversion state (left/right or up/down)
-        anchor_inv = getattr(first.obj, f"{axis_key}axis_inverted")()
-        for ax in rest:
-            self._harmonize_inversion(ax, axis_key, anchor_inv)
-
-        # 4) now it’s safe to share
-        for ax in rest:
-            getattr(ax.obj, f"share{axis_key}")(first.obj)
-
+    
 
 class LegendMixin:
 

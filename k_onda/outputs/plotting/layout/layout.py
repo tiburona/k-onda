@@ -32,10 +32,12 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
             self.spec = self.processor.spec
 
         self.shared_axes_spec = None
+
+        self._dimensions = dimensions 
+        
         self.share_bins = None 
         self.set_share_bins()
 
-        self.dimensions = dimensions or self.calculate_my_dimensions()
         self.create_grid()
        
         if self.processor and self.processor.spec_type == 'segment':
@@ -46,6 +48,32 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
             
         else:
             self.cells = self.subfigure_grid
+
+    def __repr__(self):
+        try:
+            dims = getattr(self, "dimensions", None)
+            proc = getattr(self, "processor_type", None)
+            spec = getattr(self, "spec", None)
+
+            if isinstance(spec, dict) and "divisions" in spec:
+                try:
+                    divisions = " ".join(d["divider_type"] for d in spec["divisions"])
+                except Exception:
+                    divisions = None
+            else:
+                divisions = None
+
+            return f"Layout Object {dims} {proc} {divisions}"
+        except Exception as e:
+            return f"<Layout index={getattr(self,'index',None)} repr_error={e!r}>"
+        
+    
+    @property
+    def dimensions(self):
+        if self._dimensions is None:
+            self._dimensions = self.calculate_my_dimensions()
+        return self._dimensions
+
 
     def root(self):
         if self.parent is None:
@@ -200,22 +228,7 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
              for i in range(self.dimensions[0])
         ])
 
-        for cell in cells.ravel():
-            self._register_ax_to_ancestors(cell)
-
         return cells
-    
-
-    def _register_ax_to_ancestors(self, ax_wrapper):
-        node = self
-        while node is not None:
-            if node.share_bins is not None:
-                spec = node.shared_axes_spec
-                keys = spec if isinstance(spec, (list, tuple)) else spec.keys()
-                for k in ('x', 'y'):
-                    if k in keys:
-                        node.share_bins[k].append(ax_wrapper)
-            node = getattr(node, 'parent', None)
     
     @property
     def no_more_processors(self):
