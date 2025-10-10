@@ -10,32 +10,29 @@ from k_onda.utils import safe_get
 
 class AxShareMixin:
 
-    def set_share_bins(self):
+    def set_shared_axes_spec(self):
         if self.spec is not None:
             self.shared_axes_spec = safe_get(self.spec, ['aesthetics', 'ax', 'share'])
         else:
             self.shared_axes_spec = None
 
     def finalize_shared_axes(self):
-        # finalize children first (bottom-up)
         for child in self.children:
             child.finalize_shared_axes()
-
         spec = self.shared_axes_spec
-        if not spec:
-            return
+        if not spec: return
 
-        # collect *current* axes under this node
         bins = {'x': [], 'y': []}
         self._collect_axes(self, bins)
 
-        wanted = spec if isinstance(spec, (list, tuple)) else getattr(spec, 'keys', lambda: [])()
-        for axis_key in ('x', 'y'):
-            if axis_key not in wanted:
-                continue
+        for axis_key in ('x','y'):
+            wanted = spec if isinstance(spec,(list,tuple)) else getattr(spec,'keys',lambda:[])()
+            if axis_key not in wanted: continue
+
             groups = self.group(bins, axis_key)
+
             for _, axes in groups.items():
-                self._normalize_then_share(axes, axis_key, spec or {})
+                self._share(axes, axis_key)
 
     def _collect_axes(self, node, bins):
         # gather from this node
@@ -65,6 +62,16 @@ class AxShareMixin:
                 return groups
             
         return {'all': bins[axis_key]}
+    
+    def _share(self, axes, axis_key):
+        if len(axes) < 2:
+            return
+        anchor = axes[0].obj
+        for w in axes[1:]:
+            getattr(w.obj, f"share{axis_key}")(anchor)
+
+
+
     
     
 

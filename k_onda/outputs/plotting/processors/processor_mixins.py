@@ -48,7 +48,7 @@ class AestheticsMixin(ProcessorMixin):
     def init_aesthetics(self):
         element_dict = self.spec.get('aesthetics', {})
         if self.parent_processor:
-            self.parent_processor.aesthetics.update(element_dict)
+            recursive_update(self.parent_processor.aesthetics, element_dict)
             return self.parent_processor.aesthetics
         else:
             return element_dict

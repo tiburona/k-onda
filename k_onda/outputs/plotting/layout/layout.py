@@ -36,7 +36,7 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
         self._dimensions = dimensions 
         
         self.share_bins = None 
-        self.set_share_bins()
+        self.set_shared_axes_spec()
 
         self.create_grid()
        

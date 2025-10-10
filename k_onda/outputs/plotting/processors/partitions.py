@@ -45,61 +45,9 @@ class Partition(Processor):
                     plot_type=self.plot_type, aesthetics=self.aesthetics, 
                     legend_info_list=self.legend_info_list)
                 
-            bins = {'x': [], 'y': []}
-
             root = self.child_layout.root()
-            root._collect_axes(self.child_layout, bins)
-
-            axA, axB = bins['x']
-
-            print("FINALIZE @", len(axA.lines), len(axB.lines), len(axA.patches), len(axB.patches))
-            # right before finalize_shared_axes()
-
-            # immediately before finalize
-            collected = [w.obj for w in bins['x']]        # from your collector
-            fig_axes = list(root.figure.get_figure().axes)
-            print("collected ids:", {id(a) for a in collected})
-            print("fig.axes   ids:", {id(a) for a in fig_axes})
-
-            print("same figurebase?", axA.figure is axB.figure)
-            print("siblings:", len(axA.get_shared_x_axes().get_siblings(axA)))
-
-            print("autoscaleX:", [a.obj.get_autoscalex_on() for a in bins['x']])
-
-            def _tag(ax, axis): ax._konda_sync_tag = getattr(ax, "_konda_sync_tag", 0) + 1
-
-
-            
-
             root.finalize_shared_axes()
-
-            print("autoscaleX post-finalize:", [w.obj.get_autoscalex_on() for w in bins['x']])
-
-
-            for w in bins['x']: _tag(w.obj, 'x')
-            print([getattr(w.obj, "_konda_sync_tag", 0) for w in bins['x']])
-
-            axA.callbacks.connect('xlim_changed', lambda a: print("A changed to", axA.get_xlim()))
-            axB.callbacks.connect('xlim_changed', lambda a: print("B changed to", axB.get_xlim()))
-
-            
-
-            root.finalize_shared_axes()
-
-            axA.set_xlim(0, 1)         # after finalize
-            print(axB.get_xlim())       # should be (0, 1)
-
-
-            for w in bins['x']: _tag(w.obj, 'x')
-            print([getattr(w.obj, "_konda_sync_tag", 0) for w in bins['x']])
-
-            # After finalize, do one explicit draw
-            for a in {w.obj.figure for w in bins['x']}:
-                a.canvas.draw()
-            print([w.obj.get_xlim() for w in bins['x']])
-
-
-            
+       
 
     def assign_data_sources(self):
         """
