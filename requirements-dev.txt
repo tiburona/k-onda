@@ -2,3 +2,5 @@ debugpy==1.8.14
 pytest>=8.0
 nbval
 pytest-cov
+nbstripout
+pre-commit
