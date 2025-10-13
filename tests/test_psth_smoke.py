@@ -1,8 +1,8 @@
 import tempfile
 import shutil
 from k_onda.main import run_pipeline
-from k_onda.devtools import find_project_root
-from k_onda.example_configs import PSTH_OPTS
+from k_onda.resources.devtools import find_project_root
+from k_onda.resources.example_configs import PSTH_OPTS
 from pathlib import Path
 
 
@@ -10,7 +10,7 @@ from pathlib import Path
 PROJECT_ROOT = find_project_root()
 
 def test_run_pipeline_demo_config():
-    config_file = Path(f"{PROJECT_ROOT}/k_onda/example_configs/config.json")
+    config_file = Path(f"{PROJECT_ROOT}/k_onda/resources/example_configs/config.json")
     out_dir = tempfile.mkdtemp()
 
     # Patch the output path

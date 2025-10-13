@@ -1,13 +1,13 @@
 from pathlib import Path
 
 from k_onda.main import run_pipeline
-from k_onda.devtools import find_project_root
-from k_onda.example_configs import LFP_OPTS
+from k_onda.resources.devtools import find_project_root
+from k_onda.resources.example_configs import LFP_OPTS
 
 from utils import write_lfp_files
 
 PROJECT_ROOT = find_project_root()
-config_file = Path(f"{PROJECT_ROOT}/k_onda/example_configs/config.json")
+config_file = Path(f"{PROJECT_ROOT}/k_onda/resources/example_configs/config.json")
 
 
 def test_smoke_lfp():

@@ -109,11 +109,18 @@ class LegendMixin:
             legend_key['bbox_to_anchor'] = legend_key.get('bbox_to_anchor') or (.8, .9)
             ax.legend(handles, labels, **legend_key)
 
-    def get_handle(self, entry, _):
+    def get_handle(self, entry, index):
         if self.plot_type in ['psth', 'bar_plot']:
             return self.make_bar_handles_from_entry(entry)
         if self.plot_type in ['categorical_line', 'vertical_line', 'line_plot']:
-            # todo: is this just getting written over by get_handle on LinePlotter?
+            cell = entry.get('cell')
+            if cell is not None:
+                try:
+                    lines = cell.get_lines()
+                except AttributeError:
+                    lines = None
+                if lines is not None and index < len(lines):
+                    return lines[index]
             return self.make_line_handles_from_entry(entry)
         else:
             raise NotImplemented("can only make legends from handles for line and bar graphs")
@@ -276,6 +283,5 @@ class ColorbarMixin:
     
 
         
-
 
 

@@ -2,8 +2,8 @@ from copy import deepcopy
 from pathlib import Path
 
 from k_onda.main import run_pipeline
-from k_onda.devtools import find_project_root
-from k_onda.example_configs import LFP_OPTS, PSTH_OPTS
+from k_onda.resources.devtools import find_project_root
+from k_onda.resources.example_configs import LFP_OPTS, PSTH_OPTS
 from utils import write_lfp_files
 
 
@@ -21,7 +21,7 @@ LFP_CALC_OPTS['periods'] = PSTH_CALC_OPTS['periods']
 
 
 PROJECT_ROOT = find_project_root()
-config_file = Path(f"{PROJECT_ROOT}/k_onda/example_configs/config.json")
+config_file = Path(f"{PROJECT_ROOT}/k_onda/resources/example_configs/config.json")
 
 
 CSV_OPTS = {
