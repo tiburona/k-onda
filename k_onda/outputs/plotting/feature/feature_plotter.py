@@ -40,7 +40,7 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
             self.apply_ax_args(cell, ax_args, i)
 
             if legend:
-                self.record_entry_for_legend(entry, legend, cells_with_legend)
+                self.record_entry_for_legend(entry, i, legend, cells_with_legend)
       
         if legend:
             self.make_legend(set(cells_with_legend), legend)
@@ -61,7 +61,7 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
         return False
         
     def get_entry_label(self, entry, legend):
-        relevant_divider_types = legend.get('divisions')
+        relevant_divider_types = legend.get('divider_types')
         if relevant_divider_types is None:
             relevant_divider_types = [d['divider_type'] for d in entry['last_spec']['divisions']]
         label = []
@@ -71,6 +71,9 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
                 key, val = list(member.items())[0]  # Correct unpacking
                 if entry[key] == val:
                     label.append(val)
+            elif division == 'period_group':
+                val = 'periods ' + ' '.join(str(m) for m in member)
+                label.append(val)
             else:
                 if entry[division] == member:
                     label.append(member)

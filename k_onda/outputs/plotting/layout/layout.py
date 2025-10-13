@@ -41,7 +41,10 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
         self.create_grid()
        
         if self.processor and self.processor.spec_type == 'segment':
-            self.label_figure = self.parent.label_figure
+            if hasattr(self.parent, 'label_figure'):
+                self.label_figure = self.parent.label_figure
+            else:
+                self.label_figure = self.figure
 
         if self.no_more_processors:
             self.cells = self.make_all_axes()

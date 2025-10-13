@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .feature_plotter import FeaturePlotter
+from k_onda.utils import safe_get
 
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial'] 
@@ -9,10 +10,16 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 
 class LinePlotter(FeaturePlotter):
 
-    def coord_vals(self, val):
+    def coord_vals(self, val, aesthetic_args):
         """Returns the x-coordinates for the plot. Assumes val is a 1D array."""
         if isinstance(val, np.ndarray):
             return np.arange(len(val))
+        x_coord = safe_get(aesthetic_args, ['tick_labels', 'x', 'x_coord'])
+        if x_coord is not None:
+            return val.coords[x_coord]
+        keys = list(val.coords.keys())
+        if keys:
+            return val.coords[keys[0]].values
         elif hasattr(val, 'coords'):
             # Try to determine the first dimension name.
             if hasattr(val, 'dims'):
@@ -24,20 +31,17 @@ class LinePlotter(FeaturePlotter):
                     first_dim = list(dims.keys())[0]
                 if first_dim in val.coords:
                     return val.coords[first_dim].values
-            # Fallback: use the first key in the coords dictionary.
-            keys = list(val.coords.keys())
-            if keys:
-                return val.coords[keys[0]].values
+            
             else:
                 raise ValueError("No coordinates found in the provided xarray object.")
         else:
             raise ValueError("Unsupported data type for coord_vals.")
     
     def plot_entry(self, ax, val, aesthetic_args=None):
-        ax.plot(self.coord_vals(val), val, label='', **aesthetic_args.get('marker', {}))
+        ax.plot(self.coord_vals(val, aesthetic_args), val, label='', **aesthetic_args.get('marker', {}))
 
-    def get_handle(self, entry):
-        return entry['cell'].get_lines()[0]
+    def get_handle(self, entry, index):
+        return entry['cell'].get_lines()[index]
     
 class VerticalLinePlotter(LinePlotter):
     

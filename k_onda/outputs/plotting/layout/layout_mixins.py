@@ -82,8 +82,8 @@ class LegendMixin:
     # object have knowledge about whether it contains that cell?  More complicated than it sounds,
     # must be thought about when I have mental energy, which is not right now.
 
-    def record_entry_for_legend(self, entry, legend, cells_with_legend):
-        entry['handle'] = self.get_handle(entry)
+    def record_entry_for_legend(self, entry, index, legend, cells_with_legend):
+        entry['handle'] = self.get_handle(entry, index)
         entry['label'] = self.get_entry_label(entry, legend)
         index_key = ','.join(str(d) for d in entry['index'])
         if index_key in legend or 'all' in legend:
@@ -109,7 +109,7 @@ class LegendMixin:
             legend_key['bbox_to_anchor'] = legend_key.get('bbox_to_anchor') or (.8, .9)
             ax.legend(handles, labels, **legend_key)
 
-    def get_handle(self, entry):
+    def get_handle(self, entry, _):
         if self.plot_type in ['psth', 'bar_plot']:
             return self.make_bar_handles_from_entry(entry)
         if self.plot_type in ['categorical_line', 'vertical_line', 'line_plot']:

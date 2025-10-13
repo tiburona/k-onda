@@ -37,7 +37,12 @@ class PeriodConstructor:
 
         if self.selected_period_group:
             prev_condition = condition
-            condition = lambda p: int(p.identifier) in self.selected_period_group and prev_condition(p)
+            def identifier(p):
+                try:
+                    return int(p.identifier)
+                except:
+                    return int(p.identifier.split('_')[-1])
+            condition = lambda p: identifier(p) in self.selected_period_group and prev_condition(p)
 
         return [p for p in periods if condition(p)]
 
