@@ -23,7 +23,7 @@ runner.run(opts=OPTS)
 
 ## Demo
 
-A small demo showing how to generate a peristimulus time histogram of firing rates is included in the demo directory. You can run it via the Python script (demo.py), the Jupyter notebook, or [directly on Binder](mybinder.org/v2/gh/tiburona/k-onda/HEAD?filepath=demo/k_onda_demo.ipynb).
+A small demo showing how to generate a peristimulus time histogram of firing rates is included in the demo directory. You can run it via the Python script (demo.py), the Jupyter notebook, or [directly on Binder](https://mybinder.org/v2/gh/tiburona/k-onda/HEAD?filepath=demo/k_onda_demo.ipynb).
 
 A Binder tip:
 <details>
