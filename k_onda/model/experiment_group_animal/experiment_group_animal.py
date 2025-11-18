@@ -170,7 +170,7 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
             animal.validate_events()
         
 
-class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
+class Group(SpikeMethods, LFPMethods, Data, MRLMethods, BinMethods):
     _name = 'group'
 
     def __init__(self, name, animals=None, **kwargs):
@@ -187,7 +187,7 @@ class Group(Data, SpikeMethods, LFPMethods, MRLMethods, BinMethods):
         return [an for an in self.animals if an.include()]
 
 
-class Animal(Data, PeriodConstructor, SpikeMethods, LFPMethods, MRLPrepMethods, MRLMethods, BinMethods):
+class Animal(PeriodConstructor, SpikeMethods, LFPMethods, Data, MRLPrepMethods, MRLMethods, BinMethods):
     _name = 'animal'
 
     def __init__(self, identifier, animal_info, neuron_types=None, **kwargs):

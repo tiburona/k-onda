@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import numpy as np
 import xarray as xr
 from mne.time_frequency import tfr_array_multitaper
@@ -9,11 +10,13 @@ from k_onda.model.period_event import Period, Event
 from k_onda.model import Data
 from k_onda.model.bins import TimeBin
 from k_onda.interfaces import MatlabInterface
-from k_onda.math import normalized_xcorr, pearson_xcorr, calc_coherence
+from k_onda.math import normalized_xcorr
 from ...modalities.mixins import BandPassFilterMixin
 from k_onda.utils import (bandpass_filter, regularize_angles, 
                           is_iterable, contains_nan)
-from .methods import LFPMethods
+from .methods import LFPMethods, CoherenceMixin, PSDMethods, CoherenceMethods
+from .data_structures_mixins.event_validator import EventValidator
+from .data_structures_mixins.lfp_data_selector import LFPDataSelector
 
 
 class LFPProperties:
@@ -24,37 +27,8 @@ class LFPProperties:
         return np.rint(np.array(padding) * self.lfp_sampling_rate).astype(int)
 
 
-class LFPDataSelector:
-    """A class with methods shared by LFPPeriod and LFPEvent that are used to return portions of their data."""
-
-    @property
-    def lost_signal(self):
-        return self.calc_opts.get('lost_signal', [0, 0])
-
-    def slice_spectrogram(self):                                          
-        tol = 0.2                           
-
-        # boolean mask along the *frequency* coord
-        fmask = ((self.spectrogram['frequency'] >= self.freq_range[0] - tol) &
-                (self.spectrogram['frequency'] <= self.freq_range[1] + tol))         
-
-        return self.spectrogram.sel(frequency=fmask)
-
-
-    @property
-    def sliced_spectrogram(self):
-        return self.slice_spectrogram()
-    
-    
-class EventValidator:
-    
-    def get_event_validity(self, region):
-        period = self if self.name == 'period' else self.period
-        ev = period.animal.lfp_event_validity[region]
-        return {i: valid for i, valid in enumerate(ev[self.period_type][period.identifier])}
-
-
-class LFPPeriod(Period, LFPMethods, LFPProperties, LFPDataSelector, EventValidator):
+class LFPPeriod(LFPMethods, Period, LFPProperties, LFPDataSelector, EventValidator, PSDMethods, 
+                CoherenceMixin):
 
     def __init__(self, animal, index, period_type, period_info, onset, events=None, 
                  target_period=None, is_relative=False, experiment=None):
@@ -68,19 +42,24 @@ class LFPPeriod(Period, LFPMethods, LFPProperties, LFPDataSelector, EventValidat
         self.onset_in_lfp_samples = round(self.onset * conversion_factor)
         self.event_starts = np.array(events)
         self.event_starts_in_seconds = self.event_starts/self.sampling_rate 
-        self.event_starts_in_lfp_samples = (np.array(events) * conversion_factor).astype(int) - 1
+        self.event_starts_in_lfp_samples = (np.array(events) * conversion_factor).astype(int) 
         self.start_in_lfp_samples = self.onset_in_lfp_samples
         self.stop_in_lfp_samples = self.start_in_lfp_samples + self.duration_in_lfp_samples
         self.pad_start = self.start_in_lfp_samples - self.lfp_padding[0]
         self.pad_stop = self.stop_in_lfp_samples + self.lfp_padding[1]
-        # Sanity check: don’t let pads run outside data bounds
+        # don’t let pads run outside data bounds
         assert self.pad_start >= 0
         for r in self.animal.processed_lfp:
             assert self.pad_stop <= len(self.animal.processed_lfp[r])
         self._spectrogram = None
         self.brain_region = self.selected_brain_region
         self.frequency_band = self.selected_frequency_band
-        
+        self.event_duration_samples = round(self.event_duration * self.lfp_sampling_rate)
+        self._segments = OrderedDict()
+        self._events = OrderedDict()
+        self.max_event_cache   = self.calc_opts.get('max_event_cache', 4)
+        self.max_segment_cache = self.calc_opts.get('max_segment_cache', 4)
+
     @property
     def padded_data(self):
         return self.get_data_from_animal_dict(self.animal.processed_lfp, 
@@ -116,32 +95,58 @@ class LFPPeriod(Period, LFPMethods, LFPProperties, LFPDataSelector, EventValidat
             frequency=slice(None, last_freq))                               
           
         self._spectrogram = spec_trimmed                                   
-        return spec_trimmed            
+        return spec_trimmed  
+    
+    @property
+    def children(self):
+        if self.calc_type in ['coherence', 'psd'] and self.calc_opts['validate_events'] == True:
+            return self.get_segments()
+        else:
+            return self.get_events()          
 
     def get_events(self):
         """
         Build LFPEvent objects, one per stimulus, keyed to spectrogram bins.
         Works entirely in *period_time* space; no absolute-time juggling.
         """
-        eps   = 1e-8
-        tbins = self.spectrogram.coords['period_time'].values
 
-        events = []
-        for i, rel_start in enumerate(self.event_starts_in_period_time):
+        events = self._get_cache(self._events, self._event_key())
 
-            win_start = rel_start - self.pre_event
-            win_end   = rel_start + self.post_event
+        if events is None:
 
-            mask = (tbins >= win_start - eps) & (tbins < win_end - eps)
-            event_times = tbins[mask]
+            eps   = 1e-8
+            tbins = self.spectrogram.coords['period_time'].values
 
-            events.append(LFPEvent(i, event_times,     # event_times in period space
-                                self.event_starts_in_seconds[i],  # keep abs too
-                                mask, self))
+            events = []
+            for i, rel_start in enumerate(self.event_starts_in_period_time):
 
-        self._events = events
+                win_start = rel_start - self.pre_event
+                win_end   = rel_start + self.post_event
+
+                mask = (tbins >= win_start - eps) & (tbins < win_end + eps)
+                event_times = tbins[mask]
+
+                events.append(LFPEvent(i, event_times,     # event_times in period space
+                                    self.event_starts_in_seconds[i],  # keep abs too
+                                    mask, self))
+                
+            self._set_cache(self._events, self._event_key(), events,
+                            self.max_event_cache)
+
         return events
-        
+    
+    def get_segments(self):
+        segments = self._get_cache(self._segments, self._segment_key())
+        if segments is None:
+            ev_ok = self.get_event_validity(self.selected_brain_region)
+            do_pad = self.calc_type not in ['coherence', 'psd']
+            data = self.padded_data if do_pad else self.unpadded_data
+            valid_sets = self.divide_data_into_valid_sets(data, ev_ok, do_pad=do_pad) 
+            segments = [PeriodSegment(vs) for vs in valid_sets]
+            self._set_cache(self._segments, self._segment_key(), segments,
+                            self.max_segment_cache)
+        return segments
+                   
     @property
     def extended_data(self):
         data = self.events[0].data
@@ -213,8 +218,8 @@ class LFPPeriod(Period, LFPMethods, LFPProperties, LFPDataSelector, EventValidat
 
             self.save(da, pickle_path)                                             
 
-        return da      
-    
+        return da  
+
     def index_transformation_function(self, concatenator):
         if concatenator == 'animal':
             return lambda calc: calc.assign_coords(
@@ -222,7 +227,27 @@ class LFPPeriod(Period, LFPMethods, LFPProperties, LFPDataSelector, EventValidat
                 ) if isinstance(calc, xr.DataArray) else calc
         else:
             raise NotImplementedError("Period concatenation is currently only supported by animal.")
+        
+    @property
+    def segment_weights(self):
+        if len(self.segments) == 0:
+            return []
+        return [len(seg.unpadded_data) for seg in self.segments]
     
+    def get_psd_(self):
+        return self.psd_from_contiguous_data(self.unpadded_data)
+
+
+class PeriodSegment(Data, LFPMethods, PSDMethods):
+
+    _name = 'period_segment'
+    
+    def __init__(self, data):
+        self.unpadded_data = data
+
+    def get_psd_(self):
+        return self.psd_from_contiguous_data(self.unpadded_data)
+
 
 class LFPEvent(Event, LFPMethods, LFPProperties, LFPDataSelector):
 
@@ -283,122 +308,112 @@ class LFPEvent(Event, LFPMethods, LFPProperties, LFPDataSelector):
 
 class RegionRelationshipCalculator(Data, EventValidator, LFPProperties):
 
-    def __init__(self, period, regions):
+    def __init__(self, period):
         self.period = period
         self.parent = self.period.parent
         self.period_id = period.identifier
         self.period_type = period.period_type
-        self.regions = regions
         self.identifier = f"{'_'.join(self.regions)}_{self.period.identifier}"
-        processed_lfp = self.period.animal.processed_lfp
-        self.regions_data = [processed_lfp[r][
-            self.period.start_in_lfp_samples:self.period.stop_in_lfp_samples] for r in self.regions]
-        self.event_duration = round(self.lfp_sampling_rate * self.period.event_duration)
-        self.padded_regions_data = [
-            processed_lfp[r][self.period.pad_start:self.period.pad_stop]
-            for r in self.regions]
-        self._children = []
+        self.event_duration = self.period.event_duration
+        self.event_duration_samples = round(self.lfp_sampling_rate * self.event_duration)
         self.frequency_bands = [(f + .05, f + 1) for f in range(*self.freq_range)]
+        self._segments = OrderedDict()
+        self._events = OrderedDict()
+        self.max_event_cache   = self.calc_opts.get('max_event_cache', 4)
+        self.max_segment_cache = self.calc_opts.get('max_segment_cache', 4)
+
+    
+    @property
+    def regions_data(self):
+        processed_lfp = self.period.animal.processed_lfp
+        return [
+            processed_lfp[r][self.period.start_in_lfp_samples:self.period.stop_in_lfp_samples]
+            for r in self.regions
+        ]
+
+    @property
+    def padded_regions_data(self):
+        processed_lfp = self.period.animal.processed_lfp
+        return [
+            processed_lfp[r][self.period.pad_start:self.period.pad_stop]
+            for r in self.regions
+        ]
+    
+    @property
+    def regions(self):
+        return tuple(self.selected_brain_regions)
 
     @property
     def children(self):
-        if not len(self._children):
-            self.get_events()
-        return self._children
+        if self.calc_opts.get('validate_events'):
+            return self.get_segments()
+        else:
+            return self.get_events()
+     
 
     def joint_event_validity(self):
         evs = [self.get_event_validity(region) for region in self.regions]
         return {i: all([ev[i] for ev in evs]) for i in evs[0]}
-
-    def divide_data_into_valid_sets(self, region_data, do_pad=False):
-        if not self.calc_opts.get('validate_events'):
-            return [np.asarray(region_data)]
-
-        N = len(region_data)
-        ev_ok = self.joint_event_validity()
-        ev_len = int(self.event_duration)
-
-        # Build a boolean vector of event validity across time
-        n_events = N // ev_len
-        valid_vec = np.zeros(n_events, dtype=bool)
-        for k in range(n_events):
-            valid_vec[k] = ev_ok.get(k, False)
-
-        # Find contiguous runs of True
-        runs = []
-        i = 0
-        while i < n_events:
-            if not valid_vec[i]:
-                i += 1
-                continue
-            j = i
-            while j < n_events and valid_vec[j]:
-                j += 1
-            # events [i, j) are valid
-            runs.append((i, j))
-            i = j
-
-        valid_sets = []
-        # pad lengths in samples
-        padL, padR = int(self.lfp_padding[0]), int(self.lfp_padding[1])
-
-        # Minimum length (for filter stability if needed)
-        min_len = 0 if self.calc_type == 'coherence' else (self.lfp_sampling_rate + 1) * 3 + 1
-
-        for ev_start, ev_stop in runs:
-            start_samp = ev_start * ev_len
-            stop_samp  = ev_stop  * ev_len
-            if do_pad:
-                left  = max(0, start_samp - padL)
-                right = min(N, stop_samp + padR)
-            else:
-                left, right = start_samp, stop_samp
-
-            seg = np.asarray(region_data[left:right])
-            if seg.size > min_len:
-                valid_sets.append(seg)
-
-        return valid_sets
     
-    def get_valid_sets(self, do_pad=False):
-        valid_sets = list(zip(*(self.divide_data_into_valid_sets(data, do_pad=do_pad) 
-                               for data in self.regions_data)))
-        len_sets = [len(a) for a, _ in valid_sets]
-        return valid_sets, len_sets
-    
+    def get_segments(self):
+
+        segments = self._get_cache(self._segments, self._segment_key())
+
+        if segments is None:
+
+            ev_ok = self.joint_event_validity()
+            do_pad = self.calc_type not in ['coherence', 'psd']
+            regions_data = self.padded_regions_data if do_pad else self.regions_data
+
+            valid_sets = list(zip(*(self.divide_data_into_valid_sets(data, ev_ok, do_pad=do_pad) 
+                                for data in regions_data)))
+            
+            segments = [self.segment_class(self, vs, i) for i, vs in enumerate(valid_sets)]
+
+            self._set_cache(self._segments, self._segment_key(), segments,
+                                 self.max_segment_cache)
+            
+        return segments
+        
+    def get_events(self):
+        raise NotImplementedError
+            
     def index_transformation_function(self, concatenator):
         raise NotImplementedError("Not yet implemented for RegionRelationshipCalculator.")
     
+    @property
+    def segment_weights(self):
+        if len(self.segments) == 0:
+            return []
+        return [len(seg.regions_data[0]) for seg in self.segments]
 
 
+class RelationshipCalculatorSegment(Data, LFPMethods, LFPProperties):
 
-class CoherenceCalculator(RegionRelationshipCalculator):
-
-    name = 'coherence_calculator'
-
-    def get_coherence(self):
-        if not self.calc_opts.get('validate_events'):
-            f, coherence = calc_coherence(*self.regions_data, self.lfp_sampling_rate, 
-                                  *self.freq_range)
-        else:
-            valid_sets, len_sets = self.get_valid_sets()
-            if len(valid_sets) == 0:
-                return np.nan
-            coherence_sets = [calc_coherence(*data, self.lfp_sampling_rate, *self.freq_range) for data in valid_sets]
-            f = coherence_sets[0][0]
-            coherence = sum(
-                [coherence_set[1] * len(valid_sets[i][0])/sum(len_sets) 
-                for i, coherence_set in enumerate(coherence_sets)
-                ])
-        da = xr.DataArray(
-            coherence,
-            dims=['frequency'],
-            coords={'frequency': f})
-        if self.calc_opts.get('frequency_type') == 'block':
-            da = da.mean(dim='frequency')
-        return da
-        
+    def __init__(self, region_relationship_calculator, valid_data, index):
+        self.region_relation_calculator = region_relationship_calculator
+        self.parent = region_relationship_calculator
+        self.regions_data = valid_data
+        self.regions = self.parent.regions
+        self.period = self.parent.period
+        self.identifier = index
     
+
+class CoherenceCalculatorSegment(RelationshipCalculatorSegment, CoherenceMethods, LFPMethods, 
+                                 CoherenceMixin, PSDMethods):
+
+    _name = 'coherence_segment'
+
+    def __init__(self, coherence_calculator, data, index):
+        super().__init__(coherence_calculator, data, index)
+
+
+class CoherenceCalculator(RegionRelationshipCalculator, CoherenceMethods, LFPMethods, CoherenceMixin):
+
+    _name = 'coherence_calculator'
+    segment_class = CoherenceCalculatorSegment
+    
+   
 class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
 
     _name = 'amp_xcorr_calculator'
@@ -439,7 +454,8 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
             result = corr
 
         else:
-            valid_sets, len_sets = self.get_valid_sets(do_pad=True)
+            ev_ok = self.get_event_validity()
+            valid_sets, len_sets = self.get_valid_sets(ev_ok, do_pad=True)
             if not valid_sets:
                 return xr.DataArray(np.nan)
 
@@ -490,13 +506,13 @@ class PhaseRelationshipCalculator(RegionRelationshipCalculator):
             time_to_use = self.calc_opts.get('events')[self.parent.period_type]['post_stim']  # TODO: Fix this to allow for pre stim time
             time_to_use *= self.lfp_sampling_rate
         else:
-            time_to_use = self.event_duration
+            time_to_use = self.event_duration_samples
         return time_to_use
     
     def get_event_segment(self):
         time_to_use = self.time_to_use
         ones_segment = np.ones(time_to_use)
-        nans_segment = np.full(self.event_duration - time_to_use, np.nan)
+        nans_segment = np.full(self.event_duration_samples - time_to_use, np.nan)
         segment = np.concatenate([ones_segment, nans_segment])
         return segment
 

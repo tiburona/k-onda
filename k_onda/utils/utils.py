@@ -147,6 +147,25 @@ def to_serializable(val):
         return val
     
 
+def to_hashable(val):
+    """
+    Recursively coerce containers into hashable equivalents suitable for dict keys.
+    """
+    if isinstance(val, (tuple, list)):
+        return tuple(to_hashable(item) for item in val)
+    if isinstance(val, dict):
+        # sort to guarantee equal dicts produce the same hashable tuple
+        return tuple(sorted((to_hashable(k), to_hashable(v)) for k, v in val.items()))
+    if isinstance(val, (set, frozenset)):
+        return tuple(sorted(to_hashable(item) for item in val))
+    if isinstance(val, np.ndarray):
+        return tuple(to_hashable(item) for item in val.tolist())
+    if isinstance(val, numbers.Number) or isinstance(val, str) or val is None:
+        return val
+    # Fallback: use repr so objects are at least distinguishable
+    return repr(val)
+
+
 def formatted_now():
     now = datetime.now()
     return now.strftime("%Y-%m-%d %H:%M:%S")
@@ -391,5 +410,6 @@ def find_container_with_key(data, target_key):
     return None
 
 
-
+def standardize(num_array):
+    return np.round(num_array, 8).astype(np.float64)
 

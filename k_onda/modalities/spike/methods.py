@@ -32,8 +32,6 @@ class RateMethods:
     def spikes(self):
         if self._spikes is None:
             self._spikes = self.unit.find_spikes(*self.spike_range)
-        if self.period_type == 'prestim':
-            a = 'foo'
         return self._spikes
  
     @property
@@ -43,6 +41,14 @@ class RateMethods:
     @property
     def spike_range(self):
         return (self.start, self.stop)
+    
+    def resolve_calc_fun(self, calc_type, stop_at=None):
+        if stop_at is None:
+            stop_at=self.calc_opts.get('base', 'event')
+        if self.name == stop_at:
+            return getattr(self, f"get_{calc_type}_")()
+        else:
+            return self.get_average(f"get_{calc_type}", stop_at=stop_at)
     
     def get_psth(self):
         return self.resolve_calc_fun('psth')

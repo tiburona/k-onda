@@ -177,7 +177,6 @@ class LFPPrepMethods(PrepMethods):
         self.phase_relationship_calculators = self.prepare_region_relationship_calculators(cls)
 
     def prepare_region_relationship_calculators(self, calc_class):
-        brain_regions = self.calc_opts.get('region_set').split('_')
-        return ({period_type: [calc_class(period, brain_regions) 
+        return ({period_type: [calc_class(period) 
                                for period in self.lfp_periods[period_type]] 
                                for period_type in self.lfp_periods})

@@ -4,9 +4,6 @@ import matplotlib.pyplot as plt
 
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
-
-import numpy as np
-
 from ..layout.layout_mixins import LegendMixin
 from ..plotting_helpers import PlottingMixin
 from k_onda.core import Base
@@ -36,6 +33,7 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
             ax_args = aesthetic_args.get('ax', {})
             
             val = entry[entry['attr']]
+
             self.plot_entry(cell, val, aesthetic_args)
             self.apply_ax_args(cell, ax_args, i)
 

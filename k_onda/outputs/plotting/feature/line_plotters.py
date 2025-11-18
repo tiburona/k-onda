@@ -40,8 +40,8 @@ class LinePlotter(FeaturePlotter):
     def plot_entry(self, ax, val, aesthetic_args=None):
         ax.plot(self.coord_vals(val, aesthetic_args), val, label='', **aesthetic_args.get('marker', {}))
 
-    def get_handle(self, entry, index):
-        return entry['cell'].get_lines()[index]
+    # def get_handle(self, entry, index):
+    #     return entry['cell'].get_lines()[index]
     
 class VerticalLinePlotter(LinePlotter):
     
@@ -66,7 +66,7 @@ class VerticalLinePlotter(LinePlotter):
 
         # Draw each vertical line with a height equal to the length provided,
         # centered vertically at y_center.
-        for coord_val, center, length in zip(self.coord_vals(val), centers, lengths):
+        for coord_val, center, length in zip(self.coord_vals(val, aesthetic_args), centers, lengths):
             ax.vlines(coord_val, 
                       center - length*line_length_multiplier, 
                       center + length*line_length_multiplier,

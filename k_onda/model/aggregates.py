@@ -2,17 +2,16 @@ from collections import defaultdict
 import numpy as np
 import xarray as xr
 
-from k_onda.utils import cache_method, always_last, sem, is_truthy, \
-    drop_inconsistent_coords, round_coords, fill_missing_arrays
+from .xarray_helpers import XMean, fill_missing_arrays
+from k_onda.utils import cache_method, always_last, sem
+
 
 
 # TODO a lot of methods in here need to deal with dictionaries for the granger case,
 # like sem, mean, etc.
 
 
-class Aggregates:
-
-
+class Aggregates(XMean):
 
     def get_calc(self, calc_type=None):
         if calc_type is None:
@@ -26,13 +25,6 @@ class Aggregates:
         else:
             self.calc_mode = 'normal'  # the other cases set calc_mode later
             return getattr(self, f"get_{calc_type}")()
-       
-    def resolve_calc_fun(self, calc_type):
-        stop_at=self.calc_opts.get('base', 'event')
-        if self.name == stop_at:
-            return getattr(self, f"get_{calc_type}_")()
-        else:
-            return self.get_average(f"get_{calc_type}", stop_at=stop_at)
     
     @property
     def calc_result(self):
@@ -44,56 +36,20 @@ class Aggregates:
     @property
     def calc(self):
         return self.get_calc()
-
-    @staticmethod
-    def xmean(child_vals, axis=None):
-        """
-        Always returns an xr.DataArray.
-
-        - If child_vals is empty/falsey (but zeros are allowed), return a NaN scalar DataArray.
-        - If child_vals is a scalar or size-1 array/DataArray, return a *scalar* (0-D) DataArray.
-        - Otherwise, compute the mean (optionally along `axis`), preserving attrs when possible.
-        """
-        if not is_truthy(child_vals, zero_ok=True):
-            # NaN scalar DA
-            return xr.DataArray(np.nan)
-
-        def _as_da_scalar(x):
-            """Coerce x to a scalar (0-D) DataArray, preserving attrs if x is a DA."""
-            if isinstance(x, xr.DataArray):
-                # squeeze to drop any size-1 dims, keep attrs
-                return x.squeeze(drop=True)
-            # np.ndarray (size==1) or python/np scalar -> scalar DA
-            return xr.DataArray(np.asarray(x).squeeze())
-
-        # Normalize scalars / size-1 inputs to a scalar DA
-        if isinstance(child_vals, (float, np.floating)) or \
-        (isinstance(child_vals, (np.ndarray, xr.DataArray)) and np.size(child_vals) == 1):
-            return _as_da_scalar(child_vals)
-
-        # From here on, we have non-trivial arrays / lists of DAs
-        if axis is None:
-            if isinstance(child_vals, xr.DataArray):
-                return child_vals.mean(skipna=True, keep_attrs=True)
-
-            cleaned = drop_inconsistent_coords(child_vals)
-            cleaned = round_coords(cleaned, decimals=8)
-            agg = xr.concat(cleaned, dim="child", coords="minimal", compat="no_conflicts")
-            return agg.mean(dim="child", skipna=True, keep_attrs=True)
-
-        # axis provided
-        if isinstance(child_vals, xr.DataArray):
-            axis_name = child_vals.dims[axis] if isinstance(axis, int) else axis
-            return child_vals.mean(dim=axis_name, skipna=True, keep_attrs=True)
-
-        cleaned = drop_inconsistent_coords(child_vals)
-        cleaned = round_coords(cleaned, decimals=8)
-        agg = xr.concat(cleaned, dim="child", coords="minimal", compat="no_conflicts")
-        axis_name = agg.dims[axis] if isinstance(axis, int) else axis or "child"
-        return agg.mean(dim=axis_name, skipna=True, keep_attrs=True)
+    
+    def hierarchy_index(self, name):
+        hierarchy = self.hierarchy
+        try:
+            return hierarchy.index(name)
+        except ValueError:
+            for idx, entry in enumerate(hierarchy):
+                if isinstance(entry, str) and name in entry:
+                    return idx
+        return -1
                 
     @cache_method
-    def get_average(self, base_method, stop_at='event', level=0, axis=0, exclude=True, *args, **kwargs):
+    def get_average(self, base_method, stop_at='event', level=0, axis=0, exclude=True, 
+                    weights=None):
         """
         Recursively calculates the average of the values of the computation in the base method on the object's
         descendants.
@@ -103,23 +59,26 @@ class Aggregates:
         - stop_at (str): `name` attribute of the base case object the `base_method` is called on.
         - level (int): a counter for how deep recursion has descended; limits the cache.
         - axis (int or None): Specifies the axis across which to compute the mean.
-        - **kwargs: Additional keyword arguments to be passed to the base method.
 
         Returns:
         float or np.array: The mean of the data values from the object's descendants.
         """
 
-        # TODO: methods that return dicts are currently broken but they will be fixed when
-        # they return xr data sets
-        
         if not self.include() and exclude:
-            return float('nan')  
+            return float('nan') 
 
-        if self.name == stop_at:  # we are at the base case and will call the base method
-            if hasattr(self, base_method) and callable(getattr(self, base_method)):
-                return getattr(self, base_method)(*args, **kwargs)
-            else:
+        result = self._get_average_core(
+            base_method, stop_at=stop_at, level=level, axis=axis, weights=weights)
+        
+        return self.to_final_space(result) 
+    
+    def _get_average_core(self, base_method, stop_at='event', level=0, axis=0, 
+                    weights=None):
+        if stop_at in self.name or not hasattr(self, 'children'):  # we are at the base case and will call the base method
+            if not hasattr(self, base_method) or not callable(getattr(self, base_method)):
                 raise ValueError(f"Invalid base method: {base_method}")
+            val = getattr(self, base_method)()
+            return val
         
         children = self.children
 
@@ -129,13 +88,17 @@ class Aggregates:
         child_vals = []
 
         for child in children:
-            if not child.include() and exclude:
+            if not child.include():
                 continue
-            child_val = child.get_average(
-                base_method, level=level+1, stop_at=stop_at, axis=axis, **kwargs)
+            child_val = child._get_average_core(
+                base_method, level=level+1, stop_at=stop_at, axis=axis)
             if not self.is_nan(child_val):
                 child_vals.append(child_val)
-        return self.xmean(child_vals, axis)
+           
+        xmean = self.xmean(child_vals, axis, weights=weights)
+        
+        return xmean
+        
     
     @property
     def data_set(self):
@@ -158,7 +121,9 @@ class Aggregates:
             concatenation = self.concatenation
             if concatenation.ndim == 1:
                 return concatenation
-        return self.xmean(self.calc, axis=axis)
+        calc = self.to_linear_space(self.calc)
+        result = self.xmean(calc, axis=axis)
+        return self.to_final_space(result)
  
     def get_sem(self, collapse_sem_data=False):
         """
@@ -166,24 +131,73 @@ class Aggregates:
 
         - If `collapse_sem_data=True`, first computes the mean for each child before computing SEM.
         - If the data is a dictionary (e.g., multiple conditions), computes SEM for each key separately.
+        - SEMs are computed in *final* space (e.g. coherence, not Fisher-z).
         """
 
+        def _to_final(v):
+            # Only DataArrays know what space they're in; everything else is assumed final already.
+            if isinstance(v, xr.DataArray):
+                return self.to_final_space(v)
+            return v
+
+        def _collapse_single(v):
+            # Collapse each child to a scalar-like value if requested
+            v = _to_final(v)
+            if isinstance(v, xr.DataArray):
+                return v.mean(skipna=True)
+            # fall back to numpy
+            arr = np.asarray(v)
+            if arr.size == 0:
+                return np.nan
+            return np.nanmean(arr)
 
         def agg_and_calc(vals):
-            return sem([val.mean(skipna=True) for val in vals] if collapse_sem_data else vals)
+            # vals is a list of calc_results (DA / scalar / np array)
+            if not vals:
+                return float("nan")
 
-        sem_children = (self.get_descendants(stop_at=self.calc_opts.get('sem_level'))
-                        if self.calc_opts.get('sem_level') else self.children)
-        
-           
-        first_calc = sem_children[0].calc_result 
+            # Always work in final space
+            if collapse_sem_data:
+                reduced = [_collapse_single(v) for v in vals if not self.is_nan(v)]
+                # reduced may now be scalars or 0-D DataArrays
+                return sem(reduced)
+            else:
+                finals = [_to_final(v) for v in vals if not self.is_nan(v)]
+                return sem(finals)
 
+        # Decide which children to use for SEM
+        sem_level = self.calc_opts.get("sem_level")
+        if sem_level:
+            sem_children = self.get_descendants(stop_at=sem_level)
+        else:
+            sem_children = self.children
+
+        if not sem_children:
+            return float("nan")
+
+        first_calc = sem_children[0].calc_result
+
+        # --- dict case: multiple conditions / keys ---
         if isinstance(first_calc, dict):
-            return {key: agg_and_calc([child.calc[key] for child in sem_children 
-                                       if not self.is_nan(child.calc)]) 
-                                       for key in first_calc}
+            out = {}
+            for key in first_calc:
+                vals = []
+                for child in sem_children:
+                    child_calc = child.calc_result
+                    # skip if whole calc is NaN-ish or key missing
+                    if not isinstance(child_calc, dict):
+                        continue
+                    val = child_calc.get(key)
+                    if val is None or self.is_nan(val):
+                        continue
+                    vals.append(val)
+                out[key] = agg_and_calc(vals)
+            return out
 
-        return agg_and_calc([child.calc_result for child in sem_children if not self.is_nan(child.calc_result)])
+        # --- normal case ---
+        vals = [child.calc_result for child in sem_children if not self.is_nan(child.calc_result)]
+        return agg_and_calc(vals)
+
                 
     @staticmethod
     def extend_into_bins(sources, extend_by):
@@ -198,7 +212,7 @@ class Aggregates:
             stop_at = self.calc_opts.get('stop_at')
         vals_to_summarize = self.get_descendants(stop_at=stop_at)
         vals_to_summarize = self.extend_into_bins(vals_to_summarize, extend_by)
-        arrays = [obj.calc for obj in vals_to_summarize]
+        arrays = [self.to_final_space(obj.calc) for obj in vals_to_summarize]
         if arrays:
             np_arrays = []
             for arr in arrays:
@@ -225,14 +239,32 @@ class Aggregates:
     @property
     def concatenation(self):
         
-        kwargs = self.calc_opts.get('concatenation', {})
-        if not kwargs.get('concatenator'):
-            kwargs['concatenator'] = self.name
-        if not kwargs.get('concatenated'):
-            kwargs['concatenated'] = self.children[0].name
-        return self.concatenate(**kwargs)
-        
+        opts = dict(self.calc_opts.get('concatenation', {}))
+        if not opts.get('concatenator'):
+            opts['concatenator'] = self.name
+        if not opts.get('concatenated'):
+            opts['concatenated'] = self.children[0].name
+        return self.concatenate(
+            concatenator=opts.get('concatenator'),
+            concatenated=opts.get('concatenated'),
+            attrs=opts.get('attrs'),
+            dim_xform=opts.get('dim_xform'),
+            child_xform=opts.get('child_xform'))
+    
     def concatenate(self, concatenator=None, concatenated=None, attrs=None, 
+                    dim_xform=None, child_xform=None):
+        
+        result = self._concatenate_core(
+            concatenator=concatenator, 
+            concatenated=concatenated, 
+            attrs=attrs, 
+            dim_xform=dim_xform,
+            child_xform=child_xform)
+        
+
+        return self.to_final_space(result)
+        
+    def _concatenate_core(self, concatenator=None, concatenated=None, attrs=None, 
                     dim_xform=None, child_xform=None):
         """Concatenates data from descendant nodes using xarray."""
 
@@ -301,13 +333,17 @@ class Aggregates:
         else:
             # Successively average levels of the hierarchy until we reach the concatenator (recursive case)
             children_data = [
-                child.concatenate(concatenator=concatenator, concatenated=concatenated, 
+                child._concatenate_core(concatenator=concatenator, concatenated=concatenated, 
                                 attrs=attrs, dim_xform=dim_xform, child_xform=child_xform)
                 for child in self.children if child.include()
             ]
             
             concatenated_data = xr.concat(children_data, dim="child") if children_data else xr.DataArray([])
-            return concatenated_data.mean(dim="child", skipna=True)
+            concatenated_data = self.to_linear_space(concatenated_data)
+            result = concatenated_data.mean(dim="child", skipna=True) 
+            result.attrs = concatenated_data[0].attrs
+            return result
+            
          
     @property
     def stack(self):
@@ -334,20 +370,35 @@ class Aggregates:
 
         # Pull and flatten the data
         data_objects = self.accumulate(max_depth=max_depth)[base]
-        data_values = np.array([getattr(do, f"get_{self.calc_type}")() for do in data_objects])      
 
-        data_values = data_values[np.isfinite(data_values)]  # drop NaN/inf
+        vals = []
+        for obj in data_objects:
+            v = getattr(obj, f"get_{self.calc_type}")()
+
+            # If xarray, normalize to final space **before** converting to numpy
+            if isinstance(v, xr.DataArray):
+                v = self.to_final_space(v)
+
+            # Convert to numpy
+            v = np.asarray(v)
+
+            # Flatten, accumulate
+            vals.append(v.ravel())     
 
         # Early return for no data
-        if data_values.size == 0:
+        if len(vals) == 0:
             empty = np.array([], dtype=float)
             return xr.DataArray(
                 np.array([], dtype=int),
                 dims=["bin"],
-                coords={"bin": empty, "left": ("bin", empty), "right": ("bin", empty), "center": ("bin", empty)},
+                coords={"bin": empty, "left": ("bin", empty), 
+                        "right": ("bin", empty), "center": ("bin", empty)},
                 name=f"{base}_hist",
                 attrs={"range": None, "bins": 0, "density": False, "base": base},
             )
+        
+        data_values = np.concatenate(vals)
+        data_values = data_values[np.isfinite(data_values)]
 
         # Histogram parameters
         num_bins = int(histogram.get('bins', 20))
@@ -365,6 +416,7 @@ class Aggregates:
 
         # Compute histogram
         counts, edges = np.histogram(data_values, bins=num_bins, range=(lo, hi), density=density)
+
         left = edges[:-1]
         right = edges[1:]
         center = (left + right) / 2.0
@@ -382,6 +434,7 @@ class Aggregates:
             name=f"{base}_hist",
             attrs={"range": (lo, hi), "bins": num_bins, "density": density, "base": base},
         )
+
         return da
 
     def apply_fun_to_accumulated_data(self, fun, depth=1, attr='calc', method=None):
@@ -449,19 +502,25 @@ class Aggregates:
     def percent_change(self):
         return self.get_percent_change()
     
-    @property
     def evoked(self):
         return self.get_evoked()
     
     def get_evoked(self):
         fun = lambda orig, ref: orig - ref
-        return self.get_comparison_calc('evoked', fun)
+        result = self.get_comparison_calc('evoked', fun)
+        return self.to_final_space(result)
 
     def get_percent_change(self):
-        fun = lambda orig, ref: orig/np.mean(ref) * 100 - 100
+        if self.calc_opts.get('percent_change', {}).get('space') in ['linear', 'transformed']:
+            fun = lambda orig, ref: self.to_linear_space(orig)/np.mean(self.to_linear_space(ref)) * 100 - 100
+        else:
+            fun = lambda orig, ref: self.to_final_space(orig)/np.mean(self.to_final_space(ref)) * 100 - 100
         return self.get_comparison_calc('percent_change', fun)
 
-    def get_comparison_calc(self, comparison, fun):
+    def get_comparison_calc(
+            self, 
+            comparison, 
+            fun):
         # This complexity is solving problems like "we'd like to get see a value
         # for a period with a reference of its own parent unit without triggering
         # infinite recursion"
@@ -471,20 +530,33 @@ class Aggregates:
         # we are currently at a higher tree level than the comparison ref level
         if level not in self.hierarchy or (
             self.hierarchy.index(self.name) < self.hierarchy.index(level)):
-            return self.get_average(f'get_{comparison}', stop_at=self.calc_opts.get('base', 'event'))
+            return self.get_average(
+                f'get_{comparison}', 
+                stop_at=self.calc_opts.get('base', 'event'))
         # we are currently at a lower tree level than the comparison ref level
-        elif self.hierarchy.index(self.name) > self.hierarchy.index(level):
+        elif self.hierarchy_index(self.name) > self.hierarchy_index(level):
             ref_obj = [anc for anc in self.ancestors if anc.name == level][0]
-            ref = self.get_ref(ref_obj, comparison_dict['reference'])
+            ref = self.get_ref(
+                ref_obj, 
+                comparison_dict['reference'])
         # we are currently at the comparison ref level
         else: 
-            ref = self.get_ref(self, comparison_dict['reference'])
+            ref = self.get_ref(
+                self, 
+                comparison_dict['reference'])
+            
         orig = getattr(self, f"get_{self.calc_type}")()
-        return fun(orig, ref)
+
+        orig = self.to_linear_space(orig)
+        ref = self.to_linear_space(ref)
+        
+        result = fun(orig, ref)
+
+        return result
 
     def get_ref(self, obj, reference_period_type):
         if obj.has_reference:
-            return getattr(obj.reference, f"get_{self.calc_type}")
+            return getattr(obj.reference, f"get_{self.calc_type}")()
         else:
             return obj.get_reference_calc(reference_period_type)
         

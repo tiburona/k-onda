@@ -3,7 +3,13 @@ from .aggregates import Aggregates
 from k_onda.utils import operations
 
 
-class Data(Base, Aggregates):    
+class TransformRegistryMixin:
+    TRANSFORMS: dict[str, tuple] = {}  # default empty
+
+
+class Data(Base, Aggregates, TransformRegistryMixin):    
+
+    TRANSFORMS: dict[str, tuple] = {}
 
     def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -123,9 +129,13 @@ class Data(Base, Aggregates):
             hierarchy = ['experiment', 'animal', 'unit', 'period', 'event']
         elif self.kind_of_data == 'lfp':
             if self.calc_type in ['amp_xcorr', 'lag_of_max_corr']:
-                hierarchy = ['experiment', 'animal', 'amp_xcorr_calculator']
+                hierarchy = ['experiment', 'animal', 'amp_xcorr_calculator', 'amp_xcorr_event']
+                if self.calc_opts.get('validate_events'):
+                    hierarchy.insert(3, 'amp_xcorr_segment')
             elif self.calc_type == 'coherence':
-                hierarchy = ['experiment', 'animal', 'coherence_calculator']
+                hierarchy = ['experiment', 'animal', 'coherence_calculator', 'coherence_event']
+                if self.calc_opts.get('validate_events'):
+                    hierarchy.insert(3, 'coherence_segment')
             else:
                 hierarchy = ['experiment', 'animal', 'period', 'event']
         elif self.kind_of_data == 'mrl':
@@ -169,3 +179,54 @@ class Data(Base, Aggregates):
     @property
     def has_reference(self):
         return hasattr(self, 'reference') and self.reference is not None
+    
+    @classmethod
+    def all_transforms(cls) -> dict:
+        """
+        Merge TRANSFORMS dicts from cls and all base classes.
+        Later classes in the MRO override earlier ones on key conflicts.
+        """
+        merged: dict = {}
+        # Walk MRO from base → subclass so subclasses win
+        for base in reversed(cls.mro()):
+            d = getattr(base, "TRANSFORMS", None)
+            if d:
+                merged.update(d)
+        return merged
+
+    def transforms(self) -> dict:
+        # instance-facing helper
+        return type(self).all_transforms()
+    
+    def _get_transform_pair(self):
+        return self.transforms().get(self.calc_type, (None, None))
+
+    def to_linear_space(self, da):
+        transform, _ = self._get_transform_pair()
+        if transform is None:
+            return da
+
+        space = getattr(da, "attrs", {}).get("space", "raw")
+        if space == "z":
+            return da
+        if space in ("raw", "final"):
+            out = transform(da)
+            out.attrs.update(da.attrs)
+            out.attrs["space"] = "z"
+            return out
+        return da
+
+    def to_final_space(self, da):
+        _, back_transform = self._get_transform_pair()
+        if back_transform is None:
+            return da
+
+        space = getattr(da, "attrs", {}).get("space", "raw")
+        if space in ("final", "raw"):
+            return da
+        if space == "z":
+            out = back_transform(da)
+            out.attrs.update(da.attrs)
+            out.attrs["space"] = "final"
+            return out
+        return da
