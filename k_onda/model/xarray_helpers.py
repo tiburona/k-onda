@@ -214,7 +214,7 @@ class XMean:
         if isinstance(child_vals, xr.DataArray):
             axis_name = child_vals.dims[axis] if isinstance(axis, int) else axis
             return self._maybe_weighted_mean(child_vals, dim=axis_name, weights=weights)
-
+        
         agg = self.clean_and_aggregate(child_vals)
         
         if isinstance(axis, int):

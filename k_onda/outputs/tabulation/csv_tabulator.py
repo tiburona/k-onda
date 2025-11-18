@@ -177,7 +177,8 @@ class CSVTabulator(OutputGenerator):
         attr = self.calc_opts.get('attr', 'mean')
 
         for source in sources:
-            result = getattr(source, attr)
+        
+            result = source.to_final_space(getattr(source, attr))
             result = float(getattr(result, 'values', None) or result)
             if isinstance(result, dict):
                 row_dict = {f"{self.data_col}_{key}": val for key, val in result.items()}

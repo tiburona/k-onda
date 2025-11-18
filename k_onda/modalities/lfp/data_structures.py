@@ -123,7 +123,8 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, LFPDataSelector, EventValidat
                 win_start = rel_start - self.pre_event
                 win_end   = rel_start + self.post_event
 
-                mask = (tbins >= win_start - eps) & (tbins < win_end + eps)
+                mask = (tbins >= win_start - eps) & (tbins < win_end)
+
                 event_times = tbins[mask]
 
                 events.append(LFPEvent(i, event_times,     # event_times in period space

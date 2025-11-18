@@ -28,4 +28,3 @@ def test_smoke_lfp():
 
     tmpdir.cleanup()
  
-test_smoke_lfp()

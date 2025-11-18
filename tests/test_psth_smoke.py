@@ -26,4 +26,3 @@ def test_run_pipeline_demo_config():
     # Cleanup
     shutil.rmtree(out_dir)
 
-test_run_pipeline_demo_config()

@@ -47,5 +47,3 @@ def test_smoke_csv():
     assert (output_dir / "psth_lfp.csv").exists(), "Missing output: psth_lfp.csv"
 
     tmpdir.cleanup()
-
-test_smoke_csv()
