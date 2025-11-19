@@ -80,7 +80,7 @@ class Aggregates(XMean):
             if not hasattr(self, base_method) or not callable(getattr(self, base_method)):
                 raise ValueError(f"Invalid base method: {base_method}")
             val = getattr(self, base_method)()
-            return val
+            return self.to_linear_space(val)
         
         children = self.children
 
@@ -96,8 +96,9 @@ class Aggregates(XMean):
                 base_method, level=level+1, stop_at=stop_at, axis=axis)
             if not self.is_nan(child_val):
                 child_vals.append(child_val)
+
            
-        xmean = self.xmean(child_vals, axis, weights=weights)
+        xmean = self.xmean(self.to_linear_space(child_vals), axis, weights=weights)
         
         return xmean
         

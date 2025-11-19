@@ -174,7 +174,7 @@ class Data(Base, Aggregates, TransformRegistryMixin):
                 descendants.append(self)
 
             for child in self.children:
-                child.get_descendants(descendants=descendants)
+                child.get_descendants(descendants=descendants, stop_at=stop_at, all=all)
 
         return descendants
     
@@ -211,32 +211,44 @@ class Data(Base, Aggregates, TransformRegistryMixin):
         return registry.get(key, (None, None))
 
 
-    def to_linear_space(self, da):
-        transform, _ = self.get_transform_pair_for_da(da)
-        if transform is None:
-            return da
+    def to_linear_space(self, data):
+        if isinstance(data, xr.Dataset):
+            ds = data.copy()
+            for name in ds.data_vars:
+                ds[name] = self.to_linear_space(ds[name])
+            return ds
 
-        space = getattr(da, "attrs", {}).get("space", "raw")
+        transform, _ = self.get_transform_pair_for_da(data)
+        if transform is None:
+            return data
+
+        space = getattr(data, "attrs", {}).get("space", "raw")
         if space == "z":
-            return da
+            return data
         if space in ("raw", "final"):
-            out = transform(da)
-            out.attrs.update(da.attrs)
+            out = transform(data)
+            out.attrs.update(data.attrs)
             out.attrs["space"] = "z"
             return out
-        return da
+        return data
 
-    def to_final_space(self, da):
-        _, back_transform = self.get_transform_pair_for_da(da)
+    def to_final_space(self, data):
+        if isinstance(data, xr.Dataset):
+            ds = data.copy()
+            for name in ds.data_vars:
+                ds[name] = self.to_final_space(ds[name])
+            return ds
+
+        _, back_transform = self.get_transform_pair_for_da(data)
         if back_transform is None:
-            return da
+            return data
 
-        space = getattr(da, "attrs", {}).get("space", "raw")
+        space = getattr(data, "attrs", {}).get("space", "raw")
         if space in ("final", "raw"):
-            return da
+            return data
         if space == "z":
-            out = back_transform(da)
-            out.attrs.update(da.attrs)
+            out = back_transform(data)
+            out.attrs.update(data.attrs)
             out.attrs["space"] = "final"
             return out
-        return da
+        return data

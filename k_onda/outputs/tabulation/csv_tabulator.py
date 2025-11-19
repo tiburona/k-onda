@@ -6,7 +6,7 @@ import json
 import random
 import string
 from functools import reduce
-from xarray import DataArray
+from xarray import DataArray, Dataset
 
 from k_onda.core import OutputGenerator
 from k_onda.utils import safe_make_dir, to_serializable
@@ -130,6 +130,28 @@ class CSVTabulator(OutputGenerator):
 
             
         return self.get_data(level, other_attributes)
+    
+
+    def assign_result_to_column(self, res, row_dict, space_suffix=''):
+
+        def to_scalar(val):
+            data = getattr(val, 'values', val)
+            size = getattr(data, 'size', None)
+            if size == 1 and hasattr(data, 'item'):
+                scalar = data.item()
+                try:
+                    return float(scalar)
+                except (TypeError, ValueError):
+                    return scalar
+            return data
+
+        if isinstance(res, Dataset):
+            for key, val in res.data_vars.items():
+                row_dict[f"{self.data_col}_{key}{space_suffix}"] = to_scalar(val)
+        else:
+            row_dict[f"{self.data_col}{space_suffix}"] = to_scalar(res)
+
+        return row_dict
 
     def get_data(self, level, other_attributes):
         """
@@ -178,12 +200,22 @@ class CSVTabulator(OutputGenerator):
 
         for source in sources:
         
-            result = source.to_final_space(getattr(source, attr))
-            result = float(getattr(result, 'values', None) or result)
-            if isinstance(result, dict):
-                row_dict = {f"{self.data_col}_{key}": val for key, val in result.items()}
+            result = getattr(source, attr)
+
+            row_dict = {}
+
+            if result.attrs.get('transform_key'):
+                transform_spec = self.calc_opts.get('space', ['linear', 'final'])
+                if not isinstance(transform_spec, (list, tuple, set)):
+                    transform_spec = [transform_spec]
+                for space in transform_spec:
+                    transform_fn = getattr(source, f'to_{space}_space')
+                    transformed = transform_fn(result)
+                    row_dict = self.assign_result_to_column(
+                        transformed, row_dict, space_suffix=f'_{space}'
+                    )
             else:
-                row_dict = {self.data_col: result}
+                row_dict = self.assign_result_to_column(result, row_dict)
             
             for src in source.ancestors:
                 row_dict[src.name] = src.identifier
@@ -239,5 +271,3 @@ class CSVTabulator(OutputGenerator):
             writer.writeheader()
             for index, row in df.iterrows():
                 writer.writerow(row.to_dict())
-
-

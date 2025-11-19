@@ -3,7 +3,7 @@ import xarray as xr
 from k_onda.model.data import TransformRegistryMixin
 
 from k_onda.math import (msc_from_spectra, fisher_z_from_coherence, fisher_z_from_msc, 
-                         back_transform_fisher_z, psd, msc_from_spectra, cross_spectral_density)
+                         back_transform_fisher_z, psd, cross_spectral_density)
 
 
 class LFPMethods(TransformRegistryMixin):
@@ -17,10 +17,11 @@ class LFPMethods(TransformRegistryMixin):
     def get_weights(self):
         if not hasattr(self, 'children') or len(self.children) == 0:
             return None
-        elif 'segment' in self.children[0].name:
-            return [len(child.data[0]) for child in self.children]
+        if 'segment' in self.children[0].name:
+            weights = self.segment_weights
         else:
-            return [1 for _ in range(len(self.children))]
+            weights = [1 for _ in range(len(self.children))]
+        return weights
         
     def frequency_selector(self, da):
                                       
@@ -48,19 +49,9 @@ class LFPMethods(TransformRegistryMixin):
 
         if not hasattr(self, 'children') or len(self.children) == 0 or stop_at in self.name:
             return getattr(self, f"get_{calc_type}_")()
-        
-        if 'segment' in self.children[0].name:
-            weights = self.segment_weights
         else:
-            weights = [1 for _ in range(len(self.children))]
-
-        if calc_type != 'coherence':
-            return self.get_average(f'get_{calc_type}', weights=weights, 
-                                    stop_at=stop_at)
-        else:
-            return self.get_average(f'get_coherence', weights=weights, stop_at=stop_at)
-           
-  
+            return self.get_average(f'get_{calc_type}', weights=self.get_weights(), stop_at=stop_at)
+      
     def get_psd(self):
         base = None
         if self.calc_type == 'psd':
@@ -97,11 +88,7 @@ class LFPMethods(TransformRegistryMixin):
         stop_at = self.calc_opts.get('base', 'coherence_calculator')
 
         coherence = self.resolve_calc_fun('coherence', stop_at=stop_at)
-        # TODO: eventually it could be nice to read an optional override of 
-        # transforms from calc opts; that could happen right here.
-        if coherence.attrs['space'] == 'raw':
-            coherence = fisher_z_from_msc(coherence)
-            coherence.attrs['space'] = 'z'
+        
         return coherence
 
 
@@ -153,21 +140,22 @@ class CoherenceMethods:
         Sxx, Syy = list(self.get_psd().data_vars.values())
         Sxy = self.get_csd()
         return_val = msc_from_spectra(Sxx=Sxx, Syy=Syy, Sxy=Sxy)
-        transform_attrs = {'space': 'z', 'transform_key': 'coherence'}
+        transform_attrs = {'space': 'raw', 'transform_key': 'coherence'}
 
-        if self.calc_opts.get('frequency_type', 'continuous') == 'continuous':
-            da = xr.DataArray( 
-                return_val,
-                dims=['frequency'],
-                coords={'frequency': Sxy.coords['frequency']},
-                attrs=transform_attrs)
-        else:
-            da = xr.DataArray(
+        da = xr.DataArray(
                 return_val,
                 attrs=transform_attrs
             )
-            da = da.mean(dim='frequency', keep_attrs=True) 
+        
+        # TODO: eventually it could be nice to read an optional override of 
+        # transforms from calc opts; that could happen right here.
+        if da.attrs['space'] == 'raw':
+            da = fisher_z_from_msc(da)
+            da.attrs['space'] = 'z'
 
+        if self.calc_opts.get('frequency_type', 'continuous') == 'block':
+            da = da.mean(dim='frequency', keep_attrs=True) 
+          
         return da
            
     def welch_and_coherence_args(self, analysis):

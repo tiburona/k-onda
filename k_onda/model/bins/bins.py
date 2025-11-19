@@ -105,6 +105,8 @@ class FrequencyBin(Bin, TimeBinMethods):
 
     @property
     def mean_data(self):
+        # todo: this isn't the right way to take a mean anymore now that everything is data arrays 
+        # with attrs that need to be conserved 
         return np.mean(self.val)
     
     

@@ -42,7 +42,7 @@ class MRLCalculator(Data, EventValidator, LFPProperties, BandPassFilterMixin):
     @property
     def weights(self):
         if self._weights is None:
-            self._weights = self.get_weights()
+            self._weights = self.get_mrl_weights()
         return self._weights
 
            
@@ -77,7 +77,7 @@ class MRLCalculator(Data, EventValidator, LFPProperties, BandPassFilterMixin):
                 indices[spike] = len(events) - 1
         return indices
     
-    def get_weights(self):
+    def get_mrl_weights(self):
         wt_range = range(self.duration * self.lfp_sampling_rate)
         if not self.calc_opts.get('validate_events'):
             weights = [1 if weight in self.spikes else float('nan') for weight in wt_range]
@@ -120,7 +120,7 @@ class MRLCalculator(Data, EventValidator, LFPProperties, BandPassFilterMixin):
         if not self.validator():
             return np.nan
         alpha = self.get_phases()          # expect (..., time)
-        w = self.get_weights()             # shape (time,)
+        w = self.get_mrl_weights()             # shape (time,)
 
         # If alpha is 2D, normalize orientation so time is last
         if alpha.ndim == 2:
