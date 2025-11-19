@@ -69,11 +69,13 @@ class Aggregates(XMean):
 
         result = self._get_average_core(
             base_method, stop_at=stop_at, level=level, axis=axis, weights=weights)
-        
+
         return self.to_final_space(result) 
     
     def _get_average_core(self, base_method, stop_at='event', level=0, axis=0, 
                     weights=None):
+        
+
         if stop_at in self.name or not hasattr(self, 'children'):  # we are at the base case and will call the base method
             if not hasattr(self, base_method) or not callable(getattr(self, base_method)):
                 raise ValueError(f"Invalid base method: {base_method}")
@@ -261,7 +263,6 @@ class Aggregates(XMean):
             dim_xform=dim_xform,
             child_xform=child_xform)
         
-
         return self.to_final_space(result)
         
     def _concatenate_core(self, concatenator=None, concatenated=None, attrs=None, 
@@ -340,8 +341,8 @@ class Aggregates(XMean):
             
             concatenated_data = xr.concat(children_data, dim="child") if children_data else xr.DataArray([])
             concatenated_data = self.to_linear_space(concatenated_data)
-            result = concatenated_data.mean(dim="child", skipna=True) 
-            result.attrs = concatenated_data[0].attrs
+
+            result = concatenated_data.mean(dim="child", skipna=True, keep_attrs=True) 
             return result
             
          

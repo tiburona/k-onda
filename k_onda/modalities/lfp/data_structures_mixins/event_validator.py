@@ -108,11 +108,11 @@ class EventValidator:
             min_len = self.calc_opts['min_len'] * self.lfp_sampling_rate
         else:
             if self.calc_type == 'coherence':
-                f_min = self.freq_range[0]
-                fs = self.lfp_sampling_rate
-                base = int(fs / f_min)
-                min_len = base * 5   # 5 cycles worth of data
-
+                coherence_args = self.welch_and_coherence_args('coherence')
+                nperseg = coherence_args['nperseg']
+                min_len = nperseg * 5
+            else:
+                min_len = (self.lfp_sampling_rate + 1) * 3 + 1
 
         event_start_times = np.asarray(period.event_starts_in_period_time) * self.lfp_sampling_rate
 

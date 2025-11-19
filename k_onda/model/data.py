@@ -1,3 +1,5 @@
+import xarray as xr
+
 from k_onda.core import Base
 from .aggregates import Aggregates
 from k_onda.utils import operations
@@ -198,11 +200,19 @@ class Data(Base, Aggregates, TransformRegistryMixin):
         # instance-facing helper
         return type(self).all_transforms()
     
-    def _get_transform_pair(self):
-        return self.transforms().get(self.calc_type, (None, None))
+    def get_transform_pair_for_da(self, da):
+        # Only DataArrays that explicitly opt in via a key get transformed
+        if not isinstance(da, xr.DataArray):
+            return (None, None)
+        key = da.attrs.get("transform_key", None)
+        if key is None:
+            return (None, None)
+        registry = self.transforms() if hasattr(self, "transforms") else {}
+        return registry.get(key, (None, None))
+
 
     def to_linear_space(self, da):
-        transform, _ = self._get_transform_pair()
+        transform, _ = self.get_transform_pair_for_da(da)
         if transform is None:
             return da
 
@@ -217,7 +227,7 @@ class Data(Base, Aggregates, TransformRegistryMixin):
         return da
 
     def to_final_space(self, da):
-        _, back_transform = self._get_transform_pair()
+        _, back_transform = self.get_transform_pair_for_da(da)
         if back_transform is None:
             return da
 

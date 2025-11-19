@@ -21,6 +21,17 @@ class LFPMethods(TransformRegistryMixin):
             return [len(child.data[0]) for child in self.children]
         else:
             return [1 for _ in range(len(self.children))]
+        
+    def frequency_selector(self, da):
+                                      
+        tol = 0.3                          
+
+        # boolean mask along the *frequency* coord
+        fmask = ((da['frequency'] >= self.freq_range[0] - tol) &
+                (da['frequency'] <= self.freq_range[1] + tol))         
+
+        return da.sel(frequency=fmask)
+       
  
     def get_power(self):
         return self.get_average('get_power', stop_at=self.calc_opts.get('base', 'event'))
@@ -93,8 +104,6 @@ class LFPMethods(TransformRegistryMixin):
             coherence.attrs['space'] = 'z'
         return coherence
 
-    
-
 
 class PSDMethods:
 
@@ -108,17 +117,17 @@ class PSDMethods:
             data=return_val, 
             dims=["frequency"],
             coords=dict(frequency=f))
+        
+        da = self.frequency_selector(da)
 
-        da = da.sel(frequency=slice(*self.freq_range))
-
-        if self.calc_opts.get('frequency_type') == 'block':
-            da = da.mean(dim='frequency') 
+        if self.calc_type == 'psd' and self.calc_opts.get('frequency_type') == 'block':
+            da = da.mean(dim='frequency', keep_attrs=True) 
         
         return da
     
 
 class CoherenceMethods:
-    
+
     def get_psd_(self):
 
         regions_data = dict(zip(self.regions, self.regions_data))
@@ -133,10 +142,10 @@ class CoherenceMethods:
 
         f, val = cross_spectral_density(*self.regions_data, self.lfp_sampling_rate, **args)
         da = xr.DataArray(val, dims=['frequency'], coords={'frequency': f})
-        da = da.sel(frequency=slice(*self.freq_range))
+        da = self.frequency_selector(da)
 
-        if self.calc_opts.get('frequency_type') == 'block':
-            da = da.mean(dim='frequency')
+        if self.calc_type == 'csd' and self.calc_opts.get('frequency_type') == 'block':
+            da = da.mean(dim='frequency', keep_attrs=True)
 
         return da
     
@@ -144,34 +153,27 @@ class CoherenceMethods:
         Sxx, Syy = list(self.get_psd().data_vars.values())
         Sxy = self.get_csd()
         return_val = msc_from_spectra(Sxx=Sxx, Syy=Syy, Sxy=Sxy)
+        transform_attrs = {'space': 'z', 'transform_key': 'coherence'}
+
         if self.calc_opts.get('frequency_type', 'continuous') == 'continuous':
             da = xr.DataArray( 
                 return_val,
                 dims=['frequency'],
                 coords={'frequency': Sxy.coords['frequency']},
-                attrs={'space': 'raw'})
-            
+                attrs=transform_attrs)
         else:
             da = xr.DataArray(
                 return_val,
-                attrs={'space': 'raw'}
+                attrs=transform_attrs
             )
+            da = da.mean(dim='frequency', keep_attrs=True) 
 
         return da
            
-        
-    
-
-
-class CoherenceMixin:
-
     def welch_and_coherence_args(self, analysis):
-        f_min = self.freq_range[0]
-        fs = self.lfp_sampling_rate
 
-        base = int(fs / f_min)          # 1 cycle of f_min worth of data
-        nperseg = base                  # enough to resolve f_min (≈ 1 cycle)
-        noverlap = int(nperseg / 2)
+        nperseg = 1000                
+        noverlap = 500
 
         args = {
             'nperseg': nperseg,

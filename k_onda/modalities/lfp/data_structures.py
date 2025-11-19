@@ -14,7 +14,7 @@ from k_onda.math import normalized_xcorr
 from ...modalities.mixins import BandPassFilterMixin
 from k_onda.utils import (bandpass_filter, regularize_angles, 
                           is_iterable, contains_nan)
-from .methods import LFPMethods, CoherenceMixin, PSDMethods, CoherenceMethods
+from .methods import LFPMethods, PSDMethods, CoherenceMethods
 from .data_structures_mixins.event_validator import EventValidator
 from .data_structures_mixins.lfp_data_selector import LFPDataSelector
 
@@ -25,10 +25,10 @@ class LFPProperties:
     def lfp_padding(self):
         padding = self.calc_opts.get('lfp_padding', [0, 0])
         return np.rint(np.array(padding) * self.lfp_sampling_rate).astype(int)
+    
 
 
-class LFPPeriod(LFPMethods, Period, LFPProperties, LFPDataSelector, EventValidator, PSDMethods, 
-                CoherenceMixin):
+class LFPPeriod(LFPMethods, Period, LFPProperties, LFPDataSelector, EventValidator, PSDMethods):
 
     def __init__(self, animal, index, period_type, period_info, onset, events=None, 
                  target_period=None, is_relative=False, experiment=None):
@@ -52,8 +52,6 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, LFPDataSelector, EventValidat
         for r in self.animal.processed_lfp:
             assert self.pad_stop <= len(self.animal.processed_lfp[r])
         self._spectrogram = None
-        self.brain_region = self.selected_brain_region
-        self.frequency_band = self.selected_frequency_band
         self.event_duration_samples = round(self.event_duration * self.lfp_sampling_rate)
         self._segments = OrderedDict()
         self._events = OrderedDict()
@@ -401,7 +399,7 @@ class RelationshipCalculatorSegment(Data, LFPMethods, LFPProperties):
     
 
 class CoherenceCalculatorSegment(RelationshipCalculatorSegment, CoherenceMethods, LFPMethods, 
-                                 CoherenceMixin, PSDMethods):
+                                 PSDMethods):
 
     _name = 'coherence_segment'
 
@@ -409,7 +407,7 @@ class CoherenceCalculatorSegment(RelationshipCalculatorSegment, CoherenceMethods
         super().__init__(coherence_calculator, data, index)
 
 
-class CoherenceCalculator(RegionRelationshipCalculator, CoherenceMethods, LFPMethods, CoherenceMixin):
+class CoherenceCalculator(RegionRelationshipCalculator, CoherenceMethods, LFPMethods, PSDMethods):
 
     _name = 'coherence_calculator'
     segment_class = CoherenceCalculatorSegment
