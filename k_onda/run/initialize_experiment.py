@@ -36,7 +36,8 @@ class Initializer(PrepMethods):
 
     def init_experiment(self):
         self.experiment = Experiment(self.exp_info)
-        self.animals = [self.init_animal(animal_info) for animal_info in self.animals_info]
+        base_animal = self.exp_info.get("base_animal", {})
+        self.animals = [self.init_animal(animal_info, base_animal) for animal_info in self.animals_info]
         self.groups = [
             Group(name=group, 
                   animals=[animal for animal in self.animals if animal.group_name == group])
@@ -44,8 +45,10 @@ class Initializer(PrepMethods):
         self.experiment.initialize_data_sources(self.animals, groups=self.groups)
         return self.experiment
 
-    def init_animal(self, animal_info):  
-        animal = Animal(animal_info['identifier'], animal_info=animal_info, 
+    def init_animal(self, animal_info, base_animal):
+        updated_animal_info = deepcopy(base_animal)
+        updated_animal_info.update(animal_info) 
+        animal = Animal(animal_info['identifier'], animal_info=updated_animal_info, 
                         neuron_types=self.neuron_types)
         self.get_periods_from_nev(animal)
         return animal

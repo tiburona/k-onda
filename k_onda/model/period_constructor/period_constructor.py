@@ -49,23 +49,21 @@ class PeriodConstructor:
 
     def prepare_periods(self):
         self.period_class = self.experiment.kind_of_data_to_period_type[self.kind_of_data]
-        for boo, function in zip((False, True), (self.construct_periods, 
-                                                 self.construct_relative_periods)):
-            try:
-                period_info = copy(self.period_info)
-            except AttributeError:
-                period_info = copy(self.animal.period_info)
-            
-            filtered_period_info = {
-                k: v for k, v in period_info.items() if bool(v.get('relative')) == bool(boo)}
-            for period_type in filtered_period_info:
-                periods = getattr(self, f"{self.kind_of_data}_periods")
-                periods[period_type] = function(period_type, filtered_period_info[period_type])
-            for k, v in period_info.items():
-                if v.get('reference'):
-                    self.target_periods[k] = v['reference']
-                    self.reference_periods[v['reference']].append(k)
+        try:
+            period_info = self.period_info
+        except AttributeError:
+            period_info = self.animal.period_info
 
+        periods = getattr(self, f"{self.kind_of_data}_periods")
+        for is_relative, builder in (
+            (False, self.construct_periods),
+            (True, self.construct_relative_periods),
+        ):
+            for period_type, info in period_info.items():
+                if bool(info.get('relative')) != is_relative:
+                    continue
+                periods[period_type] = builder(period_type, info)
+        
 
     def construct_periods(self, period_type, period_info):
         periods = []
@@ -152,21 +150,42 @@ class PeriodConstructor:
    
     def construct_relative_periods(self, period_type, period_info):
 
-        periods = []
-        target_periods = getattr(self, f"{self.kind_of_data}_periods")
-        paired_periods = target_periods[period_info['target']]
+        # period info for relative can optionally have a list, target_indices
         
+
+        # if target_indices is not supplied, it's assumed that every target generates
+        # a reference.  if target_indices is supplied (in the Rhonda case, target_index: 0)
+
+        # relative periods are only constructed for those target indices
+
+        # period info for non-relative periods can either not specify reference indices (old behavior)
+        # supply one index, in which case all non-relative periods of this type are assumed to have
+        # the same reference period, or a list of pairs of indices.  
+        
+
+        reference_periods = []
+        modality_periods = getattr(self, f"{self.kind_of_data}_periods")
+        candidate_target_periods = modality_periods[period_info['target']]
+        target_index = period_info.get('target_index')
+        reference_index = period_info.get('reference_index')
         exceptions = period_info.get('exceptions') 
 
-        for i, paired_period in enumerate(paired_periods):
-            i_key = str(i)
-            if exceptions and i_key in exceptions:
-                shift = exceptions[i_key]['shift']
-                duration = exceptions[i_key]['duration']
+        if target_index is None:
+            target_index = list(range(len(candidate_target_periods)))
+        elif isinstance(target_index, int):
+            target_index = [target_index]
+        else:
+            pass
+
+        for i in target_index:
+            if exceptions and i in exceptions:
+                shift = exceptions[i]['shift']
+                duration = exceptions[i]['duration']
             else:
                 shift = period_info['shift']
                 duration = period_info.get('duration')
             shift_in_samples = shift * self.sampling_rate
+            paired_period = candidate_target_periods[i]
             onset = paired_period.onset + shift_in_samples
             event_starts = []
             event_duration = paired_period
@@ -184,13 +203,16 @@ class PeriodConstructor:
             reference_period = self.period_class(self, i, period_type, period_info, onset, 
                                                  events=event_starts, target_period=paired_period, 
                                                  is_relative=True, experiment=self.experiment)
-            paired_period.paired_period = reference_period
-            periods.append(reference_period)
-        return periods
-    
-    def construct_combination_period(self):
-        # This is just a placeholder for something it's easy to imagine someone wanting to 
-        # implement, an average or a concatenation of more than one period, but for now you can 
-        # accomplish largely the same thing in the experiment specification, just by defining more 
-        # periods, even if they comprise other defined periods.
-        pass
+        
+            reference_periods.append(reference_period)
+
+        if reference_index is None:
+            reference_index = {i:i for i in range(len(candidate_target_periods))}
+        elif isinstance(reference_index, int):
+            reference_index = {i:reference_index for i in range(len(candidate_target_periods))}
+        else:
+            pass
+
+        for i, non_relative_period in enumerate(candidate_target_periods):
+            non_relative_period.reference = reference_periods[reference_index[i]]
+        return reference_periods
