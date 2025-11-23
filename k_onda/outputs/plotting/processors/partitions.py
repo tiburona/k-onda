@@ -123,6 +123,12 @@ class Partition(Processor):
         if 'dim' in current_divider:
             dim = current_divider['dim']
             self.current_index[dim] = self.starting_index[dim] + i
+        elif 'dimensions' in self.spec:
+            if self.current_index[1] < self.spec_dimensions[1] - 1:
+                self.current_index[1] += 1
+            else: # advance to the next row
+                self.current_index[0] += 1
+                self.current_index[1] = 0
 
     def wrap_up(self, updated_info): 
          

@@ -2,6 +2,7 @@ import json
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from itertools import product
+from math import ceil
 
 from .plotting_helpers import  PlottingMixin
 from k_onda.core import OutputGenerator
@@ -61,24 +62,99 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
             self.experiment.initialize_data()
 
         self.process_plot_spec(opts)
+
+    def count_axes(self, spec, rows=1, cols=1) -> tuple:
+        """
+        Walks the spec tree and returns an tuple representing how many rows and
+        columns the layout will ultimately try to allocate.
+        """
     
-    def make_split_combinations(self, split):
+        if 'divisions' in spec:
+            rows, cols = self.count(spec, rows, cols)
+
+        for spec_type in ['series', 'section']:
+            if spec_type in spec:
+                rows, cols = self.count_axes(spec[spec_type], rows, cols)
+
+        return rows, cols
+    
+    def count(self, spec, rows=1, cols=1):
+      
+        for division in spec['divisions']: # todo: containers don't have divisions
+            dim = division.get('dim')
+            members = division['members']
+            if dim == 0:
+                rows *= len(members)
+            elif dim == 1:
+                cols *= len(members)
+            else: # dim wasn't specified by the user
+                dimensions = division.get('dimensions', (4, 3))
+                # this is going to build columnwise
+                # the number of new rows is going to be members//max_cols
+                # number of new cols is going to be min(len(members), max_cols)
+                # todo add the ability to build rowwise first?
+                rows *= ceil(len(members) / dimensions[1])
+                cols *= min(len(members), dimensions[1])
+        return rows, cols
+        
+    def spec_inspector(self, plot_spec, max_rows=4, max_cols=3):
+      
+        if 'split' in plot_spec:
+            return self.make_split_combinations(plot_spec)
+        
+        if 'series' not in plot_spec:
+            return [plot_spec]  # nothing obvious to split on
+
+        rows, cols = self.count_axes(plot_spec['series'])
+        if rows <= max_rows and cols <= max_cols:
+            return [plot_spec]
+
+        if rows - max_rows <= cols - max_cols:
+            direction = 0
+            mx = max_rows
+        else:
+            direction = 1
+            mx = max_cols
+
+        page_specs = self.expand_spec_into_splits(plot_spec, direction, mx)
+
+        return page_specs
+
+    
+    def expand_spec_into_splits(self, ps, direction, mx):
+        divisions = ps['series']['divisions']
+        try:
+            target_div = next(d for d in divisions if d.get('dim') == direction)
+        except StopIteration:
+            target_div = divisions[0]
+        members = target_div['members']
+        page_members = list(self.chunk_list(members, mx))
+        spec = deepcopy(ps)
+        series_spec = spec.pop('series')
+        spec['split'] = {'divisions': [{'members': page_members}]}
+        spec['split']['series'] = series_spec  # or however you want to embed it
+        return self.make_split_combinations(spec)
+
+    def chunk_list(self, seq, n):
+        for i in range(0, len(seq), n):
+            yield seq[i:i+n]
+    
+    def make_split_combinations(self, spec):
+        # this gets a dictionary like {'split':{'divisions' = []}, 'section':{}}}
         bunches = []
-        ranges = [range(len(division['members'])) for division in split['divisions']]
+        ranges = [range(len(division['members'])) for division in spec['split']['divisions']]
         all_combinations = list(product(*ranges))
         for combination in all_combinations:
-            spec = deepcopy(split)
+            new_spec = deepcopy(spec)
+            split_spec = new_spec.pop('split')
+            new_spec['series'] = split_spec
             for i, j in enumerate(combination):
-                new_members = split['divisions'][i]['members'][j]
+                new_members = new_spec['series']['divisions'][i]['members'][j]
                 if not is_iterable(new_members):
                     new_members = [new_members]
-                spec['divisions'][i]['members'] = new_members
+                new_spec['series']['divisions'][i]['members'] = new_members
                  
-            bunches.append(spec)
-        return bunches
-            
-    def preprocess_split(self, split):
-        bunches = self.make_split_combinations(split)
+            bunches.append(new_spec)
         return bunches
 
     def process_plot_spec(self, opts):
@@ -88,15 +164,12 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
 
         plot_spec = opts['plot_spec']
 
-        if not 'split' in plot_spec:
-            self.kick_off(plot_spec)
+        # apply pagination / auto-split
+        pages = self.spec_inspector(plot_spec, max_rows=4, max_cols=3)
+
+        for spec in pages:
+            self.kick_off(spec)
             self.wrap_up(opts)
-        else:
-            bunches = self.preprocess_split(plot_spec['split'])
-            for spec in bunches:
-                plot_spec['split'] = spec
-                self.kick_off(plot_spec)
-                self.wrap_up(opts)
 
     def kick_off(self, spec):
 

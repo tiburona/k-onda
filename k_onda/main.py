@@ -15,6 +15,13 @@ def run_pipeline(config_file=None, opts=None, prep=None, logdir=None):
     if logdir:
         log_directory_contents(logdir)
 
+
+def run_pipelines(config_file, pipelines):
+    runner = Runner(config_file=config_file)
+    for pipeline in pipelines:
+        runner.run(**pipeline)
+
+
 # For profiling tools (e.g., time/memory usage), see k_onda/devtools/debug_utils.py
 def main():
     """Entry point for CLI or script execution."""

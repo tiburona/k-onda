@@ -162,7 +162,7 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
     def calculate_my_dimensions(self):
         dims = [1, 1]
         if self.spec is not None:
-            if self.processor_type == 'container':
+            if 'dimensions' in self.spec:
                 dims = self.spec['dimensions']
             else: 
                 for division in self.spec['divisions']:

@@ -418,6 +418,12 @@ class Base:
                 new_fields[field] = kwargs[field]
             elif field in obj.selectable_variables:
                 new_fields[field] = getattr(obj, field, getattr(self, f'selected_{field}'))
+            elif '.' in field:
+                attrs = field.split('.').reverse()
+                new_attr = obj
+                while len(attrs):
+                    new_attr = getattr(new_attr, attrs.pop())
+                new_fields[field] = new_attr
             elif '|' in field:
                 field_type, field_key = field.split('|')
                 new_fields[field] = getattr(obj, f'selected_{field_type}')[field_key]
@@ -435,4 +441,3 @@ class Base:
         constructor.update(new_fields)
         return constructor['template'].format(**constructor)
     
-
