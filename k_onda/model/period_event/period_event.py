@@ -51,6 +51,10 @@ class Period(Data, BinMethods, TimeLineMethods):
     def __repr__(self):
         return (f"Period {self.animal.identifier} {self.period_type} "
                 f"{self.identifier}")
+    
+    @property
+    def unique_id(self):
+        return '_'.join([str(tag) for tag in [self.parent.unique_id, self.period_type, self.identifier]])
 
     @property
     def children(self):

@@ -288,9 +288,9 @@ class Base:
         if identifier and 'all' in identifier:
             return data_sources
         if identifiers:
-            return [source for source in data_sources if source.identifier in identifiers]
+            return [source for source in data_sources if source.unique_id in identifiers]
         if identifier:
-            return [source for source in data_sources if source.identifier == identifier][0]
+            return [source for source in data_sources if source.unique_id == identifier][0]
 
     @property
     def post(self):

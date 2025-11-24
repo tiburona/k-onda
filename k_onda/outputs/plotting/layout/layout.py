@@ -166,7 +166,7 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
                 dims = self.spec['dimensions']
             else: 
                 for division in self.spec['divisions']:
-                    if 'dim' in division:
+                    if 'dim' in division and division['dim'] != 2:
                         dims[division['dim']] = len(division['members'])
         return deepcopy(dims)
     

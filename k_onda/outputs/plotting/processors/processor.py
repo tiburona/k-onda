@@ -15,11 +15,11 @@ class ProcessorConfig(Base):
     def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
                  figure=None, division_info=None, info_by_division=None, info_by_division_by_layers=None, 
                  index=None, aesthetics=None, layers=None, 
-                 is_first=False, plot_type=None, legend_info_list=None, splits=False, final_dicts=None):
+                 is_first=False, plot_type=None, legend_info_list=None, final_dicts=None):
         
         self.executive_plotter = executive_plotter
         self.full_spec = full_spec
-        processor_types = ['section', 'split', 'segment', 'series', 'container']
+        processor_types = ['section', 'segment', 'series', 'container']
         self.spec_type = [k for k in processor_types if k in self.full_spec][0]
         self.spec = self.full_spec[self.spec_type]
         self.parent_layout = layout
@@ -30,7 +30,6 @@ class ProcessorConfig(Base):
         self.info_by_division_by_layers = info_by_division_by_layers
         self.final_dicts = final_dicts
         self.legend_info_list = legend_info_list
-        self.splits = splits
         self.index = index
         self.child_layout = None
         self.aesthetics = aesthetics 
@@ -79,14 +78,13 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
         pass
 
     def finalize_init_common(self):
-        if not self.name == 'split':
-            self.child_layout = Layout(
-                self.parent_layout,
-                self.current_index,
-                processor=self,
-                figure=self.figure,
-                **self.get_layout_args()  # Dynamically include additional arguments
-            )
+        self.child_layout = Layout(
+            self.parent_layout,
+            self.current_index,
+            processor=self,
+            figure=self.figure,
+            **self.get_layout_args()  # Dynamically include additional arguments
+        )
 
     def finalize_init_unique(self):
         # Intended to be overridden by subclasses
@@ -145,7 +143,7 @@ class Container(Processor):
         super().__init__(config)
         
     def check_type(self, spec):
-        processor_keys = ['series', 'section', 'segment', 'split', 'container']
+        processor_keys = ['series', 'section', 'segment', 'container']
         for key in processor_keys:
             if key in spec:
                 return 'processor'  

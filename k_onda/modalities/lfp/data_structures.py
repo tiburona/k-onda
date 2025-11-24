@@ -121,7 +121,9 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, LFPDataSelector, EventValidat
                 win_start = rel_start - self.pre_event
                 win_end   = rel_start + self.post_event
 
-                mask = (tbins >= win_start - eps) & (tbins < win_end)
+                #
+                # mask = (tbins >= win_start - eps) & (tbins < win_end)
+                mask = (tbins >= win_start - eps) & (tbins < win_end - eps)
 
                 event_times = tbins[mask]
 
@@ -203,7 +205,7 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, LFPDataSelector, EventValidat
                 attrs={'calc_method': calc_method}
             )
             
-            true_beginning = self.lfp_padding[0] - self.lost_signal[0]
+            true_beginning = self.lfp_padding[0]/self.lfp_sampling_rate - self.lost_signal[0]
 
             da = (
                 da.assign_coords(time_idx=('time_raw', np.arange(da.sizes['time_raw'])))

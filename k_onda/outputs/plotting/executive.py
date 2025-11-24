@@ -6,7 +6,7 @@ from math import ceil
 
 from .plotting_helpers import  PlottingMixin
 from k_onda.core import OutputGenerator
-from .processors.partitions import Section, Segment, Series, Split
+from .processors.partitions import Section, Segment, Series
 from .processors.processor import Container, ProcessorConfig
 from .processors.processor_mixins import MarginMixin
 from .layout.layout import Layout
@@ -62,13 +62,12 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
             self.experiment.initialize_data()
 
         self.process_plot_spec(opts)
-
+    
     def count_axes(self, spec, rows=1, cols=1) -> tuple:
         """
-        Walks the spec tree and returns an tuple representing how many rows and
-        columns the layout will ultimately try to allocate.
+        Walks the spec tree and returns (rows, cols) for the layout,
+        ignoring any dim==2 (page axes).
         """
-    
         if 'divisions' in spec:
             rows, cols = self.count(spec, rows, cols)
 
@@ -77,104 +76,140 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
                 rows, cols = self.count_axes(spec[spec_type], rows, cols)
 
         return rows, cols
-    
+
     def count(self, spec, rows=1, cols=1):
-      
-        for division in spec['divisions']: # todo: containers don't have divisions
+        for division in spec['divisions']:
             dim = division.get('dim')
             members = division['members']
+
             if dim == 0:
                 rows *= len(members)
             elif dim == 1:
                 cols *= len(members)
-            else: # dim wasn't specified by the user
+            elif dim == 2:
+                # page axis: DO NOT affect rows/cols
+                continue
+            else:
                 dimensions = division.get('dimensions', (4, 3))
-                # this is going to build columnwise
-                # the number of new rows is going to be members//max_cols
-                # number of new cols is going to be min(len(members), max_cols)
-                # todo add the ability to build rowwise first?
                 rows *= ceil(len(members) / dimensions[1])
                 cols *= min(len(members), dimensions[1])
-        return rows, cols
-        
-    def spec_inspector(self, plot_spec, max_rows=4, max_cols=3):
-      
-        if 'split' in plot_spec:
-            return self.make_split_combinations(plot_spec)
-        
-        if 'series' not in plot_spec:
-            return [plot_spec]  # nothing obvious to split on
 
-        rows, cols = self.count_axes(plot_spec['series'])
+        return rows, cols
+    
+    def descend_spec(self, spec, fun):
+        # apply to this node if appropriate
+        if 'divisions' in spec:
+            fun(spec)
+
+        for key in ('series', 'section', 'segment'):
+            child = spec.get(key)
+            if child is not None:
+                self.descend_spec(child, fun)
+
+
+    def assign_data_sources(self, spec):
+        divisions = spec.get('divisions', [])
+        for division in divisions:
+            members = division.get('members')
+
+            data_source = division.get('data_source')
+            if data_source is None:
+                continue
+
+            if members == 'all' or members == ['all']:
+                pool = getattr(self.experiment, f'all_{data_source}s')
+                division['members'] = [obj.unique_id for obj in pool]
+                continue
+
+    def spec_inspector(self, plot_spec, max_rows=4, max_cols=3):
+        """
+        Decide whether to paginate and return a list of page specs.
+
+        - If a division with dim==2 exists in the top partition (series/section),
+        paginate explicitly along that axis.
+        - Otherwise, if the layout overflows max_rows/max_cols, do a rescue
+        pagination by chopping one division into pages.
+        """
+        self.descend_spec(plot_spec, self.assign_data_sources)
+
+        # Which partition are we operating on? series preferred, else section.
+        part_key = None
+        for key in ('series', 'section'):
+            if key in plot_spec:
+                part_key = key
+                break
+
+        if part_key is None:
+            return [plot_spec]  # nothing obvious to paginate
+
+        part_spec = plot_spec[part_key]
+        divisions = part_spec['divisions']
+
+        # 1) Explicit page axis: dim == 2
+        for idx, d in enumerate(divisions):
+            if d.get('dim') == 2:
+                dimensions = d.get('dimensions', (4, 3))
+                per_page = dimensions[0] * dimensions[1]
+                return self._paginate_over_division(plot_spec, part_key, idx, per_page)
+
+        # 2) No explicit page axis: compute layout and maybe rescue
+        rows, cols = self.count_axes(part_spec)
         if rows <= max_rows and cols <= max_cols:
             return [plot_spec]
 
-        if rows - max_rows <= cols - max_cols:
-            direction = 0
-            mx = max_rows
+        row_over = max(rows - max_rows, 0)
+        col_over = max(cols - max_cols, 0)
+
+        if row_over >= col_over:
+            target_dim = 0
+            page_size = max_rows
         else:
-            direction = 1
-            mx = max_cols
+            target_dim = 1
+            page_size = max_cols
 
-        page_specs = self.expand_spec_into_splits(plot_spec, direction, mx)
-
-        return page_specs
-
-    
-    def expand_spec_into_splits(self, ps, direction, mx):
-        divisions = ps['series']['divisions']
+        # find division with that dim; fallback to first
         try:
-            target_div = next(d for d in divisions if d.get('dim') == direction)
+            div_idx = next(i for i, d in enumerate(divisions)
+                        if d.get('dim') == target_dim)
         except StopIteration:
-            target_div = divisions[0]
-        members = target_div['members']
-        page_members = list(self.chunk_list(members, mx))
-        spec = deepcopy(ps)
-        series_spec = spec.pop('series')
-        spec['split'] = {'divisions': [{'members': page_members}]}
-        spec['split']['series'] = series_spec  # or however you want to embed it
-        return self.make_split_combinations(spec)
+            div_idx = 0
+
+        return self._paginate_over_division(plot_spec, part_key, div_idx, page_size)
+    
+    def _paginate_over_division(self, plot_spec, part_key, div_idx, page_size):
+        """
+        Given a plot_spec and a partition key ('series' or 'section'),
+        split one division's members into pages and return per-page specs.
+        """
+        pages = []
+        divisions = plot_spec[part_key]['divisions']
+        members = divisions[div_idx]['members']
+        if isinstance(members, str):
+             members = [members]
+
+        for chunk in self.chunk_list(members, page_size):
+            spec = deepcopy(plot_spec)
+            spec[part_key]['divisions'][div_idx]['members'] = chunk
+            pages.append(spec)
+
+        return pages
 
     def chunk_list(self, seq, n):
         for i in range(0, len(seq), n):
             yield seq[i:i+n]
-    
-    def make_split_combinations(self, spec):
-        # this gets a dictionary like {'split':{'divisions' = []}, 'section':{}}}
-        bunches = []
-        ranges = [range(len(division['members'])) for division in spec['split']['divisions']]
-        all_combinations = list(product(*ranges))
-        for combination in all_combinations:
-            new_spec = deepcopy(spec)
-            split_spec = new_spec.pop('split')
-            new_spec['series'] = split_spec
-            for i, j in enumerate(combination):
-                new_members = new_spec['series']['divisions'][i]['members'][j]
-                if not is_iterable(new_members):
-                    new_members = [new_members]
-                new_spec['series']['divisions'][i]['members'] = new_members
-                 
-            bunches.append(new_spec)
-        return bunches
 
     def process_plot_spec(self, opts):
-        """
-        Make a figure and start the top-level processor.
-        """
-
         plot_spec = opts['plot_spec']
-
-        # apply pagination / auto-split
         pages = self.spec_inspector(plot_spec, max_rows=4, max_cols=3)
 
         for spec in pages:
             self.kick_off(spec)
             self.wrap_up(opts)
 
+
     def kick_off(self, spec):
 
         processor_classes = {
-            'split': Split,
             'section': Section,
             'segment': Segment,
             'series': Series,
@@ -247,15 +282,7 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
             legend_info_list=legend_info_list
         )
 
-        if info and isinstance(info, list) and any('split' in entry for entry in info):
-            splits = {entry['split'] for entry in info}
-            self.make_fig(spec)
-            for split in splits:
-                subset = [entry for entry in info if entry['split'] == split]
-                self.send(info=subset, **send_args)
-        else:
-            self.send(info=info, **send_args)
-
+        self.send(info=info, **send_args)
 
     def send(self, info=None, spec=None, plot_type=None, aesthetics=None, ax=None,
                   spec_type=None, legend_info_list=None):
