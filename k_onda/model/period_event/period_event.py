@@ -39,6 +39,7 @@ class Period(Data, BinMethods, TimeLineMethods):
         self.shift = period_info.get('shift')
         self.duration = period_info.get('duration')
         self.reference_period_type = period_info.get('reference')
+        self.reference = None
         self.event_duration = period_info.get('event_duration')
         if target_period and hasattr(target_period, 'event_duration'):
             self.event_duration = target_period.event_duration
@@ -46,7 +47,7 @@ class Period(Data, BinMethods, TimeLineMethods):
         self._stop = self._start + self.duration
         self.universal_res_onset = self.get_universal_res_onset()
         self.duration_in_universal_res = self.duration/self.finest_res 
-
+       
     def __repr__(self):
         return (f"Period {self.animal.identifier} {self.period_type} "
                 f"{self.identifier}")
@@ -68,26 +69,6 @@ class Period(Data, BinMethods, TimeLineMethods):
         if not self._events:
             self.get_events()
         return self._events
-    
-    @property
-    def reference_override(self):
-        override = self.calc_opts.get('reference_override')
-        return override and override[0] == self.name
-        
-    @property
-    def reference(self):
-        if (self.is_relative or not self.reference_period_type) and (
-            not self.reference_override):
-            return None
-        if self.reference_override:
-            return getattr(self, self.calc_opts['reference_override'][1])
-        else:
-            period_attr = f"{self.kind_of_data}_periods"
-            if hasattr(self, period_attr):
-                periods = getattr(self, period_attr)
-            else:
-                periods = getattr(self.parent, period_attr)
-            return periods[self.reference_period_type][self.identifier]
         
 
 class Event(Data, BinMethods, TimeLineMethods):
@@ -105,7 +86,7 @@ class Event(Data, BinMethods, TimeLineMethods):
         self.period_type = self.period.period_type
         self.duration = self.pre_event + self.post_event
         self.universal_res_onset = self.get_universal_res_onset()
-
+        self.reference = self.parent.reference
 
     @property
     def start(self):
@@ -115,17 +96,6 @@ class Event(Data, BinMethods, TimeLineMethods):
     def stop(self):
         return self._start + self.post_event
 
-    @property
-    def reference(self):
-        if self.period.is_relative:
-            return None
-        reference_period_type = self.period.reference_period_type
-        if not reference_period_type:
-            return None
-        else:
-            period = self if self.name == 'period' else self.parent
-            reference_periods = getattr(period.parent, f"{self.kind_of_data}_periods")
-            return reference_periods[reference_period_type][period.identifier]
         
    
     
