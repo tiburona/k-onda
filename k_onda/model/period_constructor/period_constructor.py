@@ -1,7 +1,5 @@
 from collections import defaultdict
-from copy import copy
 import numpy as np
-
 
 
 class PeriodConstructor:
@@ -64,7 +62,6 @@ class PeriodConstructor:
                     continue
                 periods[period_type] = builder(period_type, info)
         
-
     def construct_periods(self, period_type, period_info):
         periods = []
         if not period_info:
@@ -72,24 +69,15 @@ class PeriodConstructor:
         # the time stamp of the beginning of a period
         period_onsets = period_info['onsets'] 
         
-        period_events, selected_event_indices = self.event_times_and_indices(
-            period_info, period_type, period_onsets
-        )
-                 
-        event_ind = 0
+        period_events = self.event_times(period_info, period_onsets)
         
-        for i, (onset, events) in enumerate(zip(period_onsets, period_events)):
-            if len(events):
-                period_events = np.array([
-                    ev for j, ev in enumerate(events) if event_ind + j in selected_event_indices])
-                event_ind += len(events)
-            else:
-                period_events = []
+        for i, (onset, pe) in enumerate(zip(period_onsets, period_events)):
+        
             periods.append(self.period_class(self, i, period_type, period_info, onset, 
-                                             events=period_events, experiment=self.experiment)) 
+                                             events=pe, experiment=self.experiment)) 
         return periods
     
-    def event_times_and_indices(self, period_info, period_type, period_onsets):
+    def event_times(self, period_info, period_onsets):
         events = period_info.get('events')
         if not events:
             return [[] for _ in period_onsets], None
@@ -99,16 +87,7 @@ class PeriodConstructor:
             # the time stamps of things that happen within the period   
             period_events = period_info['events'] 
 
-        num_events = len([event for events_list in period_events for event in events_list])  # all the events for this period type
-
-        if self.calc_opts.get('events', {}).get(period_type, {}).get('selection') is not None:
-            events = slice(*self.calc_opts['events'][period_type]['selection'])
-        else:
-            events = slice(0, num_events) # default is to take all events
-        # indices of the events used in this data analysis
-        selected_event_indices = list(range(num_events))[events]  
-
-        return period_events, selected_event_indices
+        return period_events
         
     def read_events_dict(self, events, period_onsets):
         # events is a dictionary like: {'start': 'period_onset', 'pattern': {'range_args': [30]}, 'unit': 'second',
@@ -160,7 +139,8 @@ class PeriodConstructor:
 
         # period info for non-relative periods can either not specify reference indices (old behavior)
         # supply one index, in which case all non-relative periods of this type are assumed to have
-        # the same reference period, or a list of pairs of indices.  
+        # the same reference period, or a dictionary with keys target period indices 
+        # and vals reference period indices.
         
 
         reference_periods = []
@@ -188,16 +168,15 @@ class PeriodConstructor:
             paired_period = candidate_target_periods[i]
             onset = paired_period.onset + shift_in_samples
             event_starts = []
-            event_duration = paired_period
-            if paired_period.period_info.get('event_duration'):
-                event_duration = paired_period.period_info['event_duration'] * self.sampling_rate
+           
+            if period_info.get('events'):
+                event_starts = self.event_times(period_info, [onset])[0]
             else:
-                event_duration = None
-
-            for es in paired_period.event_starts:
-                ref_es = es + shift_in_samples
-                if ref_es + event_duration <= paired_period.onset:
+                paired_event_starts = paired_period.event_starts
+                for es in paired_event_starts:
+                    ref_es = es + shift_in_samples
                     event_starts.append(ref_es)
+            
             event_starts = np.array(event_starts)
             duration = duration if duration else paired_period.duration
             reference_period = self.period_class(self, i, period_type, period_info, onset, 

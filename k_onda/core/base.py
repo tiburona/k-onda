@@ -8,7 +8,7 @@ import re
 from pathlib import PosixPath
 
 
-from k_onda.utils import get_round_decimals
+from k_onda.utils import get_round_decimals, safe_make_dir
 from k_onda.math import Filter
     
 
@@ -335,7 +335,7 @@ class Base:
             other_identifiers = []
         for p in [data_path, store_dir]:
             if not os.path.exists(p):
-                os.mkdir(p)
+                safe_make_dir(p)
         store_path = os.path.join(store_dir, '_'.join(other_identifiers) + f".{store}")
         if os.path.exists(store_path) and not self.calc_opts.get('force_recalc'):
             with open(store_path, 'rb') as f:
