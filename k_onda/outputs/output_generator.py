@@ -8,7 +8,7 @@ class OutputGenerator(Base):
         self.file_path = ''
         self.opts_file_path = ''
 
-    def build_write_path(self, file_type='plot', opts=None):
+    def build_write_path(self, file_type='plot', opts=None, page=None):
             
         constructors = self.io_opts['paths']
         self.write_opts = constructors.get(file_type, constructors.get('out', '.'))
@@ -26,11 +26,17 @@ class OutputGenerator(Base):
                         data_source_dict=data_source_dict)
                 else:
                     self.write_opts = self.fill_fields(self.write_opts)
-            
+
+            page_suffix = f'_{page}' if page else ''
+
             if '.' in self.write_opts:
-                    self.file_path = self.write_opts
+                self.file_path = self.write_opts[:-4] + page_suffix + self.write_opts[-4:]
             else:
-                self.file_path = self.write_opts + f'.{default_ext}'
+                self.file_path = self.write_opts + page_suffix + f'.{default_ext}'
+
+            
+
+            # todo insert page number in here
 
             self.opts_file_path = self.file_path[0:-3] + 'txt'
             return
@@ -67,12 +73,16 @@ class OutputGenerator(Base):
                 # Build final file path and an opts file
                 self.opts_file_path = self.file_path + '.txt'
 
-                default_ext = 'png' if file_type == 'plot' else 'csv'
+                if page is not None:
+                    self.file_path += f'_{page}'
 
                 if isinstance(self.write_opts, dict):
                     ext = self.write_opts.get('extension', default_ext)
                 else:
                     ext = '.png'
+
+               
+
                 self.file_path += ext
 
     def handle_collisions(self):

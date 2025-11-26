@@ -160,9 +160,12 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
         return subfig_grid
             
     def calculate_my_dimensions(self):
+        # todo: need to fix this so that it handles page dimensions
         dims = [1, 1]
         if self.spec is not None:
-            if 'dimensions' in self.spec:
+            if self.processor.page_dimensions:
+                dims = self.processor.page_dimensions
+            elif self.spec.get('dimenstions'):
                 dims = self.spec['dimensions']
             else: 
                 for division in self.spec['divisions']:

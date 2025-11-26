@@ -101,18 +101,18 @@ class Partition(Processor):
             self.process_divisions(divisions[1:], info=updated_info)
 
     def advance_index(self, current_divider, i):
-        if 'dim' in current_divider:
+        if len(current_divider['members']) == 1:
+            return
+        if 'dim' in current_divider and current_divider['dim'] != 2:
             dim = current_divider['dim']
-            if dim == 2:
-                return
             self.current_index[dim] = self.starting_index[dim] + i
         else:
-            dimensions = self.spec.get('dimensions', (4, 3))
-            if self.current_index[1] < dimensions[1] - 1:
-                self.current_index[1] += 1
-            else: # advance to the next row
-                self.current_index[0] += 1
-                self.current_index[1] = 0
+            dimensions = current_divider.get('dimensions', self.page_dimensions)
+            x = i // dimensions[1]
+            y = i % dimensions[1]
+            if x == 4:
+                a = 'foo'
+            self.current_index = [x, y]
 
     def wrap_up(self, updated_info): 
          

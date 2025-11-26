@@ -121,7 +121,7 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
                 division['members'] = [obj.unique_id for obj in pool]
                 continue
 
-    def spec_inspector(self, plot_spec, max_rows=4, max_cols=3):
+    def spec_inspector(self, plot_spec):
         """
         Decide whether to paginate and return a list of page specs.
 
@@ -131,6 +131,8 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
         pagination by chopping one division into pages.
         """
         self.descend_spec(plot_spec, self.assign_data_sources)
+
+        dimensions = plot_spec.get('page_dimensions', (4, 3))
 
         # Which partition are we operating on? series preferred, else section.
         part_key = None
@@ -148,11 +150,11 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
         # 1) Explicit page axis: dim == 2
         for idx, d in enumerate(divisions):
             if d.get('dim') == 2:
-                dimensions = d.get('dimensions', (4, 3))
-                per_page = dimensions[0] * dimensions[1]
-                return self._paginate_over_division(plot_spec, part_key, idx, per_page)
+                page_size = dimensions[0] * dimensions[1]
+                return self._paginate_over_division(plot_spec, part_key, idx, page_size)
 
         # 2) No explicit page axis: compute layout and maybe rescue
+        max_rows, max_cols = dimensions
         rows, cols = self.count_axes(part_spec)
         if rows <= max_rows and cols <= max_cols:
             return [plot_spec]
@@ -181,6 +183,7 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
         Given a plot_spec and a partition key ('series' or 'section'),
         split one division's members into pages and return per-page specs.
         """
+        # todo need to add dimensions here
         pages = []
         divisions = plot_spec[part_key]['divisions']
         members = divisions[div_idx]['members']
@@ -200,14 +203,15 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
 
     def process_plot_spec(self, opts):
         plot_spec = opts['plot_spec']
-        pages = self.spec_inspector(plot_spec, max_rows=4, max_cols=3)
+        pages = self.spec_inspector(plot_spec)
 
-        for spec in pages:
-            self.kick_off(spec)
-            self.wrap_up(opts)
+        for i, spec in enumerate(pages):
+            page = i if len(pages) > 1 else None
+            self.kick_off(spec, plot_spec.get('page_dimensions'))
+            self.wrap_up(opts, page=page)
 
 
-    def kick_off(self, spec):
+    def kick_off(self, spec, page_dimensions):
 
         processor_classes = {
             'section': Section,
@@ -219,8 +223,8 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
         self.make_fig(spec)
      
         config = ProcessorConfig(self, spec, layout=self.layout, 
-                                  figure=self.layout.cells[0, 0], index=[0, 0], 
-                                 is_first=True)
+                                figure=self.layout.cells[0, 0], index=[0, 0], 
+                                is_first=True, page_dimensions=page_dimensions)
         processor = processor_classes[config.spec_type](config)
         processor.start(top_level=True)
 
@@ -246,18 +250,18 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
             if k in spec:
                 return spec[k].get('margins', {})
     
-    def wrap_up(self, opts):
+    def wrap_up(self, opts, page=None):
         interactive = opts.get('interactive', False)
         if interactive:
              plt.show()
-        self.close_plot(opts=opts)
+        self.close_plot(opts=opts, page=page)
 
-    def close_plot(self, opts=None, fig=None):
+    def close_plot(self, opts=None, fig=None, page=None):
         
         if not fig:
             fig = self.fig  
 
-        self.build_write_path(opts=opts)
+        self.build_write_path(opts=opts, page=page)
 
         safe_make_dir(self.file_path)
         

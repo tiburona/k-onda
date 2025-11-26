@@ -14,7 +14,7 @@ class ProcessorConfig(Base):
 
     def __init__(self, executive_plotter, full_spec, layout=None, parent_processor=None, 
                  figure=None, division_info=None, info_by_division=None, info_by_division_by_layers=None, 
-                 index=None, aesthetics=None, layers=None, 
+                 index=None, aesthetics=None, layers=None, page_dimensions=None,
                  is_first=False, plot_type=None, legend_info_list=None, final_dicts=None):
         
         self.executive_plotter = executive_plotter
@@ -30,6 +30,7 @@ class ProcessorConfig(Base):
         self.info_by_division_by_layers = info_by_division_by_layers
         self.final_dicts = final_dicts
         self.legend_info_list = legend_info_list
+        self.page_dimensions = page_dimensions or self.spec.get('page_dimensions')
         self.index = index
         self.child_layout = None
         self.aesthetics = aesthetics 
@@ -45,7 +46,9 @@ class ProcessorConfig(Base):
                 self.next = {k: self.spec[k]}
         
         self.index = index
-        self.starting_index = [0, 0]
+        # todo: someday I should really disambiguate between the index within a spec
+        # and within the figure
+        self.starting_index = [0, 0] 
 
         self.inherited_division_info = self.division_info or {}
 
@@ -112,7 +115,8 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
             division_info=updated_division_info, 
             info_by_division=info_by_division,
             info_by_division_by_layers=info_by_division_by_layers,
-            legend_info_list=self.legend_info_list
+            legend_info_list=self.legend_info_list,
+            page_dimensions = self.page_dimenions
             )
         
         return ProcessorConfig(self.executive_plotter, spec, **processor_config)
