@@ -46,11 +46,15 @@ class Period(Data, BinMethods, TimeLineMethods):
         self._start = self.onset/self.sampling_rate 
         self._stop = self._start + self.duration
         self.universal_res_onset = self.get_universal_res_onset()
-        self.duration_in_universal_res = self.duration/self.finest_res 
+        self.duration_in_universal_res = self.duration/self.finest_res
        
     def __repr__(self):
         return (f"Period {self.animal.identifier} {self.period_type} "
                 f"{self.identifier}")
+    
+    @property
+    def unique_id(self):
+        return '_'.join([str(tag) for tag in [self.parent.unique_id, self.period_type, self.identifier]])
 
     @property
     def children(self):

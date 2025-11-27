@@ -72,7 +72,7 @@ class PeriStimulusPlotter(FeaturePlotter):
                 transform = transforms.blended_transform_factory(ax.transData, ax.transAxes)
                 ax.add_patch(plt.Rectangle(
                     (when[0], 0), width, 1,
-                    facecolor='gray', alpha=0.4,
+                    facecolor='gray', alpha=0.2,
                     transform=transform,  # Apply the transformation
                     zorder=10
                 ))

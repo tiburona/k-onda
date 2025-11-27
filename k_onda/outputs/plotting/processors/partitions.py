@@ -19,7 +19,6 @@ class Partition(Processor):
         # self.info_by_division_by_layers is a list with these same unique values, repeated for
         # each unique layer
         self.info_dicts = self.info_by_division_by_layers if self.layers else self.info_by_division
-        self.assign_data_sources()
 
     def finalize_init_unique(self):
         if self.global_colorbar:
@@ -47,24 +46,6 @@ class Partition(Processor):
                 
             root = self.child_layout.root()
             root.finalize_shared_axes()
-       
-
-    def assign_data_sources(self):
-        """
-        Assign data sources to each division. If a division's 'members' key is a string beginning 
-        with 'all', fetches the identifiers for the relevant data objects and assigns them to 
-        'members'. E.g., 'all_animals' assigns a list of the identifiers of all the animals in the 
-         experiment."""
-
-        for division in self.spec['divisions']:
-            data_source = division.get('data_source')
-            
-            if not data_source:
-                return
-            # if data_source is 'all_animals' or similar, expand that into a list of identifiers
-            if 'all' in division.get('members', []):
-                division['members'] = [
-                    s.identifier for s in getattr(self.experiment, division['members'])]
                 
     def copy_info(self, info):
         # can't deepcopy info with cell in it; causes infinite loop 
@@ -120,9 +101,18 @@ class Partition(Processor):
             self.process_divisions(divisions[1:], info=updated_info)
 
     def advance_index(self, current_divider, i):
-        if 'dim' in current_divider:
+        if len(current_divider['members']) == 1:
+            return
+        if 'dim' in current_divider and current_divider['dim'] != 2:
             dim = current_divider['dim']
             self.current_index[dim] = self.starting_index[dim] + i
+        else:
+            dimensions = current_divider.get('dimensions', self.page_dimensions)
+            x = i // dimensions[1]
+            y = i % dimensions[1]
+            if x == 4:
+                a = 'foo'
+            self.current_index = [x, y]
 
     def wrap_up(self, updated_info): 
          
@@ -148,8 +138,6 @@ class Partition(Processor):
                 self.info_by_division.append(updated_info)
                 self.get_calcs(updated_info)
        
-           
-
         else:
             self.start_next_processor(self.next, updated_info, self.info_by_division, self.info_by_division_by_layers)
 
@@ -199,7 +187,7 @@ class Series(Partition):
                 
     def wrap_up(self, updated_info):
         
-        self.label(cell=None)
+        self.set_label(cell=None)
         for component in self.spec['components']:
             base = deepcopy(self.spec['base'])
             spec = recursive_update(base, component)
@@ -234,76 +222,4 @@ class Segment(Partition):
 
         return 
            
-
-class Split(Partition):
-    name = 'split'
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.splits = True
-
-    # a split is unlike other partitions in that it needs to expand the number of 
-    # entries in info, while keeping the split label on each entry.  
-    # within each split, the divider type and members should be labeled
-
-    # in this sense, a split is like layers.  The other partitions need to be split-aware
-    # and if there is a split, understand that they must iterate through splits.
-    # if there are splits, each subsequent operation must operate on each split, 
-    # and each info by division, or info by division by list
-
-    # update_info was the method that did this before.  it now must iterate through the splits
-    # 
-
-    # if divider_type is a data source than there are three options:
-    # all_x, a list of identifiers, or a list of lists (actually I think just two.  I think assign_data_sources still works)
-
-    # if divider_type is a selectable variable than there are two options:
-    # a list of identifiers, or a list of lists.  
-
-    # this class can overwrite wrap_up so the only thing it does is start the next processor
-
-    
-
-    def process_divisions(self, divisions, info=None):
-        
-        
-        if not info:
-            info = self.copy_info(self.inherited_division_info)   
-
-        # we hit a leaf in the recursion
-        if not divisions:
-            # This is the final combination of all previous divider choices.        
-            self.wrap_up(info)
-            return
-
-        # Otherwise, take the first divider in the list
-        divider = divisions[0]
-        divider_type = divider['divider_type']
-        info['data_source'] = divider.get('data_source', self.inherited_division_info.get('data_source'))
-
-        # Go through each of its members
-        for i, member in enumerate(divider['members']):
-            # update the info dict with information about each member
-            updated_info = self.update_info(info, member, divider_type, i)
-            # advance the index to indicate the position of this member
-            self.advance_index(divider, i)
-            # Now recurse on the remainder of the list, carrying `updated_info`
-            self.process_divisions(divisions[1:], info=updated_info)
-
-    def update_info(self, info, member, divider_type, index):
-         # Merge it into our accumulated info
-        if isinstance(member, dict):
-            # member is dict, as in conditions, period_types, etc.
-            updated_info = {**info, divider_type: {**info.get(divider_type, {}), **member}, 
-                            'split_index': index}
-        else:
-            updated_info = {**info, divider_type: member, 'split_index': index}
-
-        return updated_info
-    
-    def wrap_up(self, info):
-                
-        if self.next:
-            self.start_next_processor(self.next, info, self.info_by_division, self.info_by_division_by_layers)
-
             

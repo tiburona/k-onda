@@ -183,6 +183,7 @@ class LabelMixin:
         if not label_config:
             return
 
+        # todo: this isn't accurate I don't think 
         needs_data_source = any('{' in conf.get('text', '') 
                                 for conf in label_config.values())
         data_source = None
