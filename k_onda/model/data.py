@@ -32,6 +32,14 @@ class Data(Base, Aggregates, TransformRegistryMixin):
         return self.include() and self in self.parent.children
     
     @property
+    def unique_id(self):
+        if not hasattr(self, '_unique_id'):
+            return self.identifier
+        else:
+            return self._unique_id
+
+    
+    @property
     def included_children(self):
         
         if hasattr(self, 'children'):
@@ -41,7 +49,7 @@ class Data(Base, Aggregates, TransformRegistryMixin):
     
     @property
     def has_children(self):
-        return len(self.children)
+        return bool(len(self.children))
     
     @property
     def has_grandchildren(self):

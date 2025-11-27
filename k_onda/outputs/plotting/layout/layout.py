@@ -160,13 +160,16 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
         return subfig_grid
             
     def calculate_my_dimensions(self):
+        # todo: need to fix this so that it handles page dimensions
         dims = [1, 1]
         if self.spec is not None:
-            if self.processor_type == 'container':
+            if self.processor.page_dimensions:
+                dims = self.processor.page_dimensions
+            elif self.spec.get('dimensions'):
                 dims = self.spec['dimensions']
             else: 
                 for division in self.spec['divisions']:
-                    if 'dim' in division:
+                    if 'dim' in division and division['dim'] != 2:
                         dims[division['dim']] = len(division['members'])
         return deepcopy(dims)
     
@@ -210,7 +213,8 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
         space_within = position_info.get('space_within', .05)
         ratios = [space_between, 1, space_within]
         if rvrs:
-            reversed(ratios)
+            ratios = list(reversed(ratios))
+
 
         ratio_dict = {f"{ratio_dim}_ratios": ratios}
 
@@ -239,16 +243,6 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
             self.processor.name == 'segment' or 
             self.processor.next is None
             )
-        
-    def make_subfigure(self, i, j):
-
-        if self.colorbar_for_each_plot:
-            subfigure = self.colorbar_enabled_subfigure(
-                self.figure, self.subfigure_grid[i, j], self.colorbar_position)
-        else:
-            subfigure = self.figure.add_subfigure(self.subfigure_grid[i, j])
-            
-        return subfigure
        
 
 class Wrapper(Base):

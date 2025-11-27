@@ -127,21 +127,7 @@ class PeriodConstructor:
 
         return events_to_return
    
-    def construct_relative_periods(self, period_type, period_info):
-
-        # period info for relative can optionally have a list, target_indices
-        
-
-        # if target_indices is not supplied, it's assumed that every target generates
-        # a reference.  if target_indices is supplied (in the Rhonda case, target_index: 0)
-
-        # relative periods are only constructed for those target indices
-
-        # period info for non-relative periods can either not specify reference indices (old behavior)
-        # supply one index, in which case all non-relative periods of this type are assumed to have
-        # the same reference period, or a dictionary with keys target period indices 
-        # and vals reference period indices.
-        
+    def construct_relative_periods(self, period_type, period_info):        
 
         reference_periods = []
         modality_periods = getattr(self, f"{self.kind_of_data}_periods")
