@@ -27,7 +27,7 @@ class OutputGenerator(Base):
                 else:
                     self.write_opts = self.fill_fields(self.write_opts)
 
-            page_suffix = f'_{page}' if page else ''
+            page_suffix = f'_{page}' if page is not None else ''
 
             if '.' in self.write_opts:
                 self.file_path = self.write_opts[:-4] + page_suffix + self.write_opts[-4:]

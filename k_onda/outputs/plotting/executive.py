@@ -183,16 +183,26 @@ class ExecutivePlotter(OutputGenerator, PlottingMixin, PrepMethods, MarginMixin)
         Given a plot_spec and a partition key ('series' or 'section'),
         split one division's members into pages and return per-page specs.
         """
-        # todo need to add dimensions here
         pages = []
         divisions = plot_spec[part_key]['divisions']
-        members = divisions[div_idx]['members']
+        target_division = divisions[div_idx]
+        members = target_division['members']
         if isinstance(members, str):
              members = [members]
 
+        page_dims = None
+        if target_division.get('dim') == 2:
+            page_dims = (target_division.get('dimensions')
+                         or plot_spec.get('page_dimensions')
+                         or (4, 3))
+
         for chunk in self.chunk_list(members, page_size):
             spec = deepcopy(plot_spec)
-            spec[part_key]['divisions'][div_idx]['members'] = chunk
+            spec_division = spec[part_key]['divisions'][div_idx]
+            spec_division['members'] = chunk
+            if page_dims:
+                spec_division['dimensions'] = page_dims
+                spec['page_dimensions'] = page_dims
             pages.append(spec)
 
         return pages
