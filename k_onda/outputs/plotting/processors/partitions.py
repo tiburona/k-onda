@@ -110,8 +110,6 @@ class Partition(Processor):
             dimensions = current_divider.get('dimensions', self.page_dimensions)
             x = i // dimensions[1]
             y = i % dimensions[1]
-            if x == 4:
-                a = 'foo'
             self.current_index = [x, y]
 
     def wrap_up(self, updated_info): 

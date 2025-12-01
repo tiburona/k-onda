@@ -116,7 +116,7 @@ class Processor(Base, PlottingMixin, LayerMixin, AestheticsMixin, LabelMixin, Ma
             info_by_division=info_by_division,
             info_by_division_by_layers=info_by_division_by_layers,
             legend_info_list=self.legend_info_list,
-            page_dimensions = self.page_dimenions
+            page_dimensions = self.page_dimensions
             )
         
         return ProcessorConfig(self.executive_plotter, spec, **processor_config)

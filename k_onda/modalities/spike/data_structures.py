@@ -112,7 +112,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         return np.mean([pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
                         for pair in self.unit_pairs], axis=axis)
     
-    def get_waveform(self, exclude=True):
+    def get_waveform(self):
         if self.waveform is not None:
             return self.waveform
         else:
@@ -122,7 +122,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
             self.waveform = wf
             return wf
     
-    def get_raster(self, exclude=True):
+    def get_raster(self):
         base = self.calc_opts.get('base', 'event')
         # raster type can be spike_train for binarized data or spike_counts for gradations
         raster_type = self.calc_opts.get('raster_type', 'spike_train')

@@ -493,88 +493,12 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
 
         return xr.DataArray(result, dims=['lag'], coords={'lag': lags})
 
-            
-    
-class PhaseRelationshipCalculator(RegionRelationshipCalculator):
-
-    name = 'phase_relationship_calculator'
-
-    @property
-    def time_to_use(self):
-        if self.calc_opts.get('events'):
-            time_to_use = self.calc_opts.get('events')[self.parent.period_type]['post_stim']  # TODO: Fix this to allow for pre stim time
-            time_to_use *= self.lfp_sampling_rate
-        else:
-            time_to_use = self.event_duration_samples
-        return time_to_use
-    
-    def get_event_segment(self):
-        time_to_use = self.time_to_use
-        ones_segment = np.ones(time_to_use)
-        nans_segment = np.full(self.event_duration_samples - time_to_use, np.nan)
-        segment = np.concatenate([ones_segment, nans_segment])
-        return segment
-
-    def get_event_times(self, data):
-        event_duration = int(self.event_duration)
-        
-        event_times = []
-        shape = data.shape[1]  # The length of the second dimension of data
-
-        for _ in range(0, shape, event_duration):
-            event_times.append(self.get_event_segment())
-        
-        event_times = np.concatenate(event_times)
-        
-        # Pad with NaNs if event_times is shorter than shape
-        if len(event_times) < shape:
-            padding = np.full(shape - len(event_times), np.nan)
-            event_times = np.concatenate([event_times, padding])
-        else:
-            event_times = event_times[:shape]  # Ensure it matches the required length
-
-        event_times = np.tile(event_times, (data.shape[0], 1))  # Repeat the event_times across rows
-        
-        return event_times
-    
-    def get_events(self): # I need to add some pre event stuff ehre
-        events = []
-        d1, d2 = (self.region_1_data_padded, self.region_2_data_padded)
-        events_info = self.calc_opts.get('events')
-        if events_info is not None:
-            pre_stim = events_info[self.period_type].get('pre_stim', 0)
-            post_stim = events_info[self.period_type].get('post_stim', self.event_duration/self.sampling_rate)
-        for i, start in enumerate(range(0, len(d1), self.event_duration)):
-            slc = slice(*(int(start-pre_stim*self.sampling_rate), int(start+post_stim*self.sampling_rate)))
-            events.append(PhaseRelationshipEvent(self, i, d1[slc], d2[slc]))
-        self._children = events
-
-    def get_phase_phase_mrl(self):
-        valid_sets = self.get_angles()
-        results_per_set = [compute_mrl(data, self.get_event_times(data), dim=1) for data in valid_sets]
-        weights = np.array([data_set.shape[1] for data_set in valid_sets])
-        to_return = np.average(results_per_set, axis=0, weights=weights) # TODO:figure out what's wrong with self.refer here
-        return to_return
-
-    def get_angles(self):
-        d1, d2 = (self.region_1_data, self.region_2_data)
-        phase_diffs = self.get_region_phases(d1) - self.get_region_phases(d2) 
-        return regularize_angles(phase_diffs)
-
-    def get_region_phases(self, region_data):
-        valid_sets = np.array([
-            self.divide_data_into_valid_sets(
-                np.array(compute_phase(bandpass_filter(region_data, low, high, self.sampling_rate)))
-            ) for low, high in self.frequency_bands])
-        return valid_sets.transpose(1, 0, 2)
-
-    
 
 class GrangerFunctions:
 
     def fetch_granger_stat(self, d1, d2, tags, proc_name, do_weight=True, max_len_sets=None):
         ml = MatlabInterface(self.env_config['matlab_config'], tags=tags)
-        data = np.vstack((d1, d2))
+        data = np.vstack(self.padded_regions_data)
         proc = getattr(ml, proc_name)
         result = proc(data)
         if proc_name == 'granger_causality':
