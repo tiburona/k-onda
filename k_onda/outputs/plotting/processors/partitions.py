@@ -129,6 +129,7 @@ class Partition(Processor):
             updated_info['cell'] = cell
             updated_info['index'] = copy(self.current_index) 
             updated_info['last_spec'] = self.spec
+            updated_info['attr'] = self.spec.get('attr', 'calc')
                        
             if self.layers:
                 self.get_layer_dicts(updated_info)
