@@ -110,7 +110,7 @@ class EventValidator:
             if self.calc_type == 'coherence':
                 coherence_args = self.welch_and_coherence_args('coherence')
                 nperseg = coherence_args['nperseg']
-                min_len = nperseg * 5
+                min_len = nperseg
             else:
                 min_len = (self.lfp_sampling_rate + 1) * 3 + 1
 

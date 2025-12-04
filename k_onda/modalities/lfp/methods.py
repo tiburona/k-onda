@@ -1,3 +1,4 @@
+import mne
 import xarray as xr
 
 from k_onda.model.data import TransformRegistryMixin
@@ -12,7 +13,6 @@ class LFPMethods(TransformRegistryMixin):
         'coherence': (fisher_z_from_msc, back_transform_fisher_z),
         # 'amp_xcorr': (amp_xcorr_transform, amp_xcorr_back), ...
     }
-
 
     def get_weights(self):
         if not hasattr(self, 'children') or len(self.children) == 0:
@@ -32,7 +32,16 @@ class LFPMethods(TransformRegistryMixin):
                 (da['frequency'] <= self.freq_range[1] + tol))         
 
         return da.sel(frequency=fmask)
-       
+    
+
+    def resample(data, fs, new_fs, axis=-1):
+        data_rs = mne.filter.resample(
+            data,
+            down=fs / new_fs,
+            npad='auto',
+            axis=axis
+        )
+        return data_rs, new_fs
  
     def get_power(self):
         return self.get_average('get_power', stop_at=self.calc_opts.get('base', 'event'))
@@ -160,8 +169,8 @@ class CoherenceMethods:
            
     def welch_and_coherence_args(self, analysis):
 
-        nperseg = 1000                
-        noverlap = 500
+        nperseg = 2000                
+        noverlap = 1000
 
         args = {
             'nperseg': nperseg,

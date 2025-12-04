@@ -110,8 +110,6 @@ class Partition(Processor):
             dimensions = current_divider.get('dimensions', self.page_dimensions)
             x = i // dimensions[1]
             y = i % dimensions[1]
-            if x == 4:
-                a = 'foo'
             self.current_index = [x, y]
 
     def wrap_up(self, updated_info): 
@@ -131,6 +129,7 @@ class Partition(Processor):
             updated_info['cell'] = cell
             updated_info['index'] = copy(self.current_index) 
             updated_info['last_spec'] = self.spec
+            updated_info['attr'] = self.spec.get('attr', 'calc')
                        
             if self.layers:
                 self.get_layer_dicts(updated_info)
