@@ -30,7 +30,7 @@ class SpikePrepMethods(PrepMethods):
 
         for category in [cat for cat in ['good', 'MUA'] if cat in units_info]:
             for unit_info in units_info[category]:
-                unit_kwargs = {kw: unit_info[kw] for kw in ['waveform', 'neuron_type', 'quality', 'firing_rate', 'fwhm_seconds']}
+                unit_kwargs = {kw: unit_info[kw] for kw in ['waveform', 'neuron_type', 'quality', 'firing_rate', 'fwhm']}
                 unit = Unit(self, category, unit_info['spike_times'], unit_info['cluster'], 
                             experiment=self.experiment, **unit_kwargs)
                 if unit.neuron_type:
@@ -45,7 +45,7 @@ class SpikePrepMethods(PrepMethods):
             for unit in units:
                 Unit(self, unit['group'], unit['spike_times'], unit['cluster'], 
                     waveform=unit['waveform'], experiment=self.experiment, 
-                    firing_rate=unit['firing_rate'], fwhm_seconds=unit['fwhm_seconds'])
+                    firing_rate=unit['firing_rate'], fwhm=unit['fwhm'])
         else:
             phy_path = self.construct_path('phy')
             phy_interface = PhyInterface(phy_path, self)

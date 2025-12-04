@@ -1,8 +1,8 @@
 import numpy as np
 import xarray as xr
 
-from k_onda.math import normalized_xcorr
-from k_onda.utils import standardize, calc_hist, correlogram
+from k_onda.math import normalized_xcorr, calc_hist
+from k_onda.utils import correlogram
 
 
 class SpikeMethods:
@@ -22,7 +22,6 @@ class SpikeMethods:
     def get_spike_train(self):
         return self.get_average('get_spike_train', stop_at=self.calc_opts.get('base', 'event'))
 
-  
     
 class RateMethods:
 
@@ -31,12 +30,17 @@ class RateMethods:
     @property
     def spikes(self):
         if self._spikes is None:
-            self._spikes = self.unit.find_spikes(*self.spike_range)
+            spikes = self.unit.find_spikes(*self.spike_range)  # quantity, dim 'spike'
+
+            spikes_abs = spikes.pint.to('second')
+            spikes_rel = (spikes - self.start).pint.to('second')
+
+            self._spikes = spikes.assign_coords(
+                absolute_time=('spike', spikes_abs),
+                relative_time=('spike', spikes_rel),
+            )
+
         return self._spikes
- 
-    @property
-    def spikes_in_seconds_from_start(self):
-        return self.unit.find_spikes(*self.spike_range) - self.start
     
     @property
     def spike_range(self):
@@ -64,40 +68,56 @@ class RateMethods:
     
     def get_proportion(self):
         return self.resolve_calc_fun('proportion')
-    
-    def get_coords(self, length):
-        index = np.arange(length)
-        absolute_time = standardize(index * self.calc_opts['bin_size'] + self.start)
-        relative_time = standardize(absolute_time - self._start)
-        period_time = standardize(absolute_time - self.parent._start 
-                                  if self.name == 'event' else relative_time)
-
-        coord_dict = {
-            'time': index,
-            'absolute_time': ('time', absolute_time),
-            'relative_time': ('time', relative_time),
-            'period_time': ('time', period_time)
-        }
-
-        if self.name == 'event':
-            coord_dict['event_time'] = ('time', relative_time)
-
-        return coord_dict
         
     def get_spike_counts_(self):
         if 'counts' in self.private_cache:
             counts = self.private_cache['counts']
         else:
-            raw_counts = calc_hist(self.spikes, self.num_bins_per, self.spike_range)[0]
-            coords = self.get_coords(len(raw_counts))
-            # Wrap the raw counts in a DataArray with 'time' as the dimension.
+            # 1) histogram over spikes in SECONDS (plain floats)
+            spikes_sec = self.to_float(self.spikes, unit="second")
+            spike_range = tuple(self.to_float(b, unit="second") for b in self.spike_range)
+            raw_counts = calc_hist(spikes_sec, self.num_bins_per, spike_range)[0]
+
+            # 2) bin index
+            index = xr.DataArray(
+                np.arange(len(raw_counts)),
+                dims=["time"],
+                name="time",
+            )
+
+            bin_size = self.bin_size.pint.to("second")
+            start = self.start.pint.to("second")
+            absolute_time = self.standardize_time(index * bin_size + start)  
+
+            rel_start = self._start.pint.to("second")
+            relative_time = self.standardize_time(absolute_time - rel_start)
+
+            if self.name == "event":
+                period_start = self.parent._start.pint.to("second")
+                period_time = self.standardize_time(absolute_time - period_start)
+            else:
+                period_time = relative_time
+
+            coord_dict = {
+                "time": index,
+                "absolute_time": absolute_time,
+                "relative_time": relative_time,
+                "period_time": period_time,
+            }
+
+            if self.name == "event":
+                coord_dict["event_time"] = relative_time
+
             counts = xr.DataArray(
                 raw_counts,
-                dims=['time'],  
-                coords=coords
+                dims=["time"],
+                coords=coord_dict,
+                name="spike_counts",
             )
-        if self.calc_type == 'psth':
-            self.private_cache['counts'] = counts
+
+            if self.calc_type == "psth":
+                self.private_cache['counts'] = counts
+
         return counts
 
     def get_spike_train_(self):
@@ -112,7 +132,7 @@ class RateMethods:
         return corrected_rates
 
     def get_firing_rates_(self):
-        return self.get_spike_counts_()/self.calc_opts.get('bin_size', .01)
+        return self.get_spike_counts_()/self.bin_size
 
     def get_proportion_(self):
         return xr.where(self.get_psth() > 0, 1, 0)

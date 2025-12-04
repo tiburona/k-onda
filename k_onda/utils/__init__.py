@@ -1,6 +1,4 @@
 from .math_functions import (
-    calc_hist,
-    calc_rates,
     trim_and_normalize_ac,
     compute_one_sided_spectrum,
     get_positive_frequencies,
@@ -56,8 +54,6 @@ from .prep_methods import PrepMethods
 
 __all__ = [
     # From math_functions
-    "calc_hist",
-    "calc_rates",
     "trim_and_normalize_ac",
     "compute_one_sided_spectrum",
     "get_positive_frequencies",

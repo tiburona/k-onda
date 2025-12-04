@@ -52,9 +52,6 @@ class TimeBin(Bin):
 
         self.time = ts[self.identifier] 
 
-        # TODO add in the actual resampling here
-        self.resampled_time_point = round(self.time/self.parent.finest_res, self.parent.round_to)
-
 
 class TimeBinMethods:
          
@@ -91,8 +88,6 @@ class FrequencyBin(Bin, TimeBinMethods):
         
         if self.calc_type == 'power': 
             self.frequency = float(representative.spectrogram.coords['frequency'][index].values)
-        elif 'phase' in self.calc_type:
-            self.frequency = representative.frequency_bands[index][0]
         else:
             freq_range = list(range(self.freq_range[0], self.freq_range[1] + 1)) 
             if isinstance(parent_data, dict):

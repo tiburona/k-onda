@@ -22,18 +22,15 @@ class LFPMethods(TransformRegistryMixin):
         else:
             weights = [1 for _ in range(len(self.children))]
         return weights
-        
+    
     def frequency_selector(self, da):
-                                      
-        tol = 0.3                          
-
+                                                               
         # boolean mask along the *frequency* coord
-        fmask = ((da['frequency'] >= self.freq_range[0] - tol) &
-                (da['frequency'] <= self.freq_range[1] + tol))         
+        fmask = ((da['frequency'] >= self.freq_range.sel(edge='low') - self.tolerance) &
+                (da['frequency'] <= self.freq_range.sel(edge='high') + self.tolerance))                 
 
         return da.sel(frequency=fmask)
     
-
     def resample(data, fs, new_fs, axis=-1):
         data_rs = mne.filter.resample(
             data,
@@ -104,21 +101,25 @@ class LFPMethods(TransformRegistryMixin):
 class PSDMethods:
 
     def psd_from_contiguous_data(self, data):
+        args = self.welch_and_coherence_args("psd")
 
-        args = self.welch_and_coherence_args('psd')
+        fs = self.to_float(self.lfp_sampling_rate, unit="Hz")
+        f, return_val = psd(data, fs, **args)
 
-        f, return_val = psd(data, self.lfp_sampling_rate, **args)
+        freq = self.quantity(f, units="Hz", name="frequency")
 
         da = xr.DataArray(
-            data=return_val, 
+            data=return_val,
             dims=["frequency"],
-            coords=dict(frequency=f))
-        
+            coords={"frequency": freq},
+            attrs={"psd_units": "V^2/Hz"},  # optional doc only
+        )
+
         da = self.frequency_selector(da)
 
-        if self.calc_type == 'psd' and self.calc_opts.get('frequency_type') == 'block':
-            da = da.mean(dim='frequency', keep_attrs=True) 
-        
+        if self.calc_type == "psd" and self.calc_opts.get("frequency_type") == "block":
+            da = da.mean(dim="frequency", keep_attrs=True)
+
         return da
     
 
@@ -135,8 +136,9 @@ class CoherenceMethods:
     def get_csd_(self):
 
         args = self.welch_and_coherence_args('csd')
+        fs = self.to_float(self.lfp_sampling_rate, unit="Hz")
 
-        f, val = cross_spectral_density(*self.regions_data, self.lfp_sampling_rate, **args)
+        f, val = cross_spectral_density(*self.regions_data, fs, **args)
         da = xr.DataArray(val, dims=['frequency'], coords={'frequency': f})
         da = self.frequency_selector(da)
 

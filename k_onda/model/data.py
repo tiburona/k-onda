@@ -80,7 +80,6 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             name = self.name
         return getattr(self.experiment, f'all_{name}s').index(self)
         
-
     def sort(self, sort, items):
         if not sort:
             return items
@@ -91,7 +90,6 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             reverse=(order == 'descending'))
         return sorted_lst
 
-    
     def sort_children(self, children):
         sort = self.calc_opts.get('sort', {}).get(self.name)
         if not sort:

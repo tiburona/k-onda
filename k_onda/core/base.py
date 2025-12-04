@@ -2,13 +2,14 @@ from collections import defaultdict
 from copy import deepcopy
 import importlib
 import json
+import numpy as np
 import pickle
 import os
 import re
 from pathlib import PosixPath
+import xarray as xr
 
-
-from k_onda.utils import get_round_decimals, safe_make_dir
+from k_onda.utils import  safe_make_dir
 from k_onda.math import Filter
     
 
@@ -28,7 +29,7 @@ class Base:
     _selected_brain_region = ''
     _selected_frequency_band = ''
     _selected_region_set = []
-    _calc_mode = 'normal'
+
     _shared_filters = {}
     original_periods = None
     selectable_variables = [
@@ -71,6 +72,104 @@ class Base:
     @io_opts.setter
     def io_opts(self, value):
         Base._io_opts = value
+
+    @property
+    def ureg(self):
+        return self.experiment_ureg
+    
+    def quantity(
+        self,
+        value,
+        unit: str,
+        name: str | None = None,
+        dims=None,
+        coords=None,
+    ):
+        """
+        Wrap `value` in an xarray.DataArray with units, then quantify with pint.
+
+        - If `value` is a DataArray, we preserve its dims/coords (and ignore dims/coords args).
+        - If `value` is array-like/scalar, we use the provided dims/coords.
+        """
+        if isinstance(value, xr.DataArray):
+            da = value.copy()
+            if name is not None:
+                da = da.rename(name)
+            da.attrs["unit"] = unit
+        else:
+            da = xr.DataArray(
+                value,
+                name=name,
+                dims=dims,
+                coords=coords,
+                attrs={"unit": unit},
+            )
+
+        return da.pint.quantify(unit_registry=self.ureg)
+    
+    def to_int(self, q, unit=None):
+        """
+        Convert a pint-xarray quantity `q` to int(s) in the given unit.
+
+        - Scalar -> Python int
+        - Array  -> numpy.ndarray[int]
+        """
+        return self.to_numerical_type(q, unit, dtype="int")
+ 
+    def to_float(self, q, unit=None):
+        """
+        Convert a pint-xarray quantity `q` to float(s) in the given unit.
+
+        - If unit is provided, convert to that unit first.
+        - Scalar -> Python float
+        - Array  -> numpy.ndarray[float]
+        """
+        return self.to_numerical_type(q, unit, dtype="float")
+       
+    def to_numerical_type(self, q, unit, dtype):
+        """
+        Convert a pint-xarray quantity `q` to floats or ints in the given unit.
+
+        - dtype = "float" or "int"
+        - Scalar -> Python scalar
+        - Array  -> numpy.ndarray
+        """
+        if unit is not None:
+            q = q.pint.to(unit)
+
+        mag = q.pint.magnitude  # numpy scalar or ndarray
+
+        if dtype == "float":
+            return np.round(mag, 8).astype(np.float64)
+
+        elif dtype == "int":
+            return np.rint(mag).astype(int)
+
+        else:
+            raise ValueError(f"Unknown data type: {dtype!r}")
+        
+    def standardize_time(self, q, unit="second", decimals=8):
+        """
+        Round a pint-xarray time quantity to a fixed number of decimals,
+        preserving units, dims, and coords.
+
+        q: pint-xarray DataArray (or Quantity-like) with time units
+        unit: target unit to round in (default 'second')
+        """
+        # ensure correct unit
+        q2 = q.pint.to(unit)
+
+        mag = np.round(q2.pint.magnitude, decimals=decimals)  # ndarray or scalar
+
+        # rebuild a DataArray with same dims/coords/name, then re-quantify
+        da = xr.DataArray(
+            mag,
+            dims=q2.dims,
+            coords=q2.coords,
+            name=q2.name,
+            attrs={"unit": unit},
+        )
+        return da.pint.quantify(unit_registry=self.ureg)
 
     @property
     def env_config(self):
@@ -122,11 +221,9 @@ class Base:
     def del_all_criteria(self):
         self.criteria = defaultdict(lambda: defaultdict(tuple))
 
-
     def del_from_criteria(self, obj_name, attr):
         del self.criteria[obj_name][attr]
 
-    
     @property
     def shared_filters(self):
         return Base._shared_filters
@@ -146,7 +243,6 @@ class Base:
             cfg.get("_version", "v1"),
         )
     
- 
     def get_or_create_filter(self, cfg: dict) -> Filter:
         k = self.filter_key(cfg)
         flt = self.shared_filters.get(k)
@@ -155,7 +251,6 @@ class Base:
             self.shared_filters[k] = flt
         return flt
 
-    
     @property
     def kind_of_data(self):
         return self.calc_opts.get('kind_of_data')
@@ -167,14 +262,6 @@ class Base:
     @calc_type.setter
     def calc_type(self, calc_type):
         self.calc_opts['calc_type'] = calc_type
-
-    @property
-    def calc_mode(self):
-        return self._calc_mode
-    
-    @calc_mode.setter
-    def calc_mode(self, calc_mode):
-        self._calc_mode = calc_mode
 
     @property
     def selected_conditions(self):
@@ -263,22 +350,21 @@ class Base:
         return self.calc_opts.get('frequency_band_definition') or \
             self.experiment.exp_info['frequency_bands'] or {}
            
-
     @property
     def freq_range(self):
-        if isinstance(self.selected_frequency_band, type('str')):
-            return self.frequency_band_definition[self.selected_frequency_band]
+        if isinstance(self.selected_frequency_band, str):
+            freq_range = self.frequency_band_definition[self.selected_frequency_band]
         else:
-            return self.selected_frequency_band
+            freq_range = self.selected_frequency_band
         
-    @property
-    def finest_res(self):
-        return self.calc_opts.get('finest_res', .01)
+        return self.quantity(
+            freq_range,
+            unit='Hz',
+            dims=('edge',),
+            coords={'edge': ['low', 'high']},
+            name='frequency_range'
+        )
     
-    @property
-    def round_to(self):
-        return get_round_decimals(self.finest_res)
-        
     def get_data_sources(self, data_object_type=None, identifiers=None, identifier=None):
         if data_object_type is None:
             data_object_type = self.calc_opts['base']
@@ -319,13 +405,24 @@ class Base:
             pt = getattr(self.parent, 'period_type', None)
         if pt is None:
             pt = self.selected_period_type
-        return self.calc_opts.get('periods', {}).get(pt, {}).get(
-            f'{obj_type}_pre_post', (0, 0))[time]
 
-    
+        pre_post = (
+            self.calc_opts
+            .get('periods', {})
+            .get(pt, {})
+            .get(f'{obj_type}_pre_post', (0, 0))[time]
+        )
+
+        return self.quantity(
+            pre_post,
+            unit="second",
+            name=f"{obj_type}_pre_post",
+        )
+        
     @property
     def bin_size(self):
-        return self.calc_opts.get('bin_size', .01)
+        bin_size = self.calc_opts.get('bin_size', .01)
+        return self.quantity(bin_size, unit='second', name='bin_size')
     
     def load(self, path_id, calc_name, other_identifiers=None):
         store = self.calc_opts.get('store', 'pkl')
@@ -435,8 +532,6 @@ class Base:
                     data_sources = self.get_data_sources(data_object_type=ds_dict['data_source'], 
                                                          identifiers=ds_dict['members'])
                     new_fields[field] = '_'.join([getattr(ds, field) for ds in data_sources])
-
-               
 
         constructor.update(new_fields)
         return constructor['template'].format(**constructor)
