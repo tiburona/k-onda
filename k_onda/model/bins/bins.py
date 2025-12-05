@@ -124,11 +124,8 @@ class BinMethods(TimeBinMethods, FrequencyBinMethods):
     def num_bins_per(self):
         if not hasattr(self, 'start') and hasattr(self, 'stop'):
             return None
-        bin_size = self.calc_opts.get('bin_size', .01)
-        # you need to round twice, once to take care of floating point issues, 
-        # again to get a whole number
-        num_bins = round((self.stop-self.start) / bin_size, 8)
-        return round(num_bins)
+        num_bins = self.to_int((self.stop-self.start)/self.bin_size)
+        return num_bins
 
 
 

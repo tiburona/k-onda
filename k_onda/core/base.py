@@ -8,6 +8,8 @@ import os
 import re
 from pathlib import PosixPath
 import xarray as xr
+import pint
+import pint_xarray
 
 from k_onda.utils import  safe_make_dir
 from k_onda.math import Filter
@@ -75,12 +77,12 @@ class Base:
 
     @property
     def ureg(self):
-        return self.experiment_ureg
+        return self.experiment._ureg
     
     def quantity(
         self,
         value,
-        unit: str,
+        units: str,
         name: str | None = None,
         dims=None,
         coords=None,
@@ -88,21 +90,41 @@ class Base:
         """
         Wrap `value` in an xarray.DataArray with units, then quantify with pint.
 
-        - If `value` is a DataArray, we preserve its dims/coords (and ignore dims/coords args).
-        - If `value` is array-like/scalar, we use the provided dims/coords.
+        - If `value` is a DataArray, preserve its dims/coords (ignore dims/coords args).
+        - If `value` is array-like, use provided dims/coords and check they match.
         """
         if isinstance(value, xr.DataArray):
             da = value.copy()
             if name is not None:
                 da = da.rename(name)
-            da.attrs["unit"] = unit
+            da.attrs["units"] = units
         else:
+            data = np.asarray(value)
+
+            # normalize dims
+            if dims is None:
+                # scalar -> 0-D, array -> need explicit dims
+                if data.ndim == 0:
+                    dims = ()
+                else:
+                    raise ValueError(
+                        f"dims must be provided for non-scalar data (got shape {data.shape})"
+                    )
+            elif isinstance(dims, str):
+                dims = (dims,)
+
+            if data.ndim != len(dims):
+                raise ValueError(
+                    f"different number of dimensions on data and dims: "
+                    f"{data.ndim} vs {len(dims)} (dims={dims}, shape={data.shape})"
+                )
+
             da = xr.DataArray(
-                value,
+                data,
                 name=name,
                 dims=dims,
                 coords=coords,
-                attrs={"unit": unit},
+                attrs={"units": units},
             )
 
         return da.pint.quantify(unit_registry=self.ureg)
@@ -116,7 +138,7 @@ class Base:
         """
         return self.to_numerical_type(q, unit, dtype="int")
  
-    def to_float(self, q, unit=None):
+    def to_float(self, q, unit=None, decimals=None):
         """
         Convert a pint-xarray quantity `q` to float(s) in the given unit.
 
@@ -124,51 +146,85 @@ class Base:
         - Scalar -> Python float
         - Array  -> numpy.ndarray[float]
         """
-        return self.to_numerical_type(q, unit, dtype="float")
+        return self.to_numerical_type(q, unit, dtype="float", decimals=decimals)
        
-    def to_numerical_type(self, q, unit, dtype):
+    def to_numerical_type(self, q, unit=None, dtype="float", decimals=None):
         """
-        Convert a pint-xarray quantity `q` to floats or ints in the given unit.
+        Convert a pint-xarray quantity or xarray.DataArray `q` to floats or ints
+        in the given unit (if pint-quantified).
 
+        - q can be:
+            * pint-xarray DataArray
+            * plain xarray.DataArray
+            * numpy array / scalar
+        - unit:
+            * only used if `q` is pint-quantified; otherwise must be None
         - dtype = "float" or "int"
-        - Scalar -> Python scalar
-        - Array  -> numpy.ndarray
+            * Scalar -> Python scalar
+            * Array  -> numpy.ndarray
+        - decimals:
+            * if not None and dtype=="float", round to this many decimals
         """
-        if unit is not None:
-            q = q.pint.to(unit)
+        # Is this a pint-quantified xarray object?
+        is_pint = hasattr(q, "pint") and hasattr(q.pint, "units")
 
-        mag = q.pint.magnitude  # numpy scalar or ndarray
+        # Optional unit conversion (only valid for pint objects)
+        if unit is not None:
+            if is_pint:
+                q = q.pint.to(unit)
+            else:
+                raise TypeError("`unit` is only valid when `q` is a pint-quantified DataArray.")
+
+        # Extract raw magnitude / data
+        if is_pint:
+            mag = q.pint.magnitude           # numpy scalar or ndarray
+        elif isinstance(q, xr.DataArray):
+            mag = q.data                     # xarray -> numpy
+        else:
+            mag = q                          # already numpy or scalar
+
+        mag = np.asarray(mag)
+        size = mag.size
 
         if dtype == "float":
-            return np.round(mag, 8).astype(np.float64)
+            if decimals is not None:
+                mag = np.round(mag, decimals=decimals)
+
+            if size == 1:
+                return float(mag)
+            else:
+                return mag.astype(float)
 
         elif dtype == "int":
-            return np.rint(mag).astype(int)
+            if size == 1:
+                return int(np.rint(float(mag)))
+            else:
+                return np.rint(mag).astype(int)
 
         else:
             raise ValueError(f"Unknown data type: {dtype!r}")
         
-    def standardize_time(self, q, unit="second", decimals=8):
+    def standardize_time(self, q, units="second", decimals=8):
         """
         Round a pint-xarray time quantity to a fixed number of decimals,
         preserving units, dims, and coords.
-
-        q: pint-xarray DataArray (or Quantity-like) with time units
-        unit: target unit to round in (default 'second')
         """
-        # ensure correct unit
-        q2 = q.pint.to(unit)
+        # ensure we’re working in the desired unit
+        q2 = q.pint.to(units)
 
-        mag = np.round(q2.pint.magnitude, decimals=decimals)  # ndarray or scalar
+        # round magnitudes
+        mag = np.round(q2.pint.magnitude, decimals=decimals)
 
-        # rebuild a DataArray with same dims/coords/name, then re-quantify
+        # rebuild a DataArray with the same structure
         da = xr.DataArray(
             mag,
             dims=q2.dims,
             coords=q2.coords,
             name=q2.name,
-            attrs={"unit": unit},
+            attrs={"units": units},  # <-- IMPORTANT: "units", not "unit"
         )
+
+        # re-quantify with pint-xarray
         return da.pint.quantify(unit_registry=self.ureg)
 
     @property
@@ -359,7 +415,7 @@ class Base:
         
         return self.quantity(
             freq_range,
-            unit='Hz',
+            units='Hz',
             dims=('edge',),
             coords={'edge': ['low', 'high']},
             name='frequency_range'
@@ -415,14 +471,14 @@ class Base:
 
         return self.quantity(
             pre_post,
-            unit="second",
+            units="second",
             name=f"{obj_type}_pre_post",
         )
         
     @property
     def bin_size(self):
         bin_size = self.calc_opts.get('bin_size', .01)
-        return self.quantity(bin_size, unit='second', name='bin_size')
+        return self.quantity(bin_size, units='second', name='bin_size')
     
     def load(self, path_id, calc_name, other_identifiers=None):
         store = self.calc_opts.get('store', 'pkl')

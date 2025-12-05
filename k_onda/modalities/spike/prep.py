@@ -84,8 +84,7 @@ class SpikePrepMethods(PrepMethods):
                     end = after_center[0] if len(after_center) > 0 else 130  # fallback end
 
                     # Calculate FWHM in samples and time
-                    FWHM_samples = end - start
-                    FWHM_seconds = FWHM_samples / self.sampling_rate
+                    fwhm = self.quantity(end - start, units='raw_sample', name='fwhm')
 
                     # Plot waveform and mark FWHM
                     plt.figure(figsize=(10, 5))
@@ -103,18 +102,12 @@ class SpikePrepMethods(PrepMethods):
                     plt.legend()
                     plt.savefig(os.path.join(phy_path, f"{self.identifier}_{cluster}_waveform.png"))
                     
-                    # Firing rate calculation
-                    spike_times = np.array(info['spike_times'])
-                    spike_times_for_fr = spike_times[spike_times > 30]
-                    firing_rate = len(spike_times_for_fr) / (spike_times_for_fr[-1] - spike_times_for_fr[0])
-
                     # Create unit and add attributes
                     unit = Unit(self, info['group'], info['spike_times'], cluster,
-                                waveform=waveform, experiment=self.experiment, firing_rate=firing_rate, 
-                                fwhm_seconds=FWHM_seconds)
+                                waveform=waveform, experiment=self.experiment, fwhm=fwhm)
 
                     # Append to units list
-                    units.append(info | {'waveform': waveform, 'firing_rate': firing_rate, 'fwhm_seconds': FWHM_seconds})
+                    units.append(info | {'waveform': waveform, 'fwhm': fwhm})
             
             save(units, pickle_path, 'pkl')
 

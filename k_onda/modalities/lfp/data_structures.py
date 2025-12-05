@@ -22,7 +22,7 @@ class LFPProperties:
     @property
     def tolerance(self):
         tolerance = self.calc_opts.get('frequency_tolerance', .2)
-        return self.quantity(tolerance, 'Hz', name='tol')
+        return self.quantity(tolerance, units='Hz', name='tol')
 
     @property
     def lfp_padding(self):
@@ -31,7 +31,7 @@ class LFPProperties:
         padding = self.quantity(
             padding,
             units='second',
-            dim=('side',),
+            dims=('side',),
             coords={'side': ['pre', 'post']},
             name='lfp_padding'
         )
@@ -51,7 +51,7 @@ class LFPProperties:
         lost_signal = self.calc_opts.get('lost_signal', [0, 0])
         return self.quantity(
             lost_signal,
-            units='Hz',
+            units='second',
             dims=('side',),
             coords={'side': ['pre', 'post']},
             name='lost_signal'
@@ -60,10 +60,11 @@ class LFPProperties:
 
 class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidator, PSDMethods):
 
-    def __init__(self, animal, index, period_type, period_info, onset, events=None, 
-                 target_period=None, is_relative=False, experiment=None):
-        super().__init__(index, period_type, period_info, onset, experiment=experiment, 
-                         target_period=target_period, is_relative=is_relative, events=events)
+    def __init__(self, animal, index, period_type, period_info, onset, duration, events=None,
+                  target_period=None, is_relative=False, experiment=None):
+        super().__init__(index, period_type, period_info, onset, duration, experiment=experiment, 
+                         target_period=target_period, is_relative=is_relative, events=events,
+                         )
         self.animal = animal
         self.parent = animal
         self.event_starts = events    
@@ -83,12 +84,12 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidator, PSDMethods):
 
     @property
     def event_starts_in_period_time(self):
-        if not getattr(self, '_event_starts_period', None):
-            self._event_starts_period = xr.concat(
+        if getattr(self, '_event_starts_in_period_time', None) is None:
+            self._event_starts_in_period_time = xr.concat(
                 [(t_abs - self.onset).pint.to('second') for t_abs in self.event_starts],
                 dim="event"
             )
-        return self._event_starts_period
+        return self._event_starts_in_period_time
     
     def get_data_from_animal_dict(self, pad=False):
         data_source = self.animal.processed_lfp
@@ -105,13 +106,7 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidator, PSDMethods):
     def spectrogram(self):
         if self._spectrogram is None:
             self._spectrogram = self.calc_spectrogram()
-   
-        last_freq = self.freq_range.sel(edges='high') + self.tolerance                   
-        last_freq_sel = self.to_float(last_freq, unit='Hz')
-
-        return self._spectrogram.sel(
-            frequency=slice(None, last_freq_sel)
-        )
+        return self.frequency_selector(self._spectrogram)
     
     @property
     def children(self):
@@ -130,8 +125,8 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidator, PSDMethods):
 
         if events is None:
 
-            eps   = 1e-8
-            tbins = self.spectrogram.coords['period_time'].values
+            eps   = self.quantity(1e-8, units='second')
+            tbins = self.spectrogram.coords['period_time']
 
             events = []
             for i, rel_start in enumerate(self.event_starts_in_period_time):
@@ -144,7 +139,7 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidator, PSDMethods):
                 event_times = tbins[mask]
 
                 events.append(LFPEvent(i, event_times,     # event_times in period space
-                                    self.event_starts_in_seconds[i],  # keep abs too
+                                    self.event_starts[i],  # keep abs too
                                     mask, self))
                 
             self._set_cache(self._events, self._event_key(), events,
@@ -189,67 +184,88 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidator, PSDMethods):
                    *[str(pad) for pad in self.calc_opts.get('lfp_padding', [0, 0])]]
         return arg_set
     
-    def calc_spectrogram(self):                                             
-        power_arg_set   = self.calc_opts['power_arg_set']
-        calc_method     = self.calc_opts.get('calc_method', 'matlab')
+    def calc_spectrogram(self):
+        power_arg_set = self.calc_opts["power_arg_set"]
+        calc_method = self.calc_opts.get("calc_method", "matlab")
 
         cache_args = self.generate_spectrogram_cache_args(power_arg_set, calc_method)
-        
         saved_calc_exists, spectrogram, pickle_path = self.load(
-            'lfp_output', 'spectrogram', cache_args)
-        
+            "lfp_output", "spectrogram", cache_args
+        )
         if saved_calc_exists:
             return spectrogram
-        
+
+        # --- run the calculation -------------
+        if calc_method == "matlab":
+            ml = MatlabInterface(self.env_config["matlab_config"])
+            power, freqs, times = ml.mtcsg(self.padded_data, *power_arg_set)
+            # `times` is already in seconds (numpy array)
         else:
+            data_3d = self.padded_data[np.newaxis, np.newaxis, :]
+            power = tfr_array_multitaper(data_3d, **power_arg_set).squeeze()
+            freqs = power_arg_set["freqs"]
+            dt = power_arg_set["decim"] / power_arg_set["sfreq"]  # seconds per bin
+            times = np.arange(power.shape[-1]) * dt  # plain floats in seconds
 
-            # --- run the calculation -------------
-            if calc_method == 'matlab':
-                ml = MatlabInterface(self.env_config['matlab_config'])
-                power, freqs, times = ml.mtcsg(self.padded_data, *power_arg_set)
-                # assume MATLAB already returns times in seconds
-                times = self.quantity(times, unit="second", name="spectrogram_time")
+        n_freq, n_time = power.shape
 
-            else:
-                data_3d = self.padded_data[np.newaxis, np.newaxis, :]
-                power = tfr_array_multitaper(data_3d, **power_arg_set).squeeze()
+        # dim indices (unitless bins)
+        freq_bin = np.arange(n_freq)
+        time_bin = np.arange(n_time)
 
-                # bin width in seconds: decim samples / sfreq (Hz)
-                dt = power_arg_set["decim"] / power_arg_set["sfreq"]  
-                times = self.quantity(
-                    np.arange(power.shape[-1]) * dt,
-                    unit="second",
-                    name="spectrogram_time",
-                )
-
-            freqs = self.quantity(freqs, unit="Hz", name="frequencies")
-
-            da = xr.DataArray(
-                power,
-                dims=["frequency", "time_raw"],
-                coords={"frequency": freqs, "time_raw": times},
-                attrs={"calc_method": calc_method},
-            )       
-            
-            time_raw = da['time_raw']  # quantity, e.g. in seconds
-
-            true_beginning = (
-                self.lfp_padding.sel(side='pre') - self.lost_signal.sel(side='pre')
-            ).pint.to('second')  
-
-            da = (
-                da.assign_coords(time_idx=('time_raw', np.arange(da.sizes['time_raw'])))
-                .swap_dims({'time_raw': 'time_idx'})
-                .rename({'time_idx': 'time'})
+        # unitful coords
+        spectrogram_time = self.standardize_time(
+            self.quantity(
+                times,
+                units="second",
+                dims=("time_bin",),
+                name="spectrogram_time",
             )
+        )
 
-            da = da.assign_coords(
-                spectrogram_time=('time', time_raw),
-                period_time=('time', (time_raw - true_beginning).pint.to('second')),
-            ).drop_vars('time_raw')                                            
+        frequency = self.quantity(
+            freqs,
+            units="Hz",
+            dims=("freq_bin",),
+            name="frequency",
+        )
 
-        return da  
+        da = xr.DataArray(
+            power,
+            dims=("freq_bin", "time_bin"),
+            coords={
+                "freq_bin": freq_bin,              # bin index (no units)
+                "time_bin": time_bin,              # bin index (no units)
+                "frequency": frequency,            # physical Hz, unitful
+                "spectrogram_time": spectrogram_time,  # physical seconds, unitful
+            },
+            attrs={"calc_method": calc_method},
+        )
 
+        # --- time alignment / coords, all unitful ---
+        true_beginning = (
+            self.lfp_padding.sel(side="pre") - self.lost_signal.sel(side="pre")
+        ).pint.to("second").reset_coords(drop=True)
+
+        period_time = self.standardize_time(
+            spectrogram_time - true_beginning,
+            units="second",
+        )
+
+        absolute_time = self.standardize_time(
+            spectrogram_time - true_beginning + self.onset,
+            units="second",
+        )
+
+        da = da.assign_coords(
+            period_time=period_time,
+            absolute_time=absolute_time,
+        )
+
+        self.save(da, pickle_path)
+        return da
+        
+    
     def index_transformation_function(self, concatenator):
         if concatenator == 'animal':
             return lambda calc: calc.assign_coords(
@@ -305,13 +321,11 @@ class LFPEvent(Event, LFPMethods, LFPProperties):
 
     def get_power(self):
 
-        sliced_spectrogram =  self.frequency_selector(self.spectrogram)
-
         # Boolean mask → subset times
-        power = sliced_spectrogram.isel(time=self.mask)
+        power = self.spectrogram.isel(time_bin=self.mask)
 
         # First time point in this window (period_time is already “time since period start”)
-        event_start = power.coords["period_time"].isel(time=0) + self.pre_event
+        event_start = power.coords["period_time"].isel(time_bin=0) + self.pre_event
 
         # Time relative to event onset
         power = power.assign_coords(

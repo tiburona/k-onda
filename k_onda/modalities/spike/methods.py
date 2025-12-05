@@ -36,8 +36,8 @@ class RateMethods:
             spikes_rel = (spikes - self.start).pint.to('second')
 
             self._spikes = spikes.assign_coords(
-                absolute_time=('spike', spikes_abs),
-                relative_time=('spike', spikes_rel),
+                absolute_time=('spike', spikes_abs.data),
+                relative_time=('spike', spikes_rel.data),
             )
 
         return self._spikes
@@ -81,7 +81,7 @@ class RateMethods:
             # 2) bin index
             index = xr.DataArray(
                 np.arange(len(raw_counts)),
-                dims=["time"],
+                dims=["time_bin"],
                 name="time",
             )
 
@@ -99,7 +99,7 @@ class RateMethods:
                 period_time = relative_time
 
             coord_dict = {
-                "time": index,
+                "time_bin": index,
                 "absolute_time": absolute_time,
                 "relative_time": relative_time,
                 "period_time": period_time,
@@ -110,7 +110,7 @@ class RateMethods:
 
             counts = xr.DataArray(
                 raw_counts,
-                dims=["time"],
+                dims=["time_bin"],
                 coords=coord_dict,
                 name="spike_counts",
             )

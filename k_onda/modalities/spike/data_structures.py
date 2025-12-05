@@ -18,29 +18,30 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
     _name = 'unit'
     
     def __init__(self, animal, category, spike_times, cluster_id, waveform=None, 
-                 experiment=None, neuron_type=None, quality=None, firing_rate=None, 
+                 experiment=None, neuron_type=None, quality=None, 
                  fwhm=None, **kwargs):
         super().__init__(**kwargs)
         self.animal = animal
         self.category = category
         self.spike_times = self.quantity(
             spike_times, 
-            unit='raw_sample',
-            dims=("spike",), 
+            units='second',
+            dims=('spike',), 
             name='spike_times')
         self.cluster_id = cluster_id
         self.waveform = waveform
         self.experiment = experiment
         self.neuron_type = neuron_type
         self.quality = quality
-        self.firing_rate = self.quantity(firing_rate, unit='1/second', name='firing_rate')
-        self.fwhm = self.quantity(fwhm, unit='second', name='fwhm')
+        self.firing_rate = self.calculate_unit_firing_rate()
+        self.fwhm = self.quantity(fwhm, units='second', name='fwhm')
         self.animal.units[category].append(self)
         self.identifier = '_'.join([self.animal.identifier, self.category, 
                                     str(self.animal.units[category].index(self) + 1)])
         self.spike_periods = defaultdict(list)
         self.mrl_calculators = defaultdict(list)
         self.parent = animal
+        self.period_info = self.animal.period_info
         self.kind_of_data_to_period_type = {
             'spike': SpikePeriod
         }
@@ -65,6 +66,36 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         else:
             return [unit_pair for unit_pair in all_unit_pairs if ','.join(
                 [unit_pair.unit.neuron_type, unit_pair.pair.neuron_type]) == pairs_to_select]
+        
+    def calculate_unit_firing_rate(self):
+        # trim threshold in seconds
+        spike_trim = self.quantity(
+            self.experiment.exp_info.get('spike_trim', 0),
+            units='second',
+            name='spike_trim',
+        )
+
+        # work in seconds explicitly
+        spikes_sec = self.spike_times.pint.to("second")
+
+        # boolean mask: keep spikes strictly after trim
+        mask = spikes_sec > spike_trim
+
+        # boolean indexing with isel preserves pint info
+        spike_times_for_fr = spikes_sec.isel(spike=mask)
+
+        # no rate possible with < 2 spikes
+        if spike_times_for_fr.size < 2:
+            return self.quantity(0.0, units="1/second", name="firing_rate")
+
+        # duration in seconds (already a quantity)
+        duration = spike_times_for_fr.isel(spike=-1) - spike_times_for_fr.isel(spike=0)
+        duration = duration.pint.to("second")
+
+        # count is dimensionless → result has units 1/second
+        firing_rate_val = len(spike_times_for_fr) / duration
+
+        return self.quantity(firing_rate_val, units="1/second", name="firing_rate")
  
     def spike_prep(self):
         self.prepare_periods()
@@ -133,10 +164,10 @@ class SpikePeriod(Period, RateMethods):
 
     name = 'period'
 
-    def __init__(self, unit, index, period_type, period_info, onset, 
+    def __init__(self, unit, index, period_type, period_info, onset, duration, 
                  events=None, target_period=None, is_relative=False, 
                  experiment=None):
-        super().__init__(index, period_type, period_info, onset, events=events, 
+        super().__init__(index, period_type, period_info, onset, duration, events=events, 
                          experiment=experiment, target_period=target_period, 
                          is_relative=is_relative)
         self.unit = unit

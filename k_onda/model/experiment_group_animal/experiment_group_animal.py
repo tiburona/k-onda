@@ -4,7 +4,6 @@ import pint
 import pint_xarray
 
 
-
 from ..bins import BinMethods
 from ..period_constructor import PeriodConstructor
 from k_onda.modalities import (LFPPeriod, LFPMethods, SpikePeriod, SpikeMethods, SpikePrepMethods, 

@@ -6,8 +6,8 @@ class Period(Data, BinMethods):
 
     _name = 'period'
 
-    def __init__(self, index, period_type, period_info, onset, target_period=None, 
-                 is_relative=False, duration=None, shift=None, experiment=None, events=None):
+    def __init__(self, index, period_type, period_info, onset, duration, target_period=None, 
+                 is_relative=False, shift=None, experiment=None, events=None):
         super().__init__()
         self.identifier = index
         self.period_type = period_type
@@ -26,6 +26,7 @@ class Period(Data, BinMethods):
         self.event_duration = period_info.get('event_duration')
         if target_period and hasattr(target_period, 'event_duration'):
             self.event_duration = target_period.event_duration
+        self._start = self.onset
         self._stop = self._start + self.duration
 
     def __repr__(self):
@@ -74,6 +75,7 @@ class Event(Data, BinMethods):
         super().__init__()
         self.period = period
         self.onset = onset
+        self._start = self.onset
         self.identifier = index
         self.experiment = self.period.experiment
         self.parent = period

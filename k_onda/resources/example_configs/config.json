@@ -1124,7 +1124,7 @@
             "neuron_type": "PN",
             "quality": "good",
             "firing_rate": 10.0,
-            "fwhm_seconds": 0.002
+            "fwhm": 0.002
           }
         ]
       },

@@ -24,12 +24,12 @@ class LFPMethods(TransformRegistryMixin):
         return weights
     
     def frequency_selector(self, da):
-                                                               
-        # boolean mask along the *frequency* coord
-        fmask = ((da['frequency'] >= self.freq_range.sel(edge='low') - self.tolerance) &
-                (da['frequency'] <= self.freq_range.sel(edge='high') + self.tolerance))                 
+        low  = self.freq_range.sel(edge='low')  - self.tolerance
+        high = self.freq_range.sel(edge='high') + self.tolerance
 
-        return da.sel(frequency=fmask)
+        fmask = (da['frequency'] >= low) & (da['frequency'] <= high)
+
+        return da.sel(freq_bin=fmask)
     
     def resample(data, fs, new_fs, axis=-1):
         data_rs = mne.filter.resample(

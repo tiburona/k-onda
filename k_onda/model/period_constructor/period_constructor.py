@@ -1,8 +1,4 @@
 from collections import defaultdict
-import numpy as np
-import xarray as xr
-import pint
-import pint_xarray
 
 
 class PeriodConstructor:
@@ -214,8 +210,8 @@ class PeriodConstructor:
                 period_type,
                 period_info,
                 onset,
+                duration,
                 events=event_starts,
-                duration=duration,
                 shift=shift,
                 target_period=paired_period,
                 is_relative=True,
@@ -260,11 +256,15 @@ class PeriodConstructor:
                 shift = period_info['shift']
                 duration = period_info.get('duration')
 
+            paired_period = candidate_target_periods[i]
+
             shift = self.quantity(
                 shift,
                 units='second',
                 name = "shift"
                 )
+            
+            onset = paired_period.onset + shift
             
             if duration is not None:
                 duration = self.quantity(
@@ -272,9 +272,8 @@ class PeriodConstructor:
                     units='second',
                     name = 'duration'
                 )
-
-            paired_period = candidate_target_periods[i]
-            onset = paired_period.onset + shift
+            else:
+                duration = paired_period.duration
 
             event_starts = []
            
@@ -286,9 +285,7 @@ class PeriodConstructor:
                     ref_es = es + shift
                     event_starts.append(ref_es)
             
-            event_starts = np.array(event_starts)
-            duration = duration if duration else paired_period.duration
-            reference_period = self.period_class(self, i, period_type, period_info, onset, 
+            reference_period = self.period_class(self, i, period_type, period_info, onset, duration,
                                                  events=event_starts, target_period=paired_period, 
                                                  is_relative=True, experiment=self.experiment)
         
@@ -316,3 +313,5 @@ class PeriodConstructor:
         for i in target_index:
             non_relative_period = candidate_target_periods[i]
             non_relative_period.reference = reference_periods[reference_index[i]]
+
+        return reference_periods
