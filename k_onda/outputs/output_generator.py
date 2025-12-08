@@ -1,4 +1,5 @@
-import os, uuid
+import os 
+import uuid
 from ..core.base import Base
 from k_onda.utils import smart_title_case, find_container_with_key
 
@@ -33,10 +34,6 @@ class OutputGenerator(Base):
                 self.file_path = self.write_opts[:-4] + page_suffix + self.write_opts[-4:]
             else:
                 self.file_path = self.write_opts + page_suffix + f'.{default_ext}'
-
-            
-
-            # todo insert page number in here
 
             self.opts_file_path = self.file_path[0:-3] + 'txt'
             return
@@ -80,8 +77,6 @@ class OutputGenerator(Base):
                     ext = self.write_opts.get('extension', default_ext)
                 else:
                     ext = '.png'
-
-               
 
                 self.file_path += ext
 

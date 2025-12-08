@@ -80,7 +80,6 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             name = self.name
         return getattr(self.experiment, f'all_{name}s').index(self)
         
-
     def sort(self, sort, items):
         if not sort:
             return items
@@ -91,7 +90,6 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             reverse=(order == 'descending'))
         return sorted_lst
 
-    
     def sort_children(self, children):
         sort = self.calc_opts.get('sort', {}).get(self.name)
         if not sort:
@@ -128,6 +126,10 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             return [self]
         if hasattr(self, 'parent'):
             return self.parent.ancestors + [self]
+        
+    @property
+    def descendants(self):
+        return self.get_descendants
     
     @property
     def index(self):
@@ -186,6 +188,12 @@ class Data(Base, Aggregates, TransformRegistryMixin):
 
         return descendants
     
+    def find_attr_in_ancestors(self, attr):
+        for obj in reversed(self.ancestors):
+            if hasattr(obj, attr):
+                return getattr(obj, attr)
+        return None
+
     @property
     def has_reference(self):
         return hasattr(self, 'reference') and self.reference is not None
@@ -217,7 +225,6 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             return (None, None)
         registry = self.transforms() if hasattr(self, "transforms") else {}
         return registry.get(key, (None, None))
-
 
     def to_linear_space(self, data):
         if isinstance(data, xr.Dataset):
@@ -260,3 +267,4 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             out.attrs["space"] = "final"
             return out
         return data
+    

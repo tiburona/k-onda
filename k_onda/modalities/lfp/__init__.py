@@ -1,8 +1,8 @@
-from .data_structures import EventValidator, LFPMethods, LFPPeriod, LFPProperties
+from .data_structures import EventValidation, LFPMethods, LFPPeriod, LFPProperties
 from .prep import LFPPrepMethods
 
 __all__ = [
-    "EventValidator",
+    "EventValidation",
     "LFPMethods",
     "LFPPeriod",
     "LFPPrepMethods",

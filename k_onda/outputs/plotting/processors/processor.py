@@ -31,7 +31,7 @@ class ProcessorConfig(Base):
         self.final_dicts = final_dicts
         self.legend_info_list = legend_info_list
         self.page_dimensions = page_dimensions or self.spec.get('page_dimensions')
-        self.index = index
+        self.to_int = index
         self.child_layout = None
         self.aesthetics = aesthetics 
         if self.aesthetics is None:
@@ -45,7 +45,7 @@ class ProcessorConfig(Base):
             if k in self.spec:
                 self.next = {k: self.spec[k]}
         
-        self.index = index
+        self.to_int = index
         # todo: someday I should really disambiguate between the index within a spec
         # and within the figure
         self.starting_index = [0, 0] 

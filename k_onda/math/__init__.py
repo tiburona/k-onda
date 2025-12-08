@@ -7,3 +7,4 @@ from .filtering import Filter, FilterMixin
 from .mrl import compute_mrl, compute_phase
 from .hilbert import apply_hilbert_to_padded_data
 from .misc import pool
+from .rates import calc_hist, calc_rates

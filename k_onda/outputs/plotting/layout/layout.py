@@ -18,7 +18,7 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
             self.parent.children.append(self)
         self.children = []
 
-        self.index = index
+        self.to_int = index
         self.figure = figure
         self.processor = processor
         
@@ -250,7 +250,7 @@ class Wrapper(Base):
     def __init__(self, obj, index, layout):
         self.obj = obj
         self.figure = layout.figure # the subfigure the obj is on
-        self.index = index 
+        self.to_int = index 
         self.layout = layout
         self.processor = layout.processor
 
@@ -275,7 +275,7 @@ class Wrapper(Base):
         return True
     
     def is_extreme_within_parent(self, dim, last):
-        return self.is_extreme_index(self.index, self.layout, dim, last)
+        return self.is_extreme_index(self.to_int, self.layout, dim, last)
     
     def is_in_extreme_position(self, axis, last, absolute):
         dim = int(not axis == 'x')
@@ -312,7 +312,7 @@ class BrokenAxes(Base):
     
     def __init__(self, fig, parent_layout, index, break_axes, aspect=None):
         self.break_axes = break_axes
-        self.index = index
+        self.to_int = index
         self.fig = fig
         self.layout = parent_layout
         self.aspect = aspect

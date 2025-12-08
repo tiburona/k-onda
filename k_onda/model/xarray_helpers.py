@@ -4,6 +4,7 @@ import xarray as xr
 from k_onda.utils import is_truthy
 
 
+
 def drop_inconsistent_coords(arrs, tol=1e-8):
     """
     For each common coordinate, keep it only if *all* arrays agree (within tol).
@@ -22,6 +23,7 @@ def drop_inconsistent_coords(arrs, tol=1e-8):
             continue
         if any(_is_none_coord(a.coords[name].values) for a in arrs[1:]):
             continue
+
 
         # --- if values differ, normalise them ---------------------------
         if not all(name in a.coords and

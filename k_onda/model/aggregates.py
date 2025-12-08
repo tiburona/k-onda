@@ -6,11 +6,6 @@ from .xarray_helpers import XMean, fill_missing_arrays
 from k_onda.utils import cache_method, always_last, sem
 
 
-
-# TODO a lot of methods in here need to deal with dictionaries for the granger case,
-# like sem, mean, etc.
-
-
 class Aggregates(XMean):
 
     def get_calc(self, calc_type=None):
@@ -23,7 +18,6 @@ class Aggregates(XMean):
         elif self.calc_opts.get('histogram'):
             return self.histogram
         else:
-            self.calc_mode = 'normal'  # the other cases set calc_mode later
             return getattr(self, f"get_{calc_type}")()
     
     @property
@@ -74,8 +68,6 @@ class Aggregates(XMean):
     
     def _get_average_core(self, base_method, stop_at='event', level=0, axis=0, 
                     weights=None):
-        
-
         if stop_at in self.name or not hasattr(self, 'children'):  # we are at the base case and will call the base method
             if not hasattr(self, base_method) or not callable(getattr(self, base_method)):
                 raise ValueError(f"Invalid base method: {base_method}")
@@ -97,12 +89,10 @@ class Aggregates(XMean):
             if not self.is_nan(child_val):
                 child_vals.append(child_val)
 
-           
         xmean = self.xmean(self.to_linear_space(child_vals), axis, weights=weights)
         
         return xmean
         
-    
     @property
     def data_set(self):
         return xr.Dataset({k: getattr(self, k) for k in self.calc_opts.get('data_set', {})})
@@ -214,7 +204,8 @@ class Aggregates(XMean):
         if not stop_at:
             stop_at = self.calc_opts.get('stop_at')
         vals_to_summarize = self.get_descendants(stop_at=stop_at)
-        vals_to_summarize = self.extend_into_bins(vals_to_summarize, extend_by)
+        if extend_by:
+            vals_to_summarize = self.extend_into_bins(vals_to_summarize, extend_by)
         arrays = [self.to_final_space(obj.calc) for obj in vals_to_summarize]
         if arrays:
             np_arrays = []
@@ -229,15 +220,18 @@ class Aggregates(XMean):
         else:
             return float("nan")
 
+    import xarray as xr
+
     def is_nan(self, value):
-        if isinstance(value, float) and np.isnan(value):
-            return True
-        elif isinstance(value, np.ndarray) and np.all(np.isnan(value)):
-            return True
-        elif isinstance(value, dict) and all(self.is_nan(val) for val in value.values()):
-            return True                                
-        else:
-            return False
+        if isinstance(value, float):
+            return np.isnan(value)
+        if isinstance(value, np.ndarray):
+            return np.all(np.isnan(value))
+        if isinstance(value, xr.DataArray):
+            return bool(np.all(np.isnan(value.values)))
+        if isinstance(value, dict):
+            return all(self.is_nan(val) for val in value.values())
+        return False
     
     @property
     def concatenation(self):
@@ -246,6 +240,8 @@ class Aggregates(XMean):
         if not opts.get('concatenator'):
             opts['concatenator'] = self.name
         if not opts.get('concatenated'):
+            if not self.children:
+                return xr.DataArray([]) 
             opts['concatenated'] = self.children[0].name
         return self.concatenate(
             concatenator=opts.get('concatenator'),
@@ -316,17 +312,14 @@ class Aggregates(XMean):
                 if ((concatenator == 'animal' and self.calc_type != 'spike') or 
                     concatenator in ['unit', 'period']):
                    
-                    result = xr.concat(children_data, dim="time")
+                    result = xr.concat(children_data, dim="time_bin")
                     if child_xform:
                         new_time = np.array([eval(child_xform)(child) for child in children])
                     else:
-                        new_time = np.arange(result.sizes["time"])
+                        new_time = np.arange(result.sizes["time_bin"])
                     if dim_xform:
                         new_time = eval(dim_xform)(new_time)
                     
-                    result = result.assign_coords(time=("time", new_time))
-                    # Reorder coords to match dims:
-                    result = result.assign_coords(**{dim: result.coords[dim] for dim in result.dims})
                     return result
 
                 else:
@@ -346,7 +339,6 @@ class Aggregates(XMean):
             result = concatenated_data.mean(dim="child", skipna=True, keep_attrs=True) 
             return result
             
-         
     @property
     def stack(self):
         return self.get_stack()
@@ -402,6 +394,17 @@ class Aggregates(XMean):
         data_values = np.concatenate(vals)
         data_values = data_values[np.isfinite(data_values)]
 
+        if data_values.size == 0:
+            empty = np.array([], dtype=float)
+            return xr.DataArray(
+                np.array([], dtype=int),
+                dims=["bin"],
+                coords={"bin": empty, "left": ("bin", empty),
+                        "right": ("bin", empty), "center": ("bin", empty)},
+                name=f"{base}_hist",
+                attrs={"range": None, "bins": 0, "density": False, "base": base},
+            )
+        
         # Histogram parameters
         num_bins = int(histogram.get('bins', 20))
         if histogram.get('range') is not None:
@@ -478,7 +481,11 @@ class Aggregates(XMean):
     
     @property
     def greatgrandchildren_scatter(self):
-        return [ggchild.mean for ggchild in self.accumulate(max_depth=3)[3]]
+        try:
+            key = self.hierarchy[self.hierarchy.index(self.name) + 3]
+        except IndexError:
+            return []
+        return [gchild.mean for gchild in self.accumulate(max_depth=3)[key]]
     
     def accumulate(self, max_depth=1, depth=0, accumulator=None, filter=False): 
         
@@ -504,6 +511,7 @@ class Aggregates(XMean):
     def percent_change(self):
         return self.get_percent_change()
     
+    @property
     def evoked(self):
         return self.get_evoked()
     
@@ -526,7 +534,6 @@ class Aggregates(XMean):
         # This complexity is solving problems like "we'd like to get see a value
         # for a period with a reference of its own parent unit without triggering
         # infinite recursion"
-        self.calc_mode = comparison
         comparison_dict = self.calc_opts.get(comparison, {'level': 'period'})
         level = comparison_dict['level']
         # we are currently at a higher tree level than the comparison ref level
@@ -563,29 +570,19 @@ class Aggregates(XMean):
             return obj.get_reference_calc(reference_period_type)
         
     def get_reference_calc(self, reference):
-        # record the original values of the period attributes
         period_attrs = ['selected_period_type', 'selected_period_types']
         orig_vals = [getattr(self, attr) for attr in period_attrs]
 
-        # infer whether we are setting period_types or period_type from value of reference
         if isinstance(reference, str):
             attr_to_set = 'selected_period_type'
         else:
             attr_to_set = 'selected_period_types'
         
-        # set the relevent attribute to its new value and get the calculation
         setattr(self, attr_to_set, reference)
         reference_calc = getattr(self, f"get_{self.calc_type}")()
 
-        # reset the original value before returning
-        if attr_to_set == 'selected_period_types':
-            self.selected_period_type = orig_vals[0]
-        else:
-            self.selected_period_types = orig_vals[1]
-                
+        for attr, val in zip(period_attrs, orig_vals):
+            setattr(self, attr, val)
+        
         return reference_calc
-
-
-        
-        
-  
+    

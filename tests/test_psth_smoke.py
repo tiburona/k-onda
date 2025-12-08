@@ -6,7 +6,6 @@ from k_onda.resources.example_configs import PSTH_OPTS
 from pathlib import Path
 
 
-
 PROJECT_ROOT = find_project_root()
 
 def test_run_pipeline_demo_config():

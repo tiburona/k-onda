@@ -5,7 +5,6 @@ from collections import defaultdict
 import numpy as np
 import xarray as xr
 
-from k_onda.utils import standardize
 from k_onda.interfaces import PhyInterface
 from k_onda.model import Data
 from k_onda.model.period_constructor import PeriodConstructor
@@ -19,26 +18,30 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
     _name = 'unit'
     
     def __init__(self, animal, category, spike_times, cluster_id, waveform=None, 
-                 experiment=None, neuron_type=None, quality=None, firing_rate=None, 
-                 fwhm_seconds=None, **kwargs):
+                 experiment=None, neuron_type=None, quality=None, 
+                 fwhm=None, **kwargs):
         super().__init__(**kwargs)
         self.animal = animal
         self.category = category
-        self.spike_times = np.array(spike_times)
+        self.spike_times = self.quantity(
+            spike_times, 
+            units='second',
+            dims=('spike',), 
+            name='spike_times')
         self.cluster_id = cluster_id
         self.waveform = waveform
         self.experiment = experiment
         self.neuron_type = neuron_type
         self.quality = quality
-        self.firing_rate = firing_rate
-        self.fwhm_seconds = fwhm_seconds
-        self.fwhm_microseconds = fwhm_seconds * 1e6 if fwhm_seconds else None
+        self.firing_rate = self.calculate_unit_firing_rate()
+        self.fwhm = self.quantity(fwhm, units='second', name='fwhm')
         self.animal.units[category].append(self)
         self.identifier = '_'.join([self.animal.identifier, self.category, 
                                     str(self.animal.units[category].index(self) + 1)])
         self.spike_periods = defaultdict(list)
         self.mrl_calculators = defaultdict(list)
         self.parent = animal
+        self.period_info = self.animal.period_info
         self.kind_of_data_to_period_type = {
             'spike': SpikePeriod
         }
@@ -64,21 +67,35 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
             return [unit_pair for unit_pair in all_unit_pairs if ','.join(
                 [unit_pair.unit.neuron_type, unit_pair.pair.neuron_type]) == pairs_to_select]
         
-    def get_coords(self, length):
-        index = np.arange(length)
-        absolute_time = standardize(index * self.calc_opts['bin_size'] + self.start)
-        relative_time = standardize(absolute_time - self._start)
-    
+    def calculate_unit_firing_rate(self):
+        # trim threshold in seconds
+        spike_trim = self.quantity(
+            self.experiment.exp_info.get('spike_trim', 0),
+            units='second',
+            name='spike_trim',
+        )
 
-        coord_dict = {
-            'time': index,
-            'absolute_time': ('time', absolute_time),
-        }
+        # work in seconds explicitly
+        spikes_sec = self.spike_times.pint.to("second")
 
-        if self.name == 'event':
-            coord_dict['event_time'] = ('time', relative_time)
+        # boolean mask: keep spikes strictly after trim
+        mask = spikes_sec > spike_trim
 
-        return coord_dict
+        # boolean indexing with isel preserves pint info
+        spike_times_for_fr = spikes_sec.isel(spike=mask)
+
+        # no rate possible with < 2 spikes
+        if spike_times_for_fr.size < 2:
+            return self.quantity(0.0, units="1/second", name="firing_rate")
+
+        # duration in seconds (already a quantity)
+        duration = spike_times_for_fr.isel(spike=-1) - spike_times_for_fr.isel(spike=0)
+        duration = duration.pint.to("second")
+
+        # count is dimensionless → result has units 1/second
+        firing_rate_val = len(spike_times_for_fr) / duration
+
+        return self.quantity(firing_rate_val, units="1/second", name="firing_rate")
  
     def spike_prep(self):
         self.prepare_periods()
@@ -87,7 +104,16 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         return [UnitPair(self, other) for other in [unit for unit in self.animal if unit.identifier != self.identifier]]
 
     def find_spikes(self, start, stop):
-        return np.array(self.spike_times[bs_left(self.spike_times, start): bs_right(self.spike_times, stop)])
+        # convert quantities to plain ints in raw_sample space
+        spike_raw = self.to_int(self.spike_times, unit="raw_sample")  # ndarray[int]
+        start_raw = self.to_int(start, unit="raw_sample")             # int
+        stop_raw  = self.to_int(stop, unit="raw_sample")              # int
+
+        left = bs_left(spike_raw, start_raw)
+        right = bs_right(spike_raw, stop_raw)
+
+        # slice along the spike dimension using those indices
+        return self.spike_times.isel(spike=slice(left, right))
 
     def get_spikes_by_events(self):
         return [event.spikes for period in self.children for event in period.children]
@@ -138,10 +164,10 @@ class SpikePeriod(Period, RateMethods):
 
     name = 'period'
 
-    def __init__(self, unit, index, period_type, period_info, onset, 
+    def __init__(self, unit, index, period_type, period_info, onset, duration, 
                  events=None, target_period=None, is_relative=False, 
                  experiment=None):
-        super().__init__(index, period_type, period_info, onset, events=events, 
+        super().__init__(index, period_type, period_info, onset, duration, events=events, 
                          experiment=experiment, target_period=target_period, 
                          is_relative=is_relative)
         self.unit = unit
@@ -151,7 +177,6 @@ class SpikePeriod(Period, RateMethods):
         self._spikes = None 
         self.neuron_type = self.unit.neuron_type
   
-        
     def get_events(self):
         self._events = [SpikeEvent(self, self.unit, start, i) 
                         for i, start in enumerate(self.event_starts)]
@@ -178,14 +203,6 @@ class SpikeEvent(Event, RateMethods, BinMethods):
         self.neuron_type = self.unit.neuron_type
 
     @property
-    def start(self):
-       return self._start - self.pre_event
-
-    @property
-    def stop(self):
-        return self._start + self.post_event
-
-    @property
     def spike_range(self):
         return (self.start, self.stop)
     
@@ -203,7 +220,6 @@ class SpikeEvent(Event, RateMethods, BinMethods):
                 ) if isinstance(calc, xr.DataArray) else calc
         else:
             raise NotImplementedError("Event concatenation is only supported by period and unit.")
-
 
 
 class UnitPair(Data):

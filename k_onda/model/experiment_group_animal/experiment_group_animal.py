@@ -1,6 +1,7 @@
 from collections import defaultdict
 import functools
-
+import pint
+import pint_xarray
 
 
 from ..bins import BinMethods
@@ -34,9 +35,14 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
         self.identifier = info['identifier'] 
         self.now = formatted_now
         self.group_names = info.get('group_names', [])
+
+        # define sampling rates and set up unit registry
         self._sampling_rate = info.get('sampling_rate')
         self._lfp_sampling_rate = info.get('lfp_sampling_rate')
-        self.stimulus_duration = info.get('stimulus_duration')
+        ureg = pint.UnitRegistry(force_ndarray_like=True)
+        ureg.define(f"raw_sample = 1/{self._sampling_rate} * second")
+        ureg.define(f"lfp_sample = 1/{self._lfp_sampling_rate} * second")
+        self._ureg = ureg
         self.experiment = self
         self.groups = None
         self.all_groups = None

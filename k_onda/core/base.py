@@ -2,13 +2,16 @@ from collections import defaultdict
 from copy import deepcopy
 import importlib
 import json
+import numpy as np
 import pickle
 import os
 import re
 from pathlib import PosixPath
+import xarray as xr
+import pint
+import pint_xarray
 
-
-from k_onda.utils import get_round_decimals, safe_make_dir
+from k_onda.utils import  safe_make_dir
 from k_onda.math import Filter
     
 
@@ -28,7 +31,7 @@ class Base:
     _selected_brain_region = ''
     _selected_frequency_band = ''
     _selected_region_set = []
-    _calc_mode = 'normal'
+
     _shared_filters = {}
     original_periods = None
     selectable_variables = [
@@ -71,6 +74,175 @@ class Base:
     @io_opts.setter
     def io_opts(self, value):
         Base._io_opts = value
+
+    @property
+    def ureg(self):
+        return self.experiment._ureg
+    
+    def quantity(
+        self,
+        value,
+        units: str,
+        name: str | None = None,
+        dims=None,
+        coords=None,
+    ):
+        """
+        Wrap `value` in an xarray.DataArray with units, then quantify with pint.
+
+        - If `value` is a DataArray, preserve its dims/coords (ignore dims/coords args).
+        - If `value` is array-like, use provided dims/coords and check they match.
+        """
+        if isinstance(value, xr.DataArray):
+            da = value.copy()
+            if name is not None:
+                da = da.rename(name)
+            da.attrs["units"] = units
+        else:
+            data = np.asarray(value)
+
+            # normalize dims
+            if dims is None:
+                # scalar -> 0-D, array -> need explicit dims
+                if data.ndim == 0:
+                    dims = ()
+                else:
+                    raise ValueError(
+                        f"dims must be provided for non-scalar data (got shape {data.shape})"
+                    )
+            elif isinstance(dims, str):
+                dims = (dims,)
+
+            if data.ndim != len(dims):
+                raise ValueError(
+                    f"different number of dimensions on data and dims: "
+                    f"{data.ndim} vs {len(dims)} (dims={dims}, shape={data.shape})"
+                )
+
+            da = xr.DataArray(
+                data,
+                name=name,
+                dims=dims,
+                coords=coords,
+                attrs={"units": units},
+            )
+
+        return da.pint.quantify(unit_registry=self.ureg)
+    
+    def to_int(self, q, unit=None):
+        """
+        Convert a pint-xarray quantity `q` to int(s) in the given unit.
+
+        - Scalar -> Python int
+        - Array  -> numpy.ndarray[int]
+        """
+        return self.to_numerical_type(q, unit, dtype="int")
+ 
+    def to_float(self, q, unit=None, decimals=None):
+        """
+        Convert a pint-xarray quantity `q` to float(s) in the given unit.
+
+        - If unit is provided, convert to that unit first.
+        - Scalar -> Python float
+        - Array  -> numpy.ndarray[float]
+        """
+        return self.to_numerical_type(q, unit, dtype="float", decimals=decimals)
+       
+    def to_numerical_type(self, q, unit=None, dtype="float", decimals=None):
+        """
+        Convert a pint-xarray quantity or xarray.DataArray `q` to floats or ints
+        in the given unit (if pint-quantified).
+
+        - q can be:
+            * pint-xarray DataArray
+            * plain xarray.DataArray
+            * numpy array / scalar
+        - unit:
+            * only used if `q` is pint-quantified; otherwise must be None
+        - dtype = "float" or "int"
+            * Scalar -> Python scalar
+            * Array  -> numpy.ndarray
+        - decimals:
+            * if not None and dtype=="float", round to this many decimals
+        """
+        # Is this a pint-quantified xarray object?
+        is_pint = hasattr(q, "pint") and hasattr(q.pint, "units")
+
+        # Optional unit conversion (only valid for pint objects)
+        if unit is not None:
+            if is_pint:
+                q = q.pint.to(unit)
+            else:
+                raise TypeError("`unit` is only valid when `q` is a pint-quantified DataArray.")
+
+        # Extract raw magnitude / data
+        if is_pint:
+            mag = q.pint.magnitude           # numpy scalar or ndarray
+        elif isinstance(q, xr.DataArray):
+            mag = q.data                     # xarray -> numpy
+        else:
+            mag = q                          # already numpy or scalar
+
+        mag = np.asarray(mag)
+        size = mag.size
+
+        if dtype == "float":
+            if decimals is not None:
+                mag = np.round(mag, decimals=decimals)
+
+            if size == 1:
+                return float(mag)
+            else:
+                return mag.astype(float)
+
+        elif dtype == "int":
+            if size == 1:
+                return int(np.rint(float(mag)))
+            else:
+                return np.rint(mag).astype(int)
+
+        else:
+            raise ValueError(f"Unknown data type: {dtype!r}")
+        
+    def standardize_time(self, q, units="second", decimals=8):
+        """
+        Round a pint-xarray time quantity to a fixed number of decimals,
+        preserving units, dims, and coords.
+        """
+        # ensure we’re working in the desired unit
+        q2 = q.pint.to(units)
+
+        # round magnitudes
+        mag = np.round(q2.pint.magnitude, decimals=decimals)
+
+        # rebuild a DataArray with the same structure
+        da = xr.DataArray(
+            mag,
+            dims=q2.dims,
+            coords=q2.coords,
+            name=q2.name,
+            attrs={"units": units},  # <-- IMPORTANT: "units", not "unit"
+        )
+
+        # re-quantify with pint-xarray
+        return da.pint.quantify(unit_registry=self.ureg)
+    
+    def rebind_to_ureg(self, da: xr.DataArray) -> xr.DataArray:
+        """
+        Ensure `da` is quantified with this object's unit registry.
+
+        - If it's already pint-quantified with some registry, dequantify -> quantify.
+        - If it's plain xarray with "units"/"unit" attrs, just quantify.
+        """
+        # try to drop any existing pint wrapping
+        try:
+            da = da.pint.dequantify()
+        except Exception:
+            # either not quantified or pint_xarray not attached; that's fine
+            pass
+
+        # now quantify with *our* registry using attrs["units"] / ["unit"]
+        return da.pint.quantify(unit_registry=self.ureg)
 
     @property
     def env_config(self):
@@ -122,11 +294,9 @@ class Base:
     def del_all_criteria(self):
         self.criteria = defaultdict(lambda: defaultdict(tuple))
 
-
     def del_from_criteria(self, obj_name, attr):
         del self.criteria[obj_name][attr]
 
-    
     @property
     def shared_filters(self):
         return Base._shared_filters
@@ -146,7 +316,6 @@ class Base:
             cfg.get("_version", "v1"),
         )
     
- 
     def get_or_create_filter(self, cfg: dict) -> Filter:
         k = self.filter_key(cfg)
         flt = self.shared_filters.get(k)
@@ -155,7 +324,6 @@ class Base:
             self.shared_filters[k] = flt
         return flt
 
-    
     @property
     def kind_of_data(self):
         return self.calc_opts.get('kind_of_data')
@@ -167,14 +335,6 @@ class Base:
     @calc_type.setter
     def calc_type(self, calc_type):
         self.calc_opts['calc_type'] = calc_type
-
-    @property
-    def calc_mode(self):
-        return self._calc_mode
-    
-    @calc_mode.setter
-    def calc_mode(self, calc_mode):
-        self._calc_mode = calc_mode
 
     @property
     def selected_conditions(self):
@@ -263,22 +423,21 @@ class Base:
         return self.calc_opts.get('frequency_band_definition') or \
             self.experiment.exp_info['frequency_bands'] or {}
            
-
     @property
     def freq_range(self):
-        if isinstance(self.selected_frequency_band, type('str')):
-            return self.frequency_band_definition[self.selected_frequency_band]
+        if isinstance(self.selected_frequency_band, str):
+            freq_range = self.frequency_band_definition[self.selected_frequency_band]
         else:
-            return self.selected_frequency_band
+            freq_range = self.selected_frequency_band
         
-    @property
-    def finest_res(self):
-        return self.calc_opts.get('finest_res', .01)
+        return self.quantity(
+            freq_range,
+            units='Hz',
+            dims=('edge',),
+            coords={'edge': ['low', 'high']},
+            name='frequency_range'
+        )
     
-    @property
-    def round_to(self):
-        return get_round_decimals(self.finest_res)
-        
     def get_data_sources(self, data_object_type=None, identifiers=None, identifier=None):
         if data_object_type is None:
             data_object_type = self.calc_opts['base']
@@ -319,13 +478,24 @@ class Base:
             pt = getattr(self.parent, 'period_type', None)
         if pt is None:
             pt = self.selected_period_type
-        return self.calc_opts.get('periods', {}).get(pt, {}).get(
-            f'{obj_type}_pre_post', (0, 0))[time]
 
-    
+        pre_post = (
+            self.calc_opts
+            .get('periods', {})
+            .get(pt, {})
+            .get(f'{obj_type}_pre_post', (0, 0))[time]
+        )
+
+        return self.quantity(
+            pre_post,
+            units="second",
+            name=f"{obj_type}_pre_post",
+        )
+        
     @property
     def bin_size(self):
-        return self.calc_opts.get('bin_size', .01)
+        bin_size = self.calc_opts.get('bin_size', .01)
+        return self.quantity(bin_size, units='second', name='bin_size')
     
     def load(self, path_id, calc_name, other_identifiers=None):
         store = self.calc_opts.get('store', 'pkl')
@@ -435,8 +605,6 @@ class Base:
                     data_sources = self.get_data_sources(data_object_type=ds_dict['data_source'], 
                                                          identifiers=ds_dict['members'])
                     new_fields[field] = '_'.join([getattr(ds, field) for ds in data_sources])
-
-               
 
         constructor.update(new_fields)
         return constructor['template'].format(**constructor)

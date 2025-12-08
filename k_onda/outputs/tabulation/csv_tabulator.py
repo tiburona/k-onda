@@ -47,7 +47,7 @@ class CSVTabulator(OutputGenerator):
         self.initialize()
         self.opts_dicts.append(deepcopy(self.calc_opts))
         df = pd.DataFrame(self.get_rows())
-        vs = ['unit_num', 'animal', 'category', 'group', 'frequency']
+        vs = ['unit_num', 'animal', 'category', 'group']
         for var in vs:
             if var in df:
                 df[var] = df[var].astype('category')

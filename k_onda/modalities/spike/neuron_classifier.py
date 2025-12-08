@@ -23,7 +23,7 @@ class NeuronClassifier:
         else:
             neuron_colors = plt.cm.get_cmap('viridis', len(self.neuron_types_ascending))
         self.neuron_colors = {t: c for t, c in zip(self.neuron_types, neuron_colors)}
-        self.characteristics = self.config.get('characteristics', ['firing_rate', 'fwhm_microseconds'])
+        self.characteristics = self.config.get('characteristics', ['firing_rate', 'fwhm'])
         self.sort_on = self.config.get('sort_on', 'firing_rate')
         self.plot_characteristics = self.config.get('plot')
         self.sort_on_ind = self.characteristics.index(self.sort_on) 
