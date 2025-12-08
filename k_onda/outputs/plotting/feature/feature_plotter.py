@@ -154,9 +154,6 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
 
             for side in sides:
 
-                if sides == ['bottom']:
-                    a = 'foo'
-
                 is_truthy = lambda x: x not in is_falsy
 
                 ax.spines[side].set_visible(is_truthy(spine_visible))
