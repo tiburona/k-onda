@@ -226,6 +226,23 @@ class Base:
 
         # re-quantify with pint-xarray
         return da.pint.quantify(unit_registry=self.ureg)
+    
+    def rebind_to_ureg(self, da: xr.DataArray) -> xr.DataArray:
+        """
+        Ensure `da` is quantified with this object's unit registry.
+
+        - If it's already pint-quantified with some registry, dequantify -> quantify.
+        - If it's plain xarray with "units"/"unit" attrs, just quantify.
+        """
+        # try to drop any existing pint wrapping
+        try:
+            da = da.pint.dequantify()
+        except Exception:
+            # either not quantified or pint_xarray not attached; that's fine
+            pass
+
+        # now quantify with *our* registry using attrs["units"] / ["unit"]
+        return da.pint.quantify(unit_registry=self.ureg)
 
     @property
     def env_config(self):

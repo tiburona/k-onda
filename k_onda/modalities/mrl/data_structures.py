@@ -2,14 +2,14 @@ import numpy as np
 import xarray as xr
 
 from k_onda.model import Data
-from k_onda.modalities import EventValidator
+from k_onda.modalities import EventValidation
 from k_onda.modalities.lfp import LFPProperties
 from ...modalities.mixins import BandPassFilterMixin
 from k_onda.math import compute_mrl, compute_phase
 from k_onda.utils import circ_r2_unbiased
 
 
-class MRLCalculator(Data, EventValidator, LFPProperties, BandPassFilterMixin):
+class MRLCalculator(Data, EventValidation, LFPProperties, BandPassFilterMixin):
     _name = 'mrl_calculator'
     
     def __init__(self, unit, period):
@@ -22,39 +22,24 @@ class MRLCalculator(Data, EventValidator, LFPProperties, BandPassFilterMixin):
         self.duration = period.duration
         self.identifier = f"{self.period.identifier}_{self.unit.identifier}"
         self.parent = self.unit
-        self.spike_period = self.unit.spike_periods[self.period_type][self.period.identifier]
-        self.experiment = self.period.experiment
-        self._spikes = None
+        self.spike_period = self.unit.spike_periods[self.period_type][self.period.identifier]    
         self._weights = None
         self.brain_region = self.selected_brain_region
         self.frequency_band = self.selected_frequency_band
         
-
     @property
     def spikes(self):
-        # Puts the period spikes in units of lfp samples
-        if self._spikes is None:
-            spikes = np.array([spike for event in self.spike_period.events for spike in event.spikes])
-            start = self.spike_period.start * self.lfp_sampling_rate
-            self._spikes = (spikes * self.lfp_sampling_rate - start).astype(int)
-        return self._spikes
-
+        self.spike_period.spike_times.pint.to('lfp_sample')
+        
     @property
     def weights(self):
         if self._weights is None:
             self._weights = self.get_mrl_weights()
         return self._weights
-
-           
+      
     @property
     def ancestors(self):
         return [self] + [self.unit] + [self.period] + self.parent.ancestors
-    
-    @property
-    def equivalent_calculator(self):
-        other_stage = self.period.reference_period_type
-        return [calc for calc in self.parent.mrl_calculators[other_stage] 
-                if calc.identifier == self.identifier][0]
     
     def validator(self):
         if self.calc_opts.get('evoked'):
@@ -64,9 +49,10 @@ class MRLCalculator(Data, EventValidator, LFPProperties, BandPassFilterMixin):
         
     def translate_spikes_to_lfp_events(self, spikes):
 
-        pre_stim = int(np.rint(self.pre_event * self.lfp_sampling_rate))
-        events = np.asarray(self.period.event_starts_in_lfp_samples, dtype=int)
-        events = events - events[0] - pre_stim
+        event_starts = self.period_event_starts.pint.to('lfp_sample')
+        onset = self.period.onset.pint.to('lfp_sample')
+        pre_event = self.pre_event.pint.to('lfp_sample')
+        events = event_starts - onset - pre_event
         indices = {}
         for spike in spikes:
             # Find the index of the event the spike belongs to
@@ -78,7 +64,7 @@ class MRLCalculator(Data, EventValidator, LFPProperties, BandPassFilterMixin):
         return indices
     
     def get_mrl_weights(self):
-        wt_range = range(self.duration * self.lfp_sampling_rate)
+        wt_range = range(self.to_int(self.duration.pint.to('lfp_sample')))
         if not self.calc_opts.get('validate_events'):
             weights = [1 if weight in self.spikes else float('nan') for weight in wt_range]
         else:
@@ -142,7 +128,6 @@ class MRLCalculator(Data, EventValidator, LFPProperties, BandPassFilterMixin):
             w1 = w.copy()
             w1[np.isnan(alpha)] = np.nan
             result = compute_mrl(alpha, w1, dim=-1)
-
 
         da = xr.DataArray(result, attrs={'mrl_func': 'compute_mrl'})
         return da

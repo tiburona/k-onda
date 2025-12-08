@@ -14,7 +14,7 @@ SPECTRUM_OPTS = {
     'time_type': 'continous', 
     'frequency_type': 'continuous', 
     'bin_size': .01,
-    'periods': {'stim': {'event_pre_post': (0, .3)}},
+    'periods': {'stim': {'event_pre_post': (0, .3)}, 'prestim': {'event_pre_post': (0, .3)}},
     }
 
 

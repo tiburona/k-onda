@@ -23,9 +23,13 @@ class Period(Data, BinMethods):
         self.duration = duration
         self.reference_period_type = period_info.get('reference')
         self.reference = None
-        self.event_duration = period_info.get('event_duration')
+        event_duration = period_info.get('event_duration')
         if target_period and hasattr(target_period, 'event_duration'):
-            self.event_duration = target_period.event_duration
+            event_duration = target_period.event_duration
+        if event_duration is not None:
+            self.event_duration = self.quantity(event_duration, units='second')
+        else:
+            self.event_duration = None
         self._start = self.onset
         self._stop = self._start + self.duration
 

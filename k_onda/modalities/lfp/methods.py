@@ -24,11 +24,18 @@ class LFPMethods(TransformRegistryMixin):
         return weights
     
     def frequency_selector(self, da):
-        low  = self.freq_range.sel(edge='low')  - self.tolerance
-        high = self.freq_range.sel(edge='high') + self.tolerance
+        """
+        Select a frequency band using pint-aware, unitful comparisons.
 
-        fmask = (da['frequency'] >= low) & (da['frequency'] <= high)
-
+        Expects:
+        - da['frequency'] as a pint-xarray coord in Hz
+        - self.freq_range as a 2-element pint-xarray in Hz with edge=('low','high')
+        - self.tolerance as a pint-xarray scalar in Hz
+        """
+        low = (self.freq_range.sel(edge="low") - self.tolerance).pint.to("Hz")
+        high = (self.freq_range.sel(edge="high") + self.tolerance).pint.to("Hz")
+        f = da["frequency"].pint.to("Hz")
+        fmask = (f >= low) & (f <= high)
         return da.sel(freq_bin=fmask)
     
     def resample(data, fs, new_fs, axis=-1):
@@ -41,7 +48,7 @@ class LFPMethods(TransformRegistryMixin):
         return data_rs, new_fs
  
     def get_power(self):
-        return self.get_average('get_power', stop_at=self.calc_opts.get('base', 'event'))
+        return self.resolve_calc_fun('power', stop_at=self.calc_opts.get('base', 'event'))
     
     def get_amp_xcorr(self):
         return self.get_average('get_amp_xcorr', 
@@ -57,45 +64,34 @@ class LFPMethods(TransformRegistryMixin):
             return getattr(self, f"get_{calc_type}_")()
         else:
             return self.get_average(f'get_{calc_type}', weights=self.get_weights(), stop_at=stop_at)
-      
-    def get_psd(self):
+    
+    def get_base_of_coherence_constituent(self, calc_type):
         base = None
-        if self.calc_type == 'psd':
+        if self.calc_type == calc_type:
             base = self.calc_opts.get('base')
             if base is None:
                 base = 'segment' if self.calc_opts.get('validate_events') else 'period'
         elif self.calc_type == 'coherence':
             if isinstance(self.calc_opts.get('base'), dict):
-                base = self.calc_opts['base'].get('psd')
+                base = self.calc_opts['base'].get(calc_type)
             if base is None:
                 base = 'segment' if self.calc_opts.get('validate_events') else 'calculator'
         else:
-            raise ValueError("Why are you trying to calculate PSD?")
+            raise ValueError(f"Why are you trying to calculate {calc_type}?")
         
+        return base
+
+    def get_psd(self):
+        base = self.get_base_of_coherence_constituent('psd')
         return self.resolve_calc_fun('psd', stop_at=base)
 
     def get_csd(self):
-        base = None
-        if self.calc_type == 'csd':
-            base = self.calc_opts.get('base')
-            if base is None:
-                base = 'segment' if self.calc_opts.get('validate_events') else 'calculator'
-        elif self.calc_type == 'coherence':
-            if isinstance(self.calc_opts.get('base'), dict):
-                base = self.calc_opts['base'].get('csd')
-            if base is None:
-                base = 'segment' if self.calc_opts.get('validate_events') else 'calculator'
-        else:
-            raise ValueError("Why are you trying to calculate CSD?")
-        
+        base = self.get_base_of_coherence_constituent('csd')  
         return self.resolve_calc_fun('csd', stop_at=base)
 
     def get_coherence(self):
         stop_at = self.calc_opts.get('base', 'coherence_calculator')
-
-        coherence = self.resolve_calc_fun('coherence', stop_at=stop_at)
-        
-        return coherence
+        return self.resolve_calc_fun('coherence', stop_at=stop_at)
 
 
 class PSDMethods:
@@ -112,7 +108,7 @@ class PSDMethods:
             data=return_val,
             dims=["frequency"],
             coords={"frequency": freq},
-            attrs={"psd_units": "V^2/Hz"},  # optional doc only
+            attrs={"psd_units": "V^2/Hz"}  
         )
 
         da = self.frequency_selector(da)
@@ -183,15 +179,3 @@ class CoherenceMethods:
         args.update(self.calc_opts.get(f'{analysis}_params', {}).get('args', {}))
         args.update(self.calc_opts.get('coherence_params', {}).get('args', {}))
         return args
-
- 
-
-    
-   
-    
-    
-   
-
-
-    
-    

@@ -126,6 +126,10 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             return [self]
         if hasattr(self, 'parent'):
             return self.parent.ancestors + [self]
+        
+    @property
+    def descendants(self):
+        return self.get_descendants
     
     @property
     def index(self):
@@ -184,6 +188,12 @@ class Data(Base, Aggregates, TransformRegistryMixin):
 
         return descendants
     
+    def find_attr_in_ancestors(self, attr):
+        for obj in reversed(self.ancestors):
+            if hasattr(obj, attr):
+                return getattr(obj, attr)
+        return None
+
     @property
     def has_reference(self):
         return hasattr(self, 'reference') and self.reference is not None
@@ -215,7 +225,6 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             return (None, None)
         registry = self.transforms() if hasattr(self, "transforms") else {}
         return registry.get(key, (None, None))
-
 
     def to_linear_space(self, data):
         if isinstance(data, xr.Dataset):
@@ -258,3 +267,4 @@ class Data(Base, Aggregates, TransformRegistryMixin):
             out.attrs["space"] = "final"
             return out
         return data
+    

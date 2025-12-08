@@ -4,7 +4,7 @@ from pathlib import Path
 from k_onda.main import run_pipeline
 from k_onda.resources.devtools import find_project_root
 from k_onda.resources.example_configs import LFP_OPTS, PSTH_OPTS
-from utils import write_lfp_files
+from .utils import write_lfp_files
 
 
 

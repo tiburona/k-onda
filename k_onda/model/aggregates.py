@@ -68,7 +68,8 @@ class Aggregates(XMean):
     
     def _get_average_core(self, base_method, stop_at='event', level=0, axis=0, 
                     weights=None):
-        
+        if 'period' in self.name:
+            a = 'foo'
         if stop_at in self.name or not hasattr(self, 'children'):  # we are at the base case and will call the base method
             if not hasattr(self, base_method) or not callable(getattr(self, base_method)):
                 raise ValueError(f"Invalid base method: {base_method}")
@@ -313,17 +314,14 @@ class Aggregates(XMean):
                 if ((concatenator == 'animal' and self.calc_type != 'spike') or 
                     concatenator in ['unit', 'period']):
                    
-                    result = xr.concat(children_data, dim="time")
+                    result = xr.concat(children_data, dim="time_bin")
                     if child_xform:
                         new_time = np.array([eval(child_xform)(child) for child in children])
                     else:
-                        new_time = np.arange(result.sizes["time"])
+                        new_time = np.arange(result.sizes["time_bin"])
                     if dim_xform:
                         new_time = eval(dim_xform)(new_time)
                     
-                    result = result.assign_coords(time=("time", new_time))
-                    # Reorder coords to match dims:
-                    result = result.assign_coords(**{dim: result.coords[dim] for dim in result.dims})
                     return result
 
                 else:
