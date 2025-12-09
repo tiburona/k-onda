@@ -93,7 +93,7 @@ Build the pieces that allow K-Onda to grow.
 
 ---
 
-### 11. File Inputs & Timebase Corrections
+### 11. File Inputs
 - Think about whether we need NWB support  
 
 ---
