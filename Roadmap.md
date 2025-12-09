@@ -9,7 +9,7 @@ Make K-Onda a reliable and user-friendly electrophysiology tool for our lab and 
 - Granger causality  
 - Amplitude cross correlation must be refactored to match coherence handling of segments/transforms  
 - Decide whether phase–phase MRL returns (currently removed)  
-- Move everything in the deprecated math_functions module to the math subpackage
+- Move any still-used functions in the deprecated `math_functions` module into the `math` subpackage and remove the old module  
 
 ---
 
@@ -85,7 +85,6 @@ Naming refactors:
 Build the pieces that allow K-Onda to grow.
 
 ### 10. Modernization/Improvement of Developer Tooling
-
 - Consider migrating to `pyproject.toml` instead of `setup.py`  
 - Evaluate using `uv` or `pixi` instead of plain `pip`  
 - Install a linter with a commit hook  
@@ -93,30 +92,37 @@ Build the pieces that allow K-Onda to grow.
 
 ---
 
-### 11. File Inputs
+### 11. Developer-Facing Documentation
+- Write a short “Contributing” guide (how to run tests, style expectations, where things live)  
+- Mark a few “good first issues” for new contributors  
+- Add a high-level architecture overview 
+
+---
+
+### 12. File Inputs & Timebase Corrections
 - Think about whether we need NWB support  
 
 ---
 
-### 12. Plotting and Figure Infrastructure (Phase 2 extensions)
+### 13. Plotting and Figure Infrastructure (Phase 2 extensions)
 - Expand `Container` (currently a stub) to support non-data objects (JPEGs, SVGs, etc.)  
 - Reintroduce missing plot types from earlier versions: e.g., polar plots  
 - Identify any other electrophysiology-standard plots not yet supported  
 
 ---
 
-### 13. Allow Further Data/Calculation Transformations
+### 14. Allow Further Data/Calculation Transformations
 - Users should be able to choose from common math functions (and maybe their own via lambdas) when displaying data. For example, `lag_of_max_corr` should be expressed as normal amp_xcorr + `np.argmax` instead of being a separate bespoke calc.
 
 ---
 
-### 14. Rationalize User Input Process (Phase 2 extensions)
+### 15. Rationalize User Input Process (Phase 2 extensions)
 - Reconsider natural-language-style parsing for criteria/rules (revive or replace)  
 - Add simple GUI (e.g., dropdown-driven spec builder, SPM-style) once specs are stable  
 
 ---
 
-### 15. Generalized Modality Architecture
+### 16. Generalized Modality Architecture
 - Make Movement a modality (freezing, position, velocity, rearing, sleep states)  
 - Generalize the Phase 1 Custom modality into a more flexible system:
   - User-provided arrays can be per period, per event, or per time bin  
@@ -125,7 +131,7 @@ Build the pieces that allow K-Onda to grow.
 
 ---
 
-### 16. Further Expand the Data Model
+### 17. Further Expand the Data Model
 - Make grouping/indexing more flexible:
   - Arbitrary nested or crossed groupings (e.g., collection site, cage)  
 
@@ -134,25 +140,25 @@ Build the pieces that allow K-Onda to grow.
 ## Phase 3 — Long-Term Ambitious Projects  
 Aspirational goals.
 
-### 17. Statistical Environment & Standardized Outputs
+### 18. Statistical Environment & Standardized Outputs
 - Embed a version-locked Python/R environment for statistical analyses  
 - Return standardized JSON summaries for automated plot annotations  
 
 ---
 
-### 18. Next-Generation Specification Model
+### 19. Next-Generation Specification Model
 - Evolve the linear JSON/YAML spec into a DAG  
 - Capture branching analyses, caching, and selective recomputation  
 
 ---
 
-### 19. Plugin Ecosystem
-- Formalize interfaces so external labs can contribute new wrappers for preprocessors, modalities, and plot types  
+### 20. Plugin Ecosystem
+- Formalize interfaces so external labs can contribute new modalities, processors, or plot types  
 - Define a governance model for reviewing and merging popular plugins  
 
 ---
 
-### 20. GUI for Publication-Ready Analysis
+### 21. GUI for Publication-Ready Analysis
 - Cross-platform GUI for assembling figures  
 - Automatic embedding of provenance  
 - Drag-and-drop layout editing  
@@ -160,6 +166,6 @@ Aspirational goals.
 
 ---
 
-### 21. AI-Assisted Statistical and Analytical Guidance
+### 22. AI-Assisted Statistical and Analytical Guidance
 - Suggest appropriate analyses  
 - Provide retrieval-augmented explanations referencing the user’s data  
