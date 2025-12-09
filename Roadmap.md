@@ -147,7 +147,7 @@ Aspirational goals.
 ---
 
 ### 19. Plugin Ecosystem
-- Formalize interfaces so external labs can contribute new modalities, processors, or plot types  
+- Formalize interfaces so external labs can contribute new wrappers for preprocessors, modalities, and plot types  
 - Define a governance model for reviewing and merging popular plugins  
 
 ---
