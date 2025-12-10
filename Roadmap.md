@@ -99,6 +99,7 @@ Build the pieces that allow K-Onda to grow.
 - Write a short “Contributing” guide (how to run tests, style expectations, where things live)  
 - Mark a few “good first issues” for new contributors  
 - Add a high-level architecture overview 
+- Standardize practices for and expand docstrings
 
 ---
 
