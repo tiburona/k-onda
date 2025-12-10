@@ -4,6 +4,7 @@
 Make K-Onda a reliable and user-friendly electrophysiology tool for our lab and others.
 
 ### 1. Fix What’s Actively Broken or Disorganized
+- Manual testing/cleanup from pint refactor
 - Unit autocorrelation  
 - Unit cross-correlation  
 - Granger causality  
