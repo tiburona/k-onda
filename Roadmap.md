@@ -79,6 +79,8 @@ Naming refactors:
 - Add a minimal CLI (e.g., `k_onda` or similar) that can:
   - Run an analysis from a config file (`k_onda run --config config.yaml`)  
   - Optionally initialize an analysis repo and add a flag to run-and-commit results  
+  - Run diagnostic commands like filter visualization and experimental-design plots
+  - Run neuron categorization as a standalone tool 
 
 ---
 
@@ -130,9 +132,27 @@ Build the pieces that allow K-Onda to grow.
   - Support user-defined transformations (e.g., lambdas)  
 - Treat this as a proto-plugin system for non-electrophysiology data  
 
+ 
+
 ---
 
-### 17. Further Expand the Data Model
+### 17. Generalization of Event Validation / Data Quality Masking
+Current event validation works only for LFP/MRL and is power-based.
+
+Users may want to:
+- Invalidate more irregular stretches of data (not just contiguous events)
+- Invalidate based on raw or filtered data, not just power
+- Invalidate spike data
+- Provide inputs that invalidate stretches of data based on external criteria (custom masks)
+
+Goals:
+- Define a common validation/masking interface that all modalities can use
+- Allow user-supplied masks (per time bin, per event, etc.)
+- Make validation rules part of the config/spec rather than hard-coded
+
+---
+
+### 18. Further Expand the Data Model
 - Make grouping/indexing more flexible:
   - Arbitrary nested or crossed groupings (e.g., collection site, cage)  
 
@@ -141,25 +161,25 @@ Build the pieces that allow K-Onda to grow.
 ## Phase 3 — Long-Term Ambitious Projects  
 Aspirational goals.
 
-### 18. Statistical Environment & Standardized Outputs
+### 19. Statistical Environment & Standardized Outputs
 - Embed a version-locked Python/R environment for statistical analyses  
 - Return standardized JSON summaries for automated plot annotations  
 
 ---
 
-### 19. Next-Generation Specification Model
+### 20. Next-Generation Specification Model
 - Evolve the linear JSON/YAML spec into a DAG  
 - Capture branching analyses, caching, and selective recomputation  
 
 ---
 
-### 20. Plugin Ecosystem
+### 21. Plugin Ecosystem
 - Formalize interfaces so external labs can contribute new modalities, processors, or plot types  
 - Define a governance model for reviewing and merging popular plugins  
 
 ---
 
-### 21. GUI for Publication-Ready Analysis
+### 22. GUI for Publication-Ready Analysis
 - Cross-platform GUI for assembling figures  
 - Automatic embedding of provenance  
 - Drag-and-drop layout editing  
@@ -167,6 +187,6 @@ Aspirational goals.
 
 ---
 
-### 22. AI-Assisted Statistical and Analytical Guidance
+### 23. AI-Assisted Statistical and Analytical Guidance
 - Suggest appropriate analyses  
 - Provide retrieval-augmented explanations referencing the user’s data  
