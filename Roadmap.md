@@ -103,41 +103,45 @@ Build the pieces that allow K-Onda to grow.
 
 ---
 
-### 12. File Inputs & Timebase Corrections
+### 12. Performance & Resource Use
+- Audit speed and memory usage on all pipelines, looking for bloat
+- Provide users with a small set of options to trade off speed vs. memory 
+
+---
+
+### 13. File Inputs 
 - Think about whether we need NWB support  
 
 ---
 
-### 13. Plotting and Figure Infrastructure (Phase 2 extensions)
+### 14. Plotting and Figure Infrastructure (Phase 2 extensions)
 - Expand `Container` (currently a stub) to support non-data objects (JPEGs, SVGs, etc.)  
 - Reintroduce missing plot types from earlier versions: e.g., polar plots  
 - Identify any other electrophysiology-standard plots not yet supported  
 
 ---
 
-### 14. Allow Further Data/Calculation Transformations
+### 15. Allow Further Data/Calculation Transformations
 - Users should be able to choose from common math functions (and maybe their own via lambdas) when displaying data. For example, `lag_of_max_corr` should be expressed as normal amp_xcorr + `np.argmax` instead of being a separate bespoke calc.
 
 ---
 
-### 15. Rationalize User Input Process (Phase 2 extensions)
+### 16. Rationalize User Input Process (Phase 2 extensions)
 - Reconsider natural-language-style parsing for criteria/rules (revive or replace)  
 - Add simple GUI (e.g., dropdown-driven spec builder, SPM-style) once specs are stable  
 
 ---
 
-### 16. Generalized Modality Architecture
+### 17. Generalized Modality Architecture
 - Make Movement a modality (freezing, position, velocity, rearing, sleep states)  
 - Generalize the Phase 1 Custom modality into a more flexible system:
   - User-provided arrays can be per period, per event, or per time bin  
   - Support user-defined transformations (e.g., lambdas)  
 - Treat this as a proto-plugin system for non-electrophysiology data  
 
- 
-
 ---
 
-### 17. Generalization of Event Validation / Data Quality Masking
+### 18. Generalization of Event Validation / Data Quality Masking
 Current event validation works only for LFP/MRL and is power-based.
 
 Users may want to:
@@ -153,7 +157,7 @@ Goals:
 
 ---
 
-### 18. Further Expand the Data Model
+### 19. Further Expand the Data Model
 - Make grouping/indexing more flexible:
   - Arbitrary nested or crossed groupings (e.g., collection site, cage)  
 
@@ -162,25 +166,25 @@ Goals:
 ## Phase 3 — Long-Term Ambitious Projects  
 Aspirational goals.
 
-### 19. Statistical Environment & Standardized Outputs
+### 20. Statistical Environment & Standardized Outputs
 - Embed a version-locked Python/R environment for statistical analyses  
 - Return standardized JSON summaries for automated plot annotations  
 
 ---
 
-### 20. Next-Generation Specification Model
+### 21. Next-Generation Specification Model
 - Evolve the linear JSON/YAML spec into a DAG  
 - Capture branching analyses, caching, and selective recomputation  
 
 ---
 
-### 21. Plugin Ecosystem
+### 22. Plugin Ecosystem
 - Formalize interfaces so external labs can contribute new modalities, processors, or plot types  
 - Define a governance model for reviewing and merging popular plugins  
 
 ---
 
-### 22. GUI for Publication-Ready Analysis
+### 23. GUI for Publication-Ready Analysis
 - Cross-platform GUI for assembling figures  
 - Automatic embedding of provenance  
 - Drag-and-drop layout editing  
