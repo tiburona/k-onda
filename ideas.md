@@ -1,3 +1,7 @@
+## Architecture
+
+- My robot overlord threw some shade about my classes not being cooperative.  Evaluate whether a refactor is necessary.
+
 ## IO
 
 - It would be nice if file opening were lazy.  Right now, for instance, you load every animal's LFP files, maybe even preprocess them, regardless of whether you're going to use them in the analysis you're about to run.
