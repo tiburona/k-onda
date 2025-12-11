@@ -44,7 +44,7 @@ What needs documenting:
 
 ### 5. Data Model Stabilization
 - Multi-session experiment support  
-- Multiple event types  
+- Multiple event types and parametrized events (for tuning curves)
 - Retire `Group` in favor of Conditions  
 
 Naming refactors:
