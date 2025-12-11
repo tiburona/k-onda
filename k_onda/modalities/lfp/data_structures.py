@@ -108,6 +108,7 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
     def spectrogram(self):
         if self._spectrogram is None:
             self._spectrogram = self.calc_spectrogram()
+        # todo: should cache the frequency selected spectrogram
         return self.frequency_selector(self._spectrogram)
     
     @property
@@ -118,6 +119,9 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
             return self.get_events()          
 
     def get_events(self):
+
+        if self.pre_event + self.post_event == 0:
+            raise ValueError("Event has no duration")
 
         events = self._get_cache(self._events, self._event_key())
 
@@ -331,8 +335,6 @@ class LFPEvent(Event, LFPMethods, LFPProperties):
         win_start = rel_start - self.pre_event
         win_end   = rel_start + self.post_event
         mask = (tbins >= win_start - eps) & (tbins < win_end - eps)
-        if sum(mask) == 0:
-            raise ValueError("Event mask is empty!")
         return mask
 
     def get_power_(self):
@@ -411,6 +413,8 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
         validate_events = self.calc_opts.get('validate_events')
         if validate_events:
             if 'event' in base:
+                if self.pre_event + self.post_event == 0:
+                    raise ValueError("Event has no duration")
                 return self.get_events()
             else:
                 return self.get_segments()

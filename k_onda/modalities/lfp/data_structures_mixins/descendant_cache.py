@@ -26,7 +26,7 @@ class DescendantCache:
     def _event_key(self):
         period = self.period if getattr(self, 'period', None) else self
         ev_cfg = safe_get(
-            self.calc_opts, [period.period_type, 'event_pre_post'], default=())
+            self.calc_opts, ['periods', period.period_type, 'event_pre_post'], default=())
         return to_hashable(self._base_key() + ev_cfg)
     
     def _cached_collection(self, cache_name, key_fn, build_fn, max_size):
