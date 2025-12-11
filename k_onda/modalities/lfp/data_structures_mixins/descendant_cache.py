@@ -16,17 +16,17 @@ class DescendantCache:
             cache.popitem(last=False)  # drop oldest
 
     def _base_key(self):
-        region_key = self.selected_brain_region if self.name == 'period' else self.selected_brain_regions
-        band   = self.selected_frequency_band if self.selected_frequency_band is not None else None
+        region_key = self.selected_brain_region or self.selected_brain_regions
+        band   = self.selected_frequency_band 
         return (region_key, band)
 
     def _segment_key(self):
         return to_hashable(self._base_key())
        
     def _event_key(self):
-
+        period = self.period if getattr(self, 'period', None) else self
         ev_cfg = safe_get(
-            self.calc_opts, ['periods', self.selected_period_type, 'event_pre_post'], default=())
+            self.calc_opts, [period.period_type, 'event_pre_post'], default=())
         return to_hashable(self._base_key() + ev_cfg)
     
     def _cached_collection(self, cache_name, key_fn, build_fn, max_size):

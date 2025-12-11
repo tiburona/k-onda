@@ -6,10 +6,11 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
+from k_onda.core import Base
 from k_onda.utils import operations
 
 
-class NeuronClassifier:
+class NeuronClassifier(Base):
     
     def __init__(self, experiment):
         self.experiment = experiment
@@ -40,7 +41,7 @@ class NeuronClassifier:
         if not self.config:
             return
         saved_calc_exists, categorized_neurons, pickle_path = self.experiment.load(
-            'spike', ['classified_neurons'])
+            'spike', 'classified_neurons')
         if not saved_calc_exists:
             categorized_neurons = self.categorize_neurons(pickle_path)
         self.apply_categorization(categorized_neurons)
@@ -58,9 +59,9 @@ class NeuronClassifier:
    
     def get_input_to_kmeans(self, characteristic):
         scaler = StandardScaler()
-        raw = [getattr(unit, characteristic) for unit in self.units]
-        scaled = scaler.fit_transform(np.array(raw).reshape(-1, 1))
-        return scaled, np.array(raw)  # Return both scaled and original values
+        raw = np.array([getattr(unit, characteristic).pint.magnitude for unit in self.units]).reshape(-1, 1)
+        scaled = scaler.fit_transform(raw)
+        return scaled, raw  # Return both scaled and original values
     
     def run_kmeans(self):
         X_scaled, X_original = zip(*[self.get_input_to_kmeans(char) 
@@ -83,10 +84,10 @@ class NeuronClassifier:
     
     def apply_cutoffs(self):
         for i, unit in enumerate(self.units):
-            for characteristic, operator, value, label in self.cutoffs:
-                attr = getattr(unit, characteristic)
+            for characteristic, operator, value, units, label in self.cutoffs:
+                attr = getattr(unit, characteristic).pint.to(units)
                 operation = operations[operator]
-                if operation(attr, value):
+                if operation(attr.pint.magnitude, value):
                     unit.neuron_type = label
                     self.labels[i] = label 
 

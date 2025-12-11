@@ -5,7 +5,7 @@ from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
 from scipy.signal.windows import tukey
 
-from k_onda.math import apply_hilbert_to_padded_data
+from k_onda.math import apply_hilbert_to_padded_data, psd
 from k_onda.model.period_event import Period, Event
 from k_onda.model import Data
 from k_onda.model.bins import TimeBin
@@ -13,7 +13,7 @@ from k_onda.interfaces import MatlabInterface
 from k_onda.math import normalized_xcorr
 from ...modalities.mixins import BandPassFilterMixin
 from k_onda.utils import (is_iterable, contains_nan)
-from .methods import LFPMethods, PSDMethods, CoherenceMethods
+from .methods import LFPMethods, SpectralDensityMethods, CoherenceMethods
 from .data_structures_mixins.event_validator import EventValidation
 from .data_structures_mixins.descendant_cache import DescendantCache
 
@@ -59,7 +59,7 @@ class LFPProperties:
         )
     
 
-class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, PSDMethods, 
+class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDensityMethods, 
                 DescendantCache):
 
     def __init__(self, animal, index, period_type, period_info, onset, duration, events=None,
@@ -286,10 +286,10 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, PSDMethods,
         return [len(seg.unpadded_data) for seg in self.segments]
     
     def get_psd_(self):
-        return self.psd_from_contiguous_data(self.unpadded_data)
+        return self.spectral_density_calc([self.unpadded_data], 'psd', psd)
 
 
-class PeriodSegment(Data, LFPMethods, PSDMethods):
+class PeriodSegment(Data, LFPMethods, SpectralDensityMethods):
 
     _name = 'period_segment'
     
@@ -297,7 +297,7 @@ class PeriodSegment(Data, LFPMethods, PSDMethods):
         self.unpadded_data = data
 
     def get_psd_(self):
-        return self.psd_from_contiguous_data(self.unpadded_data)
+        return self.spectral_density_calc(self.unpadded_data, 'psd', psd)
 
 
 class LFPEvent(Event, LFPMethods, LFPProperties):
@@ -385,10 +385,9 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
     @property
     def regions_data(self):
         processed_lfp = self.period.animal.processed_lfp
-        return [
-            processed_lfp[r][self.period.start_in_lfp_samples:self.period.stop_in_lfp_samples]
-            for r in self.regions
-        ]
+        start = self.to_int(self.period.start, unit='lfp_sample')
+        stop = self.to_int(self.period.stop, unit='lfp_sample')
+        return [processed_lfp[r][start:stop] for r in self.regions]
 
     @property
     def padded_regions_data(self):
@@ -404,11 +403,23 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
 
     @property
     def children(self):
-        if self.calc_opts.get('validate_events'):
-            return self.get_segments()
+        # TODO: 
+        # it would be nice to have some logic in here to throw 
+        # if children is events but events are not long enough for a valid 
+        # calculation
+        base = self.calc_opts.get('base', 'coherence_calculator')
+        validate_events = self.calc_opts.get('validate_events')
+        if validate_events:
+            if 'event' in base:
+                return self.get_events()
+            else:
+                return self.get_segments()
         else:
-            return self.get_events()
-     
+            if 'calculator' in base:
+                return []
+            else:
+                return self.get_events()
+
     def joint_event_validity(self):
         evs = [self.get_event_validity(region) for region in self.regions]
         return {i: all([ev[i] for ev in evs]) for i in evs[0]}
@@ -434,11 +445,13 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
         return segments
         
     def get_events(self):
-        events = self._get_cache(self._events, self._event_key())
+        event_key = self._event_key()
+        events = self._get_cache(self._events, event_key)
         if events is None:
             events = [
-                self.event_class(self.period, event.onset, self, i)  # todo is this right
-                for i, event in enumerate(self.period.events)]
+                self.event_class(self.period, event_start, self, i)  # todo is this right
+                for i, event_start in enumerate(self.period.event_starts)]
+        return events
             
     def index_transformation_function(self, concatenator):
         raise NotImplementedError("Not yet implemented for RegionRelationshipCalculator.")
@@ -473,22 +486,24 @@ class RelationshipCalculatorEvent(Event, LFPMethods, LFPProperties):
     @property
     def regions_data(self):
         processed_lfp = self.period.animal.processed_lfp
-        return [
-            processed_lfp[r][self.period.start_in_lfp_samples:self.period.stop_in_lfp_samples]
-            for r in self.regions
-        ]
+        start = self.to_int((self.start - self.pre_event), unit='lfp_sample')
+        stop = self.to_int((self.start + self.post_event), unit='lfp_sample')
+        return [processed_lfp[r][start:stop] for r in self.regions]
 
     @property
     def padded_regions_data(self):
         processed_lfp = self.period.animal.processed_lfp
-        return [
-            processed_lfp[r][self.period.pad_start:self.period.pad_stop]
-            for r in self.regions
-        ]
+        start = self.to_int(
+            self.start - self.pre_event - self.lfp_padding.sel(side="pre"), 
+            unit='lfp_sample')
+        stop = self.to_int(
+            self.start + self.pre_event + self.lfp_padding.sel(side="post"), 
+            unit='lfp_sample')
+        return [processed_lfp[r][start:stop] for r in self.regions]
     
 
 class CoherenceCalculatorSegment(RelationshipCalculatorSegment, 
-                                 CoherenceMethods, LFPMethods, PSDMethods):
+                                 CoherenceMethods, LFPMethods):
 
     _name = 'coherence_segment'
 
@@ -496,10 +511,19 @@ class CoherenceCalculatorSegment(RelationshipCalculatorSegment,
         super().__init__(coherence_calculator, data, index)
 
 
-class CoherenceCalculator(RegionRelationshipCalculator, CoherenceMethods, LFPMethods, PSDMethods):
+class CoherenceCalculatorEvent(RelationshipCalculatorEvent, CoherenceMethods, 
+                               LFPMethods):
+    _name = 'coherence_event'
+
+    def __init__(self, period, onset, region_relationship_calculator, index):
+        super().__init__(period, onset,region_relationship_calculator, index)
+
+
+class CoherenceCalculator(RegionRelationshipCalculator, CoherenceMethods, LFPMethods):
 
     _name = 'coherence_calculator'
     segment_class = CoherenceCalculatorSegment
+    event_class = CoherenceCalculatorEvent
     
    
 class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):

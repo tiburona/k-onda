@@ -23,18 +23,14 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         super().__init__(**kwargs)
         self.animal = animal
         self.category = category
-        self.spike_times = self.quantity(
-            spike_times, 
-            units='second',
-            dims=('spike',), 
-            name='spike_times')
+        self.spike_times = spike_times
         self.cluster_id = cluster_id
         self.waveform = waveform
         self.experiment = experiment
         self.neuron_type = neuron_type
         self.quality = quality
         self.firing_rate = self.calculate_unit_firing_rate()
-        self.fwhm = self.quantity(fwhm, units='second', name='fwhm')
+        self.fwhm = fwhm
         self.animal.units[category].append(self)
         self.identifier = '_'.join([self.animal.identifier, self.category, 
                                     str(self.animal.units[category].index(self) + 1)])
