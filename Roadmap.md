@@ -105,7 +105,8 @@ Build the pieces that allow K-Onda to grow.
 
 ### 12. Performance & Resource Use
 - Audit speed and memory usage on all pipelines, looking for bloat
-- Provide users with a small set of options to trade off speed vs. memory 
+- Provide users with a small set of options to trade off speed vs. memory
+- Explore safe opportunities for parallelization (e.g., per animal / per unit / per period) and decide whether to expose a simple “run in parallel” option for users with more cores
 
 ---
 
