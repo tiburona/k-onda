@@ -82,12 +82,6 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
     def get_aesthetic_args(self, entry):
         return self.construct_spec_based_on_conditions(self.aesthetics, entry=entry)
     
-    def get_tick_args(self, aesthetic_args):
-        
-        tick_args = {'fontsize': 12}
-        tick_args.update(aesthetic_args.get('tick', {}))
-        return tick_args
-    
     def apply_ax_args(self, cell, ax_args, i):
         ax_list = cell.ax_list if hasattr(cell, 'break_axes') else [cell.obj]
         for ax in ax_list:

@@ -2,6 +2,8 @@ from collections import defaultdict
 import functools
 import pint
 import pint_xarray
+import pint
+import pint_xarray
 
 
 from ..bins import BinMethods
@@ -35,15 +37,21 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
         self.identifier = info['identifier'] 
         self.now = formatted_now
         self.group_names = info.get('group_names', [])
+        self.experiment = self
 
         # define sampling rates and set up unit registry
-        self._sampling_rate = info.get('sampling_rate')
-        self._lfp_sampling_rate = info.get('lfp_sampling_rate')
+        sampling_rate = info.get('sampling_rate')
+        lfp_sampling_rate = info.get('lfp_sampling_rate')
         ureg = pint.UnitRegistry(force_ndarray_like=True)
-        ureg.define(f"raw_sample = 1/{self._sampling_rate} * second")
-        ureg.define(f"lfp_sample = 1/{self._lfp_sampling_rate} * second")
+        ureg.define(f"raw_sample = 1/{sampling_rate} * second")
+        ureg.define(f"lfp_sample = 1/{lfp_sampling_rate} * second")
+        pint.set_application_registry(ureg)
         self._ureg = ureg
-        self.experiment = self
+        self._sampling_rate, self._lfp_sampling_rate = [
+            rate if rate is None 
+            else self.quantity(rate, units='Hz') 
+            for rate in [sampling_rate, lfp_sampling_rate]
+        ]
         self.groups = None
         self.all_groups = None
         self.all_animals = []
@@ -100,6 +108,10 @@ class Experiment(Data, SpikePrepMethods, SpikeMethods, LFPMethods):
     @sorted_prop('coherence_calculator')
     def all_coherence_calculators(self):
         return self.get_data_calculated_by_period('coherence_calculators')
+    
+    @sorted_prop('coherence_event')
+    def all_coherence_events(self):
+        return [event for calc in self.all_coherence_calculators for event in calc.get_events()]
     
     @sorted_prop('amp_xcorr_calculator')
     def all_amp_xcorr_calculators(self):

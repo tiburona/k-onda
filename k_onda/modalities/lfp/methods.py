@@ -1,4 +1,5 @@
 import mne
+import numpy as np
 import xarray as xr
 
 from k_onda.model.data import TransformRegistryMixin
@@ -23,7 +24,33 @@ class LFPMethods(TransformRegistryMixin):
             weights = [1 for _ in range(len(self.children))]
         return weights
     
+    def frequency_and_freq_bin(self, f):
+        n_freq = len(f)
+        freq_bin = np.arange(n_freq)
+
+        frequency = self.quantity(
+            f,
+            units="Hz",
+            dims=("freq_bin",),
+            name="frequency",
+        )
+        return frequency, freq_bin
+    
     def frequency_selector(self, da):
+        """
+        Select a frequency band using pint-aware, unitful comparisons.
+
+        Expects:
+        - da['frequency'] as a pint-xarray coord in Hz
+        - self.freq_range as a 2-element pint-xarray in Hz with edge=('low','high')
+        - self.tolerance as a pint-xarray scalar in Hz
+        """
+        low = (self.freq_range.sel(edge="low") - self.tolerance).pint.to("Hz")
+        high = (self.freq_range.sel(edge="high") + self.tolerance).pint.to("Hz")
+        f = da["frequency"].pint.to("Hz")
+        fmask = (f >= low) & (f <= high)
+        return da.sel(freq_bin=fmask)
+    
         """
         Select a frequency band using pint-aware, unitful comparisons.
 
@@ -48,6 +75,7 @@ class LFPMethods(TransformRegistryMixin):
         return data_rs, new_fs
  
     def get_power(self):
+        return self.resolve_calc_fun('power', stop_at=self.calc_opts.get('base', 'event'))
         return self.resolve_calc_fun('power', stop_at=self.calc_opts.get('base', 'event'))
     
     def get_amp_xcorr(self):
@@ -74,11 +102,17 @@ class LFPMethods(TransformRegistryMixin):
         elif self.calc_type == 'coherence':
             if isinstance(self.calc_opts.get('base'), dict):
                 base = self.calc_opts['base'].get(calc_type)
+                base = self.calc_opts['base'].get(calc_type)
             if base is None:
                 base = 'segment' if self.calc_opts.get('validate_events') else 'calculator'
         else:
             raise ValueError(f"Why are you trying to calculate {calc_type}?")
+            raise ValueError(f"Why are you trying to calculate {calc_type}?")
         
+        return base
+
+    def get_psd(self):
+        base = self.get_base_of_coherence_constituent('psd')
         return base
 
     def get_psd(self):
@@ -87,61 +121,57 @@ class LFPMethods(TransformRegistryMixin):
 
     def get_csd(self):
         base = self.get_base_of_coherence_constituent('csd')  
+        base = self.get_base_of_coherence_constituent('csd')  
         return self.resolve_calc_fun('csd', stop_at=base)
 
     def get_coherence(self):
         stop_at = self.calc_opts.get('base', 'coherence_calculator')
         return self.resolve_calc_fun('coherence', stop_at=stop_at)
 
+class SpectralDensityMethods:
 
-class PSDMethods:
+    def spectral_density_calc(self, data, calc, func):
 
-    def psd_from_contiguous_data(self, data):
-        args = self.welch_and_coherence_args("psd")
+        args = self.welch_and_coherence_args(calc)
 
         fs = self.to_float(self.lfp_sampling_rate, unit="Hz")
-        f, return_val = psd(data, fs, **args)
 
-        freq = self.quantity(f, units="Hz", name="frequency")
+        f, return_val = func(*data, fs, **args)
+
+        frequency, freq_bin = self.frequency_and_freq_bin(f)
 
         da = xr.DataArray(
             data=return_val,
-            dims=["frequency"],
-            coords={"frequency": freq},
-            attrs={"psd_units": "V^2/Hz"}  
+            dims=("freq_bin",),
+            coords={
+                "freq_bin": freq_bin,   # unitless bin index
+                "frequency": frequency, # unitful Hz coord along freq_bin
+            },
+            attrs={"units": "V^2/Hz"},
         )
 
         da = self.frequency_selector(da)
 
-        if self.calc_type == "psd" and self.calc_opts.get("frequency_type") == "block":
+        if self.calc_type == calc and self.calc_opts.get("frequency_type") == "block":
             da = da.mean(dim="frequency", keep_attrs=True)
 
         return da
     
 
-class CoherenceMethods:
+class CoherenceMethods(SpectralDensityMethods):
 
     def get_psd_(self):
 
         regions_data = dict(zip(self.regions, self.regions_data))
-        out = {region: self.psd_from_contiguous_data(data) 
+        out = {region: self.spectral_density_calc([data], "psd", psd) 
                for region, data in regions_data.items()}
         ds = xr.Dataset(out)
         return ds
     
     def get_csd_(self):
 
-        args = self.welch_and_coherence_args('csd')
-        fs = self.to_float(self.lfp_sampling_rate, unit="Hz")
-
-        f, val = cross_spectral_density(*self.regions_data, fs, **args)
-        da = xr.DataArray(val, dims=['frequency'], coords={'frequency': f})
-        da = self.frequency_selector(da)
-
-        if self.calc_type == 'csd' and self.calc_opts.get('frequency_type') == 'block':
-            da = da.mean(dim='frequency', keep_attrs=True)
-
-        return da
+        return self.spectral_density_calc(
+            self.regions_data, "csd", cross_spectral_density)
     
     def get_coherence_(self):
         Sxx, Syy = list(self.get_psd().data_vars.values())
@@ -161,7 +191,7 @@ class CoherenceMethods:
             da.attrs['space'] = 'z'
 
         if self.calc_opts.get('frequency_type', 'continuous') == 'block':
-            da = da.mean(dim='frequency', keep_attrs=True) 
+            da = da.mean(dim='freq_bin', keep_attrs=True) 
           
         return da
            

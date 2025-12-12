@@ -8,8 +8,6 @@ import os
 import re
 from pathlib import PosixPath
 import xarray as xr
-import pint
-import pint_xarray
 
 from k_onda.utils import  safe_make_dir
 from k_onda.math import Filter
@@ -301,11 +299,12 @@ class Base:
     def shared_filters(self):
         return Base._shared_filters
     
-    @staticmethod
-    def filter_key(cfg: dict):
+    def filter_key(self, cfg: dict):
         # Only params that change coefficients go in the key
         return (
-            float(cfg["fs"]), float(cfg["low"]), float(cfg["high"]),
+            self.to_float(cfg["fs"]), 
+            self.to_float(cfg["low"]), 
+            self.to_float(cfg["high"]),
             cfg.get("method", "fir_hamming"),
             cfg.get("numtaps"),
             cfg.get("iir_order"),

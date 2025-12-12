@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import os
 import numpy as np
+import pint
 
-from k_onda.utils import save, load, PrepMethods
+from k_onda.utils import save, PrepMethods
 from k_onda.interfaces import PhyInterface
 from .data_structures import Unit
 
@@ -28,24 +29,32 @@ class SpikePrepMethods(PrepMethods):
         if 'get_units_from_phy' in units_info.get('instructions', []):
             self.get_units_from_phy()
 
+    
         for category in [cat for cat in ['good', 'MUA'] if cat in units_info]:
             for unit_info in units_info[category]:
-                unit_kwargs = {kw: unit_info[kw] for kw in ['waveform', 'neuron_type', 'quality', 'firing_rate', 'fwhm']}
-                unit = Unit(self, category, unit_info['spike_times'], unit_info['cluster'], 
+                spike_times = unit_info['spike_times']
+                if not isinstance(spike_times, pint.Quantity):
+                    spike_times = self.quantity(
+                        spike_times, 
+                        units='second',
+                        dims=('spike',), 
+                        name='spike_times')
+                unit_kwargs = {kw: unit_info[kw] for kw in [
+                    'waveform', 'neuron_type', 'quality', 'firing_rate', 'fwhm']}
+                unit = Unit(self, category, spike_times, unit_info['cluster'], 
                             experiment=self.experiment, **unit_kwargs)
                 if unit.neuron_type:
                     getattr(self, unit.neuron_type).append(unit)
 
     def get_units_from_phy(self):
-        saved_calc_exists, units, pickle_path = load(
-            os.path.join(self.construct_path('spike'), 'units_from_phy.pkl'), 'pkl'
+        saved_calc_exists, units, store_path = self.load(
+            'spike', 'units_from_phy', [self.identifier]
         )
         
         if saved_calc_exists:
             for unit in units:
                 Unit(self, unit['group'], unit['spike_times'], unit['cluster'], 
-                    waveform=unit['waveform'], experiment=self.experiment, 
-                    firing_rate=unit['firing_rate'], fwhm=unit['fwhm'])
+                    waveform=unit['waveform'], experiment=self.experiment, fwhm=unit['fwhm'])
         else:
             phy_path = self.construct_path('phy')
             phy_interface = PhyInterface(phy_path, self)
@@ -102,12 +111,21 @@ class SpikePrepMethods(PrepMethods):
                     plt.legend()
                     plt.savefig(os.path.join(phy_path, f"{self.identifier}_{cluster}_waveform.png"))
                     
+                    spike_times = self.quantity(
+                        info['spike_times'], 
+                        units='second',
+                        dims=('spike',), 
+                        name='spike_times')
+                    
                     # Create unit and add attributes
-                    unit = Unit(self, info['group'], info['spike_times'], cluster,
-                                waveform=waveform, experiment=self.experiment, fwhm=fwhm)
+                    unit = Unit(self, info['group'], spike_times, cluster, waveform=waveform, 
+                                experiment=self.experiment, fwhm=fwhm)
 
                     # Append to units list
-                    units.append(info | {'waveform': waveform, 'fwhm': fwhm})
+                    units.append(
+                        info | {'waveform': waveform, 'fwhm': fwhm, 'spike_times': spike_times})
             
-            save(units, pickle_path, 'pkl')
+            # todo: why is anything still using save instead of self.save?
+            # fix this.
+            save(units, store_path, 'pkl')
 

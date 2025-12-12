@@ -8,7 +8,6 @@ from .utils import write_lfp_files
 
 
 
-
 PSTH_CALC_OPTS = PSTH_OPTS['calc_opts']
 PSTH_CALC_OPTS['row_type'] = 'spike_period'
 PSTH_CALC_OPTS['calc_type'] = 'firing_rates'

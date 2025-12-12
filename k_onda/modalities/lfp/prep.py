@@ -102,13 +102,11 @@ class LFPPrepMethods(PrepMethods):
         if region in self._processed_lfp:
             self._processed_lfp.pop(region)
 
- 
-
     @property
     def filter(self):
       
         notch_cfg = {
-            "fs": self.lfp_sampling_rate,
+            "fs": self.to_float(self.lfp_sampling_rate),
             "low": 59.0, "high": 61.0,  
             "method": "iir_notch",
             "notch_Q": 30,

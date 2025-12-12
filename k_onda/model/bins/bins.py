@@ -7,34 +7,35 @@ from ..data import Data
 
 class Bin(Data):
     
-    def __init__(self, index, val, parent, parent_data):
+    def __init__(self, index, parent, parent_data):
         self.identifier = index
-        self.val = val
         self.parent = parent
         self.parent_data = parent_data
         self.period_type = copy(self.selected_period_type)
-
-    @property
-    def calc(self):
-        return self.val
 
 
 class TimeBin(Bin):
 
     _name = 'time_bin'
 
-    def __init__(self, index, val, parent, parent_data):
-        super().__init__(index, val, parent, parent_data) 
+    def __init__(self, index, parent, parent_data):
+        super().__init__(index, parent, parent_data) 
         self.period_type = self.parent.period_type
-        self.time = parent_data.isel(time_bin=index)
+        self.parent = parent
+        self.parent_data = parent_data
+
+    @property
+    def calc(self):
+        # Index only when you actually need the data
+        return self.parent_data.isel(time_bin=self.identifier)
 
 
 class TimeBinMethods:
          
     def get_time_bins(self, data):
-        if data.ndim > 1 and all(dim > 1 for dim in data.shape):
-            return [TimeBin(i, slice_, self, data) for i, slice_ in enumerate(data[..., -1])]
-        return [TimeBin(i, data_point, self, data) for i, data_point in enumerate(data)]
+        # Assume time dimension is named "time_bin"
+        n_bins = data.sizes["time_bin"]
+        return [TimeBin(i, self, data) for i in range(n_bins)]
 
     @property
     def time_bins(self):
@@ -45,9 +46,14 @@ class FrequencyBin(Bin, TimeBinMethods):
 
     _name = 'frequency_bin'
 
-    def __init__(self, index, val, parent, parent_data):
-        super().__init__(index, val, parent, parent_data)  
+    def __init__(self, index, parent, parent_data):
+        super().__init__(index, parent, parent_data)  
         self.frequency = parent_data.coords['frequency'][index] 
+
+    @property
+    def calc(self):
+        # Index only when you actually need the data
+        return self.parent_data.isel(freq_bin=self.identifier)
 
     @property
     def mean_data(self):
@@ -58,11 +64,9 @@ class FrequencyBin(Bin, TimeBinMethods):
     
 class FrequencyBinMethods:
 
-    # TODO: consider whether in the future if the possible dimensionality of data grows 
-    # you are really going to need explicit trackers of what dim is what.
-
     def get_frequency_bins(self, data):
-        return [FrequencyBin(i, data_point, self, data) for i, data_point in enumerate(data)]
+        n_bins = data.sizes["freq_bin"]
+        return [FrequencyBin(i, self, data) for i in range(n_bins)]
 
     @property
     def frequency_bins(self):
