@@ -29,6 +29,8 @@ class DescendentCache:
         ev_cfg = self.calc_opts.get('events', {}).get(self.period_type, {})
         pre  = ev_cfg.get('pre_event', self.pre_event)
         post = ev_cfg.get('post_event', self.post_event)
+        pre  = ev_cfg.get('pre_event', self.pre_event)
+        post = ev_cfg.get('post_event', self.post_event)
 
         return to_hashable(self._base_key() + (pre, post))
     
@@ -68,6 +70,7 @@ class DescendentCache:
             max_size=self.max_segment_cache,
         )
 
+
 class EventValidation:
     
     def get_event_validity(self, region):
@@ -92,6 +95,7 @@ class EventValidation:
         
         n_events = len(period.event_starts_in_period_time)
 
+        valid_vec = self.get_valid_vec(ev_ok, period)
         valid_vec = self.get_valid_vec(ev_ok, period)
 
         # Find contiguous runs of True

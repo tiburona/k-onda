@@ -51,6 +51,20 @@ class LFPMethods(TransformRegistryMixin):
         fmask = (f >= low) & (f <= high)
         return da.sel(freq_bin=fmask)
     
+        """
+        Select a frequency band using pint-aware, unitful comparisons.
+
+        Expects:
+        - da['frequency'] as a pint-xarray coord in Hz
+        - self.freq_range as a 2-element pint-xarray in Hz with edge=('low','high')
+        - self.tolerance as a pint-xarray scalar in Hz
+        """
+        low = (self.freq_range.sel(edge="low") - self.tolerance).pint.to("Hz")
+        high = (self.freq_range.sel(edge="high") + self.tolerance).pint.to("Hz")
+        f = da["frequency"].pint.to("Hz")
+        fmask = (f >= low) & (f <= high)
+        return da.sel(freq_bin=fmask)
+    
     def resample(data, fs, new_fs, axis=-1):
         data_rs = mne.filter.resample(
             data,
@@ -61,6 +75,7 @@ class LFPMethods(TransformRegistryMixin):
         return data_rs, new_fs
  
     def get_power(self):
+        return self.resolve_calc_fun('power', stop_at=self.calc_opts.get('base', 'event'))
         return self.resolve_calc_fun('power', stop_at=self.calc_opts.get('base', 'event'))
     
     def get_amp_xcorr(self):
@@ -87,11 +102,17 @@ class LFPMethods(TransformRegistryMixin):
         elif self.calc_type == 'coherence':
             if isinstance(self.calc_opts.get('base'), dict):
                 base = self.calc_opts['base'].get(calc_type)
+                base = self.calc_opts['base'].get(calc_type)
             if base is None:
                 base = 'segment' if self.calc_opts.get('validate_events') else 'calculator'
         else:
             raise ValueError(f"Why are you trying to calculate {calc_type}?")
+            raise ValueError(f"Why are you trying to calculate {calc_type}?")
         
+        return base
+
+    def get_psd(self):
+        base = self.get_base_of_coherence_constituent('psd')
         return base
 
     def get_psd(self):
@@ -99,6 +120,7 @@ class LFPMethods(TransformRegistryMixin):
         return self.resolve_calc_fun('psd', stop_at=base)
 
     def get_csd(self):
+        base = self.get_base_of_coherence_constituent('csd')  
         base = self.get_base_of_coherence_constituent('csd')  
         return self.resolve_calc_fun('csd', stop_at=base)
 

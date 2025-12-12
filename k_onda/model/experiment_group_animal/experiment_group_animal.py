@@ -2,6 +2,8 @@ from collections import defaultdict
 import functools
 import pint
 import pint_xarray
+import pint
+import pint_xarray
 
 
 from ..bins import BinMethods
