@@ -200,7 +200,7 @@ class Filter:
         # compute a safe runtime padlen based on input length.
         N = int(cfg.get("N", 0))
 
-        design, meta = _design_filter(float(fs), float(f_lo), float(f_hi), int(N), cfg)
+        design, meta = _design_filter(fs, f_lo, f_hi, int(N), cfg)
         self.meta = meta
         self._kind = design["type"]
         self._b = design.get("b")

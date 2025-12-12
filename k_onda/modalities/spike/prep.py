@@ -37,15 +37,14 @@ class SpikePrepMethods(PrepMethods):
                     getattr(self, unit.neuron_type).append(unit)
 
     def get_units_from_phy(self):
-        saved_calc_exists, units, pickle_path = load(
-            os.path.join(self.construct_path('spike'), 'units_from_phy.pkl'), 'pkl'
+        saved_calc_exists, units, store_path = self.load(
+            'spike', 'units_from_phy', [self.identifier]
         )
         
         if saved_calc_exists:
             for unit in units:
                 Unit(self, unit['group'], unit['spike_times'], unit['cluster'], 
-                    waveform=unit['waveform'], experiment=self.experiment, 
-                    firing_rate=unit['firing_rate'], fwhm=unit['fwhm'])
+                    waveform=unit['waveform'], experiment=self.experiment, fwhm=unit['fwhm'])
         else:
             phy_path = self.construct_path('phy')
             phy_interface = PhyInterface(phy_path, self)
@@ -102,12 +101,19 @@ class SpikePrepMethods(PrepMethods):
                     plt.legend()
                     plt.savefig(os.path.join(phy_path, f"{self.identifier}_{cluster}_waveform.png"))
                     
+                    spike_times = self.quantity(
+                        info['spike_times'], 
+                        units='second',
+                        dims=('spike',), 
+                        name='spike_times')
+                    
                     # Create unit and add attributes
-                    unit = Unit(self, info['group'], info['spike_times'], cluster,
-                                waveform=waveform, experiment=self.experiment, fwhm=fwhm)
+                    unit = Unit(self, info['group'], spike_times, cluster, waveform=waveform, 
+                                experiment=self.experiment, fwhm=fwhm)
 
                     # Append to units list
-                    units.append(info | {'waveform': waveform, 'fwhm': fwhm})
+                    units.append(
+                        info | {'waveform': waveform, 'fwhm': fwhm, 'spike_times': spike_times})
             
-            save(units, pickle_path, 'pkl')
+            save(units, store_path, 'pkl')
 
