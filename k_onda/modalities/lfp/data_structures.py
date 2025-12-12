@@ -137,6 +137,8 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
     def get_segments(self):
         segments = self._get_cache(self._segments, self._segment_key())
         if segments is None:
+            # todo: it would be nice to warn or error here if you open a pkl with
+            # a different structure than your current experiment
             ev_ok = self.get_event_validity(self.selected_brain_region)
             do_pad = self.calc_type not in ['coherence', 'psd']
             data = self.padded_data if do_pad else self.unpadded_data

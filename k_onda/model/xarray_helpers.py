@@ -16,18 +16,18 @@ def drop_inconsistent_coords(arrs, tol=1e-8):
     coord_names = set.intersection(*(set(a.coords) for a in arrs))
 
     for name in coord_names:
-        ref_vals = arrs[0].coords[name].values
+        ref_vals = arrs[0].coords[name].pint.magnitude
 
         # --- skip if this coord is already 'None' in any array ----------
         if _is_none_coord(ref_vals):
             continue
-        if any(_is_none_coord(a.coords[name].values) for a in arrs[1:]):
+        if any(_is_none_coord(a.coords[name].pint.magnitude) for a in arrs[1:]):
             continue
 
 
         # --- if values differ, normalise them ---------------------------
         if not all(name in a.coords and
-                   np.allclose(a.coords[name].values, ref_vals, atol=tol)
+                   np.allclose(a.coords[name].pint.magnitude, ref_vals, atol=tol)
                    for a in arrs[1:]):
 
             for i, a in enumerate(cleaned):
@@ -70,7 +70,7 @@ def round_coords(arrs, *, decimals=8):
     ref = arrs[0]
     rounded_refs = {}
     for name in common:
-        vals = ref.coords[name].values
+        vals = ref.coords[name].pint.magnitude
         if np.issubdtype(vals.dtype, np.number):
             rounded_vals = np.round(vals, decimals=decimals)
             dims = ref.coords[name].dims        # ('time',) or ('y','x'), etc.
@@ -175,11 +175,15 @@ class XMean:
 
                 w_aligned = w_aligned / w_aligned.sum(dim=dim)
                 da_aligned, w_aligned = xr.align(da, w_aligned, join="exact", copy=False)
-                return (da_aligned * w_aligned).sum(dim=dim, skipna=True, keep_attrs=True)
+                weighted = da_aligned * w_aligned
+                result = weighted.sum(dim=dim, skipna=True, keep_attrs=True)
+                return result.assign_attrs(da.attrs)
 
             w_norm = w / w.sum()
             da_b, w_b = xr.broadcast(da, w_norm)
-            return (da_b * w_b).sum(skipna=True, keep_attrs=True)
+            weighted = da_b * w_b
+            result = weighted.sum(skipna=True, keep_attrs=True)
+            return result.assign_attrs(da.attrs)
 
         if isinstance(obj, xr.Dataset):
             data_vars = {k: _apply_mean(v) for k, v in obj.data_vars.items()}
