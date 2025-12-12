@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import os
 import numpy as np
+import pint
 
-from k_onda.utils import save, load, PrepMethods
+from k_onda.utils import save, PrepMethods
 from k_onda.interfaces import PhyInterface
 from .data_structures import Unit
 
@@ -28,10 +29,19 @@ class SpikePrepMethods(PrepMethods):
         if 'get_units_from_phy' in units_info.get('instructions', []):
             self.get_units_from_phy()
 
+    
         for category in [cat for cat in ['good', 'MUA'] if cat in units_info]:
             for unit_info in units_info[category]:
-                unit_kwargs = {kw: unit_info[kw] for kw in ['waveform', 'neuron_type', 'quality', 'firing_rate', 'fwhm']}
-                unit = Unit(self, category, unit_info['spike_times'], unit_info['cluster'], 
+                spike_times = unit_info['spike_times']
+                if not isinstance(spike_times, pint.Quantity):
+                    spike_times = self.quantity(
+                        spike_times, 
+                        units='second',
+                        dims=('spike',), 
+                        name='spike_times')
+                unit_kwargs = {kw: unit_info[kw] for kw in [
+                    'waveform', 'neuron_type', 'quality', 'firing_rate', 'fwhm']}
+                unit = Unit(self, category, spike_times, unit_info['cluster'], 
                             experiment=self.experiment, **unit_kwargs)
                 if unit.neuron_type:
                     getattr(self, unit.neuron_type).append(unit)
@@ -115,5 +125,7 @@ class SpikePrepMethods(PrepMethods):
                     units.append(
                         info | {'waveform': waveform, 'fwhm': fwhm, 'spike_times': spike_times})
             
+            # todo: why is anything still using save instead of self.save?
+            # fix this.
             save(units, store_path, 'pkl')
 
