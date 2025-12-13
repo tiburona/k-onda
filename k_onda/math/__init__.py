@@ -1,5 +1,5 @@
 
-from .coherence import (psd, cross_spectral_density, 
+from .coherence import (welch_psd, welch_csd, multitaper_csd, multitaper_psd,
     msc_from_spectra, fisher_z_from_coherence, fisher_z_from_msc, 
     back_transform_fisher_z)
 from .correlation import normalized_xcorr, pearson_xcorr

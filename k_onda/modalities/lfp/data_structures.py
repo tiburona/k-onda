@@ -5,7 +5,7 @@ from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
 from scipy.signal.windows import tukey
 
-from k_onda.math import apply_hilbert_to_padded_data, psd
+from k_onda.math import apply_hilbert_to_padded_data, welch_psd
 from k_onda.model.period_event import Period, Event
 from k_onda.model import Data
 from k_onda.model.bins import TimeBin
@@ -292,7 +292,7 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
         return [len(seg.unpadded_data) for seg in self.segments]
     
     def get_psd_(self):
-        return self.spectral_density_calc([self.unpadded_data], 'psd', psd)
+        return self.spectral_density_calc([self.unpadded_data], 'psd', welch_psd)
 
 
 class PeriodSegment(Data, LFPMethods, SpectralDensityMethods):
@@ -303,7 +303,7 @@ class PeriodSegment(Data, LFPMethods, SpectralDensityMethods):
         self.unpadded_data = data
 
     def get_psd_(self):
-        return self.spectral_density_calc(self.unpadded_data, 'psd', psd)
+        return self.spectral_density_calc(self.unpadded_data, 'psd', welch_psd)
 
 
 class LFPEvent(Event, LFPMethods, LFPProperties):
