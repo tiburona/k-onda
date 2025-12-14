@@ -228,6 +228,8 @@ class CoherenceMethods(SpectralDensityMethods):
         return self.spectral_density_calc(self.regions_data, "csd")
 
     def get_psd_and_csd_(self):
+        # This eventually calls a function that saves time by calculating the complexly valued 
+        # PSD as the input to CSD so you don't calculate PSD twice.
         return self.spectral_density_calc(self.regions_data, "psd_and_csd")
 
     def get_coherence_(self):

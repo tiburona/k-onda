@@ -129,5 +129,5 @@ Others may request access via email.
 
 ## Status
 
-K-Onda is in active development.
+K-Onda is in active development. You can read the roadmap [here](/docs/Roadmap.md). 
 

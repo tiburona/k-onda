@@ -14,3 +14,5 @@
 ## Performance
 
 - Multitaper calculations of coherence events are very slow, and would be faster if they were vectorized.  Event can be a public abstraction that's actually an index into periods or segments.  Should all events be represented the same way?  
+
+- Caching needs to be reviewed. That method should be moved out of utils, perhaps into core.  It's applied very narrowly right now and some obvious uses for caching just never touch it.  It needs reviewing whether period type always works right in the "selected_period_types" case.  There's a depth switch which is apparently not being used right now and that should be reviewed too.     
