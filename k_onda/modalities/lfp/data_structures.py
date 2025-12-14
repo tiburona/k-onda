@@ -1,3 +1,4 @@
+
 from collections import OrderedDict
 import numpy as np
 import xarray as xr
@@ -5,7 +6,7 @@ from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
 from scipy.signal.windows import tukey
 
-from k_onda.math import apply_hilbert_to_padded_data, welch_psd
+from k_onda.math import apply_hilbert_to_padded_data, psd
 from k_onda.model.period_event import Period, Event
 from k_onda.model import Data
 from k_onda.model.bins import TimeBin
@@ -113,15 +114,10 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
     
     @property
     def children(self):
-        if (self.calc_type in ['coherence', 'psd'] 
-            and self.calc_opts.get('validate_events') == True
-            and self.calc_opts.get('coherence_params', {}).get('method') != 'multitaper'):
+        if self.calc_type in ['coherence', 'psd'] and self.calc_opts.get('validate_events') == True:
             return self.get_segments()
         else:
-            events = self.get_events()  
-            if self.calc_opts.get('validate_events'):
-                events = [e for e in events if e.is_valid()] 
-            return events       
+            return self.get_events()          
 
     def get_events(self):
 
@@ -297,7 +293,7 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
         return [len(seg.unpadded_data) for seg in self.segments]
     
     def get_psd_(self):
-        return self.spectral_density_calc([self.unpadded_data], 'psd', welch_psd)
+        return self.spectral_density_calc([self.unpadded_data], 'psd', psd)
 
 
 class PeriodSegment(Data, LFPMethods, SpectralDensityMethods):
@@ -308,7 +304,7 @@ class PeriodSegment(Data, LFPMethods, SpectralDensityMethods):
         self.unpadded_data = data
 
     def get_psd_(self):
-        return self.spectral_density_calc(self.unpadded_data, 'psd', welch_psd)
+        return self.spectral_density_calc(self.unpadded_data, 'psd', psd)
 
 
 class LFPEvent(Event, LFPMethods, LFPProperties):
@@ -422,10 +418,7 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
             if 'event' in base:
                 if self.pre_event + self.post_event == 0:
                     raise ValueError("Event has no duration")
-                events = self.get_events()
-                # Todo: this assumes that an event is long enough for multitaper.  This might not always be true.
-
-                return [e for e in events if e.is_valid()]
+                return self.get_events()
             else:
                 return self.get_segments()
         else:
