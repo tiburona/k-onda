@@ -16,7 +16,6 @@ from .math_functions import (
     get_fwhm,
     extreme_point,
     downsample,
-    calc_coherence,
     regularize_angles,
     nearest_power_of_10,
     get_round_decimals,

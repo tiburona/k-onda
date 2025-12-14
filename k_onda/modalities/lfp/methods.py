@@ -89,18 +89,13 @@ class LFPMethods(TransformRegistryMixin):
             )
 
     def get_base_of_coherence_constituent(self, calc_type):
-        base = None
-        if self.calc_type == calc_type:
-            base = self.calc_opts.get("base")
-            if base is None:
-                base = "segment" if self.calc_opts.get("validate_events") else "period"
-        elif self.calc_type == "coherence":
-            if isinstance(self.calc_opts.get("base"), dict):
-                base = self.calc_opts["base"].get(calc_type)
-            if base is None:
-                base = "segment" if self.calc_opts.get("validate_events") else "calculator"
-        else:
-            raise ValueError(f"Why are you trying to calculate {calc_type}?")
+        base = self.calc_opts.get("base")
+        if isinstance(base, dict):
+            base = self.calc_opts["base"].get(calc_type)
+        
+        if base is None:
+            base = "segment" if self.calc_opts.get("validate_events") else "calculator"
+            
         return base
 
     def get_psd(self):
@@ -112,11 +107,11 @@ class LFPMethods(TransformRegistryMixin):
         return self.resolve_calc_fun("csd", stop_at=base)
 
     def get_coherence(self):
-        stop_at = self.calc_opts.get("base", "coherence_calculator")
-        return self.resolve_calc_fun("coherence", stop_at=stop_at)
+        base = self.get_base_of_coherence_constituent("coherence")
+        return self.resolve_calc_fun("coherence", stop_at=base)
     
     def get_psd_and_csd(self):
-        stop_at = self.calc_opts.get("base", "coherence_calculator")
+        stop_at = self.get_base_of_coherence_constituent("psd_and_csd")
         return self.resolve_calc_fun("psd_and_csd", stop_at=stop_at)
 
 
@@ -132,7 +127,7 @@ class SpectralDensityMethods:
 
         das = []
         for return_val in return_vals:
-            da = self.wrap_calc_in_da(f, return_val, method, units="V^2/Hz")
+            da = self.wrap_calc_in_da(f, return_val, method, calc, units="V^2/Hz")
             da = self.trim_da(da, calc)
             das.append(da)
 
@@ -141,7 +136,7 @@ class SpectralDensityMethods:
         else:
             return das[0]
 
-    def wrap_calc_in_da(self, f, val, method, units=None):
+    def wrap_calc_in_da(self, f, val, method, calc, units=None):
         frequency, freq_bin = self.frequency_and_freq_bin(f)
 
         da = xr.DataArray(
@@ -151,7 +146,7 @@ class SpectralDensityMethods:
                 "freq_bin": freq_bin,    # unitless bin index
                 "frequency": frequency,  # unitful Hz coord
             },
-            attrs={"units": units, "method": method},
+            attrs={"units": units, "method": method, "calc": calc},
         )
         return da
     
@@ -218,22 +213,6 @@ class SpectralDensityMethods:
 
         return method, func, args, []
 
-    def get_spectral_func_and_args(self, calc):
-
-        method = self.calc_opts.get("coherence_params", {}).get("method", "welch").lower()
-        args = getattr(self, f'{method}_args')(calc)
-        return_val_names = []
-        if calc == "psd":
-            func = welch_psd if method == "welch" else multitaper_psd
-        elif calc == "csd":
-            func = welch_csd if method == "welch" else multitaper_csd
-        elif calc == "psd_and_csd":
-            func = multitaper_csd
-            return_val_names = ["Sxy", "Sxx", "Syy"]
-        else:
-            raise ValueError("Unknown calc")
-        return method, func, args, return_val_names
-
 
 class CoherenceMethods(SpectralDensityMethods):
 
@@ -268,7 +247,7 @@ class CoherenceMethods(SpectralDensityMethods):
         coherence = msc_from_spectra(Sxx=Sxx, Syy=Syy, Sxy=Sxy)
 
         f = Sxy.coords["frequency"].pint.to("Hz").data.magnitude
-        da = self.wrap_calc_in_da(f, coherence, method, units=1)
+        da = self.wrap_calc_in_da(f, coherence, method, "coherence", units=1)
 
         da = self.trim_da(da, "coherence")
 

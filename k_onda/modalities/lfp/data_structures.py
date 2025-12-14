@@ -113,10 +113,15 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
     
     @property
     def children(self):
-        if self.calc_type in ['coherence', 'psd'] and self.calc_opts.get('validate_events') == True:
+        if (self.calc_type in ['coherence', 'psd'] 
+            and self.calc_opts.get('validate_events') == True
+            and self.calc_opts.get('coherence_params', {}).get('method') != 'multitaper'):
             return self.get_segments()
         else:
-            return self.get_events()          
+            # Todo: this assumes that an event is long enough for multitaper.  This might not always be true.
+            events = self.get_events()  
+            if self.calc_opts.get('validate_events'):
+                events = [e for e in events if e.is_valid()]        
 
     def get_events(self):
 
@@ -417,7 +422,8 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
             if 'event' in base:
                 if self.pre_event + self.post_event == 0:
                     raise ValueError("Event has no duration")
-                return self.get_events()
+                events = self.get_events()
+                return [e for e in events if e.is_valid()]
             else:
                 return self.get_segments()
         else:
