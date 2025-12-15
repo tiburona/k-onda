@@ -26,7 +26,7 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
 
         legend = self.info[0]['last_spec'].get('legend', {})
         cells_with_legend = []
-        local_line_index = defaultdict(int)
+        local_index = defaultdict(int)
 
         for i, entry in enumerate(self.info):
             cell = entry['cell']
@@ -40,9 +40,9 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
             self.apply_ax_args(cell, ax_args, i)
 
             if legend:
-                line_idx = local_line_index[id(cell)]
+                line_idx = local_index[id(cell)]
                 self.record_entry_for_legend(entry, line_idx, legend, cells_with_legend)
-                local_line_index[id(cell)] += 1
+                local_index[id(cell)] += 1
       
         if legend:
             self.make_legend(set(cells_with_legend), legend)
