@@ -41,7 +41,8 @@ def cache_method(method):
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
 
-        cache_level = self.calc_opts.get('cache', 2)
+        # TODO it seems like this is doing nothing right now. Think about putting it back. 
+        cache_level = self.calc_opts.get('cache', 2) 
         if cache_level == -1: # Do not cache
             return method(self, *args, **kwargs)
 
@@ -67,6 +68,7 @@ def cache_method(method):
             key_list.append(obj.name)
             key_list.append(obj.identifier)
         
+        # TODO: does this work for selected period types?
         if self.selected_period_type in self.calc_opts.get('periods', {}):
             key_list.append(str(self.calc_opts['periods'][self.selected_period_type]))
 

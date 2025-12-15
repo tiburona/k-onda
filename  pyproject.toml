@@ -1,2 +1,0 @@
-[tool.setuptools]
-exclude = ["devtools*", "scripts*"]

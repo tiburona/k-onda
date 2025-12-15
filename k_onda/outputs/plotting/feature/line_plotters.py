@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import xarray
 
 from .feature_plotter import FeaturePlotter
 from k_onda.utils import safe_get
@@ -12,31 +13,22 @@ class LinePlotter(FeaturePlotter):
 
     def coord_vals(self, val, aesthetic_args):
         """Returns the x-coordinates for the plot. Assumes val is a 1D array."""
-        if isinstance(val, np.ndarray):
-            return np.arange(len(val))
-        x_coord = safe_get(aesthetic_args, ['tick_labels', 'x', 'x_coord'])
-        if x_coord is not None:
-            return val.coords[x_coord]
-        keys = list(val.coords.keys())
-        if keys:
-            return val.coords[keys[0]].values
-        elif hasattr(val, 'coords'):
-            # Try to determine the first dimension name.
-            if hasattr(val, 'dims'):
-                dims = val.dims
-                if isinstance(dims, (tuple, list)):
-                    first_dim = dims[0]
-                else:
-                    # dims is a mapping (e.g. dict-like), so get the first key.
-                    first_dim = list(dims.keys())[0]
-                if first_dim in val.coords:
-                    return val.coords[first_dim].values
-            
+        if isinstance(val, xarray.DataArray) or isinstance(val, xarray.Dataset):
+            x_coord = safe_get(aesthetic_args, ['tick_labels', 'x', 'x_coord'])
+            if x_coord is not None:
+                return val.coords[x_coord]
+            if hasattr(val, 'coords') and val.coords:
+                return val.coords.values()[0].pint.data.magnitude
             else:
-                raise ValueError("No coordinates found in the provided xarray object.")
+                if isinstance(val, xarray.DataArray):
+                    return np.arange(len(val))
+                else:
+                    da = next(iter(val.data_vars.values()))
+                    return np.arange(len(da))
         else:
-            raise ValueError("Unsupported data type for coord_vals.")
-    
+            return np.arange(len(val.data_vars.values()))
+
+
     def plot_entry(self, ax, val, aesthetic_args=None):
         ax.plot(self.coord_vals(val, aesthetic_args), val, label='', **aesthetic_args.get('marker', {}))
 
@@ -57,7 +49,7 @@ class VerticalLinePlotter(LinePlotter):
 
         if aesthetic_args.get('line_length_multiplier'):
             line_length_multiplier = aesthetic_args['line_length_multiplier']
-        elif keys[1] in ['sem', 'std']:
+        elif keys[1] in ['sem', 'std', 'sem_envelope']:
             # we want SEM vertical lines to extend the length of the sem above and below the point
             line_length_multiplier = 1.0
         else:

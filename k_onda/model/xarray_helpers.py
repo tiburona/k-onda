@@ -212,8 +212,6 @@ class XMean:
         if axis is None:
             if isinstance(child_vals, xr.DataArray):
                 return self._maybe_weighted_mean(child_vals, dim=None, weights=weights)
-
-            agg = self.clean_and_aggregate(child_vals)
             return self._maybe_weighted_mean(agg, dim="child")
 
         # axis provided

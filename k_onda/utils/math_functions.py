@@ -273,17 +273,6 @@ def downsample(data, orig_freq, dest_freq):
     ratio = round(orig_freq / dest_freq)
     return filtered_data[::ratio]
 
-def calc_coherence(data_1, data_2, sampling_rate, low, high):
-
-    nperseg = 2000  
-    noverlap = round(nperseg/2)
-    window = 'hann'  # Window type
-    f, Cxy = coherence(data_1, data_2, fs=sampling_rate, window=window, nperseg=nperseg, 
-                       noverlap=noverlap)
-    mask = (f >= low) & (f <= high)
-    return f[mask], Cxy[mask]
-
-
 
 def regularize_angles(x):
     regularize = np.vectorize(lambda x: np.arctan2(np.sin(x), np.cos(x)))

@@ -319,7 +319,7 @@ class Aggregates(XMean):
                         new_time = np.arange(result.sizes["time_bin"])
                     if dim_xform:
                         new_time = eval(dim_xform)(new_time)
-                    
+                    result.assign_coords(time=('time_bin', new_time))
                     return result
 
                 else:
