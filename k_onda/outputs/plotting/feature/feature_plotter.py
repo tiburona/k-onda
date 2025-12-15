@@ -40,8 +40,8 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
             self.apply_ax_args(cell, ax_args, i)
 
             if legend:
-                line_idx = local_index[id(cell)]
-                self.record_entry_for_legend(entry, line_idx, legend, cells_with_legend)
+                idx = local_index[id(cell)]
+                self.record_entry_for_legend(entry, idx, legend, cells_with_legend)
                 local_index[id(cell)] += 1
       
         if legend:
