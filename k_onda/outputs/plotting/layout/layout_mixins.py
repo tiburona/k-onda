@@ -71,10 +71,6 @@ class AxShareMixin:
             getattr(w.obj, f"share{axis_key}")(anchor)
 
 
-
-    
-    
-
 class LegendMixin:
 
     # TODO: fix this.  It is broken.  The fundamental problem is: how does the user 

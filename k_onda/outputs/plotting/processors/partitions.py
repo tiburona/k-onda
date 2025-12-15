@@ -123,12 +123,18 @@ class Partition(Processor):
         self.set_label(cell, updated_info)
 
         if self.colorbar_for_each_plot:
-            self.legend_info_list.append((cell, self.colorbar_spec, [updated_info]))
+            self.legend_info_list.append((cell, self.colorbar_spec, [updated_info])) 
+
+        keep_existing_index = self.spec_type == 'segment' and 'index' in updated_info
+
+        if (not self.next or 'segment' in self.next) and not keep_existing_index:
+            updated_info['index'] = copy(self.current_index)          
 
         if not self.next:
             updated_info['cell'] = cell
-            updated_info['index'] = copy(self.current_index) 
             updated_info['last_spec'] = self.spec
+            if not keep_existing_index:
+                updated_info['index'] = copy(self.current_index)
             updated_info['attr'] = self.spec.get('attr', 'calc')
                        
             if self.layers:
@@ -196,7 +202,6 @@ class Series(Partition):
 class Section(Partition):
 
     name = 'section'
-  
     
     def __init__(self, config):
         super().__init__(config)
