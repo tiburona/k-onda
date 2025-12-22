@@ -79,6 +79,11 @@ class LFPMethods(TransformRegistryMixin):
         return self.get_average(
             "get_lag_of_max_corr", stop_at=self.calc_opts.get("base", "amp_xcorr_calculator")
         )
+    
+    def get_granger_causality(self):
+        return self.get_average(
+            "get_granger_causality", stop_at=self.calc_opts.get("base", "granger_causalityzs")
+        )
 
     def resolve_calc_fun(self, calc_type, stop_at=None):
         if not hasattr(self, "children") or len(self.children) == 0 or stop_at in self.name:

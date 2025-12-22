@@ -118,7 +118,7 @@ Build the pieces that allow K-Onda to grow.
 ### 14. Plotting and Figure Infrastructure (Phase 2 extensions)
 - Expand `Container` (currently a stub) to support non-data objects (JPEGs, SVGs, etc.)  
 - Reintroduce missing plot types from earlier versions: e.g., polar plots  
-- Identify any other electrophysiology-standard plots not yet supported  
+- Identify any other electrophysiology-standard plots not yet supported
 
 ---
 
@@ -185,14 +185,22 @@ Aspirational goals.
 
 ---
 
+
 ### 23. GUI for Publication-Ready Analysis
 - Cross-platform GUI for assembling figures  
 - Automatic embedding of provenance  
 - Drag-and-drop layout editing  
-- Live previews and stat-annotation overlays  
+- Live previews and stat-annotation overlays 
 
 ---
 
-### 23. AI-Assisted Statistical and Analytical Guidance
+### 24. API for Programmer-Scientists
+
+- Define and document a stable public API for K-Onda objects and methods so they can be used in external scripts and notebooks.
+- Optionally embed an IPython/Jupyter-style notebook view in K-Onda so experienced Python users can explore data while still keeping analysis history in one place.
+
+---
+
+### 25. AI-Assisted Statistical and Analytical Guidance
 - Suggest appropriate analyses  
 - Provide retrieval-augmented explanations referencing the user’s data  

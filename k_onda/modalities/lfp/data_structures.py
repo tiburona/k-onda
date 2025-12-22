@@ -3,6 +3,7 @@ import numpy as np
 import xarray as xr
 from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
+import json
 from scipy.signal.windows import tukey
 
 from k_onda.math import apply_hilbert_to_padded_data, welch_psd
@@ -530,7 +531,7 @@ class CoherenceCalculatorEvent(RelationshipCalculatorEvent, CoherenceMethods,
     _name = 'coherence_event'
 
     def __init__(self, period, onset, region_relationship_calculator, index):
-        super().__init__(period, onset,region_relationship_calculator, index)
+        super().__init__(period, onset, region_relationship_calculator, index)
 
 
 class CoherenceCalculator(RegionRelationshipCalculator, CoherenceMethods, LFPMethods):
@@ -617,91 +618,22 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
             lags = lags[m]
 
         return xr.DataArray(result, dims=['lag'], coords={'lag': lags})
-
-
-class GrangerFunctions:
-
-    def fetch_granger_stat(self, d1, d2, tags, proc_name, do_weight=True, max_len_sets=None):
-        ml = MatlabInterface(self.env_config['matlab_config'], tags=tags)
-        data = np.vstack(self.padded_regions_data)
-        proc = getattr(ml, proc_name)
-        result = proc(data)
-        if proc_name == 'granger_causality':
-            weight = len(d1)/max_len_sets if do_weight else 1
-            matrix = np.array(result[0]['f'])
-            index_1 = round(self.freq_range[0]*matrix.shape[2]/(self.sampling_rate/2)) 
-            index_2 = round(self.freq_range[1]*matrix.shape[2]/(self.sampling_rate/2)) + 1
-            forward = []
-            backward = []
-            if self.calc_opts.get('frequency_type') == 'continuous':
-                # check to make sure we have at least 1 Hz res data
-                nec_freqs = self.freq_range[1] - self.freq_range[0] + 1
-                if index_2 - index_1 < nec_freqs:
-                    forward = np.full(nec_freqs, np.nan)
-                    backward = np.full(nec_freqs, np.nan)
-                else:
-                     # TODO: this is more complicated than it need be given that we decided
-                     # to make the Granger calculation return whole number frequencies 
-                     #  Consider simplifying.
-                    for freq in range(self.freq_range[0], self.freq_range[1] + 1):
-                        for_bin = []
-                        back_bin = []
-                        for x in range(index_1, index_2): 
-                            if x >= freq + .5:
-                                break
-                            if x >= freq - .5 and x < freq + .5:
-                                for_bin.append(np.real(matrix[0, 1, x]))
-                                back_bin.append(np.real(matrix[1, 0, x]))
-                        forward.append(np.mean(for_bin)*weight)
-                        backward.append(np.mean(back_bin)*weight)
-            else:
-                forward.append(np.mean(
-                    [np.real(matrix[0,1,x]) for x in range(index_1, index_2+1)]) * weight)
-                backward.append(np.mean(
-                            [np.real(matrix[1,0,x]) for x in range(index_1, index_2+1)]) * weight)
-            result = (forward, backward)
-            if proc_name == 'ts_data_to_info_crit':
-                 result = (len(d1), result)
-        return result
     
     
-class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO: this is more complicated than it need be given that we went with 
+class GrangerCalculator(RegionRelationshipCalculator): 
 
     name = 'granger_calculator'
 
-    def get_events(self): # I need to add some pre event stuff ehre
-        events = []
-        d1, d2 = (self.region_1_data_padded, self.region_2_data_padded)
-        events_info = self.calc_opts.get('events')
-        if events_info is not None:
-            pre_stim = events_info[self.period_type].get('pre_stim', 0)
-            post_stim = events_info[self.period_type].get('post_stim', self.event_duration/self.sampling_rate)
-        for i, start in enumerate(range(0, len(d1), self.event_duration)):
-            slc = slice(*(int(start-pre_stim*self.sampling_rate), int(start+post_stim*self.sampling_rate)))
-            events.append(GrangerEvent(self, i, d1[slc], d2[slc]))
-        self._children = events
-
-    def get_segments(self):
-        segments = []
-        valid_sets, len_sets = self.get_valid_sets() 
-        min_set_length = self.calc_opts.get('min_data_length', 8000)
-        divisor = self.period.duration*self.sampling_rate
-        for i, (set1, set2) in enumerate(valid_sets):
-            len_set = len_sets[i]
-            divisor = int(len_set/min_set_length) + 1
-            segment_length = int(len_set/divisor)
-            for s in range(divisor):
-                if s != divisor - 1:
-                    data1 = set1[s*segment_length:(s+1)*segment_length]
-                    data2 = set2[s*segment_length:(s+1)*segment_length]
-                else:
-                    data1 = set1[s*segment_length:]
-                    data2 = set2[s*segment_length:]
-            segments.append(GrangerSegment(self, i, data1, data2, len_set))
-        return segments
 
     def get_granger_model_order(self):
         return self.granger_stat('ts_data_to_info_crit')
+    
+    def get_granger_diagnostics(self):
+        ml = MatlabInterface(self.env_config['matlab_config'])
+        fres_req = self.calc_opts.get('fres_req', 500)
+        result = ml.mvgc_run_with_diag(np.vstack(self.regions_data), fres_req, momax=100)
+        diag = json.loads(result[0]['result'][0].decode('utf-8'))
+        return diag
     
     def get_granger_causality(self):
         ids = [self.period.animal.identifier, self.period_type, str(self.period.identifier), 
@@ -709,56 +641,11 @@ class GrangerCalculator(RegionRelationshipCalculator, GrangerFunctions): # TODO:
         saved_calc_exists, saved_granger_calc, pickle_path = self.load('lfp_output', 'granger', ids)
         if saved_calc_exists:
             return saved_granger_calc
-        fstat = self.get_granger_stat('granger_causality')
-        if self.calc_opts.get('frequency_type') == 'continuous':
-            forward = np.sum(np.vstack([forward for forward, _ in fstat]), 0)
-            backward = np.sum(np.vstack([backward for _, backward in fstat]), 0)
-        else:
-            forward = sum([forward for forward, _ in fstat])
-            backward = sum([backward for _, backward in fstat])
-        result = {'forward': forward, 'backward': backward}
-        self.save(result, pickle_path)
-        return result
-    
-    def get_granger_stat(self, proc_name):
-        valid_sets, len_sets = self.get_valid_sets()
-        results = []
-        for i, (set1, set2) in enumerate(valid_sets):
-            if len(set1) > self.calc_opts.get('min_data_length', 8000):
-                tags = ['animal', str(self.period.animal.identifier), self.period_type, 
-                        self.period.identifier, 'set', str(i), str(self.selected_frequency_band)]
-                results.append(self.fetch_granger_stat(set1, set2, tags, proc_name, do_weight=True, 
-                                                       max_len_sets=max(len_sets)))
-        return results
+        ml = MatlabInterface(self.env_config['matlab_config'])
+        result = ml.granger_causality(self.regions_data)
+
+        a = 'foo'
+
+
     
 
-class GrangerSegment(Data, GrangerFunctions):
-
-    name = 'granger_segment'
-
-    def __init__(self, parent_calculator, i, data1, data2, len_set):
-        self.identifier = i
-        self.parent= parent_calculator
-        self.period = self.parent.period
-        self.period_id = self.period.identifier
-        self.period_type = self.parent.period_type
-        self.region_1_data = data1
-        self.region_2_data = data2
-        self.length = len_set
-
-    def get_granger_causality(self):
-        granger_stat = self.get_granger_stat('granger_causality')
-        return {'forward': np.array(granger_stat[0]), 'backward': np.array(granger_stat[1])}
-
-    def get_granger_stat(self, proc_name):
-        tags = ['animal', str(self.period.animal.identifier), self.period_type, 
-                str(self.period.identifier), 'segment', str(self.identifier), 
-                str(self.selected_frequency_band)]
-        saved_calc_exists, saved_granger_calc, pickle_path = self.load('lfp_output', 'granger', tags)
-        if saved_calc_exists:
-            return saved_granger_calc
-        else:
-            result = self.fetch_granger_stat(self.region_1_data, self.region_2_data, tags, proc_name, 
-                                         do_weight=False)
-            self.save(result, pickle_path)
-        return result
