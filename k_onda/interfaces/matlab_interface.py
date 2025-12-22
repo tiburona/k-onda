@@ -1,3 +1,5 @@
+import h5py
+import json
 import numpy as np
 import os
 import uuid
@@ -14,6 +16,9 @@ class MatlabInterface:
         self.path_to_matlab = config['path_to_matlab']
         self.paths_to_add = config.get('paths_to_add', [])
         self.recursive_paths_to_add = config.get('recursive_paths_to_add', [])
+        matlab_resource_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), '..', 'resources', 'matlab'))
+        self.recursive_paths_to_add.append(matlab_resource_dir)
         self.base_directory = config['base_directory']
         self.data_file_path = ''
         self.script_file_path = ''
@@ -63,9 +68,18 @@ class MatlabInterface:
         execution_line = f"[AIC,BIC,moAIC,moBIC] = tsdata_to_infocrit(data, {momax}, {icregmode});"
         result = self.execute_function(data, execution_line, results=['moAIC', 'moBIC'])
         return result
-    
+
+    def mvgc_run_with_diag(self, data, fres_req, momax=200, icregmode="''"):
+        execution_line = f"""
+            result = mvgc_run_with_diag(data, {momax}, {icregmode}, {fres_req})
+        """
+        result = self.execute_function(data, execution_line, results=['diag'], ext='h5')
+        return result
+
     def granger_causality(self, data, momax=200, icregmode="''"):
         execution_line = f"""
+            global VERBOSE
+            VERBOSE = false;
             [AIC,BIC,moAIC,moBIC] = tsdata_to_infocrit(data, {momax}, {icregmode});
             morder = moBIC;
             [A,SIG] = tsdata_to_var(data,morder,{icregmode});
@@ -76,7 +90,6 @@ class MatlabInterface:
         result = self.execute_function(data, execution_line, results=['f'], ext='mat')
         return result
 
-    
     def execute_function(self, data, execution_line, results=[], ext='txt', input_type='numeric'):
         self.init_session()
         if input_type == 'numeric':
@@ -84,7 +97,8 @@ class MatlabInterface:
         else:
             with open(self.data_file_path, 'w') as f: f.write(data)
 
-        results_paths = [os.path.join(self.session_directory, result + f'.{ext}') for result in results]
+        results_paths = [os.path.join(self.session_directory, result + f'.{ext}') 
+                         for result in results]
         with open(self.script_file_path, 'w') as script_file:
             for p in self.recursive_paths_to_add:
                 script_file.write(f"addpath(genpath('{p}'));\n")
@@ -95,8 +109,17 @@ class MatlabInterface:
             script_file.write(execution_line)
             for result in results:
                 result_path = os.path.join(self.session_directory, result + f'.{ext}')
-                ascii = ", '-ascii'" if ext == 'txt' else ""
-                save_line = f"\nsave('{result_path}', '{result}'{ascii});\n"
+                if ext == 'h5':
+                    save_line = f"""
+                            \nh5file = '{result_path}'
+                            \njson = jsonencode(result)
+                            \ndset = '/result'
+                            \nh5create(h5file, dset, 1, 'Datatype', 'string')
+                            \nh5write(h5file, dset, string(json))
+                    """
+                else:
+                    ascii = ", '-ascii'" if ext == 'txt' else ""
+                    save_line = f"\nsave('{result_path}', '{result}'{ascii});\n"
                 script_file.write(save_line)
         subprocess.run([self.path_to_matlab, "-batch", f"run('{self.script_file_path}')"])
 
@@ -108,8 +131,14 @@ class MatlabInterface:
             time.sleep(1)  # Wait for 1 second
         if ext == 'txt':
             load_fun = np.loadtxt
-        else:
+        elif ext == 'json':
+            load_fun = json.loads
+        elif ext == 'h5':
+            load_fun = h5py.File
+        elif ext == 'mat':
             load_fun = scipy.io.loadmat
+        else:
+            raise ValueError("Unknown File Type")
         result = tuple(load_fun(result_path) for result_path in results_paths)
         # shutil.rmtree(self.session_directory)
 

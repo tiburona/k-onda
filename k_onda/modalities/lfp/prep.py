@@ -22,8 +22,9 @@ class LFPPrepMethods(PrepMethods):
     def lfp_prep(self):
         self.prep_data()
         self.prepare_periods()
-        if self.calc_type in ['phase_relationship', 'granger', 'amp_xcorr', 'coherence']:
-            getattr(self, f"prepare_{self.calc_type}_calculators")()
+        for calculator in ['granger', 'amp_xcorr', 'coherence']:
+            if calculator in self.calc_type:
+                getattr(self, f"prepare_{calculator}_calculators")()
         if self.calc_type == 'lag_of_max_corr':
             self.prepare_amp_xcorr_calculators()
     
@@ -66,7 +67,6 @@ class LFPPrepMethods(PrepMethods):
             block = io.read_block()
             return block.segments[0].analogsignals[0].magnitude
 
-        
     def get_raw_lfp(self):
         if all(k not in self.animal_info for k in ('lfp_electrodes', 'lfp_from_stereotrodes')):
             return {}
@@ -117,7 +117,6 @@ class LFPPrepMethods(PrepMethods):
         self.shared_filters[("lfp_prep", notch_cfg["fs"])] = flt
         return flt
 
-    
     def process_lfp(self):
         
         raw_lfp = self.get_raw_lfp()
@@ -157,7 +156,6 @@ class LFPPrepMethods(PrepMethods):
 
         self.save(self.lfp_event_validity[region], pickle_path)
 
-
     def prepare_coherence_calculators(self):
         cls = CoherenceCalculator
         self.coherence_calculators = self.prepare_region_relationship_calculators(cls)
@@ -169,10 +167,6 @@ class LFPPrepMethods(PrepMethods):
     def prepare_granger_calculators(self):
         cls = GrangerCalculator
         self.granger_calculators = self.prepare_region_relationship_calculators(cls)
-
-    def prepare_phase_relationship_calculators(self):
-        cls = PhaseRelationshipCalculator
-        self.phase_relationship_calculators = self.prepare_region_relationship_calculators(cls)
 
     def prepare_region_relationship_calculators(self, calc_class):
         return ({period_type: [calc_class(period) 

@@ -115,23 +115,16 @@ class CSVTabulator(OutputGenerator):
         other_attributes = ['period_type']
         
         if 'lfp' in self.kind_of_data:
-            if level == 'granger_segment':
-                other_attributes.append('length')
             if any([w in self.calc_type for w in ['coherence', 'amp_xcorr', 'lag_of_max_corr', 'phase', 'granger']]):
                 other_attributes.append('period_id')
-            else:
-                if self.calc_opts['time_type'] == 'continuous' and self.calc_opts.get('power_deviation'):
-                    other_attributes.append('power_deviation')
         elif 'mrl' in self.kind_of_data:
             level = 'mrl_calculator'
             other_attributes += ['frequency', 'neuron_type', 'neuron_quality']  
         else:
             other_attributes += ['category', 'neuron_type', 'quality']
 
-            
         return self.get_data(level, other_attributes)
     
-
     def assign_result_to_column(self, res, row_dict, space_suffix=''):
 
         def to_scalar(val):
