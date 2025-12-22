@@ -1,0 +1,169 @@
+function diag = mvgc_run_with_diag(X, momax, regmode, fres_req)
+%MVGC_RUN_WITH_DIAG Run MVGC pipeline and return diagnostics.
+%
+% Inputs:
+%   X        : nvars x nobs (x ntrials) data
+%   momax    : maximum model order to search
+%   regmode  : '', 'OLS', 'LWR' ('' uses MVGC default)
+%   fres_req : requested frequency resolution (number of bins)
+%
+% Output:
+%   diag     : struct containing results + diagnostics
+
+    % ------------------------
+    % Defaults
+    % ------------------------
+    if nargin < 2 || isempty(momax),    momax = 200; end
+    if nargin < 3,                      regmode = ''; end
+    if nargin < 4 || isempty(fres_req), fres_req = 1000; end
+
+    % ------------------------
+    % Init diagnostics struct
+    % ------------------------
+    diag = struct();
+    diag.ok = false;
+    diag.errors = {};
+    diag.warnings = {};        % cell array of printed "WARNING:" lines
+    diag.console = struct();   % captured stdout from evalc calls
+
+    lastwarn('');  % reset MATLAB warning state
+
+    % ------------------------
+    % 1) Model order selection
+    % ------------------------
+    try
+        out = evalc('[AIC,BIC,moAIC,moBIC] = tsdata_to_infocrit(X, momax, regmode);');
+        diag.console.tsdata_to_infocrit = out;
+        diag.warnings = [diag.warnings, scrape_console_warnings(out)];
+
+        diag.ic = struct();
+        diag.ic.ok = true;
+        diag.ic.moAIC = moAIC;
+        diag.ic.moBIC = moBIC;
+        diag.ic.AIC = AIC;
+        diag.ic.BIC = BIC;
+
+        morder = moBIC;
+        diag.morder = morder;
+
+    catch ME
+        diag.ic = struct('ok', false);
+        diag.errors{end+1} = sprintf('tsdata_to_infocrit failed: %s', ME.message);
+        return
+    end
+
+    % ------------------------
+    % 2) Fit VAR
+    % ------------------------
+    try
+        out = evalc('[A,SIG,E] = tsdata_to_var(X, morder, regmode);');
+        diag.console.tsdata_to_var = out;
+        diag.warnings = [diag.warnings, scrape_console_warnings(out)];
+
+        diag.var = struct();
+        diag.var.ok = true;
+        diag.var.A_bad = isbad(A);
+        diag.var.SIG_posdef = isposdef(SIG);
+        diag.var.rho = var_specrad(A);
+        diag.var.stable = diag.var.rho < 1;
+        diag.var.morder = morder;
+        diag.var.nobs = size(X,2);
+        diag.var.ntrials = (ndims(X) == 3) * size(X,3) + (ndims(X) ~= 3) * 1;
+
+        % keep core outputs
+        diag.A = A;
+        diag.SIG = SIG;
+        diag.E = E;
+
+    catch ME
+        diag.var = struct('ok', false);
+        diag.errors{end+1} = sprintf('tsdata_to_var failed: %s', ME.message);
+        return
+    end
+
+    % ------------------------
+    % 2b) Residual diagnostics
+    % ------------------------
+    try
+        diag.resid = mvgc_residual_diag(E, 20);
+    catch ME
+        diag.resid = struct('ok', false);
+        diag.warnings{end+1} = sprintf('Residual diagnostics failed: %s', ME.message);
+    end
+
+    % ------------------------
+    % 3) VAR -> autocovariance
+    % IMPORTANT: rename info -> acinfo to avoid shadowing MATLAB's info() function
+    % ------------------------
+    try
+        out = evalc('[G,acinfo] = var_to_autocov(A, SIG, []);');
+        diag.console.var_to_autocov = out;
+        diag.warnings = [diag.warnings, scrape_console_warnings(out)];
+
+        diag.autocov = struct();
+        diag.autocov.ok = true;
+        diag.autocov.info = acinfo;
+
+        if isfield(acinfo,'aclags'),    diag.autocov.aclags = acinfo.aclags; end
+        if isfield(acinfo,'acminlags'), diag.autocov.acminlags = acinfo.acminlags; end
+
+        if isfield(acinfo,'aclags') && isfield(acinfo,'acminlags')
+            diag.autocov.spectral_accuracy_risk = acinfo.aclags < acinfo.acminlags;
+        else
+            diag.autocov.spectral_accuracy_risk = false;
+        end
+
+        diag.G = G;
+
+    catch ME
+        diag.autocov = struct('ok', false);
+        diag.errors{end+1} = sprintf('var_to_autocov failed: %s', ME.message);
+        return
+    end
+
+    % ------------------------
+    % 4) Spectral GC
+    % ------------------------
+    try
+        out = evalc('[f, fres_used] = autocov_to_spwcgc(G, fres_req);');
+        diag.console.autocov_to_spwcgc = out;
+        diag.warnings = [diag.warnings, scrape_console_warnings(out)];
+
+        diag.spwcgc = struct();
+        diag.spwcgc.ok = true;
+        diag.spwcgc.fres_requested = fres_req;
+        diag.spwcgc.fres_used = fres_used;
+
+        diag.f = f;
+
+    catch ME
+        diag.spwcgc = struct('ok', false);
+        diag.errors{end+1} = sprintf('autocov_to_spwcgc failed: %s', ME.message);
+        return
+    end
+
+    % ------------------------
+    % 5) Final warning state
+    % ------------------------
+    [wm, wid] = lastwarn();
+    diag.lastwarn_after = wm;
+    diag.lastwarn_id = wid;
+
+    % "had_warning" means: either MATLAB warning() OR printed MVGC WARNING lines
+    diag.had_warning = (~isempty(wm)) || (~isempty(diag.warnings));
+
+    diag.ok = true;
+end
+
+
+function warn_cells = scrape_console_warnings(out)
+%SCRAPE_CONSOLE_WARNINGS Extract printed MVGC WARNING lines from stdout
+
+    if isempty(out)
+        warn_cells = {};
+        return
+    end
+
+    warn_cells = regexp(out, '(^|\n)\s*WARNING:.*?(?=\n|$)', 'match');
+    warn_cells = strtrim(warn_cells);
+end
