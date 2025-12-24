@@ -1,4 +1,5 @@
 from copy import deepcopy
+import json
 from pathlib import Path
 import tempfile
 
@@ -7,7 +8,6 @@ import pandas as pd
 
 from k_onda.main import run_pipeline
 from k_onda.resources.devtools import find_project_root
-from k_onda.run.initialize_experiment import Initializer
 from k_onda.run.runner import CalcOptsProcessor
 
 
@@ -31,49 +31,74 @@ def _build_calc_opts():
     return CalcOptsProcessor(calc_opts).process()[0]
 
 
-def _prepare_experiment(calc_opts):
-    initializer = Initializer(CONFIG_PATH)
-    experiment = initializer.init_experiment()
-    experiment.calc_opts = calc_opts
-    experiment.spike_prep()
-    return experiment
+def _load_config():
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
-def _manual_spike_counts_df(experiment):
+def _all_events_from_config(cfg, sampling_rate):
+    animal = cfg["animals"][0]
+    period_info = animal["period_info"]
+
+    stim_onsets_raw = period_info["stim"]["onsets"]
+    stim_onsets_s = [on / sampling_rate for on in stim_onsets_raw]
+    stim_events = [[onset + i for i in range(10)] for onset in stim_onsets_s]
+
+    prestim_shift = period_info["prestim"]["shift"]
+    prestim_events = [
+        [onset + prestim_shift + i for i in range(10)] for onset in stim_onsets_s
+    ]
+
+    periods = []
+    for idx, onset in enumerate(stim_onsets_s):
+        periods.append(("stim", idx, onset, stim_events[idx]))
+        periods.append(("prestim", idx, onset + prestim_shift, prestim_events[idx]))
+
+    return periods, animal
+
+
+def _manual_spike_counts_df(calc_opts):
+    cfg = _load_config()
+    sampling_rate = cfg["sampling_rate"]
+    spikes = np.array(cfg["animals"][0]["units"]["good"][0]["spike_times"])
+
+    periods, animal_cfg = _all_events_from_config(cfg, sampling_rate)
+
+    pre, post = calc_opts["periods"]["stim"]["event_pre_post"]
+    bin_size = calc_opts["bin_size"]
+    num_bins = int(round((pre + post) / bin_size))
+
     rows = []
-
-    for event in experiment.all_spike_events:
-        unit = event.unit
-        period = event.parent
-        animal = unit.animal
-
-        spikes_sec = unit.to_float(unit.spike_times, unit="second")
-        start_s = event.to_float(event.start, unit="second")
-        stop_s = event.to_float(event.stop, unit="second")
-        num_bins = event.num_bins_per
-
-        counts, _ = np.histogram(spikes_sec, bins=num_bins, range=(start_s, stop_s))
-
-        group = getattr(animal, "group", None)
-        group_id = group.identifier if group is not None else None
-
-        for i, count in enumerate(counts):
-            rows.append(
-                {
-                    "spike_counts": float(count),
-                    "experiment": experiment.identifier,
-                    "group": group_id,
-                    "unit": unit.identifier,
-                    "period": period.identifier,
-                    "event": event.identifier,
-                    "time_bin": i,
-                    "period_type": event.period_type,
-                    "category": unit.category,
-                    "neuron_type": unit.neuron_type,
-                    "quality": unit.quality,
-                    "animal": animal.identifier,
-                }
-            )
+    for period_type, period_id, period_onset, events in periods:
+        period_start = period_onset
+        for event_id, ev_time in enumerate(events):
+            start = ev_time - pre
+            stop = ev_time + post
+            counts, _ = np.histogram(spikes, bins=num_bins, range=(start, stop))
+            for time_bin, count in enumerate(counts):
+                absolute_time = np.round(start + time_bin * bin_size, 8)
+                relative_time = np.round(absolute_time - ev_time, 8)
+                period_time = np.round(absolute_time - period_start, 8)
+                rows.append(
+                    {
+                        "spike_counts": float(count),
+                        "experiment": cfg["identifier"],
+                        "group": cfg["group_names"][0],
+                        "unit": animal_cfg["identifier"] + "_good_1",
+                        "period": period_id,
+                        "event": event_id,
+                        "time_bin": time_bin,
+                        "absolute_time": absolute_time,
+                        "relative_time": relative_time,
+                        "period_time": period_time,
+                        "event_time": relative_time,
+                        "period_type": period_type,
+                        "category": "good",
+                        "neuron_type": animal_cfg["units"]["good"][0]["neuron_type"],
+                        "quality": animal_cfg["units"]["good"][0]["quality"],
+                        "animal": animal_cfg["identifier"],
+                    }
+                )
 
     return pd.DataFrame(rows)
 
@@ -93,9 +118,8 @@ def test_spike_counts_csv_matches_manual_histogram():
 
     csv_df = pd.read_csv(output_file, comment="#")
 
-    experiment = _prepare_experiment(calc_opts)
-    manual_df = _manual_spike_counts_df(experiment)
-
+    manual_df = _manual_spike_counts_df(calc_opts)
+    manual_df["spike_counts"] = manual_df["spike_counts"].astype(int)
     manual_df = manual_df[csv_df.columns]
 
     sort_cols = ["experiment", "unit", "period", "event", "time_bin"]

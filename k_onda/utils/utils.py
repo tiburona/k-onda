@@ -414,3 +414,12 @@ def find_container_with_key(data, target_key):
 
 def standardize(num_array):
     return np.round(num_array, 8).astype(np.float64)
+
+
+def magnitude(val):
+        """Return raw values, preferring pint magnitudes to avoid downcast warnings."""
+        if hasattr(val, "pint") and hasattr(val.pint, "magnitude"):
+            return val.pint.magnitude
+        if isinstance(val, xr.DataArray):
+            return val.data
+        return val
