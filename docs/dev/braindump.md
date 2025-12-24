@@ -26,6 +26,8 @@
 
 - Caching needs to be reviewed. That method should be moved out of utils, perhaps into core.  It's applied very narrowly right now and some obvious uses for caching just never touch it.  It needs reviewing whether period type always works right in the "selected_period_types" case.  There's a depth switch which is apparently not being used right now and that should be reviewed too.   
 
+- Would PSTH be faster if in the beginning of any operation, the list of spike times were converted into a spike train and find spikes became an indexing rather than a search operation?  Note: robot overlord doesn't like this idea, but suggests: "If events are short and numerous, precompute spike indices per period type once and reuse."
+
 
 
 

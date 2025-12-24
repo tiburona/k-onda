@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 
 from k_onda.math import normalized_xcorr, calc_hist
-from k_onda.utils import correlogram
+from k_onda.utils import correlogram, cache_method
 
 
 class SpikeMethods:

@@ -79,7 +79,8 @@ class BinMethods(TimeBinMethods, FrequencyBinMethods):
     def num_bins_per(self):
         if not hasattr(self, 'start') and hasattr(self, 'stop'):
             return None
-        num_bins = self.to_int((self.stop-self.start)/self.bin_size)
+        num_bins = self.to_int(
+            (self.stop - self.start).pint.to('second') / self.bin_size.pint.to('second'))
         return num_bins
 
 
@@ -91,7 +92,6 @@ class BinMethods(TimeBinMethods, FrequencyBinMethods):
            
 
             
-
 
 
 

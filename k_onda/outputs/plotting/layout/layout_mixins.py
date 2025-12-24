@@ -73,11 +73,6 @@ class AxShareMixin:
 
 class LegendMixin:
 
-    # TODO: fix this.  It is broken.  The fundamental problem is: how does the user 
-    # specify in which cell they want the legend to fall?  How does an individual layout
-    # object have knowledge about whether it contains that cell?  More complicated than it sounds,
-    # must be thought about when I have mental energy, which is not right now.
-
     def record_entry_for_legend(self, entry, index, legend, cells_with_legend):
         entry['handle'] = self.get_handle(entry, index)
         entry['label'] = self.get_entry_label(entry, legend)

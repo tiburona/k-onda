@@ -11,6 +11,7 @@ from k_onda.model.period_constructor import PeriodConstructor
 from k_onda.model.bins import BinMethods
 from k_onda.model.period_event import Period, Event
 from .methods import SpikeMethods, RateMethods
+from k_onda.utils import cache_method
 
 
 class Unit(Data, PeriodConstructor, SpikeMethods):
@@ -29,6 +30,7 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
         self.experiment = experiment
         self.neuron_type = neuron_type
         self.quality = quality
+        self._spike_times_raw = None
         self.firing_rate = self.calculate_unit_firing_rate()
         self.fwhm = fwhm
         self.animal.units[category].append(self)
@@ -101,7 +103,10 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
 
     def find_spikes(self, start, stop):
         # convert quantities to plain ints in raw_sample space
-        spike_raw = self.to_int(self.spike_times, unit="raw_sample")  # ndarray[int]
+        if self._spike_times_raw is None:
+            # cache the converted spike times; they don't change for this unit
+            self._spike_times_raw = self.to_int(self.spike_times, unit="raw_sample")
+        spike_raw = self._spike_times_raw
         start_raw = self.to_int(start, unit="raw_sample")             # int
         stop_raw  = self.to_int(stop, unit="raw_sample")              # int
 
@@ -114,9 +119,15 @@ class Unit(Data, PeriodConstructor, SpikeMethods):
     def get_spikes_by_events(self):
         return [event.spikes for period in self.children for event in period.children]
 
+    @cache_method
     def get_firing_std_dev(self):
-        concatenated = self.calc_opts.get('base', 'event')
-        return np.std([self.concatenate(concatenator='unit', concatenated=concatenated, attrs=['get_firing_rates'])])
+        concatenated = self.calc_opts.get("base", "event")
+        da = self.concatenate(
+            concatenator="unit",
+            concatenated=concatenated,
+            attrs=["get_firing_rates"],
+        )
+        return da.std()
 
     def get_cross_correlations(self, axis=0):
         cross_corrs = [pair.get_cross_correlations(axis=axis, stop_at=self.calc_opts.get('base', 'period'))
