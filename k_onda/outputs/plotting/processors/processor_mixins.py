@@ -102,7 +102,7 @@ class LabelMixin:
     def _get_figure_label_setter(self, position, config):
         """Gets the setter function or fig.text parameters for FIGURE labels."""
         kwargs = config.get('kwargs', {}).copy()
-        fig = self.child_layout.label_figure
+        label_figures = self.child_layout.label_figures
         setter = None
         is_fig_text = False
 
@@ -115,15 +115,20 @@ class LabelMixin:
             return lambda txt: fig.text(x_val, y_val, txt, **local_kwargs)
 
         if position == 'title':
+            fig = label_figures['title']
             setter = getattr(fig, 'suptitle', None)
         elif position == 'x_bottom':
+            fig = label_figures['x_bottom']
             setter = getattr(fig, 'supxlabel', None)
         elif position == 'y_left':
+            fig = label_figures['y_left']
             setter = getattr(fig, 'supylabel', None)
         elif position == 'x_top':
+            fig = label_figures['x_top']
             is_fig_text = True
             setter = _create_fig_text_setter(0.5, 0.98, {'ha': 'center', 'va': 'top'})
         elif position == 'y_right':
+            fig = label_figures['y_right']
             is_fig_text = True
             setter = _create_fig_text_setter(0.98, 0.5, {'rotation': 'vertical', 'ha': 'right', 'va': 'center'})
         else:
