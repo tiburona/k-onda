@@ -4,7 +4,6 @@ import xarray as xr
 from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
 import json
-import json
 from scipy.signal.windows import tukey
 
 from k_onda.math import apply_hilbert_to_padded_data, welch_psd
