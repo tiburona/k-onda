@@ -44,7 +44,8 @@ from .utils import (
     smart_title_case,
     find_container_with_key, 
     to_hashable, 
-    standardize
+    standardize, 
+    magnitude
 )
 
 from .prep_methods import PrepMethods
@@ -98,5 +99,6 @@ __all__ = [
     "smart_title_case", 
     "find_container_with_key", 
     "to_hashable",
-    "standardize"
+    "standardize",
+    "magnitude"
 ]

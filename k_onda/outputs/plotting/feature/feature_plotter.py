@@ -87,10 +87,20 @@ class FeaturePlotter(Base, PlottingMixin, LegendMixin):
         return self.construct_spec_based_on_conditions(self.aesthetics, entry=entry)
     
     def apply_ax_args(self, cell, ax_args, i):
+        default_y_margin = 0.05
         ax_list = cell.ax_list if hasattr(cell, 'break_axes') else [cell.obj]
         for ax in ax_list:
+            margins = ax_args['margins'] if 'margins' in ax_args else default_y_margin
+            if margins is not None:
+                if isinstance(margins, dict):
+                    ax.margins(**margins)
+                elif isinstance(margins, (list, tuple)):
+                    ax.margins(*margins)
+                else:
+                    ax.margins(y=margins)
+            
             if self.spec_type == 'segment' and i > 0:
-                return
+                continue
             if 'border' in ax_args:
                 self.apply_borders(ax, ax_args['border'])
             if 'aspect' in ax_args:

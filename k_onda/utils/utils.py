@@ -50,16 +50,16 @@ def cache_method(method):
         if 'level' in kwargs and isinstance(kwargs['level'], int) and kwargs['level'] > cache_level:
             return method(self, *args, **kwargs)
             
-        # TODO: make sure as selected period types evolve that there can't be any
-        # key overlap between different calculations  
-        
         if hasattr(self, 'period_type'):
-            period_keys = [self.period_type]
+            period_keys = [('period_type', self.period_type)]
         else:
-            period_keys = self.selected_period_types + [self.selected_period_type]
+            period_keys = [
+                ('selected_period_types', tuple(self.selected_period_types)),
+                ('selected_period_type', self.selected_period_type),
+            ]
           
         key_list = [self.calc_type, method.__name__, 
-                    self.selected_neuron_type, *period_keys, 
+                    self.selected_neuron_type, self.selected_brain_region, *period_keys, 
                     *(f'{k}_{v}' for k, v in self.selected_conditions.items()), 
                     *(arg for arg in args), 
                     *(kwarg for kwarg in kwargs)]
@@ -269,7 +269,7 @@ def is_truthy(obj, *, zero_ok: bool = False):
             return _scalar_truth(obj.item())
         return (
             obj.size > 0
-            and any(is_truthy(el, zero_ok=zero_ok) for el in obj.values)
+            and any(is_truthy(el, zero_ok=zero_ok) for el in obj.pint.magnitude)
         )
 
     elif isinstance(obj, np.ndarray):
@@ -415,3 +415,11 @@ def find_container_with_key(data, target_key):
 def standardize(num_array):
     return np.round(num_array, 8).astype(np.float64)
 
+
+def magnitude(val):
+        """Return raw values, preferring pint magnitudes to avoid downcast warnings."""
+        if hasattr(val, "pint") and hasattr(val.pint, "magnitude"):
+            return val.pint.magnitude
+        if isinstance(val, xr.DataArray):
+            return val.data
+        return val

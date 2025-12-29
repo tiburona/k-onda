@@ -1,0 +1,30 @@
+name: Binder
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+
+jobs:
+  binder-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install repo2docker
+        # Pin to a known-good release available on PyPI
+        run: |
+          python -m pip install --upgrade pip
+          pip install jupyter-repo2docker==2024.7.0
+
+      - name: Build Binder image
+        run: jupyter-repo2docker --no-run --image-name binder-test .
+
+      - name: Smoke test imports inside image
+        run: |
+          docker run --rm binder-test python - <<'PY'
+          import importlib
+          import k_onda.main  # should import without hitting numpy/quantities issues
+          importlib.import_module("k_onda.utils")
+          print("Binder image import smoke test passed.")
+          PY

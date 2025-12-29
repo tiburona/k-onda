@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 
 from k_onda.math import normalized_xcorr, calc_hist
-from k_onda.utils import correlogram
+from k_onda.utils import correlogram, cache_method
 
 
 class SpikeMethods:
@@ -73,7 +73,7 @@ class RateMethods:
         if 'counts' in self.private_cache:
             counts = self.private_cache['counts']
         else:
-            # 1) histogram over spikes in SECONDS (plain floats)
+            # 1) histogram over spikes
             spikes_sec = self.to_float(self.spikes, unit="second")
             spike_range = tuple(self.to_float(b, unit="second") for b in self.spike_range)
             raw_counts = calc_hist(spikes_sec, self.num_bins_per, spike_range)[0]
@@ -137,7 +137,7 @@ class RateMethods:
     def get_proportion_(self):
         return xr.where(self.get_psth() > 0, 1, 0)
     
-    def get_cross_correlations(self, pair=None):
+    def get_cross_correlations(self, pair):
         other = self.get_other(pair)
         raw_cross_corr, _ = normalized_xcorr(self.get_unadjusted_rates(),
                                             other.get_firing_rates_(),
@@ -152,7 +152,7 @@ class RateMethods:
         # Now select lags from -boundary to boundary using .sel (coordinate-based slicing)
         return cross_corr.sel(lags=slice(-boundary, boundary))
 
-    def get_correlogram(self, pair=None, num_pairs=None):
+    def get_correlogram(self, pair, num_pairs=None):
         max_lag, bin_size = (self.calc_opts[opt] for opt in ['max_lag', 'bin_size'])
         lags = round(max_lag/bin_size)
         return correlogram(lags, bin_size, self.spikes, pair.spikes, num_pairs)

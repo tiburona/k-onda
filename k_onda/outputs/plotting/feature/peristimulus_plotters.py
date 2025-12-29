@@ -17,7 +17,7 @@ plt.rcParams['font.sans-serif'] = ['Arial']
 class HistogramPlotter:
     
     def plot_hist(self, x, y, width, ax, aesthetic_args):
-        ax.bar(x, y, width=width, **aesthetic_args.get('marker', {})) 
+        ax.bar(self.to_float(x), self.to_float(y), width=width, **aesthetic_args.get('marker', {})) 
 
 
 class PeriStimulusPlotter(FeaturePlotter):
