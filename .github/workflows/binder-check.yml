@@ -12,10 +12,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install repo2docker
-        # Pin to a known-good release used by mybinder.org
+        # Pin to a known-good release available on PyPI
         run: |
           python -m pip install --upgrade pip
-          pip install jupyter-repo2docker==2024.2.0
+          pip install jupyter-repo2docker==2024.7.0
 
       - name: Build Binder image
         run: jupyter-repo2docker --no-run --image-name binder-test .

@@ -18,8 +18,6 @@
 
 - User might want to combine onset information from nev and other external spec.
 
-- User might want to combine onset information from nev and other external spec.
-
 
 ## Plotting
 
