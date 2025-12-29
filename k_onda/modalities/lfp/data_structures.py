@@ -4,6 +4,7 @@ import xarray as xr
 from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
 import json
+import json
 from scipy.signal.windows import tukey
 
 from k_onda.math import apply_hilbert_to_padded_data, welch_psd
@@ -74,9 +75,20 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
         self._spectrogram = None
         self._segments = OrderedDict()
         self._events = OrderedDict()
+        self._valid_events = OrderedDict()
         self.max_event_cache   = self.calc_opts.get('max_event_cache', 4)
         self.max_segment_cache = self.calc_opts.get('max_segment_cache', 4)
 
+    @property
+    def events(self):
+        # Use the descendant cache so we return the cached list, not the cache mapping
+        return self._cached_collection(
+            cache_name="_events",
+            key_fn=self._event_key,
+            build_fn=self.get_events,
+            max_size=self.max_event_cache,
+        )
+    
     @property
     def padded_data(self):
         return self.get_data_from_animal_dict(pad=True)
@@ -119,11 +131,10 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
             and self.calc_opts.get('coherence_params', {}).get('method') != 'multitaper'):
             return self.get_segments()
         else:
-            events = self.get_events()  
-            if self.calc_opts.get('validate_events'):
-                events = [e for e in events if e.is_valid()] 
-            return events       
-
+            if not self.calc_opts.get('validate_events'):
+                return self.events
+            return self.get_valid_events()
+        
     def get_events(self):
 
         if self.pre_event + self.post_event == 0:
@@ -139,6 +150,16 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
                             self.max_event_cache)
 
         return events
+    
+    def get_valid_events(self):
+        if not self.calc_opts.get('validate_events'):
+            return self.events
+        valid_events = self._get_cache(self._valid_events, self._event_key())
+        if valid_events is None:
+            valid_events = [e for e in self.events if e.is_valid]
+            self._set_cache(self._valid_events, self._event_key(), valid_events,
+                            self.max_event_cache)
+        return valid_events
     
     def get_segments(self):
         segments = self._get_cache(self._segments, self._segment_key())
@@ -325,6 +346,8 @@ class LFPEvent(Event, LFPMethods, LFPProperties):
 
     @property          
     def is_valid(self):
+        if f"Event {self.animal.identifier} {self.period_type} {self.period.identifier} {self.identifier}" == "Event INED18 pretone 4 0":
+            a = 'foo'
         val = self.animal.lfp_event_validity[self.selected_brain_region][self.period_type][
             self.period.identifier][self.identifier]
         if not val:

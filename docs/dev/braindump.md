@@ -6,9 +6,17 @@
 
 - Right now if we record spike data from more than one brain region we can't represent that.  Thinking about this more, given the choices I've already made, it might make sense to reverse the hierarchical order of unit and period and have Animal be the only period constructor.  That has to be contemplated though.
 
+
+## Data Model
+
+- There's currently no way of representing a trait of an animal, other than through conditions.  But what about continuous measurements?  Also, you may want to conceive of a trait more as an attribute than a condition -- is sex really a condition?   What about measurements that are more discrete, like, say, cortisol?  Along with sessions we need a way to be able to represent measurements that are taken once per session, or a couple of times per session.
+
+
 ## IO
 
 - It would be nice if file opening were lazy. The only gating is by analysis type, but especially when testing you just want a subset of animals. (And on this front, maybe it would save some time to store pickles of the processed lfp data? And pickles of the results of getting the period onsets from NEV's?  This is all very annoyingly slow.)
+
+- User might want to combine onset information from nev and other external spec.
 
 - User might want to combine onset information from nev and other external spec.
 
@@ -25,6 +33,11 @@
 - Multitaper calculations of coherence events are very slow, and would be faster if they were vectorized.  Event can be a public abstraction that's actually an index into periods or segments.  Should all events be represented the same way?  
 
 - Caching needs to be reviewed. That method should be moved out of utils, perhaps into core.  It's applied very narrowly right now and some obvious uses for caching just never touch it.  It needs reviewing whether period type always works right in the "selected_period_types" case.  There's a depth switch which is apparently not being used right now and that should be reviewed too.   
+
+- Would PSTH be faster if in the beginning of any operation, the list of spike times were converted into a spike train and find spikes became an indexing rather than a search operation?  Note: robot overlord doesn't like this idea, but suggests: "If events are short and numerous, precompute spike indices per period type once and reuse."
+
+
+
 
 
 

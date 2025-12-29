@@ -20,6 +20,7 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
 
         self.to_int = index
         self.figure = figure
+        self.label_figures = {}
         self.processor = processor
         
         self.gs_args = gs_args if gs_args else {}
@@ -41,10 +42,10 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
         self.create_grid()
        
         if self.processor and self.processor.spec_type == 'segment':
-            if hasattr(self.parent, 'label_figure'):
-                self.label_figure = self.parent.label_figure
+            if hasattr(self.parent, 'label_figures'):
+                self.label_figures = self.parent.label_figures
             else:
-                self.label_figure = self.figure
+                self.label_figures = self.label_figures
 
         if self.no_more_processors:
             self.cells = self.make_all_axes()
@@ -193,13 +194,25 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
             self.label_figure = self.figure
 
             self.adjust_dimension('title', label_figure_dims=(3, 1), 
-                new_figure_ind=(1, 0), ratio_dim='height', rvrs=False)
+                new_figure_ind=(2, 0), ratio_dim='height', rvrs=False)
             
             self.adjust_dimension('x', label_figure_dims=(3, 1), 
-                new_figure_ind=(1, 0), ratio_dim='height', rvrs=True)
-
+                new_figure_ind=(0, 0), ratio_dim='height', rvrs=True)
+            
+            self.adjust_dimension('x_bottom', label_figure_dims=(3, 1), 
+                new_figure_ind=(0, 0), ratio_dim='height', rvrs=True)
+            
+            self.adjust_dimension('x_top', label_figure_dims=(3, 1), 
+                new_figure_ind=(2, 0), ratio_dim='height', rvrs=False)
+            
             self.adjust_dimension('y', label_figure_dims=(1, 3), 
-                new_figure_ind=(0, 1), ratio_dim='width', rvrs=False)
+                new_figure_ind=(0, 2), ratio_dim='width', rvrs=False)
+
+            self.adjust_dimension('y_left', label_figure_dims=(1, 3), 
+                new_figure_ind=(0, 2), ratio_dim='width', rvrs=False)
+            
+            self.adjust_dimension('y_right', label_figure_dims=(1, 3), 
+                new_figure_ind=(0, 0), ratio_dim='width', rvrs=True)
          
 
     def adjust_dimension(self, position, label_figure_dims, new_figure_ind, ratio_dim, rvrs):
@@ -209,9 +222,9 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
         if not position_info:
             return
         
-        space_between = position_info.get('space_between', .05)
-        space_within = position_info.get('space_within', .05)
-        ratios = [space_between, 1, space_within]
+        space_between = position_info.get('space_between', 0.025)
+        labelpad = position_info.get('labelpad', .025)
+        ratios = [space_between, labelpad, 1]
         if rvrs:
             ratios = list(reversed(ratios))
 
@@ -221,6 +234,8 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
         grid = self.subfigures(*label_figure_dims, **ratio_dict)
     
         self.figure = grid[new_figure_ind]
+
+        self.label_figures[position] = grid[0, 1] if 'y' in position else grid[1, 0]
         
     def make_all_axes(self):
         if self.spec.get('break_axis'):

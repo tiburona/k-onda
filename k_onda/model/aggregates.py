@@ -220,15 +220,13 @@ class Aggregates(XMean):
         else:
             return float("nan")
 
-    import xarray as xr
-
     def is_nan(self, value):
         if isinstance(value, float):
             return np.isnan(value)
         if isinstance(value, np.ndarray):
             return np.all(np.isnan(value))
         if isinstance(value, xr.DataArray):
-            return bool(np.all(np.isnan(value.values)))
+            return bool(np.all(np.isnan(value.pint.magnitude)))
         if isinstance(value, dict):
             return all(self.is_nan(val) for val in value.values())
         return False

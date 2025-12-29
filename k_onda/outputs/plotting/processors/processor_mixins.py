@@ -102,7 +102,7 @@ class LabelMixin:
     def _get_figure_label_setter(self, position, config):
         """Gets the setter function or fig.text parameters for FIGURE labels."""
         kwargs = config.get('kwargs', {}).copy()
-        fig = self.child_layout.label_figure
+        label_figures = self.child_layout.label_figures
         setter = None
         is_fig_text = False
 
@@ -115,15 +115,20 @@ class LabelMixin:
             return lambda txt: fig.text(x_val, y_val, txt, **local_kwargs)
 
         if position == 'title':
+            fig = label_figures['title']
             setter = getattr(fig, 'suptitle', None)
         elif position == 'x_bottom':
+            fig = label_figures['x_bottom']
             setter = getattr(fig, 'supxlabel', None)
         elif position == 'y_left':
+            fig = label_figures['y_left']
             setter = getattr(fig, 'supylabel', None)
         elif position == 'x_top':
+            fig = label_figures['x_top']
             is_fig_text = True
             setter = _create_fig_text_setter(0.5, 0.98, {'ha': 'center', 'va': 'top'})
         elif position == 'y_right':
+            fig = label_figures['y_right']
             is_fig_text = True
             setter = _create_fig_text_setter(0.98, 0.5, {'rotation': 'vertical', 'ha': 'right', 'va': 'center'})
         else:
@@ -141,14 +146,26 @@ class LabelMixin:
         Supports 'x_bottom', 'x_top', 'y_left', 'y_right', and 'title'.
         """
         kwargs = config.get('kwargs', {}).copy()
-        mapping = dict.fromkeys(['x', 'x_bottom'], ('bottom', cell.set_xlabel, 'xaxis'))
-        mapping.update(dict.fromkeys(['x_top'], ('top',    cell.set_xlabel, 'xaxis')))
-        mapping.update(dict.fromkeys(['y', 'y_left'], ('left',  cell.set_ylabel, 'yaxis')))
-        mapping.update(dict.fromkeys(['y_right'],  ('right', cell.set_ylabel, 'yaxis')))
-        mapping.update(dict.fromkeys(['title', 'title_center'], ('center', cell.set_title)))
-        mapping.update(dict.fromkeys(['title_left'], ('left', cell.set_title)))  
-        mapping.update(dict.fromkeys(['title_right'], ('right', cell.set_title)))  
+
+        mapping = {k: v for keys, v in [
+            (('x', 'x_bottom'), ('bottom', cell.set_xlabel, 'xaxis')),
+            (('y', 'y_left'),   ('left',   cell.set_ylabel, 'yaxis')),
+            (('title', 'title_center'), ('center', cell.set_title)),
+            (('title_left',),   ('left',   cell.set_title)),
+            (('title_right',),  ('right',  cell.set_title)),
+        ] for k in keys}
         
+        if position == 'x_top':
+            ax_top = cell.secondary_xaxis('top')
+            ax_top.spines['top'].set_visible(False)
+            ax_top.tick_params(top=False, labeltop=False)
+            mapping['x_top'] = ('top', ax_top.set_xlabel, ax_top.xaxis)
+        elif position == 'y_right':
+            ax_right = cell.secondary_yaxis('right')
+            ax_right.spines['right'].set_visible(False)
+            ax_right.tick_params(right=False, labelright=False)
+            mapping['y_right'] = ('right', ax_right.set_ylabel, ax_right.yaxis)
+
         if position not in mapping:
             print(f"Warning: _get_ax_label_setter called with invalid position: {position}")
             return None
@@ -159,7 +176,8 @@ class LabelMixin:
         else:
             pos, set_label_func, axis_attr = mapping[position]
             def setter(text, **extra_kwargs):
-                getattr(cell, axis_attr).set_label_position(pos)
+                axis = getattr(cell, axis_attr) if isinstance(axis_attr, str) else axis_attr
+                axis.set_label_position(pos)
                 set_label_func(text, **{**kwargs, **extra_kwargs})
         return setter
     
@@ -175,7 +193,6 @@ class LabelMixin:
         else:
             setter = self._get_ax_label_setter(cell, position, config)
         return setter, {}
-
     
     def set_label(self, cell, updated_info):
         """Sets various labels on the figure or axes based on the spec."""

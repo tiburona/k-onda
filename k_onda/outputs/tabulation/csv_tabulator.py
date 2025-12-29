@@ -1,4 +1,3 @@
-import pandas as pd
 import csv
 import os
 from copy import deepcopy
@@ -6,10 +5,12 @@ import json
 import random
 import string
 from functools import reduce
+import numpy as np
+import pandas as pd
 from xarray import DataArray, Dataset
 
 from k_onda.core import OutputGenerator
-from k_onda.utils import safe_make_dir, to_serializable
+from k_onda.utils import safe_make_dir, to_serializable, magnitude
 
 
 class CSVTabulator(OutputGenerator):
@@ -128,15 +129,31 @@ class CSVTabulator(OutputGenerator):
     def assign_result_to_column(self, res, row_dict, space_suffix=''):
 
         def to_scalar(val):
-            data = getattr(val, 'values', val)
-            size = getattr(data, 'size', None)
-            if size == 1 and hasattr(data, 'item'):
-                scalar = data.item()
-                try:
-                    return float(scalar)
-                except (TypeError, ValueError):
-                    return scalar
-            return data
+            mag = magnitude(val)
+            mag_array = np.asarray(mag)
+            kind = getattr(mag_array.dtype, "kind", None)
+
+            if kind == "b" or isinstance(mag, (np.bool_, bool)):
+                if mag_array.size == 1 and hasattr(mag_array, "item"):
+                    return bool(mag_array.item())
+                return mag_array
+
+            if kind == "c" or isinstance(mag, (np.complexfloating, complex)):
+                if mag_array.size == 1 and hasattr(mag_array, "item"):
+                    return mag_array.item()
+                return mag_array
+
+            if kind in ("i", "u") or isinstance(mag, (np.integer, int)):
+                return self.to_int(val)
+            if kind == "f" or isinstance(mag, (np.floating, float)):
+                return self.to_float(val)
+
+            if mag_array.size == 1 and hasattr(mag_array, "item"):
+                return mag_array.item()
+            return mag
+        
+        for key, val in res.coords.items():
+            row_dict[key] = to_scalar(val)
 
         if isinstance(res, Dataset):
             for key, val in res.data_vars.items():
@@ -219,7 +236,7 @@ class CSVTabulator(OutputGenerator):
                     val = getattr(src, other_attr, None)
                     if val is not None:
                         if isinstance(val, DataArray):
-                            val = val.values
+                            val = magnitude(val)
                         row_dict[other_attr] = val
                         found_attr = True
                         break

@@ -144,7 +144,7 @@ class EventValidation:
                 left, right = start, stop
 
             seg = data[self.to_int(left):self.to_int(right)]
-            if seg.size >= min_len.pint.magnitude:
+            if seg.size >= self.to_int(min_len, units='lfp_sample'):
                 valid_sets.append(seg)
 
         return valid_sets

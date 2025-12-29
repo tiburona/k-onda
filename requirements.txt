@@ -19,7 +19,6 @@ idna==3.11
 iniconfig==2.3.0
 Jinja2==3.1.6
 joblib==1.5.2
--e git+https://github.com/tiburona/k-onda.git@ac94917477f08ebafb4a73d9409b4b8d1102ef69#egg=k_onda
 kiwisolver==1.4.9
 lazy_loader==0.4
 locket==1.0.0

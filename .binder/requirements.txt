@@ -1,11 +1,19 @@
+# Pin the versions that match the working local setup so Binder avoids
+# the numpy/quantities/neo import break seen with newer releases.
+numpy==1.26.4
+quantities==0.16.2
+neo==0.13.0
+Pint==0.25.2
+pint-xarray==0.6.0
+
+# Remaining dependencies stay unpinned
 jupyter
 h5py
 matplotlib
-neo
-numpy
 pandas
 phylib
 scikit_learn
 scipy
 xarray
 mne
+-e .
