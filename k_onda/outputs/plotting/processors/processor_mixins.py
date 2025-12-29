@@ -146,14 +146,26 @@ class LabelMixin:
         Supports 'x_bottom', 'x_top', 'y_left', 'y_right', and 'title'.
         """
         kwargs = config.get('kwargs', {}).copy()
-        mapping = dict.fromkeys(['x', 'x_bottom'], ('bottom', cell.set_xlabel, 'xaxis'))
-        mapping.update(dict.fromkeys(['x_top'], ('top',    cell.set_xlabel, 'xaxis')))
-        mapping.update(dict.fromkeys(['y', 'y_left'], ('left',  cell.set_ylabel, 'yaxis')))
-        mapping.update(dict.fromkeys(['y_right'],  ('right', cell.set_ylabel, 'yaxis')))
-        mapping.update(dict.fromkeys(['title', 'title_center'], ('center', cell.set_title)))
-        mapping.update(dict.fromkeys(['title_left'], ('left', cell.set_title)))  
-        mapping.update(dict.fromkeys(['title_right'], ('right', cell.set_title)))  
+
+        mapping = {k: v for keys, v in [
+            (('x', 'x_bottom'), ('bottom', cell.set_xlabel, 'xaxis')),
+            (('y', 'y_left'),   ('left',   cell.set_ylabel, 'yaxis')),
+            (('title', 'title_center'), ('center', cell.set_title)),
+            (('title_left',),   ('left',   cell.set_title)),
+            (('title_right',),  ('right',  cell.set_title)),
+        ] for k in keys}
         
+        if position == 'x_top':
+            ax_top = cell.secondary_xaxis('top')
+            ax_top.spines['top'].set_visible(False)
+            ax_top.tick_params(top=False, labeltop=False)
+            mapping['x_top'] = ('top', ax_top.set_xlabel, ax_top.xaxis)
+        elif position == 'y_right':
+            ax_right = cell.secondary_yaxis('right')
+            ax_right.spines['right'].set_visible(False)
+            ax_right.tick_params(right=False, labelright=False)
+            mapping['y_right'] = ('right', ax_right.set_ylabel, ax_right.yaxis)
+
         if position not in mapping:
             print(f"Warning: _get_ax_label_setter called with invalid position: {position}")
             return None
@@ -164,7 +176,8 @@ class LabelMixin:
         else:
             pos, set_label_func, axis_attr = mapping[position]
             def setter(text, **extra_kwargs):
-                getattr(cell, axis_attr).set_label_position(pos)
+                axis = getattr(cell, axis_attr) if isinstance(axis_attr, str) else axis_attr
+                axis.set_label_position(pos)
                 set_label_func(text, **{**kwargs, **extra_kwargs})
         return setter
     
@@ -180,7 +193,6 @@ class LabelMixin:
         else:
             setter = self._get_ax_label_setter(cell, position, config)
         return setter, {}
-
     
     def set_label(self, cell, updated_info):
         """Sets various labels on the figure or axes based on the spec."""

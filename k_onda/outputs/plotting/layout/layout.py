@@ -196,11 +196,17 @@ class Layout(Base, ColorbarMixin, AxShareMixin):
             self.adjust_dimension('title', label_figure_dims=(3, 1), 
                 new_figure_ind=(2, 0), ratio_dim='height', rvrs=False)
             
+            self.adjust_dimension('x', label_figure_dims=(3, 1), 
+                new_figure_ind=(0, 0), ratio_dim='height', rvrs=True)
+            
             self.adjust_dimension('x_bottom', label_figure_dims=(3, 1), 
                 new_figure_ind=(0, 0), ratio_dim='height', rvrs=True)
             
             self.adjust_dimension('x_top', label_figure_dims=(3, 1), 
                 new_figure_ind=(2, 0), ratio_dim='height', rvrs=False)
+            
+            self.adjust_dimension('y', label_figure_dims=(1, 3), 
+                new_figure_ind=(0, 2), ratio_dim='width', rvrs=False)
 
             self.adjust_dimension('y_left', label_figure_dims=(1, 3), 
                 new_figure_ind=(0, 2), ratio_dim='width', rvrs=False)
