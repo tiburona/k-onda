@@ -16,7 +16,7 @@ def compute_mrl(alpha, w, dim):
         r = np.sqrt(sx**2 + sy**2) / wsum
 
     # require at least 2 spikes
-    count = np.sum(~np.isnan(w), axis=dim, keepdims=True)
+    count = np.nansum(w, axis=dim, keepdims=True)
     r = np.where(count < 2, np.nan, r)
 
     # drop the reduced axis

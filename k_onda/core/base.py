@@ -127,16 +127,16 @@ class Base:
 
         return da.pint.quantify(unit_registry=self.ureg)
     
-    def to_int(self, q, unit=None):
+    def to_int(self, q, unit=None, convert_to_scalar=True):
         """
         Convert a pint-xarray quantity `q` to int(s) in the given unit.
 
         - Scalar -> Python int
         - Array  -> numpy.ndarray[int]
         """
-        return self.to_numerical_type(q, unit, dtype="int")
+        return self.to_numerical_type(q, unit, dtype="int", convert_to_scalar=convert_to_scalar)
  
-    def to_float(self, q, unit=None, decimals=None):
+    def to_float(self, q, unit=None, decimals=None, convert_to_scalar=True):
         """
         Convert a pint-xarray quantity `q` to float(s) in the given unit.
 
@@ -144,9 +144,9 @@ class Base:
         - Scalar -> Python float
         - Array  -> numpy.ndarray[float]
         """
-        return self.to_numerical_type(q, unit, dtype="float", decimals=decimals)
+        return self.to_numerical_type(q, unit, dtype="float", decimals=decimals, convert_to_scalar=convert_to_scalar)
        
-    def to_numerical_type(self, q, unit=None, dtype="float", decimals=None):
+    def to_numerical_type(self, q, unit=None, dtype="float", decimals=None, convert_to_scalar=True):
         """
         Convert a pint-xarray quantity or xarray.DataArray `q` to floats or ints
         in the given unit (if pint-quantified).
@@ -158,11 +158,15 @@ class Base:
         - unit:
             * only used if `q` is pint-quantified; otherwise must be None
         - dtype = "float" or "int"
-            * Scalar -> Python scalar
+            * Scalar -> Python scalar (only if convert_to_scalar=True)
             * Array  -> numpy.ndarray
         - decimals:
             * if not None and dtype=="float", round to this many decimals
+        - convert_to_scalar:
+            * if False, NEVER unwrap size==1 results to Python scalars
         """
+        dtype = str(dtype).lower()
+
         # Is this a pint-quantified xarray object?
         is_pint = hasattr(q, "pint") and hasattr(q.pint, "units")
 
@@ -182,25 +186,26 @@ class Base:
             mag = q                          # already numpy or scalar
 
         mag = np.asarray(mag)
-        size = mag.size
 
         if dtype == "float":
+            out = mag.astype(float, copy=False)
             if decimals is not None:
-                mag = np.round(mag, decimals=decimals)
+                out = np.round(out, decimals=decimals)
 
-            if size == 1:
-                return float(mag)
-            else:
-                return mag.astype(float)
+            if convert_to_scalar and out.size == 1:
+                return float(out.item())
+            return out
 
         elif dtype == "int":
-            if size == 1:
-                return int(np.rint(float(mag)))
-            else:
-                return np.rint(mag).astype(int)
+            out = np.rint(mag).astype(int)
+
+            if convert_to_scalar and out.size == 1:
+                return int(out.item())
+            return out
 
         else:
             raise ValueError(f"Unknown data type: {dtype!r}")
+
         
     def standardize_time(self, q, units="second", decimals=8):
         """
@@ -317,6 +322,9 @@ class Base:
     
     def get_or_create_filter(self, cfg: dict) -> Filter:
         k = self.filter_key(cfg)
+        for key in ['fs', 'low', 'high']:
+            cfg[key] = self.to_float(cfg[key])
+        cfg['fs'] = self.to_float(cfg['fs'])
         flt = self.shared_filters.get(k)
         if flt is None:
             flt = Filter(cfg)          # designs once

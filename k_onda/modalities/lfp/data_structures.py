@@ -292,7 +292,7 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
         if self.events and self.calc_opts.get('validate_events'):
             ev_ok = self.get_event_validity(self.selected_brain_region)
             r_factor = self.to_int(self.event_duration/self.spectrogram.attrs['bin_size'])
-            ev_mask = np.repeat(self.get_valid_vec(ev_ok, self), r_factor)
+            ev_mask = np.repeat(ev_ok, r_factor)
             power = power.where(ev_mask)
            
         if self.calc_opts.get("frequency_type") == "block":

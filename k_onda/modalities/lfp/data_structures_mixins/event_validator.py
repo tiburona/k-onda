@@ -76,15 +76,7 @@ class EventValidation:
     def get_event_validity(self, region):
         period = self if self.name == 'period' else self.period
         ev = period.animal.lfp_event_validity[region]
-        return {i: valid for i, valid in enumerate(ev[self.period_type][period.identifier])}
-    
-    def get_valid_vec(self, ev_ok, period):
-        n_events = len(period.event_starts_in_period_time)
-        valid_vec = np.zeros(n_events, dtype=bool)
-        for k in range(n_events):
-            valid_vec[k] = ev_ok.get(k, False)
-    
-        return valid_vec
+        return ev[self.period_type][period.identifier]
     
     def divide_data_into_valid_sets(self, data, ev_ok, do_pad=False):
        
@@ -95,18 +87,15 @@ class EventValidation:
         
         n_events = len(period.event_starts_in_period_time)
 
-        valid_vec = self.get_valid_vec(ev_ok, period)
-        valid_vec = self.get_valid_vec(ev_ok, period)
-
         # Find contiguous runs of True
         runs = []
         i = 0
         while i < n_events:
-            if not valid_vec[i]:
+            if not ev_ok[i]:
                 i += 1
                 continue
             j = i
-            while j < n_events and valid_vec[j]:
+            while j < n_events and ev_ok[j]:
                 j += 1
             # events [i, j) are valid
             runs.append((i, j))

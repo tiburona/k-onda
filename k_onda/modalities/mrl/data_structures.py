@@ -6,7 +6,6 @@ from k_onda.modalities import EventValidation
 from k_onda.modalities.lfp import LFPProperties
 from ...modalities.mixins import BandPassFilterMixin
 from k_onda.math import compute_mrl, compute_phase
-from k_onda.utils import circ_r2_unbiased
 
 
 class MRLCalculator(Data, EventValidation, LFPProperties, BandPassFilterMixin):
@@ -29,8 +28,26 @@ class MRLCalculator(Data, EventValidation, LFPProperties, BandPassFilterMixin):
         
     @property
     def spikes(self):
-        self.spike_period.spike_times.pint.to('lfp_sample')
-        
+        spike_times_secs = self.spike_period.spikes - self.period.onset.pint.to("second")
+        spike_inds_lfp = self.to_int(spike_times_secs, unit="lfp_sample", convert_to_scalar=False)
+
+        if self.calc_opts.get("validate_events"):
+            events = self.period.event_starts_in_period_time - self.pre_event
+            ev = events.data            # pint.Quantity (seconds)
+            sp = spike_times_secs.data  # pint.Quantity (seconds)
+
+            event_idx = np.searchsorted(
+                ev.magnitude, sp.to(ev.units).magnitude, side="right"
+            ) - 1
+
+            event_valid = self.get_event_validity(self.selected_brain_region)
+            event_valid = np.asarray(event_valid, dtype=bool)
+            valid_spike = event_valid[event_idx]
+
+            spike_inds_lfp = spike_inds_lfp[valid_spike]
+
+        return spike_inds_lfp
+
     @property
     def weights(self):
         if self._weights is None:
@@ -46,62 +63,53 @@ class MRLCalculator(Data, EventValidation, LFPProperties, BandPassFilterMixin):
             return np.nansum(self.weights) > 4 and np.nansum(self.equivalent_calculator.weights) > 4
         else:
             return np.nansum(self.weights) > 4
-        
-    def translate_spikes_to_lfp_events(self, spikes):
-
-        event_starts = self.period_event_starts.pint.to('lfp_sample')
-        onset = self.period.onset.pint.to('lfp_sample')
-        pre_event = self.pre_event.pint.to('lfp_sample')
-        events = event_starts - onset - pre_event
-        indices = {}
-        for spike in spikes:
-            # Find the index of the event the spike belongs to
-            index = np.argmax(events > spike)
-            if events[index] > spike:
-                indices[spike] = index - 1
-            else:
-                indices[spike] = len(events) - 1
-        return indices
     
     def get_mrl_weights(self):
-        wt_range = range(self.to_int(self.duration.pint.to('lfp_sample')))
-        if not self.calc_opts.get('validate_events'):
-            weights = [1 if weight in self.spikes else float('nan') for weight in wt_range]
-        else:
-            indices = self.translate_spikes_to_lfp_events(self.spikes) 
-            weight_validity = {spike: self.get_event_validity(self.selected_brain_region)[event] 
-                               for spike, event in indices.items()}
-            weights = np.array([1 if weight_validity.get(w) else float('nan') for w in wt_range])
-        return np.array(weights)
+        n = int(self.to_int(self.duration.pint.to("lfp_sample")))
+
+        spike_idx = self.spikes.astype(float, copy=False)  # ensures NaN-friendly
+
+        valid = np.isfinite(spike_idx)
+        idx = spike_idx[valid].astype(np.int64)
+
+        # counts per sample
+        counts = np.bincount(idx, minlength=n)
+
+        # convert to NaN-for-zero
+        weights = counts.astype(float)
+        weights[counts == 0] = np.nan
+        return weights
 
     def get_phases(self):
-        return compute_phase(self.filter(self.mrl_data), self.lfp_padding)
+        return compute_phase(self.filter(self.mrl_data), self.to_int(self.lfp_padding))
     
     def get_angles(self):
+        phases = self.get_phases()   # expect (..., time) typically
+        w = self.weights             # float array with NaN for 0, counts otherwise
 
-        def adjust_angle(angle, weight):
-            if np.isnan(weight):
-                return np.nan
-            return angle % (2 * np.pi)
-
-        phases = self.get_phases().T
-        weights = self.weights
-
-        # Apply the function to every element
-        vfunc = np.vectorize(adjust_angle)
+        two_pi = 2 * np.pi
 
         if phases.ndim == 1:
-            adjusted_phases = vfunc(phases, weights)
+            valid = np.isfinite(w) & np.isfinite(phases)
+            counts = w[valid].astype(np.int64)
+            ang = np.mod(phases[valid], two_pi)
+            return np.repeat(ang, counts)
+
+        # phases is 2D: make it (time, bands) so it lines up with w
+        if phases.shape[-1] == w.shape[0]:
+            ph = phases.T                  # (time, bands) from (bands, time)
+        elif phases.shape[0] == w.shape[0]:
+            ph = phases                    # already (time, bands)
         else:
-            # Expand the dimensions of weights to make it (60000, 1)
-            weights_expanded = weights[:, np.newaxis]
-            adjusted_phases = vfunc(phases, weights_expanded)
+            raise ValueError("phases time axis doesn't match weights length")
 
-        # Filter out NaNs
-        adjusted_phases = adjusted_phases[~np.isnan(adjusted_phases)]
+        valid = np.isfinite(w) & np.isfinite(ph).all(axis=1)
+        counts = w[valid].astype(np.int64)
+        ang = np.mod(ph[valid], two_pi)    # (valid_time, bands)
 
-        return adjusted_phases
-    
+        # repeat each time row by its spike count; then flatten to 1D
+        return np.repeat(ang, counts, axis=0).ravel()
+
     def get_mrl(self):
         if not self.validator():
             return np.nan
