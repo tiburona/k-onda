@@ -424,8 +424,10 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
     @property
     def padded_regions_data(self):
         processed_lfp = self.period.animal.processed_lfp
+        pad_start = self.to_int(self.period.pad_start, unit='lfp_sample')
+        pad_stop = self.to_int(self.period.pad_stop, unit='lfp_sample')
         return [
-            processed_lfp[r][self.period.pad_start:self.period.pad_stop]
+            processed_lfp[r][pad_start:pad_stop]
             for r in self.regions
         ]
     
@@ -567,8 +569,8 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
 
     _name = 'amp_xcorr_calculator'
 
-    def __init__(self, period, regions):
-        super().__init__(period, regions)
+    def __init__(self, period):
+        super().__init__(period)
 
     @property
     def lags(self):
@@ -587,12 +589,13 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
         return amp_xcorr.idxmax('lag').item()
 
     def amplitude(self, signal):
-        env = np.abs(apply_hilbert_to_padded_data(self.filter(signal), self.lfp_padding))
+        pad_len = self.to_int(self.lfp_padding)
+        env = np.abs(apply_hilbert_to_padded_data(self.filter(signal), pad_len))
         # gentle taper; alpha=0.2 is mild, won’t distort the middle
         return env * tukey(env.size, alpha=0.2)
      
     def get_amp_xcorr(self):
-        fs = self.lfp_sampling_rate
+        fs = self.to_float(self.lfp_sampling_rate, unit="Hz")
 
         if not self.calc_opts.get('validate_events'):
             n1, n2 = (len(self.padded_regions_data[0]), len(self.padded_regions_data[1]))
@@ -670,4 +673,3 @@ class GrangerCalculator(RegionRelationshipCalculator):
 
 
     
-
