@@ -439,7 +439,12 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
         # it would be nice to have some logic in here to throw 
         # if children is events but events are not long enough for a valid 
         # calculation
-        base = self.calc_opts.get('base', 'coherence_calculator')
+        base = self.calc_opts.get('base')
+        if base is None:
+            if self.calc_type != 'lag_of_max_corr':
+                base = f'{self.calc_type}_calculator'
+            else:
+                base = 'amp_xcorr_calculator'
         validate_events = self.calc_opts.get('validate_events')
         if validate_events:
             if 'event' in base:
@@ -611,8 +616,9 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, LFPMethods, BandPassFilte
     @property
     def len_longest_corr(self):
         if self._len_longest_corr is None:
-            if self.calc_opts.get('max_lags'):
-                one_side = self.calc_opts['max_lags'] * self.to_float(self.lfp_sampling_rate) 
+            if self.calc_opts.get('max_lag'):
+                max_lag = self.quantity(self.calc_opts['max_lag'], units='second')
+                one_side = self.to_int(max_lag * self.lfp_sampling_rate)
             else:
                 one_side = max([len(seg.regions_data[0]) for seg in self.segments])
             self._len_longest_corr = one_side * 2 - 1

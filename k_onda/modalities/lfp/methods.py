@@ -153,7 +153,9 @@ class AmpXCorrMethods:
 
         amp1, amp2 = [self.amplitude(signal) for signal in self.padded_regions_data]
         corr, _ = pearson_xcorr(amp1, amp2, fs=fs, min_overlap=min_overlap)
-    
+        if len(corr) > self.len_longest_corr:
+            to_trim = int((len(corr) - self.len_longest_corr)/2)
+            corr = corr[to_trim:to_trim + self.len_longest_corr]
         if self.calc_opts.get('validate_events'):
             padded = np.full(self.len_longest_corr, np.nan)
             start = (self.len_longest_corr - corr.size) // 2
