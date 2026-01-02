@@ -1,5 +1,5 @@
 import numpy as np
-from k_onda.utils import to_hashable
+from k_onda.utils import to_hashable, magnitude
 
 
 class DescendentCache:
@@ -102,22 +102,15 @@ class EventValidation:
             i = j
 
         valid_sets = []
-        
-        
+
         if self.calc_opts.get('min_len'):
             min_len = self.quantity(
                 self.calc_opts['min_len'], units='second').pint.to('lfp_sample')
         else:
-            if self.calc_type == 'coherence':
-                coherence_args = self.welch_and_coherence_args('coherence')
-                nperseg = coherence_args['nperseg']
-                min_len = self.quantity(nperseg * 2, units='lfp_sample')
-            else:
-                # this was for filter padding but a) I don't remember the justification
-                # and b) this is going to error now with pint, but I'm going to leave the
-                # error as a cue to remind myself of the justification.
-                min_len = (self.lfp_sampling_rate + 1) * 3 + 1
-        
+            min_len = self.quantity(self.filter.min_len_default(), units="lfp_sample")
+            if hasattr(self, 'min_len') and self.min_len > min_len:
+                min_len = self.min_len
+
         event_starts = period.event_starts_in_period_time
 
         for ev_start, ev_stop in runs:
@@ -127,13 +120,13 @@ class EventValidation:
                     self.period.event_duration).pint.to('lfp_sample')
           
             if do_pad:
-                left  = max(0, start - self.lfp_padding.sel(edge='pre'))
-                right = min(len(data), stop + self.lfp_padding.sel(edge='post'))
+                left  = start
+                right = self.lfp_padding.sel(side='pre') + stop + self.lfp_padding.sel(side='post')
             else:
                 left, right = start, stop
 
             seg = data[self.to_int(left):self.to_int(right)]
-            if seg.size >= self.to_int(min_len, units='lfp_sample'):
+            if seg.size >= self.to_int(min_len, unit='lfp_sample'):
                 valid_sets.append(seg)
 
         return valid_sets

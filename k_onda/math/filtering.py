@@ -221,6 +221,34 @@ class Filter:
             # sosfiltfilt chooses padlen internally; rely on default
             return sosfiltfilt(self._sos, x)
         raise RuntimeError(f"Unknown filter kind: {self._kind}")
+    
+    def padlen_default(self) -> int:
+        """SciPy default padlen for the underlying filtering call we use."""
+        if self._kind == "none":
+            return 0
+        if self._kind == "fir":
+            # SciPy filtfilt docs
+            # - padlen must be < x.shape[axis] - 1
+            # - default padlen = 3 * max(len(a), len(b))
+            # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.filtfilt.html
+            return 3 * len(self._b)  
+        if self._kind == "sos":
+            # SciPy sosfiltfilt docs
+            # - sos must have shape (n_sections, 6)
+            # - padlen must be < x.shape[axis] - 1
+            # - default padlen = 3 * (2*len(sos) + 1 - min((sos[:,2]==0).sum(), (sos[:,5]==0).sum()))
+            # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.sosfiltfilt.html
+            sos = self._sos
+            nsec = sos.shape[0]
+            nz0 = int((sos[:, 2] == 0.0).sum())
+            np0 = int((sos[:, 5] == 0.0).sum())
+            return 3 * (2 * nsec + 1 - min(nz0, np0)) 
+        raise RuntimeError(f"Unknown filter kind: {self._kind}")
+
+    def min_len_default(self) -> int:
+        """Minimum N so SciPy default padlen is legal: need padlen < N-1 => N >= padlen+2."""
+        return self.padlen_default() + 2  # strict inequality in docs 
+
 
 
 
@@ -381,4 +409,3 @@ class FilterMixin:
         plt.show()
 
         return fig, axes
-

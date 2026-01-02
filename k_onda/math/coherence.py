@@ -84,7 +84,7 @@ def fisher_z_from_msc(msc_da: xr.DataArray) -> xr.DataArray:
     z = xr.apply_ufunc(np.arctanh, r, keep_attrs=True)
     return z
 
-def back_transform_fisher_z(z_da: xr.DataArray) -> xr.DataArray:
+def back_transform_fisher_z_and_square(z_da: xr.DataArray) -> xr.DataArray:
     r = xr.apply_ufunc(np.tanh, z_da, keep_attrs=True)          # inverse of atanh
     r2 = xr.apply_ufunc(np.square, r, keep_attrs=True)          # square it
     return r2

@@ -5,16 +5,17 @@ from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
 import json
 from scipy.signal.windows import tukey
+import math
 
-from k_onda.math import apply_hilbert_to_padded_data, welch_psd
+from k_onda.math import apply_hilbert_to_padded_data, welch_psd, fisher_z_from_r
 from k_onda.model.period_event import Period, Event
 from k_onda.model import Data
 from k_onda.model.bins import TimeBin
 from k_onda.interfaces import MatlabInterface
-from k_onda.math import normalized_xcorr
+from k_onda.math import normalized_xcorr, pearson_xcorr
 from ...modalities.mixins import BandPassFilterMixin
-from k_onda.utils import (is_iterable, contains_nan)
-from .methods import LFPMethods, SpectralDensityMethods, CoherenceMethods
+from k_onda.utils import is_iterable, contains_nan
+from .methods import LFPMethods, SpectralDensityMethods, CoherenceMethods, AmpXCorrMethods
 from .data_structures_mixins.event_validator import EventValidation
 from .data_structures_mixins.descendant_cache import DescendantCache
 
@@ -166,7 +167,7 @@ class LFPPeriod(LFPMethods, Period, LFPProperties, EventValidation, SpectralDens
             # todo: it would be nice to warn or error here if you open a pkl with
             # a different structure than your current experiment
             ev_ok = self.get_event_validity(self.selected_brain_region)
-            do_pad = self.calc_type not in ['coherence', 'psd']
+            do_pad = self.calc_type not in ['coherence', 'psd', 'csd']
             data = self.padded_data if do_pad else self.unpadded_data
             valid_sets = self.divide_data_into_valid_sets(data, ev_ok, do_pad=do_pad) 
             segments = [PeriodSegment(vs) for vs in valid_sets]
@@ -424,10 +425,9 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
     @property
     def padded_regions_data(self):
         processed_lfp = self.period.animal.processed_lfp
-        return [
-            processed_lfp[r][self.period.pad_start:self.period.pad_stop]
-            for r in self.regions
-        ]
+        pad_start = self.to_int(self.period.pad_start, unit='lfp_sample')
+        pad_stop = self.to_int(self.period.pad_stop, unit='lfp_sample')
+        return [processed_lfp[r][pad_start:pad_stop] for r in self.regions]
     
     @property
     def regions(self):
@@ -458,8 +458,8 @@ class RegionRelationshipCalculator(Data, EventValidation, LFPProperties, Descend
                 return self.get_events()
 
     def joint_event_validity(self):
-        evs = [self.get_event_validity(region) for region in self.regions]
-        return {i: all([ev[i] for ev in evs]) for i in evs[0]}
+        ev_ok_sets = zip(*(self.get_event_validity(r) for r in self.regions))
+        return [all(ev_ok) for ev_ok in ev_ok_sets]
     
     def get_segments(self):
 
@@ -561,21 +561,43 @@ class CoherenceCalculator(RegionRelationshipCalculator, CoherenceMethods, LFPMet
     _name = 'coherence_calculator'
     segment_class = CoherenceCalculatorSegment
     event_class = CoherenceCalculatorEvent
-    
+
+    @property
+    def min_len(self):
+        coherence_args = self.welch_and_coherence_args('coherence')
+        nperseg = coherence_args['nperseg']
+        return self.quantity(nperseg * 2, units='lfp_sample')
+
+
+class AmpXCorrSegment(RelationshipCalculatorSegment, LFPMethods, BandPassFilterMixin, AmpXCorrMethods):
+
+    _name = 'amp_xcorr_segment'
+
+    def __init__(self, amp_xcorr_calculator, data, index):
+        super().__init__(amp_xcorr_calculator, data, index)
+        # data was padded at event validation step
+        self.padded_regions_data = self.regions_data
+
+    @property
+    def len_longest_corr(self):
+        return self.parent.len_longest_corr
+
    
-class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
+class AmpXCorrCalculator(RegionRelationshipCalculator, LFPMethods, BandPassFilterMixin, AmpXCorrMethods):
 
     _name = 'amp_xcorr_calculator'
+    segment_class = AmpXCorrSegment
 
-    def __init__(self, period, regions):
-        super().__init__(period, regions)
+    def __init__(self, period):
+        super().__init__(period)
+        self._len_longest_corr = None
 
     @property
     def lags(self):
         if self.calc_type == 'lag_of_max_corr':
             raise ValueError("Data type is max correlation; there are not multiple lags.")
         return [TimeBin(i, data_point, self) for i, data_point in enumerate(self.calc)]
-    
+
     def get_lag_of_max_corr(self):
         # TODO: it is causing all kinds of special pleading elsewhere in the code to have this method
         # I think we should move toward letting the user have a list of operations on the base calc type
@@ -586,60 +608,15 @@ class AmpXCorrCalculator(RegionRelationshipCalculator, BandPassFilterMixin):
             return xr.DataArray(np.nan)
         return amp_xcorr.idxmax('lag').item()
 
-    def amplitude(self, signal):
-        env = np.abs(apply_hilbert_to_padded_data(self.filter(signal), self.lfp_padding))
-        # gentle taper; alpha=0.2 is mild, won’t distort the middle
-        return env * tukey(env.size, alpha=0.2)
-     
-    def get_amp_xcorr(self):
-        fs = self.lfp_sampling_rate
-
-        if not self.calc_opts.get('validate_events'):
-            n1, n2 = (len(self.padded_regions_data[0]), len(self.padded_regions_data[1]))
-            assert n1 == n2, f"LFP regions mismatch: {n1} vs {n2}"
-
-            amp1, amp2 = [self.amplitude(signal) for signal in self.padded_regions_data]
-            corr, _ = normalized_xcorr(amp1, amp2, fs=fs)
-            result = corr
-
-        else:
-            ev_ok = self.get_event_validity()
-            valid_sets, len_sets = self.get_valid_sets(ev_ok, do_pad=True)
-            if not valid_sets:
-                return xr.DataArray(np.nan)
-
-            len_longest_corr = max(len_sets) * 2 - 1
-            corrs = []
-
-            for signal_series in valid_sets:
-                amp1, amp2 = [self.amplitude(signal) for signal in signal_series]
-                corr, _ = normalized_xcorr(amp1, amp2, fs=fs)
-                # todo: this len_longest_corr logic will cause an error if you
-                # are trying to average over different calculators with different lengths
-                # in practice, often not a problem since you restrict the length of the longest corr
-                # but should be fixed
-                weight = corr.size / len_longest_corr
-                padded = np.full(len_longest_corr, np.nan)
-                start = (len_longest_corr - corr.size) // 2
-                padded[start:start + corr.size] = corr * weight
-                corrs.append(padded)
-
-            result = np.nansum(np.vstack(corrs), axis=0)
-
-        # Build lags deterministically from the final result length
-        assert result.size % 2 == 1, "Cross-corr length should be odd (2*N-1)."
-        half = (result.size - 1) // 2
-        lags = np.arange(-half, half + 1, dtype=float) / fs
-
-        max_lag_sec = self.calc_opts.get('max_lag_sec', None)
-        if max_lag_sec is None and 'lags' in self.calc_opts:
-            max_lag_sec = self.calc_opts['lags'] / fs
-        if max_lag_sec is not None:
-            m = (lags >= -max_lag_sec) & (lags <= max_lag_sec)
-            result = result[m]
-            lags = lags[m]
-
-        return xr.DataArray(result, dims=['lag'], coords={'lag': lags})
+    @property
+    def len_longest_corr(self):
+        if self._len_longest_corr is None:
+            if self.calc_opts.get('max_lags'):
+                one_side = self.calc_opts['max_lags'] * self.to_float(self.lfp_sampling_rate) 
+            else:
+                one_side = max([len(seg.regions_data[0]) for seg in self.segments])
+            self._len_longest_corr = one_side * 2 - 1
+        return self._len_longest_corr
     
     
 class GrangerCalculator(RegionRelationshipCalculator): 

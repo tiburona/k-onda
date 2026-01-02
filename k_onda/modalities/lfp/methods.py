@@ -1,5 +1,7 @@
 import mne
+import math
 import numpy as np
+from scipy.signal.windows import tukey
 import xarray as xr
 
 from k_onda.model.data import TransformRegistryMixin
@@ -7,18 +9,22 @@ from k_onda.model.data import TransformRegistryMixin
 from k_onda.math import (
     msc_from_spectra,
     fisher_z_from_msc,
-    back_transform_fisher_z,
+    back_transform_fisher_z_and_square,
     welch_psd,
     welch_csd,
     multitaper_psd,
-    multitaper_csd
+    multitaper_csd,
+    fisher_z_from_r,
+    back_transform_fisher_z,
+    pearson_xcorr,
+    apply_hilbert_to_padded_data
 )
 
 
 class LFPMethods(TransformRegistryMixin):
     TRANSFORMS = {
-        "coherence": (fisher_z_from_msc, back_transform_fisher_z),
-        # 'amp_xcorr': (amp_xcorr_transform, amp_xcorr_back), ...
+        "coherence": (fisher_z_from_msc, back_transform_fisher_z_and_square),
+        "amp_xcorr": (fisher_z_from_r, back_transform_fisher_z)
     }
 
     def get_weights(self):
@@ -87,12 +93,18 @@ class LFPMethods(TransformRegistryMixin):
 
     def resolve_calc_fun(self, calc_type, stop_at=None):
         if not hasattr(self, "children") or len(self.children) == 0 or stop_at in self.name:
-            return getattr(self, f"get_{calc_type}_")()
+            return  getattr(self, f"get_{calc_type}_")()
         else:
             return self.get_average(
                 f"get_{calc_type}", weights=self.get_weights(), stop_at=stop_at
             )
 
+    def get_amp_xcorr(self):
+        base = self.calc_opts.get("base")
+        if base is None:
+            base = "segment" if self.calc_opts.get("validate_events") else "calculator"
+        return self.resolve_calc_fun('amp_xcorr', stop_at=base)
+            
     def get_base_of_coherence_constituent(self, calc_type):
         base = self.calc_opts.get("base")
         if isinstance(base, dict):
@@ -118,6 +130,77 @@ class LFPMethods(TransformRegistryMixin):
     def get_psd_and_csd(self):
         stop_at = self.get_base_of_coherence_constituent("psd_and_csd")
         return self.resolve_calc_fun("psd_and_csd", stop_at=stop_at)
+    
+
+class AmpXCorrMethods:
+
+    @property
+    def min_len(self):
+        min_cycles = float(self.calc_opts.get("min_length_cycles", 10))
+
+        fs_hz = self.to_float(self.lfp_sampling_rate, 'Hz')
+        f_low_hz = self.to_float(self.freq_range.sel(edge="low"), 'Hz')
+
+        n_samp = int(math.ceil(min_cycles * fs_hz / f_low_hz))  # cycles * (samples/sec) / (cycles/sec)
+
+        return self.quantity(n_samp, units="lfp_sample")
+
+    def get_amp_xcorr_(self):
+        fs = self.to_int(self.lfp_sampling_rate, "Hz")
+        f_low = self.to_float(self.freq_range.sel(edge="low"), "Hz")
+        min_cycles_lag = float(self.calc_opts.get("min_overlap_cycles", 5))
+        min_overlap = int(math.ceil(min_cycles_lag * fs / f_low))
+
+        amp1, amp2 = [self.amplitude(signal) for signal in self.padded_regions_data]
+        corr, _ = pearson_xcorr(amp1, amp2, fs=fs, min_overlap=min_overlap)
+    
+        if self.calc_opts.get('validate_events'):
+            padded = np.full(self.len_longest_corr, np.nan)
+            start = (self.len_longest_corr - corr.size) // 2
+            padded[start:start + corr.size] = corr
+            result = padded
+        else:
+            result = corr
+
+        result, lags = self.build_lags(result)
+        da = self.make_da(result, lags)
+        return da
+
+    def amplitude(self, signal):
+        env = np.abs(apply_hilbert_to_padded_data(
+            self.filter(signal), self.to_int(self.lfp_padding, unit='lfp_sample')))
+        alpha = self.calc_opts.get("amp_tukey_alpha", None)  # None or 0 disables
+        if alpha is not None:
+            alpha = float(alpha)
+            if alpha > 0:
+                env = env * tukey(env.size, alpha=alpha)
+        return env
+    
+    def build_lags(self, result):
+
+        fs = self.to_float(self.lfp_sampling_rate)
+
+        # Build lags deterministically from the final result length
+        half = (result.size - 1) // 2
+        lags = np.arange(-half, half + 1, dtype=float) / fs
+
+        max_lag_sec = self.calc_opts.get('max_lag', None)
+       
+        if max_lag_sec is not None:
+            m = (lags >= -max_lag_sec) & (lags <= max_lag_sec)
+            result = result[m]
+            lags = lags[m]
+        return result, lags
+    
+    def make_da(self, result, lags):
+        da = xr.DataArray(result, dims=['lag'], coords={'lag': lags})
+        da.attrs.update({"space": "raw", "transform_key": "amp_xcorr"})
+    
+        if da.attrs["space"] == "raw":
+            da = fisher_z_from_r(da)
+            da.attrs["space"] = "z"
+        
+        return da
 
 
 class SpectralDensityMethods:

@@ -15,18 +15,18 @@ Make K-Onda a reliable and user-friendly electrophysiology tool for our lab and 
 ---
 
 ### 2. Testing Infrastructure
-- Expand end-to-end tests for LFP  
-- Add end-to-end tests for Spike  
-- Add end-to-end tests for MRL  
+- Expand end-to-end tests for Power, Spike, and MRL
+- Add end-to-end tests for various region relationship calculations   
 - Add unit tests for `aggregates.py`  
 - Add “golden-file tests” for plots — generate known-good PNGs and assert they match within a tolerance  
 
 ---
 
 ### 3. User-Facing Documentation 
-Two complementary modes:
+Three complementary modes:
 - Tutorials / worked examples  
-- Encyclopedic-style reference  
+- Encyclopedic-style reference
+- Where relevant, scientific documentation (i.e., where K-Onda is opinionated in ways scientists would want to understand and report) 
 
 What needs documenting:
 - Experiment config  
@@ -104,14 +104,14 @@ Build the pieces that allow K-Onda to grow.
 ---
 
 ### 12. Performance & Resource Use
-- Audit speed and memory usage on all pipelines, looking for bloat
+- Audit speed and memory usage on important pipelines, looking for bloat
 - Provide users with a small set of options to trade off speed vs. memory
 - Explore safe opportunities for parallelization (e.g., per animal / per unit / per period) and decide whether to expose a simple “run in parallel” option for users with more cores
 
 ---
 
 ### 13. File Inputs 
-- Think about whether we need NWB support  
+- Collect set of standard input formats for electrophys data and add support.  
 
 ---
 
@@ -119,6 +119,7 @@ Build the pieces that allow K-Onda to grow.
 - Expand `Container` (currently a stub) to support non-data objects (JPEGs, SVGs, etc.)  
 - Reintroduce missing plot types from earlier versions: e.g., polar plots  
 - Identify any other electrophysiology-standard plots not yet supported
+- Determine user demand for interactive plots, and implement them if its high.  (This could entail a refactor to use Plotly as the plotting engine.)
 
 ---
 
@@ -185,7 +186,6 @@ Aspirational goals.
 
 ---
 
-
 ### 23. GUI for Publication-Ready Analysis
 - Cross-platform GUI for assembling figures  
 - Automatic embedding of provenance  
@@ -195,12 +195,18 @@ Aspirational goals.
 ---
 
 ### 24. API for Programmer-Scientists
-
 - Define and document a stable public API for K-Onda objects and methods so they can be used in external scripts and notebooks.
 - Optionally embed an IPython/Jupyter-style notebook view in K-Onda so experienced Python users can explore data while still keeping analysis history in one place.
 
 ---
 
-### 25. AI-Assisted Statistical and Analytical Guidance
+### 25. Multi-user server mode: Auth, Roles (RBAC), and Remote Execution
+- Support authentication (distinct user identities) and authorization (role-based permissions).
+- Support a server/worker deployment: run on a host machine; connect from a client.
+- Add a security review focused on user-supplied configs/plugins and any user-injectable code paths.
+
+---
+
+### 26. AI-Assisted Statistical and Analytical Guidance
 - Suggest appropriate analyses  
 - Provide retrieval-augmented explanations referencing the user’s data  

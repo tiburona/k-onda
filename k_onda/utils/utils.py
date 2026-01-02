@@ -129,23 +129,20 @@ def to_serializable(val):
     Convert non-serializable objects to serializable format.
     """
     if isinstance(val, range):
-        # Convert range to list
         return list(val)
     elif isinstance(val, tuple):
-        # Convert tuple to list
-        return list(val)
+        return to_serializable(list(val))
+    elif isinstance(val, set):
+        return to_serializable(list(val))
     elif isinstance(val, dict):
-        # Recursively apply to dictionary items
         return {key: to_serializable(value) for key, value in val.items()}
     elif isinstance(val, list):
-        # Recursively apply to each item in the list
         return [to_serializable(item) for item in val]
     elif isinstance(val, np.ndarray):
-        return [to_serializable(item) for item in val]
+        return to_serializable(list(val))
     elif isinstance(val, np.integer):
         return int(val)
     else:
-        # Return the value as is if it's already serializable
         return val
     
 

@@ -35,10 +35,6 @@
 - Would PSTH be faster if in the beginning of any operation, the list of spike times were converted into a spike train and find spikes became an indexing rather than a search operation?  Note: robot overlord doesn't like this idea, but suggests: "If events are short and numerous, precompute spike indices per period type once and reuse."
 
 
-## Random
-
-- Why did I make self.get_event_validity(self.selected_brain_region) a dict with events as keys? This is dumb; the keys are an integer list.  Refactor to array.
-
 
 
 
