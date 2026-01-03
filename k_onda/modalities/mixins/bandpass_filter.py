@@ -12,10 +12,14 @@ class BandPassFilterMixin(FilterMixin):
     @property
     def band_pass_filter_cfg(self):
         cfg = deepcopy(DEFAULTS)
+        fs = self.to_float(self.lfp_sampling_rate, unit="Hz")
+        low = self.to_float(self.freq_range[0], unit="Hz")
+        high = self.to_float(self.freq_range[1], unit="Hz")
         cfg.update(
-            {"fs": self.lfp_sampling_rate,
-             "low": self.freq_range[0],
-             "high": self.freq_range[1]
+            {
+                "fs": fs,
+                "low": low,
+                "high": high,
         }
         )
         return cfg

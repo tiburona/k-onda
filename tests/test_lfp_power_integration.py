@@ -1,9 +1,11 @@
 from copy import deepcopy
 from pathlib import Path
+from collections import defaultdict
 
 import numpy as np
 import mne
 
+from k_onda.core.base import Base
 from k_onda.resources.devtools import find_project_root
 from k_onda.resources.example_configs.lfp_opts import SPECTRUM_OPTS
 from k_onda.run.initialize_experiment import Initializer
@@ -13,6 +15,22 @@ from tests.utils import write_lfp_files
 
 PROJECT_ROOT = find_project_root()
 CONFIG_PATH = Path(f"{PROJECT_ROOT}/k_onda/resources/example_configs/config.json")
+
+
+def _reset_base_state():
+    Base._cache = defaultdict(dict)
+    Base._shared_filters = {}
+    Base._criteria = defaultdict(lambda: defaultdict(tuple))
+    Base._selected_period_type = ''
+    Base._selected_period_types = []
+    Base._selected_period_group = []
+    Base._selected_neuron_type = ''
+    Base._selected_brain_region = ''
+    Base._selected_frequency_band = ''
+    Base._selected_region_set = []
+    Base._calc_opts = {}
+    Base._io_opts = {}
+    Base._experiment = None
 
 
 def _build_calc_opts(base: str):
@@ -49,6 +67,7 @@ def _prepare_experiment(calc_opts):
     Returns the experiment and the TemporaryDirectory so callers can clean up.
     """
     np.random.seed(0)
+    _reset_base_state()
     tmpdir, input_file = write_lfp_files()
     output_dir = Path(tmpdir.name)
 
