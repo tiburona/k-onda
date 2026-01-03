@@ -34,6 +34,7 @@
 
 - Would PSTH be faster if in the beginning of any operation, the list of spike times were converted into a spike train and find spikes became an indexing rather than a search operation?  Note: robot overlord doesn't like this idea, but suggests: "If events are short and numerous, precompute spike indices per period type once and reuse."
 
+- It might be nice to save the processed LFP data to disk rather than repreprocessing them every time.
 
 
 

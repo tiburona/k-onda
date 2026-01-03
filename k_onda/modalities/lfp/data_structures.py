@@ -4,15 +4,12 @@ import xarray as xr
 from mne.time_frequency import tfr_array_multitaper
 from copy import deepcopy
 import json
-from scipy.signal.windows import tukey
-import math
 
-from k_onda.math import apply_hilbert_to_padded_data, welch_psd, fisher_z_from_r
+from k_onda.math import welch_psd
 from k_onda.model.period_event import Period, Event
 from k_onda.model import Data
 from k_onda.model.bins import TimeBin
 from k_onda.interfaces import MatlabInterface
-from k_onda.math import normalized_xcorr, pearson_xcorr
 from ...modalities.mixins import BandPassFilterMixin
 from k_onda.utils import is_iterable, contains_nan
 from .methods import LFPMethods, SpectralDensityMethods, CoherenceMethods, AmpXCorrMethods

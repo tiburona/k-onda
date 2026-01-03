@@ -17,6 +17,7 @@ from k_onda.math import (
     fisher_z_from_r,
     back_transform_fisher_z,
     pearson_xcorr,
+    normalized_xcorr,
     apply_hilbert_to_padded_data
 )
 
