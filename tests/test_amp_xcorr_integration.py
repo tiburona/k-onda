@@ -7,6 +7,9 @@ import xarray as xr
 from scipy.signal import correlate, hilbert
 from scipy.signal.windows import tukey
 
+from k_onda.math.hilbert import apply_hilbert_to_padded_data
+from k_onda.math import fisher_z_from_r
+from k_onda.math.correlation import pearson_xcorr
 from k_onda.core.base import Base
 from k_onda.resources.devtools import find_project_root
 from k_onda.run.initialize_experiment import Initializer
@@ -54,7 +57,7 @@ def _build_calc_opts(calc_type: str):
         "region_sets": ["bla_hpc"],
         "frequency_bands": [(6.0, 10.0)],
         "lfp_padding": (0, 0),
-        "max_lag_sec": 0.25,
+        "max_lag": 0.25,
         "filters": {"amp_xcorr": {"method": "none"}},
         "periods": {
             "stim": {"event_pre_post": (0.2, 0.2)},
@@ -109,32 +112,40 @@ def _normalized_xcorr_manual(x, y, fs):
 def _manual_amp_xcorr(calculator):
     fs = calculator.to_float(calculator.lfp_sampling_rate, unit="Hz")
     pad_len = calculator.to_int(calculator.lfp_padding)
-    alpha = 0.2
+    alpha = calculator.calc_opts.get("amp_tukey_alpha")
 
     envelopes = []
     for signal in calculator.padded_regions_data:
-        analytic = hilbert(np.asarray(signal))
+        filtered = calculator.filter(signal)
+        analytic = apply_hilbert_to_padded_data(np.asarray(filtered), pad_len)
         start = int(pad_len[0])
         stop = -int(pad_len[1]) if pad_len[1] else None
         env = np.abs(analytic[start:stop])
-        env = env * tukey(env.size, alpha=float(alpha))
+        if alpha not in (None, 0):
+            env = env * tukey(env.size, alpha=float(alpha))
         envelopes.append(env)
 
     amp1, amp2 = envelopes
 
-    corr, lags = _normalized_xcorr_manual(amp1, amp2, fs)
+    f_low = calculator.to_float(calculator.freq_range.sel(edge="low"), unit="Hz")
+    min_cycles = float(calculator.calc_opts.get("min_overlap_cycles", 5))
+    min_overlap = int(np.ceil(min_cycles * fs / f_low))
+    corr, lags = pearson_xcorr(amp1, amp2, fs=fs, min_overlap=min_overlap)
 
-    max_lag_sec = calculator.calc_opts.get("max_lag_sec")
-    if max_lag_sec is None and "lags" in calculator.calc_opts:
-        max_lag_sec = calculator.calc_opts["lags"] / fs
-
+    max_lag_sec = calculator.calc_opts.get("max_lag")
     if max_lag_sec is not None:
+        one_side = int(np.rint(max_lag_sec * fs))
+        target_len = max(1, one_side * 2 - 1)
+        if corr.size > target_len:
+            trim = (corr.size - target_len) // 2
+            corr = corr[trim : trim + target_len]
+            lags = lags[trim : trim + target_len]
         mask = (lags >= -max_lag_sec) & (lags <= max_lag_sec)
         corr = corr[mask]
         lags = lags[mask]
 
     corr = np.clip(corr, -1 + 1e-12, 1 - 1e-12)
-    return xr.DataArray(corr, dims=("lag",), coords={"lag": lags})
+    return xr.DataArray(corr, dims=("lag",), coords={"lag": lags}, attrs={"space": "final"})
 
 
 def _stim_calculator(experiment):

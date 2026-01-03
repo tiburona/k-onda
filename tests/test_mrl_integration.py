@@ -1,9 +1,11 @@
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 from scipy.signal import butter, hilbert, sosfiltfilt
 
 from k_onda.resources.devtools import find_project_root
+from k_onda.core.base import Base
 from k_onda.run.initialize_experiment import Initializer
 from k_onda.run.runner import CalcOptsProcessor
 
@@ -12,6 +14,22 @@ from tests.utils import write_lfp_files
 
 PROJECT_ROOT = find_project_root()
 CONFIG_PATH = Path(f"{PROJECT_ROOT}/k_onda/resources/example_configs/config.json")
+
+
+def _reset_base_state():
+    Base._cache = defaultdict(dict)
+    Base._shared_filters = {}
+    Base._criteria = defaultdict(lambda: defaultdict(tuple))
+    Base._selected_period_type = ''
+    Base._selected_period_types = []
+    Base._selected_period_group = []
+    Base._selected_neuron_type = ''
+    Base._selected_brain_region = ''
+    Base._selected_frequency_band = ''
+    Base._selected_region_set = []
+    Base._calc_opts = {}
+    Base._io_opts = {}
+    Base._experiment = None
 
 
 def _build_calc_opts():
@@ -38,6 +56,7 @@ def _prepare_experiment(calc_opts):
     Spin up an Experiment wired for MRL with synthetic LFP data.
     """
     np.random.seed(0)
+    _reset_base_state()
     tmpdir, input_file = write_lfp_files()
     output_dir = Path(tmpdir.name)
 
@@ -75,9 +94,9 @@ def _manual_mrl(calculator):
         lfp = lfp[calculator.selected_brain_region]
     filtered = _bandpass(np.asarray(lfp), fs, low, high)
 
-    pad = calculator.to_int(calculator.lfp_padding, convert_to_scalar=False)
-    start = int(pad[0])
-    stop = -int(pad[1]) if pad[1] else None
+    pad = np.asarray(calculator.to_int(calculator.lfp_padding))
+    start = int(pad[0]) if pad.size else 0
+    stop = -int(pad[1]) if pad.size > 1 and pad[1] else None
     phases = np.angle(hilbert(filtered))[start:stop]
 
     onset_s = calculator.to_float(calculator.period.onset, unit="second")
