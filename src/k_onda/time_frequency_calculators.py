@@ -3,6 +3,7 @@ import numpy as np
 
 from .signal import TimeFrequencySignal
 from .calculator import Calculator
+from .dataarray_factories import make_frequency_time_series
 
 
 class Spectrogram(Calculator):
@@ -20,4 +21,5 @@ class Spectrogram(Calculator):
         freqs = config["freqs"]
         dt = config["decim"] / config["sfreq"]  # seconds per bin
         times = np.arange(power.shape[-1]) * dt  # plain floats in seconds  
-        return power
+        da = make_frequency_time_series(power, freqs, times)
+        return da

@@ -86,5 +86,4 @@ preprocessed_signal = (
 
 epoch_0_power = preprocessed_signal.spectrogram(power_config).window(epoch)
 
-
 a = 'foo'
