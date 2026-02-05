@@ -6,10 +6,7 @@ class Shift(Calculator):
     def __init__(self, shift):
         self.config = {"shift": shift} 
     
-    def _apply(self, parent, shift):
-
-        data = parent.data
-
+    def _apply(self, data, shift):
         return data + shift 
     
 
@@ -18,12 +15,7 @@ class Scale(Calculator):
     def __init__(self, scaling_factor):
         self.config = {"scaling_factor": scaling_factor} 
     
-    def _apply(self, parent, scaling_factor):
-
-        data = parent.data
-        # TODO: this probably needs to be sensitive to whether the input
-        # is numpy, xarray, unit-aware xarray, etc.  I'm just trying to implement
-        # this simplest possible thing at first.  
+    def _apply(self, data, scaling_factor):
         return data * scaling_factor
     
 

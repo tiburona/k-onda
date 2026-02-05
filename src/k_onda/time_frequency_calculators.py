@@ -15,8 +15,8 @@ class Spectrogram(Calculator):
         return TimeFrequencySignal
 
     def _apply(self, data, config):
-
-        data_3d = data[np.newaxis, np.newaxis, :]
+        data_np = np.asarray(data)
+        data_3d = data_np[np.newaxis, np.newaxis, :]
         power = tfr_array_multitaper(data_3d, **config).squeeze()
         freqs = config["freqs"]
         dt = config["decim"] / config["sfreq"]  # seconds per bin

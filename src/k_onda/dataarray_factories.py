@@ -1,5 +1,19 @@
 
+import numpy as np
 import xarray as xr
+
+
+
+
+def get_time_coords(data, sampling_rate):
+    dt = (1 / sampling_rate).to("s")
+    time = np.arange(len(data)) * dt.magnitude
+    return time
+
+
+def make_time_series_from_fs(data, sampling_rate, units="s", data_units=None, attrs=None):
+    time = get_time_coords(data, sampling_rate)
+    return make_time_series(data, time, units, data_units, attrs)
 
 
 def make_time_series(data, time, units="s", data_units=None, attrs=None):

@@ -6,9 +6,26 @@ from .calculator_mixins import (
     TimeFrequencyCalculatorMixin
     )
 
+from .select_mixin import SelectMixin
 
 
-class Signal(SignalCalculatorMixin):
+
+class Signal(SignalCalculatorMixin, SelectMixin):
+
+    @classmethod
+    def from_data(cls, data, **kwargs):
+        """Create a signal from pre-computed data."""
+        signal = object.__new__(cls)
+        signal.parent = None
+        signal.transform = None
+        signal.config = {}
+        signal._cached_data = data
+        signal.storage_strategy = "memory"
+        for key, value in kwargs.items():
+            setattr(signal, key, value)
+        return signal
+
+
     # strategy is one of: "lazy", "memory", "disk"
     def __init__(self, parent, transform, config, storage_strategy="lazy"):
         self.parent = parent
@@ -34,21 +51,6 @@ class Signal(SignalCalculatorMixin):
     @property
     def data(self):
         return self._materialize()
-
-    def window(self, epoch):
-
-        if not hasattr(self, 'parent'):
-            return self.data.sel(time=slice(epoch.t0, epoch.t1))
-
-        parent_data = self.parent.window(epoch) # TODO: add padding
-        if self.transform is None:
-            data = parent_data
-        else:
-            data = self.transform(parent_data)
-        
-        return data
-    
-
     
 
 class TimeSeriesSignal(Signal, TimeSeriesCalculatorMixin, TimeFrequencyCalculatorMixin):

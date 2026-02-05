@@ -1,6 +1,8 @@
 from functools import partial, lru_cache
 import numpy as np
 from scipy.signal import iirnotch, tf2sos, sosfreqz, filtfilt, sosfiltfilt
+
+from .dataarray_factories import make_time_series, make_time_series_from_fs
     
 
 class Calculator:
@@ -31,13 +33,17 @@ class Normalize(Calculator):
     
     def _apply(self, data, method):
         if method == "rms":
-            return data / np.sqrt(np.mean(data ** 2))
+            result = data / np.sqrt(np.mean(data ** 2))
         elif method == "zscore":
-            return (data - np.mean(data)) / np.std(data)
+            result = (data - np.mean(data)) / np.std(data)
         elif method == 'minmax':
-            return (data - data.min()) / (data.max() - data.min())
+            result = (data - data.min()) / (data.max() - data.min())
         else:
             raise ValueError("Unknown normalize method")
+        
+        da = make_time_series_from_fs(result, self.parent_signal.sampling_rate)
+        
+        return da
         
 
 class Filter(Calculator):
@@ -72,7 +78,9 @@ class Filter(Calculator):
             # TODO: implement other filter types
             pass
         
-        return sosfiltfilt(sos, data)
+        result = sosfiltfilt(sos, data)
+
+        return make_time_series_from_fs(result, fs)
     
 
 

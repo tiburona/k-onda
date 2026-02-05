@@ -4,7 +4,8 @@ import xarray as xr
 
 from .signal import Signal, TimeSeriesSignal
 from .calculator_mixins import SignalCalculatorMixin
-from .dataarray_factories import make_time_series
+from .dataarray_factories import make_time_series, get_time_coords
+from .select_mixin import SelectMixin
 
 
 class DataSource:
@@ -65,7 +66,7 @@ class DataComponent:
         return self._data
   
     
-class LFPChannel(DataComponent, SignalCalculatorMixin):
+class LFPChannel(DataComponent, SignalCalculatorMixin, SelectMixin):
 
     output_signal_class = TimeSeriesSignal
 
@@ -74,12 +75,7 @@ class LFPChannel(DataComponent, SignalCalculatorMixin):
         self.channel_idx = channel_idx
         self.sampling_rate = self.data_source.sampling_rate
 
-    def window(self, epoch):
-        return self.data.sel(time=slice(epoch.t0, epoch.t1))
-
     def data_loader(self):
         data = self.data_source.get_channel(self.channel_idx)
-        dt = (1 / self.sampling_rate).to("s")
-        t = np.arange(len(data)) * dt.magnitude 
-        da = make_time_series(data, t) 
+        da = make_time_series(data, get_time_coords(data, self.sampling_rate)) 
         return da  

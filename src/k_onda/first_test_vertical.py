@@ -7,6 +7,8 @@ import pint_xarray
 from .time import Session
 from .sources import LFPChannel, LFPRecording
 from .central import LFP_SAMPLING_RATE
+from .signal import TimeFrequencySignal
+from .select_mixin import FrequencyBand
 
 
 data_loader_config = {
@@ -85,5 +87,20 @@ preprocessed_signal = (
     )
 
 epoch_0_power = preprocessed_signal.spectrogram(power_config).window(epoch)
+
+
+preprocessed_signal.window(epoch).filter(filter_config)
+
+signal_from_data = TimeFrequencySignal.from_data(epoch_0_power.data, sampling_rate=LFP_SAMPLING_RATE)
+
+fb = FrequencyBand(4, 8)
+
+band_power = (
+    epoch_0_power
+    .band(fb)) 
+
+# TODO: do you know what would be nice?  if essential attrs were stored on 
+# in the output da, and from_data could read them back in without getting them
+# passed.  
 
 a = 'foo'
