@@ -11,12 +11,17 @@ def get_time_coords(data, sampling_rate):
     return time
 
 
-def make_time_series_from_fs(data, sampling_rate, units="s", data_units=None, attrs=None):
+def _ensure_attrs(attrs, **known_attrs):
+    attrs = attrs or {}
+    attrs.update(known_attrs)
+    return attrs
+
+
+def make_time_series(data, sampling_rate, units="s", data_units=None, attrs=None):
+    
     time = get_time_coords(data, sampling_rate)
-    return make_time_series(data, time, units, data_units, attrs)
-
-
-def make_time_series(data, time, units="s", data_units=None, attrs=None):
+    
+    attrs = _ensure_attrs(sampling_rate=sampling_rate)
 
     return make_data_series(
         data, 
@@ -27,14 +32,19 @@ def make_time_series(data, time, units="s", data_units=None, attrs=None):
         attrs=attrs)
 
 
-def make_frequency_time_series(
-        data, 
-        freq,
-        time,
-        freq_units="Hz",  
-        time_units="s", 
-        data_units=None, 
-        attrs=None):
+def make_time_frequency_series(
+    data, 
+    sampling_rate,
+    freq,
+    freq_units="Hz",  
+    time_units="s", 
+    data_units=None, 
+    attrs=None):
+
+    # pass the first col
+    time = get_time_coords(data[0, :], sampling_rate)
+
+    attrs = _ensure_attrs(sampling_rate=sampling_rate)
     
     return make_data_series(
         data, 

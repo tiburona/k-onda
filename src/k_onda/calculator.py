@@ -2,7 +2,7 @@ from functools import partial, lru_cache
 import numpy as np
 from scipy.signal import iirnotch, tf2sos, sosfreqz, filtfilt, sosfiltfilt
 
-from .dataarray_factories import make_time_series, make_time_series_from_fs
+from .dataarray_factories import make_time_series, make_time_series
     
 
 class Calculator:
@@ -41,7 +41,7 @@ class Normalize(Calculator):
         else:
             raise ValueError("Unknown normalize method")
         
-        da = make_time_series_from_fs(result, self.parent_signal.sampling_rate)
+        da = make_time_series(result, self.parent_signal.sampling_rate)
         
         return da
         
@@ -80,7 +80,7 @@ class Filter(Calculator):
         
         result = sosfiltfilt(sos, data)
 
-        return make_time_series_from_fs(result, fs)
+        return make_time_series(result, fs)
     
 
 

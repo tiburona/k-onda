@@ -23,13 +23,28 @@ class SelectMixin:
     
     def _select_recursive(self, **dim_slices):
         """Compute selected data using recursive optimization. Returns DataArray."""
+        
+        dim_slices_local = {**dim_slices}
+
+        # if instead of a slice you got a list or the tuple as the value to the 
+        # dim key, presume its not unit aware and substitute the default unit 
+        # for the dimension
+        for dim in dim_slices:
+            if isinstance(dim_slices[dim], (tuple, list)): 
+                dim_default = getattr(self, 'dim_defaults', {}).get(dim)
+                if dim_default:
+                    dim_slices_local[dim] = slice(*[
+                        pint.Quantity(p, units=dim_default) 
+                        for p in dim_slices[dim]
+                        ])
+                
         if getattr(self, 'parent', None) is None:
-            return self.data.sel(**dim_slices)
+            return self.data.sel(**dim_slices_local)
         
         # Check which dims exist in parent
         parent_dims = self.parent.data.dims if hasattr(self.parent, 'data') else ()
-        parent_slices = {k: v for k, v in dim_slices.items() if k in parent_dims}
-        transform_slices = {k: v for k, v in dim_slices.items() if k not in parent_dims}
+        parent_slices = {k: v for k, v in dim_slices_local.items() if k in parent_dims}
+        transform_slices = {k: v for k, v in dim_slices_local.items() if k not in parent_dims}
 
         # Recurse for dims that exist in parent
         if parent_slices:

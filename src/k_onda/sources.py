@@ -77,5 +77,5 @@ class LFPChannel(DataComponent, SignalCalculatorMixin, SelectMixin):
 
     def data_loader(self):
         data = self.data_source.get_channel(self.channel_idx)
-        da = make_time_series(data, get_time_coords(data, self.sampling_rate)) 
+        da = make_time_series(data, self.sampling_rate) 
         return da  

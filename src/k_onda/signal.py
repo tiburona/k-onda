@@ -21,6 +21,8 @@ class Signal(SignalCalculatorMixin, SelectMixin):
         signal.config = {}
         signal._cached_data = data
         signal.storage_strategy = "memory"
+        for key, value in data.attrs.items():
+            setattr(signal, key, value)
         for key, value in kwargs.items():
             setattr(signal, key, value)
         return signal
@@ -55,6 +57,8 @@ class Signal(SignalCalculatorMixin, SelectMixin):
 
 class TimeSeriesSignal(Signal, TimeSeriesCalculatorMixin, TimeFrequencyCalculatorMixin):
 
+    dim_defaults = {'time': 's'}
+
     def __init__(self, parent, transform, config, storage_strategy="lazy"):
         super().__init__(parent, transform, config, storage_strategy)
         self.sampling_rate = self.parent.sampling_rate # there might be reason to overwrite this in a transform
@@ -62,7 +66,8 @@ class TimeSeriesSignal(Signal, TimeSeriesCalculatorMixin, TimeFrequencyCalculato
 
 
 class TimeFrequencySignal(Signal):
-    pass
+    dim_defaults = {'time': 's', 'frequency': 'Hz'}
+  
 
 
 class EventSignal(Signal):
