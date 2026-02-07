@@ -2,12 +2,16 @@
 import numpy as np
 import xarray as xr
 
+from .central import ureg
 
 
-
-def get_time_coords(data, sampling_rate):
-    dt = (1 / sampling_rate).to("s")
-    time = np.arange(len(data)) * dt.magnitude
+def get_time_coords(data, start, sampling_rate=None, dt=None):
+    if sampling_rate is None and dt is None:
+        raise ValueError("One of sampling_rate and dt must have a value.")
+    dt = dt or (1 / sampling_rate)
+    dt = getattr(dt, "magnitude", dt)
+    start = getattr(start, "magnitude", start)
+    time = (np.arange(len(data)) * dt) + start
     return time
 
 
@@ -17,11 +21,11 @@ def _ensure_attrs(attrs, **known_attrs):
     return attrs
 
 
-def make_time_series(data, sampling_rate, units="s", data_units=None, attrs=None):
+def make_time_series(data, sampling_rate, start = 0 * ureg.s, units="s", data_units=None, attrs=None):
     
-    time = get_time_coords(data, sampling_rate)
-    
-    attrs = _ensure_attrs(sampling_rate=sampling_rate)
+    time = get_time_coords(data, start, sampling_rate=sampling_rate)
+        
+    attrs = _ensure_attrs(getattr(data, 'attrs', {}), sampling_rate=sampling_rate)
 
     return make_data_series(
         data, 
@@ -33,18 +37,20 @@ def make_time_series(data, sampling_rate, units="s", data_units=None, attrs=None
 
 
 def make_time_frequency_series(
-    data, 
-    sampling_rate,
+    data,
     freq,
+    start = 0 * ureg.s,
+    dt = None,
+    sampling_rate = None,
     freq_units="Hz",  
     time_units="s", 
     data_units=None, 
     attrs=None):
 
     # pass the first col
-    time = get_time_coords(data[0, :], sampling_rate)
+    time = get_time_coords(data[0, :], start=start, sampling_rate=sampling_rate, dt=dt)
 
-    attrs = _ensure_attrs(sampling_rate=sampling_rate)
+    attrs = _ensure_attrs(getattr(data, 'attrs', {}), sampling_rate=sampling_rate)
     
     return make_data_series(
         data, 
