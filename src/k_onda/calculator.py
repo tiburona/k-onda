@@ -1,36 +1,58 @@
-from functools import lru_cache
+from functools import lru_cache, partial
 import numpy as np
 import pint
 from scipy.signal import iirnotch, tf2sos, sosfreqz, filtfilt, sosfilt, sosfiltfilt
 
 from .dataarray_factories import make_time_series
-    
+from .central import ureg
+
+
+
+class Transform:
+    """A transform function with optional metadata"""
+    def __init__(self, fn, padlen=None):
+        self.fn = fn
+        self.padlen = padlen or {}
+
+    def __call__(self, data):
+        return self.fn(data)
+
 
 class Calculator:
 
     def __init__(self, config):
         self.config = config
-        self.parent_signal = None
-
-    # this method sometimes gets overridden
-    def get_child_signal_class(self, parent_signal):
-        return getattr(parent_signal, 'output_signal_class', type(parent_signal))
 
     def __call__(self, parent_signal):
-        self.parent_signal = parent_signal
-        child_signal_class = self.get_child_signal_class(parent_signal)
+        child_signal_class = self._get_child_signal_class(parent_signal)
+        apply_kwargs = self._get_apply_kwargs(parent_signal)
+        transform = self._get_transform(parent_signal, apply_kwargs)
+        
         return child_signal_class(
             parent=parent_signal,
-            transform=self._apply,  # just the bound method
+            transform=transform,  
             calculator=self
         )
     
-    @property
-    def padlen(self):
-        return self._compute_padlen()
+    def _get_transform(self, _, apply_kwargs):
+        return Transform(partial(self._apply, **apply_kwargs))
+    
+    def _get_child_signal_class(self, parent_signal):
+        return getattr(parent_signal, 'output_signal_class', type(parent_signal))
+    
+    def _get_apply_kwargs(self, _):
+         # Default: just pass config
+        return {"config": self.config}
+    
 
-    # this method sometimes gets overridden
-    def _compute_padlen(self):
+class PaddingCalculator(Calculator):
+
+    def _get_transform(self, parent_signal, apply_kwargs):
+        padlen = self._compute_padlen(parent_signal, apply_kwargs)
+        transform = Transform(partial(self._apply, **apply_kwargs), padlen=padlen)
+        return transform
+
+    def _compute_padlen(self, parent_signal, apply_kwargs):
         return {}
     
 
@@ -38,8 +60,13 @@ class Normalize(Calculator):
 
     def __init__(self, method="rms"): 
         self.method = method
+
+    def _get_apply_kwargs(self, parent_signal):
+        return {
+            'sampling_rate': parent_signal.sampling_rate
+        }
     
-    def _apply(self, data):
+    def _apply(self, data, sampling_rate):
         if self.method == "rms":
             result = data / np.sqrt(np.mean(data ** 2))
         elif self.method == "zscore":
@@ -52,32 +79,28 @@ class Normalize(Calculator):
         da = make_time_series(
             result, 
             start=data.time[0].item(), 
-            sampling_rate=self.parent_signal.sampling_rate)
+            sampling_rate=sampling_rate)
         
         return da
         
 
-class Filter(Calculator):
+class Filter(PaddingCalculator):
+
     def __init__(self, filter_config):
         self.config = filter_config
-        self._designed_filter = None
-
-    def __call__(self, parent_signal):
-        self.parent_signal = parent_signal
-        child_signal_class = self.get_child_signal_class(parent_signal)
-
-        self.design_filter(self.config)
-        
-        return child_signal_class(
-            parent=parent_signal,
-            transform=self._apply,
-            calculator=self
-        )
     
-    def design_filter(self, filter_config):
-        fs = self.parent_signal.sampling_rate
+    def _get_apply_kwargs(self, parent_signal):
+        designed_filter = self.design_filter(parent_signal)
+        fs = parent_signal.sampling_rate
+        return {
+            'fs': fs,
+            'designed_filter': designed_filter
+        }
+    
+    def design_filter(self, parent_signal):
+        fs = parent_signal.sampling_rate
         # todo: add in other kinds of filters
-        self._designed_filter = self._design_sos(fs=fs.magnitude.item(), **filter_config)
+        return self._design_sos(fs=fs.magnitude, **self.config)
         
     @staticmethod
     @lru_cache(maxsize=32)
@@ -95,26 +118,69 @@ class Filter(Calculator):
             sos = tf2sos(b, a)
             return sos
         
-    def _compute_padlen(self):
+    def _compute_padlen(self, parent_signal, apply_kwargs):
+        fs = parent_signal.sampling_rate.magnitude
+        designed_filter = apply_kwargs['designed_filter']
+
         # Generate impulse response
-        N = int(self.parent_signal.sampling_rate.magnitude)  # 1 second worth of samples
+        N = int(fs)  # 1 second worth of samples
         impulse = np.zeros(N)
         impulse[0] = 1.0
-        h = sosfilt(self._designed_filter, impulse)
+        h = sosfilt(designed_filter, impulse)
 
         # Find where it decays below some threshold 
         threshold = 1e-3  # -60 dB relative to peak
         peak = np.max(np.abs(h))
         settled = np.where(np.abs(h) > threshold * peak)[0]
         pad_needed = settled[-1] if len(settled) > 0 else 0
-        pad_seconds = pad_needed/self.parent_signal.sampling_rate
+        pad_seconds = pad_needed/fs * ureg.s
 
         return {"time": (pad_seconds, pad_seconds)}
             
-    def _apply(self, data):
-        fs = self.parent_signal.sampling_rate
+    def _apply(self, data, fs, designed_filter):
         axis = data.dims.index('time')
-        result = sosfiltfilt(self._designed_filter, data, axis=axis)
+        result = sosfiltfilt(designed_filter, data, axis=axis)
         return make_time_series(result, fs, start=data['time'][0].item())
+    
+
+class ThresholdMask(Calculator):
+
+    def __init__(self, threshold, comparison='gt'):
+        self.threshold = threshold
+        self.comparison = comparison 
+        self.operations = {
+            'gt': lambda data, threshold: data > threshold,
+            'lt': lambda data, threshold: data < threshold,
+            'ge': lambda data, threshold: data <= threshold,
+            'le': lambda data, threshold: data <= threshold
+        }
+
+    def _get_child_signal_class(self, _):
+        from .signal import ValidityMask
+        return ValidityMask
+    
+    def _get_apply_kwargs(self, parent_signal):
+        return {
+            'threshold': self.threshold,
+            'comparison': self.comparison
+        }
+    
+    def _apply(self, data, threshold, comparison):
+        return self.operations[comparison](data, threshold)
+
+    
+class Intersection(Calculator):
+
+    def __init__(self):
+        pass
+
+    def __call__(self, parent_signal):
+        return 
+    
+    def _apply(self, other):
+        pass
+        
+
+
 
 

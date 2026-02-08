@@ -1,4 +1,5 @@
 import pint
+import numpy as np
 
 from .arithmetic_calculators import Scale, Shift
 
@@ -29,13 +30,18 @@ class Signal(SignalCalculatorMixin, SelectMixin):
             setattr(signal, key, value)
         return signal
 
-
     # strategy is one of: "lazy", "memory", "disk"
-    def __init__(self, parent, transform, calculator, storage_strategy="lazy"):
+    def __init__(
+            self, 
+            parent, 
+            transform,
+            calculator, 
+            storage_strategy="lazy"
+            ):
         self.parent = parent
         self.transform = transform
         self.calculator = calculator
-        self.storage_strategy = storage_strategy
+        self.storage_strategy = storage_strategy,
         self._cached_data = None
 
     def __truediv__(self, other):
@@ -80,3 +86,61 @@ class EventSignal(Signal):
 class EpochScalarSignal(Signal):
     pass
       
+
+class EventSignal(Signal):
+    # stored as timestamps
+    # .window(epoch) returns timestamps in range
+    
+    def to_binary(self, sampling_rate):
+        return BinaryEventSignal(parent=self, sampling_rate=sampling_rate)
+
+
+class BinaryEventSignal(Signal):  
+    # stored as boolean array at some sampling rate
+    # supports & | ~
+
+    def __init__(
+            self, 
+            parent, 
+            transform, 
+            calculator, 
+            storage_strategy="lazy", 
+            sampling_rate=None, 
+            length=None,
+            endpoints=None,
+            intervals=None):
+        super().__init__(parent, transform, calculator, storage_strategy=storage_strategy)
+        self.intervals = intervals
+        self.length = length
+        self.endpoints = endpoints
+        self.sampling_rate = sampling_rate or getattr(self.parent, 'sampling_rate', None)
+
+    def __rand__(self, other):
+        if isinstance(other, BinaryEventSignal):
+            # return Intersection
+            pass
+    
+    @property
+    def data(self):
+        if self.intervals:
+            return self._bool_train_from_intervals()
+
+        
+    def _bool_train_from_intervals(self):
+    
+        length = self.length or (self.endpoints[1] - self.endpoints[0])/self.sampling_rate
+        arr = np.full(length, False)
+
+        for start, end in self.intervals:
+            arr[slice(start, end)] = True
+
+        return arr
+            
+
+
+   
+
+class ValidityMask(BinaryEventSignal):
+
+
+    pass

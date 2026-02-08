@@ -16,7 +16,7 @@ class SelectionContext:
         self.padlen = {}
 
     def add_padding(self, calculator_padlen):
-        if calculator_padlen is None:
+        if not calculator_padlen:
             return
         
         for dim in calculator_padlen:
@@ -44,6 +44,7 @@ class SelectMixin:
         Returns a NEW signal containing only the selected data. This breaks
         the parent chain since we materialize the computed result.
         """
+
         sc = SelectionContext()
 
         data = self._select_recursive(sc, **dim_endpoints)
@@ -53,7 +54,8 @@ class SelectMixin:
         trimmed_data = data.sel(**dim_slices)
         
         signal_class = getattr(self, 'output_signal_class', type(self))
-        return signal_class.from_data(trimmed_data, **self._get_inheritable_attrs())
+        new_signal = signal_class.from_data(trimmed_data, **self._get_inheritable_attrs())
+        return new_signal
     
     def _apply_default_units(self, dim_endpoints):
 
@@ -81,9 +83,9 @@ class SelectMixin:
         
         dim_endpoints_local = self._apply_default_units(dim_endpoints)
 
-        calculator = getattr(self, "calculator", None)
-        if calculator is not None:
-            selection_context.add_padding(calculator.padlen)
+        if hasattr(self, 'transform'):
+            padlen = getattr(self.transform, 'padlen', {})
+            selection_context.add_padding(padlen)
 
         if getattr(self, "parent", None) is None:
             for dim in selection_context.padlen:

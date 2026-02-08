@@ -34,7 +34,6 @@ filter_config = {"method": "iir_notch", "f_lo": 59, "f_hi": 61
 freqs = np.arange(1, 21, 1)
 
 power_config = {
-    "sfreq": 2000, 
     "freqs": freqs, 
     "decim": 20, 
     "n_cycles": freqs * 0.5,
@@ -87,7 +86,6 @@ preprocessed_signal = (
     )
 
 epoch_0_power = preprocessed_signal.spectrogram(power_config).window(epoch)
-
 
 preprocessed_signal.window(epoch).filter(filter_config)
 

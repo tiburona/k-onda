@@ -1,6 +1,6 @@
 import pint
 
-ureg = pint.UnitRegistry(force_ndarray_like=True)
+ureg = pint.UnitRegistry()
 
 SAMPLING_RATE = 30000 * ureg.Hz
 LFP_SAMPLING_RATE = 2000 * ureg.Hz
