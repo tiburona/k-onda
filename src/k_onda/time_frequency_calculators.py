@@ -4,6 +4,7 @@ import numpy as np
 from .signal import TimeFrequencySignal
 from .calculator import PaddingCalculator
 from .dataarray_factories import make_time_frequency_series
+from .central import ureg
 
 
 class Spectrogram(PaddingCalculator):
@@ -21,6 +22,20 @@ class Spectrogram(PaddingCalculator):
             'config': self.config,
             'sampling_rate': parent_signal.sampling_rate
         }
+    
+    def _compute_padlen(self, _, apply_kwargs):
+        n_cycles = apply_kwargs['config']['n_cycles']
+        freqs = apply_kwargs['config']['freqs']
+        f_min = freqs[0]
+        if isinstance(n_cycles, np.ndarray):
+            # todo: it would be safer here to test for my kinds of iterables and not assume it's numpy
+            pad_needed = np.max(n_cycles / freqs) / 2
+        else:
+            pad_needed = n_cycles / (2 * f_min)
+        pad_seconds = pad_needed * ureg.seconds
+
+        return {"time": (pad_seconds, pad_seconds)}
+
     
     def _apply(self, data, config, sampling_rate):
         fs = sampling_rate.magnitude

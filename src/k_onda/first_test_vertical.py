@@ -9,6 +9,7 @@ from .sources import LFPChannel, LFPRecording
 from .central import LFP_SAMPLING_RATE
 from .signal import TimeFrequencySignal
 from .select_mixin import FrequencyBand
+from .time_frequency_calculators import Spectrogram
 
 
 data_loader_config = {
@@ -73,21 +74,41 @@ session = Session(experiment, animal, session_config)
 
 recording = LFPRecording(session, data_loader_config, sampling_rate=LFP_SAMPLING_RATE)
 
-lfp_channel = LFPChannel(recording, channel_idx=1)
+lfp_channel_1 = LFPChannel(recording, channel_idx=1)
+lfp_channel_2 = LFPChannel(recording, channel_idx=2)
 
 
-epoch = session.epochs['tone'][0]
+epoch_0 = session.epochs['tone'][0]
+epoch_1 = session.epochs['tone'][1]
 
-preprocessed_signal = (
-    lfp_channel
+preprocessed_signal_1 = (
+    lfp_channel_1
     .scale(.25)
     .filter(filter_config)
     .normalize("rms")
     )
 
-epoch_0_power = preprocessed_signal.spectrogram(power_config).window(epoch)
+epoch_0_power = preprocessed_signal_1.spectrogram(power_config).window(epoch_0)
 
-preprocessed_signal.window(epoch).filter(filter_config)
+power_calculator = Spectrogram(power_config)
+
+epoch_0_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_0)
+epoch_1_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_1)
+
+assert epoch_0_power_sig_1 != epoch_1_power_sig_1
+
+preprocessed_signal_2 = (
+    lfp_channel_2
+    .scale(.25)
+    .filter(filter_config)
+    .normalize("rms")
+    )
+
+epoch_0_power_sig_2 = power_calculator(preprocessed_signal_2).window(epoch_0)
+
+assert epoch_0_power_sig_2 != epoch_0_power_sig_1
+
+preprocessed_signal_1.window(epoch_0).filter(filter_config)
 
 signal_from_data = TimeFrequencySignal.from_data(epoch_0_power.data)
 
