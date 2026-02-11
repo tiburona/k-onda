@@ -143,15 +143,15 @@ class Filter(PaddingCalculator):
         return make_time_series(result, fs, start=data['time'][0].item())
     
 
-class ThresholdMask(Calculator):
+class Threshold(Calculator):
 
-    def __init__(self, threshold, comparison='gt'):
+    def __init__(self, comparison, threshold):
         self.threshold = threshold
         self.comparison = comparison 
         self.operations = {
             'gt': lambda data, threshold: data > threshold,
             'lt': lambda data, threshold: data < threshold,
-            'ge': lambda data, threshold: data <= threshold,
+            'ge': lambda data, threshold: data >= threshold,
             'le': lambda data, threshold: data <= threshold
         }
 
@@ -168,17 +168,116 @@ class ThresholdMask(Calculator):
     def _apply(self, data, threshold, comparison):
         return self.operations[comparison](data, threshold)
 
+
+class BinaryCalculatorMixin:
+       
+    def get_and_validate_sig_overlap(self, parent_data, other_data, dims=None):
+        """
+        Find overlapping region on shared dimensions.
+
+        Args:
+            dims: Dimension(s) to align on.  If None, uses all shared dimensions.
+                  Can be a string ('time') or list (['time', 'frequency'])
+        """
+
+        shared_dims = set(parent_data.dims) & set(other_data.dims)
+
+        # Determine which dims to align on
+        if dims is None:
+            dims = shared_dims
+        else:
+            dims = {dims} if isinstance(dims, str) else set(dims)
+            dims = dims & shared_dims  # Only use dims that exist in both
+
+        if not dims:
+            raise ValueError("No shared dimensions to align on")
+        
+        # Build selection slices for each dimension
+        slices = {}
+        for dim in dims:
+            coord_parent = parent_data.coords[dim]
+            coord_other = other_data.coords[dim]
+
+            overlap_start = max(coord_parent[0].item(), coord_other[0].item())
+            overlap_end = min(coord_parent[-1].item(), coord_other[-1].item())
+
+            if overlap_start >= overlap_end:
+                raise ValueError(f"No overlap on dimension '{dim}'")
+            
+            slices[dim] = slice(overlap_start, overlap_end)
+        
+        # Select overlapping regions
+        parent_overlap = parent_data.sel(**slices)
+        other_overlap = other_data.sel(**slices)
+
+        # Validate lengths match on aligned dimensions
+        for dim in dims:
+            if len(parent_overlap.coords[dim]) != len(other_overlap.coords[dim]):
+                raise ValueError(f"Signals have different sampling on '{dim}'")
+       
+        return parent_overlap, other_overlap
     
+    def validate_sig_types(self, signals):
+        from .signal import BinarySignal
+        for signal in signals:
+            if not isinstance(signal, BinarySignal):
+                raise TypeError(f"{signal} is not of type BinarySignal.")
+            
+
 class Intersection(Calculator):
 
-    def __init__(self):
+    def __init__(self, tolerance_decimals=9):
+        self.tolerance = 10^-tolerance_decimals
         pass
-
-    def __call__(self, parent_signal):
-        return 
     
-    def _apply(self, other):
-        pass
+    def __call__(self, parent, other):
+        self.validate_sig_types([parent, other])
+
+        child_signal_class = self._get_child_signal_class(parent)
+
+        transform = partial(self._apply, parent, other)
+
+        return child_signal_class(
+            parent=parent,
+            transform=transform,  
+            calculator=self
+        )
+
+    def _apply(self, parent, other):
+        parent_overlap, other_overlap = self.get_and_validate_sig_overlap(parent, other)
+        return parent_overlap.data & other_overlap.data
+
+
+class ApplyMask(Calculator, BinaryCalculatorMixin):
+
+    def __init__(self, mask=None):
+        self.mask = mask
+  
+
+    def __call__(self, parent_signal, mask=None):
+        mask = mask or self.mask
+        if mask is None:
+            raise ValueError("mask must be provided at init or call time")
+        self.validate_sig_types([mask])
+        child_signal_class = self._get_child_signal_class(parent_signal)
+        apply_kwargs = {'mask': mask}
+        transform = self._get_transform(parent_signal, apply_kwargs)
+   
+        return child_signal_class(
+            parent=parent_signal,
+            transform=transform,
+            calculator=self
+        )
+    
+    def _apply(self, parent_data, mask):
+        # TODO: Verify xarray alignment behavior - should give masked overlap + NaN outside
+        _, mask_overlap = self.get_and_validate_sig_overlap(parent_data, mask.data)
+        result = parent_data.where(mask_overlap, other=np.nan)
+        return result
+        
+
+      
+
         
 
 

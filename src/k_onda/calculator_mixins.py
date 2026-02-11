@@ -1,5 +1,5 @@
 from .arithmetic_calculators import Scale, Shift
-from .calculator import Filter, Normalize
+from .calculator import Filter, Normalize, Threshold, ApplyMask
 
 
 class SignalCalculatorMixin:
@@ -8,14 +8,23 @@ class SignalCalculatorMixin:
     
     def shift(self, offset):
         return Shift(offset)(self)
+    
+    def normalize(self, method='rms'):
+        return Normalize(method)(self)
+    
+    def threshold(self, comparison, threshold):
+        return Threshold(comparison, threshold)(self)
+    
+    def apply_mask(self, mask):
+        return ApplyMask(mask)(self)
 
 
 class TimeSeriesCalculatorMixin(SignalCalculatorMixin):
     def filter(self, config):
         return Filter(config)(self)
     
-    def normalize(self, method='rms'):
-        return Normalize(method)(self)
+    
+    
     
 
 class TimeFrequencyCalculatorMixin(SignalCalculatorMixin):

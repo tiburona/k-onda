@@ -10,6 +10,7 @@ from .calculator_mixins import (
     )
 
 from .select_mixin import SelectMixin
+from .calculator import Intersection, ApplyMask
 
 
 
@@ -92,10 +93,10 @@ class EventSignal(Signal):
     # .window(epoch) returns timestamps in range
     
     def to_binary(self, sampling_rate):
-        return BinaryEventSignal(parent=self, sampling_rate=sampling_rate)
+        return BinarySignal(parent=self, sampling_rate=sampling_rate)
 
 
-class BinaryEventSignal(Signal):  
+class BinarySignal(Signal):  
     # stored as boolean array at some sampling rate
     # supports & | ~
 
@@ -116,14 +117,18 @@ class BinaryEventSignal(Signal):
         self.sampling_rate = sampling_rate or getattr(self.parent, 'sampling_rate', None)
 
     def __rand__(self, other):
-        if isinstance(other, BinaryEventSignal):
-            # return Intersection
-            pass
+        # called when: non_mask & mask
+        if isinstance(other, BinarySignal):
+            return Intersection()(other, self)
+        elif isinstance(other, Signal):
+            return ApplyMask()(other, self)
     
     @property
     def data(self):
         if self.intervals:
             return self._bool_train_from_intervals()
+        else:
+            return self._materialize()
 
         
     def _bool_train_from_intervals(self):
@@ -140,7 +145,7 @@ class BinaryEventSignal(Signal):
 
    
 
-class ValidityMask(BinaryEventSignal):
+class ValidityMask(BinarySignal):
 
 
     pass

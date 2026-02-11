@@ -122,5 +122,14 @@ band_power = (
     epoch_0_power.select(frequency=(4, 8))
 )
 
+threshold = epoch_0_power_sig_2.threshold('lt', 20)
+
+
+masked_epoch_0_power_sig_2 = epoch_0_power_sig_2 & epoch_0_power_sig_2.threshold('lt', 20)
+
+
+masked_epoch_0_power_sig_2.data
+
+
   
 
