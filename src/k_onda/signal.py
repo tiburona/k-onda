@@ -116,12 +116,12 @@ class BinarySignal(Signal):
         self.endpoints = endpoints
         self.sampling_rate = sampling_rate or getattr(self.parent, 'sampling_rate', None)
 
+    def __and__(self, other):
+        return Intersection()(other, self)
+
     def __rand__(self, other):
         # called when: non_mask & mask
-        if isinstance(other, BinarySignal):
-            return Intersection()(other, self)
-        elif isinstance(other, Signal):
-            return ApplyMask()(other, self)
+        return ApplyMask()(other, self)
     
     @property
     def data(self):

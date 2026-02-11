@@ -224,7 +224,7 @@ class BinaryCalculatorMixin:
                 raise TypeError(f"{signal} is not of type BinarySignal.")
             
 
-class Intersection(Calculator):
+class Intersection(Calculator, BinaryCalculatorMixin):
 
     def __init__(self, tolerance_decimals=9):
         self.tolerance = 10^-tolerance_decimals
