@@ -2,10 +2,15 @@ from neo.rawio import BlackrockRawIO
 import numpy as np
 import xarray as xr
 
+from pathlib import Path
+import csv
+
+
 from .signal import Signal, TimeSeriesSignal
-from .calculator_mixins import SignalCalculatorMixin
+from .calculator_mixins import SignalCalculatorMixin, CollectionMixin
 from .dataarray_factories import make_time_series, get_time_coords
 from .select_mixin import SelectMixin
+from .central import ureg
 
 
 class DataSource:
@@ -14,8 +19,8 @@ class DataSource:
     def __init__(self, session, data_loader_config):
         self.session = session
         self.data_loader_config = data_loader_config
-        self.file_path = self.data_loader_config["file_path"]
-        self.file_ext = self.data_loader_config["file_ext"]
+        self.file_path = Path(self.data_loader_config["file_path"])
+        self.file_ext = self.data_loader_config.get("file_ext")
         self._raw_data = None 
     
 
@@ -51,24 +56,46 @@ class LFPRecording(DataSource):
         return data
     
 
+
 class DataComponent:
 
-    output_signal_class = Signal
+    output_class = Signal
     
     def __init__(self, source):
         self.data_source = source
         self._data = None
+        self.data_identity = None
         
     @property
     def data(self):
         if self._data is None:
             self._data = self.data_loader()
         return self._data
+    
+    def assign_to_data_identity(self, data_identity):
+        self.data_identity = data_identity
+        data_identity.data_components.append(self)
+    
+
+class DataIdentity:
+
+    def __init__(self, data_components):
+        if data_components is None:
+            self.data_components = []
+        else:
+            self.data_components = data_components
+        self.subject = self.data_components[0].data_source.session.subject
+
+    def add_data_components(self, data_components):
+        self.data_components.extend(data_components)
+        for data_component in data_components:
+            data_component.data_identity = self
+
   
     
 class LFPChannel(DataComponent, SignalCalculatorMixin, SelectMixin):
 
-    output_signal_class = TimeSeriesSignal
+    output_class = TimeSeriesSignal
 
     def __init__(self, data_source, channel_idx):
         super().__init__(data_source)
@@ -79,3 +106,45 @@ class LFPChannel(DataComponent, SignalCalculatorMixin, SelectMixin):
         data = self.data_source.get_channel(self.channel_idx)
         da = make_time_series(data, self.sampling_rate) 
         return da  
+    
+
+class Collection(CollectionMixin):
+
+    def __init__(self, members):
+        self.members = members
+
+    @property
+    def signals(self):
+       
+       
+        # todo: there are other kinds of collections besides of DataIdentities
+        if isinstance(self.members[0], DataIdentity):
+            components = [c for member in self.members for c in member.data_components]   
+        else:
+            components = self.members
+
+        # If components aren't yet signals they need to be made into them.
+        if isinstance(components[0], DataComponent):
+
+            signals = [component.output_class(
+                component, 
+                transform=lambda x: x, 
+                calculator=None,
+                origin=component) 
+                for component in components]
+     
+            return signals
+        
+        else:
+            return components
+          
+
+        
+        
+
+    
+    
+    
+    
+
+        

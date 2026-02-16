@@ -1,50 +1,109 @@
-from functools import lru_cache, partial
+from functools import lru_cache, partial, wraps
+
 import numpy as np
 import pint
-from scipy.signal import iirnotch, tf2sos, sosfreqz, filtfilt, sosfilt, sosfiltfilt
+from scipy.signal import iirnotch, tf2sos, sosfreqz, filtfilt, sosfilt, sosfiltfilt, medfilt
+import xarray as xr
 
 from .dataarray_factories import make_time_series
 from .central import ureg
 
 
+def with_key_access(func):
+    @wraps(func)
+    def wrapper(self, data, *args, key=None, **kwargs):
+        if key is None:
+            return func(self, data *args, **kwargs)
+        
+        subset = data[key]
+        result = func(self, subset, *args, **kwargs)
+
+        new_data = data.copy()
+        new_data[key] = result
+        return new_data
+    return wrapper
+
 
 class Transform:
     """A transform function with optional metadata"""
-    def __init__(self, fn, padlen=None):
+    def __init__(self, fn, padlen=None, signal_class=None):
         self.fn = fn
         self.padlen = padlen or {}
+        self.signal_class = signal_class
 
     def __call__(self, data):
         return self.fn(data)
+    
+
+class Transformer:
+    pass
 
 
-class Calculator:
+class Calculator(Transformer):
 
-    def __init__(self, config):
-        self.config = config
+    obligate_output_class = None
 
-    def __call__(self, parent_signal):
-        child_signal_class = self._get_child_signal_class(parent_signal)
-        apply_kwargs = self._get_apply_kwargs(parent_signal)
-        transform = self._get_transform(parent_signal, apply_kwargs)
+    def __call__(self, parent, key=None):
+  
+        child_class = self.get_child_class(parent)
+        kwargs = self._get_apply_kwargs(parent, key=key)
+
+        if parent.is_bundle:
+            kwargs.update(
+                {'signal_class': self.obligate_output_class or 
+                 self.get_output_class(parent.signals[0])}
+                 )
+            
+        transform = self._get_transform(parent, **kwargs)
+
+        child_signal = child_class(parent=parent, transform=transform, calculator=self)
+
+        if not parent.is_bundle:
+            child_signal.origin = getattr(parent, 'origin', None)
         
-        return child_signal_class(
-            parent=parent_signal,
-            transform=transform,  
-            calculator=self
-        )
+        return child_signal
     
-    def _get_transform(self, _, apply_kwargs):
-        return Transform(partial(self._apply, **apply_kwargs))
     
-    def _get_child_signal_class(self, parent_signal):
-        return getattr(parent_signal, 'output_signal_class', type(parent_signal))
+    def _get_transform(self, _, **kwargs):
+        signal_class = kwargs.pop('signal_class', None)
+        return Transform(
+            partial(self._apply, **kwargs), 
+            signal_class=signal_class)
     
-    def _get_apply_kwargs(self, _):
-         # Default: just pass config
-        return {"config": self.config}
+    def get_child_class(self, parent):
+        # If we're operating on a SignalBundle, we'll return a SignalBundle.  
+        # If this calculator has an obligate Signal type to return, 
+        # we'll return one of those.
+        # Otherwise, we'll query the parent signal to get the output class.
+        if parent.is_bundle:
+            return type(parent)
+        else:
+            return self.obligate_output_class or self.get_output_class(parent)
+        
+    @staticmethod
+    def get_output_class(entity):
+        return getattr(entity, 'output_class', type(entity))
+    
+    def _get_apply_kwargs(self, parent_signal, key=None):
+        result = {'key': key}
+        result.update(self._get_distinctive_apply_kwargs(parent_signal))
+        return result
+    
+    def _get_distinctive_apply_kwargs(self, _):
+        return {}
     
 
+class ReduceDim(Calculator):
+
+    def __init__(self, dim, method='mean'):
+        self.dim = dim
+        self.method = method
+
+    @with_key_access
+    def _apply(self, data):
+        return getattr(data, self.method)(dim=self.dim)
+
+    
 class PaddingCalculator(Calculator):
 
     def _get_transform(self, parent_signal, apply_kwargs):
@@ -60,42 +119,44 @@ class Normalize(Calculator):
 
     def __init__(self, method="rms"): 
         self.method = method
-
-    def _get_apply_kwargs(self, parent_signal):
-        return {
-            'sampling_rate': parent_signal.sampling_rate
-        }
     
-    def _apply(self, data, sampling_rate):
+    def _get_apply_kwargs(self, parent_signal, key=None, dim=None):
+        result = super()._get_apply_kwargs(parent_signal, key=key)
+        result.update({'dim': dim})
+        return result
+    
+    def _get_distinctive_apply_kwargs(self, _):
+        return {}
+    
+    @with_key_access
+    def _apply(self, data, dim=None):
         if self.method == "rms":
-            result = data / np.sqrt(np.mean(data ** 2))
+            result = data / np.sqrt((data ** 2).mean(dim=dim))
         elif self.method == "zscore":
-            result = (data - np.mean(data)) / np.std(data)
+            result = (data - data.mean(dim=dim)) / data.std(dim=dim)
         elif self.method == 'minmax':
-            result = (data - data.min()) / (data.max() - data.min())
+            result = (data - data.min(dim=dim)) / (data.max(dim=dim) - data.min(dim=dim))
         else:
             raise ValueError("Unknown normalize method")
         
-        da = make_time_series(
-            result, 
-            start=data.time[0].item(), 
-            sampling_rate=sampling_rate)
+        result.attrs = data.attrs
         
-        return da
+        return result
         
 
 class Filter(PaddingCalculator):
 
-    def __init__(self, filter_config):
+    def __init__(self, filter_config, dim='time'):
         self.config = filter_config
+        self.dim = dim
     
-    def _get_apply_kwargs(self, parent_signal):
+    def _get_apply_kwargs(self, parent_signal, key=None):
+        result = super()._get_apply_kwargs(parent_signal, key=key)
+        return result
+    
+    def _get_distinctive_apply_kwargs(self, parent_signal):
         designed_filter = self.design_filter(parent_signal)
-        fs = parent_signal.sampling_rate
-        return {
-            'fs': fs,
-            'designed_filter': designed_filter
-        }
+        return {'designed_filter': designed_filter}
     
     def design_filter(self, parent_signal):
         fs = parent_signal.sampling_rate
@@ -136,11 +197,27 @@ class Filter(PaddingCalculator):
         pad_seconds = pad_needed/fs * ureg.s
 
         return {"time": (pad_seconds, pad_seconds)}
-            
-    def _apply(self, data, fs, designed_filter):
-        axis = data.dims.index('time')
+    
+    @with_key_access
+    def _apply(self, data, designed_filter):
+        dim = self.dim
+        if dim != 'time':
+            raise NotImplementedError(
+                "You can currently only filter along the time dimension.")
+        axis = data.dims.index(dim)
         result = sosfiltfilt(designed_filter, data, axis=axis)
-        return make_time_series(result, fs, start=data['time'][0].item())
+        result = xr.DataArray(
+            result, 
+            coords=data.coords, 
+            dims=data.dims, 
+            attrs=data.attrs
+            )
+        return result
+    
+
+
+
+    
     
 
 class Threshold(Calculator):
@@ -155,18 +232,13 @@ class Threshold(Calculator):
             'le': lambda data, threshold: data <= threshold
         }
 
-    def _get_child_signal_class(self, _):
+    def get_child_class(self, _):
         from .signal import ValidityMask
         return ValidityMask
     
-    def _get_apply_kwargs(self, parent_signal):
-        return {
-            'threshold': self.threshold,
-            'comparison': self.comparison
-        }
-    
-    def _apply(self, data, threshold, comparison):
-        return self.operations[comparison](data, threshold)
+    @with_key_access
+    def _apply(self, data):
+        return self.operations[self.comparison](data, self.threshold)
 
 
 class BinaryCalculatorMixin:
@@ -233,16 +305,18 @@ class Intersection(Calculator, BinaryCalculatorMixin):
     def __call__(self, parent, other):
         self.validate_sig_types([parent, other])
 
-        child_signal_class = self._get_child_signal_class(parent)
+        child_signal_class = self.get_child_class(parent)
 
         transform = partial(self._apply, parent, other)
 
         return child_signal_class(
             parent=parent,
-            transform=transform,  
+            transform=transform,
+            origin=(parent.origin, other.origin),  
             calculator=self
         )
 
+    @with_key_access
     def _apply(self, parent, other):
         parent_overlap, other_overlap = self.get_and_validate_sig_overlap(parent, other)
         return parent_overlap.data & other_overlap.data
@@ -253,22 +327,24 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
     def __init__(self, mask=None):
         self.mask = mask
   
-
+    # TODO: all these calls need to be verified to work with SignalBundle and not break acyclic graph representation
     def __call__(self, parent_signal, mask=None):
         mask = mask or self.mask
         if mask is None:
             raise ValueError("mask must be provided at init or call time")
         self.validate_sig_types([mask])
-        child_signal_class = self._get_child_signal_class(parent_signal)
+        child_signal_class = self.get_child_class(parent_signal)
         apply_kwargs = {'mask': mask}
         transform = self._get_transform(parent_signal, apply_kwargs)
    
         return child_signal_class(
             parent=parent_signal,
             transform=transform,
+            origin=(parent_signal.origin, mask.origin),
             calculator=self
         )
     
+    @with_key_access
     def _apply(self, parent_data, mask):
         # TODO: Verify xarray alignment behavior - should give masked overlap + NaN outside
         _, mask_overlap = self.get_and_validate_sig_overlap(parent_data, mask.data)
@@ -276,10 +352,137 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
         return result
         
 
-      
+class MedianFilter(Calculator):
 
+    def __init__(self, kernel_sizes):
+        self.kernel_sizes = kernel_sizes
+
+    def _get_distinctive_apply_kwargs(self, _):
+        return {
+            'kernel_sizes': self.kernel_sizes
+        }
         
+    @with_key_access
+    def _apply(self, data, kernel_sizes):
+        # kernel_sizes is a dictionary like {'samples': 5}
+        kernel_size = tuple(
+            kernel_sizes.get(dim, 1) for dim in data.dims
+        )
+        result = medfilt(data, kernel_size=kernel_size)
+
+        result = xr.DataArray(
+            result, 
+            coords=data.coords, 
+            dims=data.dims, 
+            attrs=data.attrs
+            )
+        return result
 
 
 
+class GroupSignals(Transformer):
+    """GroupSignals is passed a Collection and returns a SignalBundle.  The transform concatenates
+    data along the provided stack_dim so that downstream calculations can be vectorized."""
 
+    def __init__(self, stack_dim=None):
+        self.stack_dim = stack_dim
+        
+    def __call__(self, parent):
+        from .signal import SignalBundle
+        
+        return SignalBundle(
+            parent=parent,
+            transform=self._apply,
+            calculator=self
+        )
+    
+    def _gather_datasets(self, signals):
+        keys = signals[0].data.keys()
+        data = {}
+        boundaries = [0]
+
+        for i, key in enumerate(keys):
+            arrays = []
+            for signal in signals:
+                arr = signal.data[key]
+                arrays.append(arr)
+                increment = arr.sizes[self.stack_dim] if self.stack_dim else 1
+                if i == 0:
+                    boundaries.append(boundaries[-1] + increment)
+            
+            data[key] = xr.concat(
+                arrays, 
+                dim=self.stack_dim or 'members', 
+                combine_attrs='no_conflicts'
+                )
+
+        dataset = xr.Dataset(data)
+        dataset.attrs['boundaries'] = boundaries
+        dataset.attrs['stack_dim'] = self.stack_dim
+
+        return dataset
+
+    def _gather_arrays(self, signals):
+        arrays = []
+        boundaries = [0]
+        
+        for signal in signals:
+            arr = signal.data
+            arrays.append(arr)
+            increment = arr.sizes[self.stack_dim] if self.stack_dim else 1
+            boundaries.append(boundaries[-1] + increment)
+
+        data = xr.concat(
+            arrays, 
+            dim=self.stack_dim or 'members', 
+            combine_attrs='no_conflicts'
+            )
+        
+        data.attrs['boundaries'] = boundaries
+        data.attrs['stack_dim'] = self.stack_dim
+        
+        return data
+        
+    def _apply(self, signals):
+        if isinstance(signals[0].data, xr.Dataset):
+            return self._gather_datasets(signals)
+        else:
+            return self._gather_arrays(signals)
+    
+
+class SplitSignals(Transformer):
+    
+    def __init__(self, stack_dim=None):
+        self.stack_dim = stack_dim or 'members'
+
+    def get_child_class(self):
+        from .sources import Collection
+        return Collection
+
+    def __call__(self, signal_bundle):
+        signals = []
+
+        for i in range(len(signal_bundle.signals)):
+            signal_class = signal_bundle.signal_class
+            transform = partial(self._apply, idx=i)
+            origin = signal_bundle.signals[i].origin
+            signal = signal_class(
+                parent=signal_bundle,
+                transform=transform,
+                origin=origin,
+                calculator=self
+            )
+            signals.append(signal)
+
+        return self.get_child_class()(signals)
+
+    def get_child_signal_class(self, signal):
+        if not hasattr(signal, 'calculator'):
+            return signal.output_class
+        else:
+            return signal.calculator.get_child_class()
+    
+    def _apply(self, data, idx):
+        boundaries = data.attrs['boundaries']
+        start, end = boundaries[idx], boundaries[idx + 1]
+        return data.isel({self.stack_dim: slice(start, end)})

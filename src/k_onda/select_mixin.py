@@ -124,6 +124,7 @@ class SelectMixin:
     def _get_inheritable_attrs(self):
         """Get attributes that should be inherited by selected signals."""
         attrs = {}
-        if hasattr(self, 'sampling_rate'):
-            attrs['sampling_rate'] = self.sampling_rate
+        for attr in ['sampling_rate', 'origin']:
+            if hasattr(self, attr):
+                attrs[attr] = getattr(self, attr)
         return attrs
