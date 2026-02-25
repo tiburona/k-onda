@@ -6,12 +6,18 @@ import pint_xarray
 from collections import defaultdict
 
 from .time import Session
-from .sources import LFPChannel, LFPRecording, Collection
-from .spike_sources import PhyOutput, initialize_neurons_from_phy
+from .sources import (
+    Collection,
+    LFPChannel,
+    LFPRecording,
+    PhyOutput,
+    initialize_neurons_from_phy,
+)
 from .central import LFP_SAMPLING_RATE
-from .signal import TimeFrequencySignal
-from .select_mixin import FrequencyBand
-from .time_frequency_calculators import Spectrogram
+from .signals import TimeFrequencySignal
+from .transformers import FrequencyBand
+from .transformers import Spectrogram
+from .central import ureg
 
 
 lfp_data_loader_config = {
@@ -24,16 +30,15 @@ spike_data_loader_config = {
 }
 
 session_config = {
-    'onsets_from_nev': {
-        'nev_path': "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.mat",
+    'nev': {
+        'path': "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.mat",
         'epochs': {
-        'tone': {
-            'nev_code': 65502,
-            'duration': 30
-        }
+            'tone': {
+                'code': 65502,
+                'duration': 30
+                }
     }
-    }
-}
+}}
 
 filter_config = {"method": "iir_notch", "f_lo": 59, "f_hi": 61
     }
@@ -79,14 +84,14 @@ class Subject:
     
     @property
     def neurons(self):
-        return self.data_identities['neurons']
+        return self.data_identities['neuron']
     
 
 experiment = Experiment("IG_INED_SAFETY_RECALL")
 animal = Subject("INED18")
 animal.add_to_experiment(experiment)
 
-session = Session(experiment, animal, session_config)
+session = Session(experiment, animal, session_config, ureg)
 
 recording = LFPRecording(session, lfp_data_loader_config, sampling_rate=LFP_SAMPLING_RATE)
 
@@ -100,33 +105,23 @@ neurons = initialize_neurons_from_phy(phy_output)
 
 # # Vectorized
 # experiment.all_neurons
-#     .group_signals(stack_dim='spikes')
+#     .stack_signals(stack_dim='spikes').
 #     .reduce(key='waveforms', dim='electrodes', method='mean')
 #     .median_filter(key='waveforms', kernel_sizes={'samples': 5})
 #     .split_signals()
 #     .group_by('identity')
+#     .extract_features('firing_rate', 'fwhm')
+#     .kmeans()
+#     .apply_labels(to='neuron')
+
 
 # # Iterating
 # experiment.all_neurons
-#     .reduce(key='waveforms', dim='electrodes', method='mean')
+#     .reduce(key='waveforms', dim='electrode s', method='mean')
 #     .median_filter(key='waveforms', kernel_sizes={'samples': 5})
 #     .group_by('identity')
 
 
-spikes_and_filtered_waveforms = (experiment
- .all_neurons
- .group_signals(stack_dim='spikes')
- .reduce(key='waveforms', dim='electrodes', method='mean')
- .median_filter(key='waveforms', kernel_sizes={'samples': 5}).data)
-
-
-spikes_and_filtered_waveforms = (experiment
- .all_neurons
- .group_signals(stack_dim='spikes')
- .reduce(key='waveforms', dim='electrodes', method='mean')
- .median_filter(key='waveforms', kernel_sizes={'samples': 5})
- .split_signals(stack_dim='spikes')
- )
 
 
 
@@ -140,18 +135,27 @@ epoch_1 = session.epochs['tone'][1]
 preprocessed_signal_1 = (
     lfp_channel_1
     .scale(.25)
+    .filter(filter_config))
+
+
+
+preprocessed_signal_1 = (
+    lfp_channel_1
+    .scale(.25)
     .filter(filter_config)
     .normalize("rms")
     )
 
 epoch_0_power = preprocessed_signal_1.spectrogram(power_config).window(epoch_0)
+epoch_0_power.data
+
 
 power_calculator = Spectrogram(power_config)
 
-epoch_0_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_0)
-epoch_1_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_1)
+epoch_0_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_0).data
+epoch_1_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_1).data
 
-assert epoch_0_power_sig_1 != epoch_1_power_sig_1
+assert not epoch_0_power_sig_1.equals(epoch_1_power_sig_1)
 
 preprocessed_signal_2 = (
     lfp_channel_2
@@ -160,13 +164,10 @@ preprocessed_signal_2 = (
     .normalize("rms")
     )
 
-epoch_0_power_sig_2 = power_calculator(preprocessed_signal_2).window(epoch_0)
+epoch_0_power_sig_2 = power_calculator(preprocessed_signal_2).window(epoch_0).data
 
-assert epoch_0_power_sig_2 != epoch_0_power_sig_1
+assert not epoch_0_power_sig_2.equals(epoch_0_power_sig_1)
 
-preprocessed_signal_1.window(epoch_0).filter(filter_config)
-
-signal_from_data = TimeFrequencySignal.from_data(epoch_0_power.data)
 
 fb = FrequencyBand(4, 8)
 
@@ -175,7 +176,7 @@ band_power = (
     .band(fb)) 
 
 band_power = (
-    epoch_0_power.select(frequency=(4, 8))
+    epoch_0_power.select(frequency=(4, 8)).data
 )
 
 threshold_1 = epoch_0_power_sig_1.threshold('lt', 100)
@@ -191,6 +192,22 @@ masked_epoch_0_power_sig_1 = epoch_0_power_sig_2
 
 
 masked_epoch_0_power_sig_2.data
+
+spikes_and_filtered_waveforms = (experiment
+ .all_neurons
+ .stack_signals(dim='spikes')
+ .reduce(key='waveforms', dim='electrodes', method='mean')
+ .median_filter(key='waveforms', kernel_sizes={'samples': 5}).data)
+
+
+spikes_and_filtered_waveforms = (experiment
+ .all_neurons
+ .stack_signals(dim='spikes')
+ .reduce(key='waveforms', dim='electrodes', method='mean')
+ .median_filter(key='waveforms', kernel_sizes={'samples': 5})
+ .unstack_signals(dim='spikes')
+ .group_by('neuron')
+ )
 
 
 

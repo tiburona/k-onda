@@ -1,0 +1,170 @@
+from copy import copy
+from itertools import product
+from math import ceil
+
+import numpy as np
+import xarray as xr
+
+from .core import Calculator
+
+
+class ReduceDim(Calculator):
+    name = "reduce_dim"
+
+    def __init__(self, dim, method="mean", weights=None):
+        self.dim = dim
+        self.method = method
+        self.weights = weights
+
+    def _apply_inner(self, data):
+        if self.weights is not None:
+            data = data.weighted(self.weights, keep_attrs=True)
+        return getattr(data, self.method)(dim=self.dim, keep_attrs=True)
+
+
+class Histogram(Calculator):
+    name = "histogram"
+
+    def __init__(
+        self,
+        bins=10,
+        bin_size=None,
+        hist_range=None,
+        density=False,
+        dim="time",
+        range_source="data",
+        bin_coord="left",
+    ):
+        # bins int, None, or callable that operates on parent.data
+        # bin_size float, None, or callable that operates on parent.data
+        # range tuple or callable that operates on parent.data
+        # weights None or callable that operates on parent.data
+        self.bins = bins
+        self.bin_size = bin_size
+        self.hist_range = hist_range
+        self.weights = None
+        self.density = density
+        self.dim = dim
+        self.range_source = range_source
+        self.bin_coord = bin_coord
+
+        if self.bins is None and self.bin_size is None:
+            raise ValueError("One of `bins` or `bin_size` must not be None.")
+        if self.bins and self.bin_size:
+            raise ValueError("Provide `bins` or `bin_size`, not both.")
+
+    @property
+    def obligate_output_class(self):
+        from ..signals import DistributionSignal
+
+        return DistributionSignal
+
+    def _prepare_hist_inputs(self, data):
+        axis = data.dims.index(self.dim)
+
+        if callable(self.hist_range):
+            lo, hi = self.hist_range(data, dim=self.dim)
+        elif self.hist_range is not None:
+            lo, hi = self.hist_range
+        elif self.range_source == "coords":
+            coord = np.asarray(data.coords[self.dim])
+            lo, hi = coord[0], coord[-1]
+        elif self.range_source == "data":
+            lo = data.min().item()
+            hi = data.max().item()
+        else:
+            raise ValueError(f"Unknown range_source '{self.range_source}'")
+        if not (hi > lo):
+            raise ValueError(f"Invalid histogram range: ({lo}, {hi})")
+
+        if callable(self.bins):
+            bins = self.bins(data, dim=self.dim)
+        elif self.bins is not None:
+            bins = self.bins
+        else:
+            bins = max(1, ceil((hi - lo) / self.bin_size))
+
+        if callable(self.weights):
+            weights = self.weights(data, dim=self.dim)
+        else:
+            weights = self.weights
+        if weights is not None:
+            weights = np.asarray(weights)
+            if weights.shape not in ((data.shape[axis],), data.shape):
+                raise ValueError(
+                    f"weights of shape {weights.shape} not compatible with data of shape {data.shape}"
+                )
+
+        return axis, bins, (lo, hi), weights
+
+    @staticmethod
+    def histogram_along_axis(data, bins, axis, hist_range, weights, density):
+        """
+        Apply np.histogram to every 1D slice along one axis of an N-D array.
+
+        The axis being histogrammed is replaced by a bins axis in the output.
+        """
+        if weights is not None and weights.shape == data.shape:
+            slice_weights = True
+            weights = np.moveaxis(weights, axis, -1)
+        else:
+            slice_weights = False
+
+        data = np.moveaxis(data, axis, -1)
+        outer_shape = data.shape[:-1]
+        n_bins = bins if isinstance(bins, int) else len(bins) - 1
+        dtype = float if density or weights is not None else int
+        result = np.empty(outer_shape + (n_bins,), dtype=dtype)
+        for idx in product(*(range(s) for s in outer_shape)):
+            result[idx], bin_edges = np.histogram(
+                data[idx],
+                bins=bins,
+                range=hist_range,
+                weights=weights if not slice_weights else weights[idx],
+                density=density,
+            )
+        # TODO should I assign units here like of 1/the bin dimension unit?
+        result = np.moveaxis(result, -1, axis)
+        return result, bin_edges
+
+    def _wrap_result(self, result, data, axis, bin_edges):
+        new_dims = []
+        new_coords = {}
+        for i, dim in enumerate(data.dims):
+            if i != axis:
+                new_dims.append(dim)
+                new_coords[dim] = data.coords[dim]
+            else:
+                new_dim = f"{dim}_counts"
+                new_dims.append(new_dim)
+                if self.bin_coord == "left":
+                    new_coords[new_dim] = bin_edges[:-1]
+                elif self.bin_coord == "center":
+                    center = lambda i, edges: (edges[i] + edges[i + 1]) / 2
+                    new_coords[new_dim] = [
+                        center(i, bin_edges) for i in range(len(bin_edges) - 1)
+                    ]
+                else:
+                    raise ValueError("Unknown bin coord")
+
+        new_attrs = copy(data.attrs)
+
+        # It can make sense to compute a histogram over the stacked dimension
+        # but if you do the unstacked signals are no longer recoverable.
+        if "stack_dim" in new_attrs and new_attrs["stack_dim"] == self.dim:
+            new_attrs.pop("stack_dim")
+            new_attrs.pop("boundaries")
+
+        result = xr.DataArray(result, dims=new_dims, coords=new_coords, attrs=new_attrs)
+
+        return result
+
+    def _apply_inner(self, data):
+        axis, bins, hist_range, weights = self._prepare_hist_inputs(data)
+
+        hist, bin_edges = self.histogram_along_axis(
+            data, bins, axis, hist_range, weights, self.density
+        )
+
+        return hist, {'axis': axis, 'bin_edges': bin_edges}
+    

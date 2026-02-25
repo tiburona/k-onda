@@ -1,6 +1,8 @@
 import pint
+import pint_xarray
 
 ureg = pint.UnitRegistry()
+pint_xarray.setup_registry(ureg)
 
 SAMPLING_RATE = 30000 * ureg.Hz
 LFP_SAMPLING_RATE = 2000 * ureg.Hz
