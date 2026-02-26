@@ -9,14 +9,18 @@ from .utils import group_to_dict
 
 class Epoch:
     
-    def __init__(self, session, onset, duration, index=None, epoch_type=None):
+    def __init__(self, session, onset, duration, index=None, epoch_type=None, 
+                 mode='pushdown'):
         self.session = session
         self.onset = onset
         self.duration = duration
         self.index = index
         self.epoch_type = epoch_type
+        self.mode = mode
         self.t0 = self.onset
         self.t1 = self.onset + self.duration
+        
+
 
 
 @dataclass(frozen=True)

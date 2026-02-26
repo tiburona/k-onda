@@ -75,7 +75,7 @@ def make_data_series(data, dims, units, coords, data_units=None, attrs=None):
     })
 
     if data_units is not None:
-        da = da.pint.quantify(data_units)
+        da = da.pint.quantify(ureg.Unit(data_units) if isinstance(data_units, str) else data_units)
 
     return da
    

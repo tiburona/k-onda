@@ -41,10 +41,12 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
      
     @property
     def lineage(self):
+        # root to leaf
         if not self._lineage and self.parent:
-            return self._collect_lineage(self, self._lineage)
-        else:
-            return self._lineage
+            lineage = self._collect_lineage(self, self._lineage)
+            self._lineage = list(reversed(lineage))
+        
+        return self._lineage
         
     def _collect_lineage(self, signal, accum):
         accum.append(signal)

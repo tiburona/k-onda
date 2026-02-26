@@ -1,27 +1,33 @@
 from copy import deepcopy, copy
 from functools import partial
-import pint
+from collections import defaultdict
 
 from k_onda.time import Epoch
 from .core import Transformer
 from k_onda.central import ureg
+from ..utils import scalar
 
 
 
 
 class FrequencyBand:
 
-    def __init__(self, f_lo, f_hi, units="Hz"):
-        self.f_lo = pint.Quantity(f_lo, units=units)
-        self.f_hi = pint.Quantity(f_hi, units=units)
+    def __init__(self, f_lo, f_hi, units="Hz", mode='pushdown'):
+        self.f_lo = ureg.Quantity(f_lo, units=units)
+        self.f_hi = ureg.Quantity(f_hi, units=units)
+        self.mode = mode
 
 
 class SelectTransform:
 
-    def __init__(self, fn, selection, padlen=None):
+    def __init__(self, fn, selection, selection_endpoints=None, 
+                 padded_endpoints=None, padlen=None):
         self.fn = fn
         self.selection = selection
         self.padlen = padlen
+        self.selection_endpoints = selection_endpoints
+        self.padded_endpoints = padded_endpoints
+            
 
     def __call__(self, data):
         return self.fn(data)
@@ -30,55 +36,30 @@ class SelectTransform:
 class SelectMixin:
 
     def band(self, freq_band):
-        return self.select(frequency=(freq_band.f_lo, freq_band.f_hi))
+        return self.select(selection=freq_band, mode=freq_band.mode)
 
     def window(self, epoch):
-        return self.select(time=(epoch.t0, epoch.t1))
+        return self.select(selection=epoch, mode=epoch.mode)
     
-    def select(self, placement='pushdown', selection=None, units=None, **dim_endpoints):
-        return Selector(placement, selection, units, **dim_endpoints)(self)
+    def select(self, mode='pushdown', selection=None, units=None, **dim_endpoints):
+        return Selector(mode, selection, units, **dim_endpoints)(self)
 
 
 class Selector(Transformer):
 
-    def __init__(self, placement='pushdown', selection=None, units=None, **dim_endpoints):
-        self.placement = placement # pushdown | local
+    def __init__(self, mode='pushdown', selection=None, units=None, **dim_endpoints):
+        self.mode = mode # pushdown | local
         self.selection = selection
-        if isinstance(selection, Epoch):
-            self.dim_endpoints = {'time': [selection.t0, selection.t1]}
-        elif isinstance(selection, FrequencyBand):
-            self.dim_endpoints = {
-                'frequency': (selection.f_lo, selection.f_hi)}
-        else:
-            self.dim_endpoints = dim_endpoints
         self.units = units
-        self._process_endpoints_and_units()
-
-    def _process_endpoints_and_units(self):
-        units = self.units; dim_endpoints = self.dim_endpoints
-        for dim, endpoints in dim_endpoints.items():
-            if len(endpoints) == 3:
-                ep_units = getattr(ureg, endpoints[2])
-            elif isinstance(self.units, str):
-                if len(list(dim_endpoints.keys())) > 1:
-                    raise ValueError("units type str is ambiguous when selecting" \
-                    "on more than one dimension.")
-                else:
-                    ep_units = getattr(ureg, units)
-            elif isinstance(units, dict) and dim in units:
-                ep_units = getattr(ureg, units[dim])
-            else:
-                ep_units = 1
-            
-            for ep in endpoints:
-                ep *= ep_units
-       
+        self.dim_endpoints = dim_endpoints
+    
     def _call_on_signal(self, signal, key=None):
         
         child_class = self.get_output_class(signal)
         transform = self._get_transform(signal, key=key)
-        if 'time' in self.dim_endpoints:
-            duration = self.dim_endpoints['time'][1] - self.dim_endpoints['time'][0]
+        eps = transform.selection_endpoints
+        if 'time' in eps:
+            duration = eps['time'][1] - eps['time'][0]
         else:
             duration = None
         child_signal = child_class(
@@ -89,142 +70,260 @@ class Selector(Transformer):
         return child_signal
     
     def _get_transform(self, parent, key=None):
-        apply_kwargs = self._get_apply_kwargs(parent)
-        transform_kwargs = self._get_transform_kwargs(apply_kwargs)
-        return SelectTransform(partial(self._apply, **apply_kwargs), **transform_kwargs)
-    
-    def _get_apply_kwargs(self, parent):
-        return {
-            'lineage': parent.lineage,
-            'padlen': self._get_padlen(parent.lineage, self.dim_endpoints),
-            'dim_defaults': getattr(parent, 'dim_defaults', None)
-            }
-    
-    def _get_transform_kwargs(self, apply_kwargs):
-        return {
-            'selection': self.selection,
-            'padlen': apply_kwargs['padlen']
+
+        plan = {
+            'selection_endpoints': ...,
+            'padded_endpoints': ...,
+            'padlen_by_dim': ...,
+            'ancestors_with_selectors': ...,
+            'when_to_select': ...,
         }
 
-    def _get_padlen(self, lineage, dim_endpoints):
+        plan= self._process_endpoints(plan, parent.lineage)
+          
+        plan = self.accumulate_padlen(plan, parent.lineage)
         
+        apply_kwargs = self._get_apply_kwargs(parent, plan)
+        
+        transform_kwargs = self._get_transform_kwargs(plan)
+
+        return SelectTransform(
+            partial(self._apply, **apply_kwargs), **transform_kwargs
+            )
+    
+    def _get_apply_kwargs(self, parent, plan):
+        return {
+            'plan': plan,
+            'lineage': parent.lineage
+            }
+    
+    def _get_transform_kwargs(self, plan):
+        return {
+            'selection_endpoints': plan['selection_endpoints'],
+            'selection': self.selection,
+            'padlen': plan['padlen_by_dim'],
+            'padded_endpoints': plan['padded_endpoints']
+        }
+    
+    def _apply(self, _, plan, lineage):
+        
+        plan = self._get_ancestors_with_selectors(plan, lineage)
+
+        self.validate_selection(plan, lineage)
+        
+        if self.mode == 'pushdown':
+            plan = self._plan_pushdown_select_timing(plan)
+            return self.pushdown_selection(plan, lineage)
+    
+        elif self.mode == 'local':
+            return self.local_selection(plan, lineage)
+        
+        else:
+            raise ValueError(f"Unknown selection placement {self.mode}")
+
+        
+    @staticmethod
+    def _create_dim_slices(dim_endpoints):
+        return {dim: slice(*eps) for dim, eps in dim_endpoints.items()}
+    
+    def _process_endpoints(self, plan, lineage):
+        
+        # Expand selection objects into endpoints
+        if isinstance(self.selection, Epoch):
+            dim_endpoints = {
+                'time': [self.selection.t0, self.selection.t1]
+                }
+        elif isinstance(self.selection, FrequencyBand):
+            dim_endpoints = {
+                'frequency': (self.selection.f_lo, self.selection.f_hi)
+                }
+        else:
+            dim_endpoints = self.dim_endpoints
+
+        # Assign units to endpoints from self.units
+        selection_endpoints = deepcopy(dim_endpoints)
+
+        for dim, eps in selection_endpoints.items():
+            if len(eps) == 3:
+                ep_units = getattr(ureg, eps[2])
+                eps = eps[:2]
+            elif isinstance(self.units, str):
+                if len(list(dim_endpoints.keys())) > 1:
+                    raise ValueError("units type str is ambiguous when selecting" \
+                    "on more than one dimension.")
+                ep_units = getattr(ureg, self.units)
+            elif isinstance(self.units, dict) and dim in self.units:
+                ep_units = getattr(ureg, self.units[dim])
+            else:
+                ep_units = 1
+            
+            selection_endpoints[dim] = [ep * ep_units for ep in eps]
+
+        # If that didn't yield units, try to get them from the signal
+        # First collect every default dim leading up to this selection
+        dim_defaults = {}
+        for ancestor in lineage:
+            defaults = getattr(ancestor, 'dim_defaults', {})
+            dim_defaults.update(defaults)
+        
+        # Then assign them to every non-unit-aware endpoint
+        for dim in dim_endpoints:
+            eps = selection_endpoints[dim]
+            is_unit_aware = all([isinstance(ep, ureg.Quantity) for ep in eps])
+            if not is_unit_aware: 
+                if dim_defaults:
+                    selection_endpoints[dim] = [
+                        ureg.Quantity(float(p), dim_defaults[dim]) 
+                        for p in selection_endpoints[dim]
+                        ]
+            else: 
+                selection_endpoints[dim] = list(selection_endpoints[dim])
+
+        plan['selection_endpoints'] = selection_endpoints
+        return plan
+    
+    def _get_ancestors_with_selectors(self, plan, lineage):
+        plan['ancestors_with_selectors'] = [
+            (i, ancestor) for i, ancestor in enumerate(lineage)
+            if isinstance(getattr(ancestor, 'transform', None), SelectTransform)
+            ]
+        return plan
+    
+    def accumulate_padlen(self, plan, lineage):
+
+        selection_endpoints = plan['selection_endpoints']
+     
         def get_units(dim, index): 
             try: 
-                units = dim_endpoints[dim][index].units
+                units = selection_endpoints[dim][index].units
             except:
                 units = 1
             finally:
                 return units
 
-        accumulator = {dim: [0.0 * get_units(dim, 0), 0.0 * get_units(dim, 1)] 
-                       for dim in dim_endpoints}
+        def reset_padlen_accumulator(dim):
+            return [0.0 * get_units(dim, 0), 0.0 * get_units(dim, 1)] 
 
-        for signal in lineage:
-            transform = getattr(signal, 'transform', None)
-            if transform is not None and not isinstance(transform, SelectTransform):
-                padlen = getattr(signal.transform, 'padlen', {})
-                dims = set(padlen.keys()) & set(dim_endpoints.keys())
-                for dim in dims:
-                    accumulator[dim][0] += padlen[dim][0]
-                    accumulator[dim][1] += padlen[dim][1]
+        our_padlen = {dim: reset_padlen_accumulator(dim) for dim in selection_endpoints}
 
-        return accumulator
-    
-    def _apply(self, data, lineage, padlen, dim_defaults):
-        if self.placement == 'pushdown':
-            return self._apply_pushdown(data, lineage, padlen, dim_defaults)
-        elif self.placement == 'local':
-            return self._apply_local(data, dim_defaults)
-        else:
-            raise ValueError(f"Unknown placement {self.placement}")
-        
-    @staticmethod
-    def _create_dim_slices(dim_endpoints):
-        return {dim: slice(*eps) for dim, eps in dim_endpoints.items()}
-        
-    def _apply_default_units(self, dim_defaults):
-
-        dim_endpoints_local = deepcopy(self.dim_endpoints)
-
-        for dim, endpoints in self.dim_endpoints.items():
-            is_unit_aware = all([isinstance(ep, pint.Quantity) for ep in endpoints])
-            if not is_unit_aware: 
-                if dim_defaults:
-                    dim_endpoints_local[dim] = [
-                        pint.Quantity(float(p), dim_defaults[dim]) 
-                        for p in self.dim_endpoints[dim]
-                        ]
-            else: 
-                dim_endpoints_local[dim] = list(dim_endpoints_local[dim])
-
-        return dim_endpoints_local
-    
-    def _apply_pushdown(self, data, lineage, padlen, dim_defaults):
-        endpoints = self._apply_default_units(dim_defaults)
-        return self._select_in_stages(data, lineage, endpoints, padlen)
-    
-    def _apply_local(self, data, dim_defaults):
-        dim_endpoints = self._apply_default_units(dim_defaults)
-        return data.sel(**self._create_dim_slices(**dim_endpoints))
-    
-    def _select_in_stages(self, data, lineage, dim_endpoints, padlen):
-
-        original_endpoints = deepcopy(dim_endpoints)
-
-        for dim in dim_endpoints:
-            if dim in padlen:
-                dim_endpoints[dim][0] -= padlen[dim][0]
-                dim_endpoints[dim][1] += padlen[dim][1]
-
-        done_dims = set()
-
-        def compare_endpoints(selection, existing):
-            for dim in selection:
-                if dim in existing:
-                    if (existing[dim][0] > selection[dim][0] or
-                    existing[dim][1] < selection[dim][1]):
-                        raise ValueError(
-                        f"selection {selection[dim]} outside the bounds of" 
-                        f" available data {existing[dim]}.")
-                    
+        padded_endpoints = deepcopy(selection_endpoints)
+        # assuming lineage is root-leaf
         for ancestor in lineage:
+            
             transform = getattr(ancestor, 'transform', None)
-            if isinstance(transform, SelectTransform):
-                dims = (set(ancestor.transformer.dim_endpoints.keys()) & 
-                        set(dim_endpoints.keys())) - done_dims
-                for dim in dims:
-                    compare_endpoints(
-                        dim_endpoints, ancestor.selector.dim_endpoints
-                        )
-                    done_dims.add(dim)
+            
+            if transform is None:
+                continue
 
-            if (done_dims == set(dim_endpoints.keys()) or 
-                getattr(ancestor, 'parent', None) is None):
-                replay_from_ancestor = ancestor
-                break
+            elif isinstance(transform, SelectTransform):
+                their_selection_endpoints = transform.selection_endpoints
+                for dim in their_selection_endpoints:
+                    our_padlen[dim] = reset_padlen_accumulator(dim) # reset
+
+            else:
+                their_padlen = transform.padlen
+                for dim in selection_endpoints:
+                    if dim in their_padlen:
+                        our_padlen[dim][0] += their_padlen[dim][0]
+                        our_padlen[dim][1] += their_padlen[dim][1]
         
-        data = self._replay_transforms(replay_from_ancestor, lineage, dim_endpoints)
-                # the signal that needs to sel here is the 
-
-        trimmed_data = data.sel(**self._create_dim_slices(original_endpoints))
-
-        return trimmed_data
+        padded_endpoints = {
+            dim: [selection_endpoints[dim][0] - our_padlen[dim][0], 
+                  selection_endpoints[dim][1] + our_padlen[dim][1]] 
+                  for dim in selection_endpoints}
+        
+        plan['padlen_by_dim'] = our_padlen
+        plan['padded_endpoints'] = padded_endpoints
+        return plan
     
-    def _replay_transforms(self, replay_from_ancestor, lineage, dim_endpoints):
-        dim_endpoints = deepcopy(dim_endpoints)
-        # todo: this would be a little nicer if it reversed after it identified
-        # the right index -- fewer objects to move around.
-        history = list(reversed(lineage))
-        start_index = history.index(replay_from_ancestor)
-        recent_history = history[start_index:]
-        data = recent_history[0].data
-        for ancestor in recent_history[1:]:
-            data = ancestor.transform(data)
-            dims = list(dim_endpoints.keys())
-            for dim in dims:
-                if dim in data.dims and dim in dim_endpoints:
-                    data = data.sel(**self._create_dim_slices(dim_endpoints))
-                    dim_endpoints.pop(dim)
+    def validate_selection(self, plan, lineage):
+
+        def get_data_endpoints(ancestor):
+            return {
+                dim: 
+                [ancestor.data.coords[dim][0].item(), ancestor.data.coords[dim][-1].item()] 
+                for dim in ancestor.data.dims
+                }
+
+        def compare_endpoints(theirs, ours):
+            for dim in ours:
+                if dim in theirs:
+                    if theirs[dim][0] > ours[dim][0] or theirs[dim][1] < ours[dim][1]:
+                        raise ValueError(f"Available data on dim {dim} is {theirs[dim]}.  " \
+                        "Requested selection is {ours[dim]}") 
+                    
+        ours = plan['selection_endpoints']
+        theirs = get_data_endpoints(lineage[0])
+
+        compare_endpoints(theirs, ours)
+
+        if self.mode == 'pushdown':
+            for _, ancestor in plan['ancestors_with_selectors']:
+                theirs = ancestor.transform.selection_endpoints 
+                compare_endpoints(theirs, ours)
+    
+    def _plan_pushdown_select_timing(self, plan):
+        when_to_select = defaultdict(lambda: 0)
+        ours = plan['selection_endpoints']
+
+        for i, ancestor in plan['ancestors_with_selectors']:
+            theirs = ancestor.transform.selection_endpoints
+
+            if self.mode == 'pushdown':
+                for dim in ours:
+                    if dim in theirs:
+                        when_to_select[dim] = i
+
+        plan['when_to_select'] = when_to_select
+        return plan
+
+    def local_selection(self, plan, lineage):
+        data = lineage[0].data
+
+        for ancestor in lineage[1:]:
+            transform = getattr(ancestor, 'transform', None)
+            if transform is not None:
+                data = transform(data)
+
+        data = data.sel(**self._create_dim_slices(plan['selection_endpoints']))
+
         return data
+
+    def pushdown_selection(self, plan, lineage):
+
+        when_to_select = plan['when_to_select']
+        selection_endpoints = plan['selection_endpoints']
+        padded_endpoints = plan['padded_endpoints']
+
+        index_dims_dict = defaultdict(list)
+
+        for dim, index in when_to_select.items():
+            index_dims_dict[index].append(dim)
+
+        def select_dims_for_index(idx):
+            selection = {dim: padded_endpoints[dim] 
+                         for dim in index_dims_dict[idx]}
+            return data.sel(**self._create_dim_slices(selection))
+
+        for i, ancestor in enumerate(lineage):
+
+            if i == 0:
+                data = ancestor.data
+                data = select_dims_for_index(0)
+            
+            else:
+                transform = getattr(ancestor, 'transform', None)
+                if transform is not None:
+                    data = transform(data)
+
+                if i in index_dims_dict:
+                    # do select
+                    data = select_dims_for_index(i)
+
+        return data.sel(**self._create_dim_slices(selection_endpoints))
+
+
+
+    
     
   

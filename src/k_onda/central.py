@@ -2,6 +2,7 @@ import pint
 import pint_xarray
 
 ureg = pint.UnitRegistry()
+pint.set_application_registry(ureg)
 pint_xarray.setup_registry(ureg)
 
 SAMPLING_RATE = 30000 * ureg.Hz
