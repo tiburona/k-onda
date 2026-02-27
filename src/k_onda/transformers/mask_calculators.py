@@ -99,7 +99,7 @@ class Intersection(Calculator, BinaryCalculatorMixin):
             parent=parent,
             transform=transform,
             origin=(parent.origin, other.origin),
-            calculator=self,
+            transformer=self,
         )
 
     def _apply_inner(self, parent_data, other):

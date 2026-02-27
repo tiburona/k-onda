@@ -141,7 +141,7 @@ class EpochScalarSignal(Signal):
     pass
 
 
-class EventSignal(Signal):
+class PointProcessSignal(Signal):
     # stored as timestamps
     # .window(epoch) returns timestamps in range
 
@@ -151,7 +151,7 @@ class EventSignal(Signal):
         transform,
         transformer=None,
         origin=None,
-        time_key=None,
+        coord_map=None,
         start=None,
         duration=None,
         storage_strategy="lazy",
@@ -166,8 +166,11 @@ class EventSignal(Signal):
             storage_strategy)
         
         # there might be reason to overwrite this in a transform
-        self.sampling_rate = getattr(self.parent, "sampling_rate", None)
-        self.time_key = time_key or getattr(self.parent, "time_key", None)
+        self.sampling_rate = getattr(self.parent, 'sampling_rate', None)
+        self.coord_map = coord_map or getattr(self.parent, 'coord_map', None)
+
+    def __getitem__(self, key):
+        return self.payload(key)
 
     def to_binary(self):
         if self.sampling_rate is None:
@@ -180,11 +183,11 @@ class EventSignal(Signal):
                 raise TypeError("`data` must be a dictionary or xarray Dataset")
             return data[key]
 
-        return EventSignal(
+        return PointProcessSignal(
             parent=self,
             transform=transform,
             origin=self.origin,
-            calculator=None,
+            transformer=None,
         )
 
     @property
@@ -216,7 +219,6 @@ class BinarySignal(Signal):
         storage_strategy="lazy",
         sampling_rate=None,
         length=None,
-        endpoints=None,
         intervals=None,
     ):
         super().__init__(
@@ -230,7 +232,6 @@ class BinarySignal(Signal):
         
         self.intervals = intervals
         self.length = length
-        self.endpoints = endpoints
         self.sampling_rate = sampling_rate or getattr(self.parent, "sampling_rate", None)
 
     def __and__(self, other):

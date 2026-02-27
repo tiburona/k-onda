@@ -1,6 +1,9 @@
 from copy import deepcopy, copy
 from functools import partial
 from collections import defaultdict
+from typing import Protocol, runtime_checkable
+from functools import reduce
+import xarray as xr
 
 from k_onda.time import Epoch
 from .core import Transformer
@@ -8,6 +11,10 @@ from k_onda.central import ureg
 from ..utils import scalar
 
 
+
+@runtime_checkable
+class PointProcessLike(Protocol):
+    coord_map: ...
 
 
 class FrequencyBand:
@@ -53,10 +60,15 @@ class Selector(Transformer):
         self.units = units
         self.dim_endpoints = dim_endpoints
     
-    def _call_on_signal(self, signal, key=None):
+    def _call_on_signal(self, signal, key_spec=None):
+
+        if key_spec and key_spec.input_name is not None:
+            raise NotImplementedError(
+                "Use signal.payload(key).select(...) or signal[key].select"
+                )
         
         child_class = self.get_output_class(signal)
-        transform = self._get_transform(signal, key=key)
+        transform = self._get_transform(signal)
         eps = transform.selection_endpoints
         if 'time' in eps:
             duration = eps['time'][1] - eps['time'][0]
@@ -69,7 +81,7 @@ class Selector(Transformer):
             duration=duration)
         return child_signal
     
-    def _get_transform(self, parent, key=None):
+    def _get_transform(self, parent):
 
         plan = {
             'selection_endpoints': ...,
@@ -77,9 +89,10 @@ class Selector(Transformer):
             'padlen_by_dim': ...,
             'ancestors_with_selectors': ...,
             'when_to_select': ...,
+            'is_point_process': isinstance(parent, PointProcessLike)      
         }
 
-        plan= self._process_endpoints(plan, parent.lineage)
+        plan = self._process_endpoints(plan, parent.lineage)
           
         plan = self.accumulate_padlen(plan, parent.lineage)
         
@@ -105,7 +118,7 @@ class Selector(Transformer):
             'padded_endpoints': plan['padded_endpoints']
         }
     
-    def _apply(self, _, plan, lineage):
+    def _apply(self, _data, plan, lineage):
         
         plan = self._get_ancestors_with_selectors(plan, lineage)
 
@@ -113,14 +126,13 @@ class Selector(Transformer):
         
         if self.mode == 'pushdown':
             plan = self._plan_pushdown_select_timing(plan)
-            return self.pushdown_selection(plan, lineage)
+            return self.pushdown_selection(plan, lineage) 
     
         elif self.mode == 'local':
             return self.local_selection(plan, lineage)
         
         else:
             raise ValueError(f"Unknown selection placement {self.mode}")
-
         
     @staticmethod
     def _create_dim_slices(dim_endpoints):
@@ -250,7 +262,7 @@ class Selector(Transformer):
                 if dim in theirs:
                     if theirs[dim][0] > ours[dim][0] or theirs[dim][1] < ours[dim][1]:
                         raise ValueError(f"Available data on dim {dim} is {theirs[dim]}.  " \
-                        "Requested selection is {ours[dim]}") 
+                        f"Requested selection is {ours[dim]}") 
                     
         ours = plan['selection_endpoints']
         theirs = get_data_endpoints(lineage[0])
@@ -276,18 +288,26 @@ class Selector(Transformer):
 
         plan['when_to_select'] = when_to_select
         return plan
+    
+    def signal_type_select(self, endpoints, ancestor, data):
+         
+        if isinstance(ancestor, PointProcessLike):
+            return self.select_point_process(endpoints, ancestor, data)
+        else:
+            return data.sel(**self._create_dim_slices(endpoints))
 
     def local_selection(self, plan, lineage):
-        data = lineage[0].data
+        selection_endpoints = plan['selection_endpoints']
+
+        ancestor = lineage[0]
+        data = ancestor.data
 
         for ancestor in lineage[1:]:
             transform = getattr(ancestor, 'transform', None)
             if transform is not None:
                 data = transform(data)
 
-        data = data.sel(**self._create_dim_slices(plan['selection_endpoints']))
-
-        return data
+        return self.signal_type_select(selection_endpoints, ancestor, data)
 
     def pushdown_selection(self, plan, lineage):
 
@@ -301,10 +321,10 @@ class Selector(Transformer):
             index_dims_dict[index].append(dim)
 
         def select_dims_for_index(idx):
-            selection = {dim: padded_endpoints[dim] 
+            endpoints = {dim: padded_endpoints[dim] 
                          for dim in index_dims_dict[idx]}
-            return data.sel(**self._create_dim_slices(selection))
-
+            return self.signal_type_select(endpoints, ancestor, data)
+            
         for i, ancestor in enumerate(lineage):
 
             if i == 0:
@@ -320,10 +340,65 @@ class Selector(Transformer):
                     # do select
                     data = select_dims_for_index(i)
 
-        return data.sel(**self._create_dim_slices(selection_endpoints))
-
-
-
+        return self.signal_type_select(selection_endpoints, lineage[-1], data)
     
+
+    def get_points(self, endpoints, ancestor, data, map_dims):
+
+        array_keys = list(ancestor.coord_map.values())
+        first_array_key = array_keys[0]
+        first_coord_arr = data[first_array_key]  # example coord_array: spike_times
+        point_dim = first_coord_arr.dims[0]  # example event_dim: spikes
+
+        if len(map_dims) == 0:
+            return point_dim, set(range(len(first_coord_arr[point_dim])))
+
+        selected_points = []
+
+        for dim in map_dims:
+            array_key = ancestor.coord_map[dim]  # dim is 'time' array_key is 'spike_times'
+            coord_array = data[array_key]  # the array of spike_times
+            entries = set()
+            for i, entry in enumerate(coord_array):  # i is the index of the spike. entry is the value of the spike time
+                if (endpoints[dim][0] <= entry and 
+                    entry < endpoints[dim][1]):
+                    entries.add(i)
+            selected_points.append(entries)
+
+        if len(selected_points) == 0:
+            selected_points = set()
+        else:
+            selected_points = reduce(set.intersection, selected_points)
+
+        return point_dim, selected_points
     
+    def select_point_process(self, endpoints, ancestor, data):
+        # this is in process
+
+        coord_map_dims = set(endpoints) & set(ancestor.coord_map)
+        other_dims = set(endpoints) - coord_map_dims
+
+        get_points_args = (endpoints, ancestor, data, coord_map_dims)
+        point_dim, selected_points = self.get_points(*get_points_args)
+       
+        filtered = {}
+
+        for key in data:
+            da = data[key]
+            da = da.isel({point_dim: sorted(selected_points)})
+
+            dims = other_dims & set(da.dims)
+            eps = {d: ps for d, ps in endpoints.items() if d in dims}
+            da = da.sel(**self._create_dim_slices(eps))
+
+            filtered[key] = da
+
+        result = xr.Dataset(
+            filtered,
+            attrs=data.attrs
+        )
+
+        return result
+
+
   

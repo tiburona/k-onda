@@ -29,9 +29,9 @@ class Rate(Calculator):
         }
 
     def _input_validation(self, parent):
-        from ..signals import BinarySignal, EventSignal
+        from ..signals import BinarySignal, PointProcessSignal
 
-        if not isinstance(parent, (EventSignal, BinarySignal)):
+        if not isinstance(parent, (PointProcessSignal, BinarySignal)):
             raise ValueError("Rate can only operate on EventSignal or BinarySignal.")
 
     def _validate_rate_inputs(self, time_key, intervals=None, exclude_initial=None):
@@ -39,7 +39,7 @@ class Rate(Calculator):
             raise ValueError("Cannot select data if `time_key` is not defined.")
 
     def _prepare_rate_inputs(self, data, intervals, exclude_initial):
-        time_key = data.attrs.get("time_key")
+        time_key = data.attrs.get('coord_map')['time']
         intervals = intervals(data) if callable(intervals) else intervals
         exclude_initial = exclude_initial(data) if callable(exclude_initial) else exclude_initial
         return time_key, intervals, exclude_initial

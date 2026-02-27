@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 
 from ..central import ureg
-from ..signals import EventSignal
+from ..signals import PointProcessSignal
 from .core import DataComponent, DataIdentity, DataSource
 
 
@@ -84,13 +84,13 @@ class Neuron(DataIdentity):
 
 
 class SpikeCluster(DataComponent):
-    output_class = EventSignal
+    output_class = PointProcessSignal
     data_type = xr.Dataset
 
     def __init__(self, data_source, cluster_idx, neuron=None):
         super().__init__(data_source)
         self.cluster_idx = cluster_idx
-        self.time_key = "spike_times"
+        self.coord_map = {'time': 'spike_times'}
         if neuron is not None:
             self.assign_to_neuron(neuron)
 
@@ -105,11 +105,11 @@ class SpikeCluster(DataComponent):
             dims=("spikes",),
         )
         waveforms = self.data_source.get_waveforms(self.cluster_idx)
-        waveforms = xr.DataArray(waveforms, dims=("spikes", "samples", "electrodes"))
+        waveforms = xr.DataArray(waveforms, dims=('spikes', 'samples', 'electrodes'))
 
         return xr.Dataset(
-            {"spike_times": spike_times, "waveforms": waveforms},
-            attrs={"time_key": self.time_key},
+            {'spike_times': spike_times, 'waveforms': waveforms},
+            attrs={'coord_map': self.coord_map},
         )
 
     def assign_to_neuron(self, neuron):

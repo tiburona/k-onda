@@ -152,10 +152,10 @@ epoch_0_power.data
 
 power_calculator = Spectrogram(power_config)
 
-epoch_0_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_0).data
-epoch_1_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_1).data
+epoch_0_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_0)
+epoch_1_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_1)
 
-assert not epoch_0_power_sig_1.equals(epoch_1_power_sig_1)
+assert not epoch_0_power_sig_1.data.equals(epoch_1_power_sig_1.data)
 
 preprocessed_signal_2 = (
     lfp_channel_2
@@ -164,9 +164,9 @@ preprocessed_signal_2 = (
     .normalize("rms")
     )
 
-epoch_0_power_sig_2 = power_calculator(preprocessed_signal_2).window(epoch_0).data
+epoch_0_power_sig_2 = power_calculator(preprocessed_signal_2).window(epoch_0)
 
-assert not epoch_0_power_sig_2.equals(epoch_0_power_sig_1)
+assert not epoch_0_power_sig_2.data.equals(epoch_0_power_sig_1.data)
 
 
 fb = FrequencyBand(4, 8)
@@ -179,7 +179,7 @@ band_power = (
     epoch_0_power.select(frequency=(4, 8)).data
 )
 
-threshold_1 = epoch_0_power_sig_1.threshold('lt', 100)
+threshold_1 = epoch_0_power.threshold('lt', 100)
 threshold_2 = epoch_0_power_sig_2.threshold('gt', 20)
 
 intersection = threshold_1 & threshold_2
