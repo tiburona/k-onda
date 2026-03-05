@@ -15,7 +15,7 @@ class Rate(Calculator):
         self.exclude_initial = exclude_initial
 
     @property
-    def obligate_output_class(self):
+    def fixed_output_class(self):
         from ..signals import ScalarSignal
 
         return ScalarSignal

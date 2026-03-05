@@ -8,6 +8,7 @@ from ..signals import BinarySignal, ValidityMask
 
 class Threshold(Calculator):
     name = "threshold"
+    fixed_output_class = ValidityMask
 
     def __init__(self, comparison, threshold):
         self.threshold = threshold
@@ -18,10 +19,6 @@ class Threshold(Calculator):
             "ge": lambda data, value: data >= value,
             "le": lambda data, value: data <= value,
         }
-
-    def get_child_class(self, _):
-
-        return ValidityMask
 
     def _apply_inner(self, data):
         return self.operations[self.comparison](data, self.threshold)
@@ -91,7 +88,7 @@ class Intersection(Calculator, BinaryCalculatorMixin):
     def __call__(self, parent, other):
         self.validate_sig_types([parent, other])
 
-        child_signal_class = self.get_child_class(parent)
+        child_signal_class = self.resolve_output_class(parent)
 
         transform = Transform(partial(self._apply, other=other))
 
@@ -119,7 +116,7 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
         if mask is None:
             raise ValueError("mask must be provided at init or call time")
         self.validate_sig_types([mask])
-        child_signal_class = self.get_child_class(parent_signal)
+        child_signal_class = self.resolve_output_class(parent_signal)
         transform = Transform(partial(self._apply, mask=mask))
 
         return child_signal_class(

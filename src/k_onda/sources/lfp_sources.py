@@ -1,6 +1,7 @@
 from ..dataarray_factories import make_time_series
 from ..signals import TimeSeriesSignal
 from .core import DataComponent, DataSource
+from k_onda.central import Schema
 
 
 class LFPRecording(DataSource):
@@ -46,3 +47,7 @@ class LFPChannel(DataComponent):
         data = self.data_source.get_channel(self.channel_idx)
         da = make_time_series(data, self.sampling_rate)
         return da
+    
+    @property
+    def output_schema(self):
+        return Schema(set('time'))

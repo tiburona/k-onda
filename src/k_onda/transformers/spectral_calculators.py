@@ -3,25 +3,32 @@ from mne.time_frequency import tfr_array_multitaper
 import numpy as np
 import xarray as xr
 
-from ..central import ureg
+from ..central import ureg, Schema
 from .core import PaddingCalculator
 from ..utils import scalar
+
+
+# TODO: Right now this calculator has a baked in assumption that we are computing
+# a spectrogram on time.  That's the most common case, but there could be others
+# and it would be nice to generalize it for consistency with the generalization 
+# of other calculators.
 
 
 class Spectrogram(PaddingCalculator):
     name = "spectrogram"
 
-    @property
-    def obligate_output_class(self):
-        from ..signals import TimeFrequencySignal
-        return TimeFrequencySignal
-
     def __init__(self, config):
         self.config = config
 
-    def get_child_signal_class(self, _):
+    @property
+    def fixed_output_class(self):
         from ..signals import TimeFrequencySignal
         return TimeFrequencySignal
+    
+    def output_schema(self, input_schema):
+        dims = set(input_schema.dims)
+        dims.add('frequency')
+        return Schema(dims)
 
     def _compute_padlen(self, _, apply_kwargs):
         n_cycles = self.config["n_cycles"]

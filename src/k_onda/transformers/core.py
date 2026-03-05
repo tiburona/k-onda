@@ -3,20 +3,14 @@ from dataclasses import dataclass
 from functools import partial, wraps
 import numpy as np
 import xarray as xr
-from typing import Protocol, runtime_checkable
 from copy import deepcopy
 
-
-@runtime_checkable
-class SignalLike(Protocol):
-    data: ...
+from k_onda.central import SignalLike
 
 
-def resolve_target_data(self, data, key_spec=None):
-    if key_spec is None:
+def resolve_target_data(self, data, key):
+    if key is None:
         return data
-    
-    key = key_spec.input_name
 
     if not isinstance(data, xr.Dataset):
         raise ValueError(
@@ -101,18 +95,24 @@ KeySpec = namedtuple('KeySpec', 'input_name output_mode')
 
 class Transformer:
 
-    def __call__(self, parent, key=None, key_output_mode=None):
+    fixed_output_class = None
+
+    # this gets overridden
+    def output_schema(self, input_schema):
+        return input_schema
+
+    def __call__(self, input, key=None, key_output_mode=None):
         from ..sources import Collection, GroupedCollection
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
-        if isinstance(parent, GroupedCollection):
-            return self._call_on_grouped_collection(parent, key_spec)
+        if isinstance(input, GroupedCollection):
+            return self._call_on_grouped_collection(input, key_spec)
         
-        if isinstance(parent, Collection):
-            return self._call_on_collection(parent, key_spec)
+        if isinstance(input, Collection):
+            return self._call_on_collection(input, key_spec)
         
-        return self._call_on_signal(parent, key_spec)
+        return self._call_on_signal(input, key_spec)
     
     def _call_on_grouped_collection(self, grouped_collection, key_spec):
 
@@ -136,14 +136,24 @@ class Transformer:
              )
     
     def _call_on_signal(self, signal, key_spec):
-        self._input_validation(signal)
-        child_class = self.get_child_class(signal)
+        output_class = self.resolve_output_class(signal)
         transform = self._get_transform(signal, key_spec)
-        child_signal = child_class(parent=signal, transform=transform, transformer=self)
-        return child_signal
+        output_signal = output_class(
+            inputs=(signal,), 
+            transform=transform, 
+            transformer=self)
+        return output_signal
     
+    def resolve_output_class(self, input):
+        # If we're operating on a StackedSignal, preserve the stack type.
+        # If this calculator has a fixed output class, return that.
+        # Otherwise ask the parent signal what it would produce.
+        if getattr(input, "is_stack", False):
+            return type(input)
+        return self.fixed_output_class or self._infer_output_class(input)
+
     @staticmethod
-    def get_output_class(entity):
+    def _infer_output_class(entity):
         return getattr(entity, "output_class", type(entity))
 
 
@@ -153,53 +163,44 @@ class CalculatorPolicies(Policies):
 
 class Calculator(Transformer):
     name = None
-    obligate_output_class = None
     key_mode = 'replace'  # replace | append | standalone
     require_some_finite = True
     require_all_finite = False
     allow_empty = False
 
-    def _input_validation(self, parent):
-        if not isinstance(parent, SignalLike):
+    def _input_validation(self, input):
+        if not isinstance(input, SignalLike):
             raise ValueError("Calculators can only operate on Data Components, Signals, " \
             "StackedSignals, Collections, and GroupedCollections.")
-        
-    def get_child_class(self, parent):
-        # If we're operating on a StackedSignal, we'll return a StackedSignal.
-        # If this calculator has an obligate Signal type to return, we'll return one
-        # of those. Otherwise we'll query the parent signal to get the output class.
-        if getattr(parent, "is_stack", False):
-            return type(parent)
-        return self.obligate_output_class or self.get_output_class(parent)
 
-    def _get_transform(self, parent, key_spec):
+    def _get_transform(self, input, key_spec):
 
-        apply_kwargs = self._get_apply_kwargs(parent, key_spec)
-        transform_kwargs = self._get_transform_kwargs(parent, apply_kwargs)
+        apply_kwargs = self._get_apply_kwargs(input, key_spec)
+        transform_kwargs = self._get_transform_kwargs(input, apply_kwargs)
         return Transform(partial(self._apply, **apply_kwargs), **transform_kwargs)
 
-    def _get_apply_kwargs(self, parent_signal, key_spec):
+    def _get_apply_kwargs(self, input, key_spec):
         result = {'key_spec': key_spec}
-        result.update(self._get_extra_apply_kwargs(parent_signal))
+        result.update(self._get_extra_apply_kwargs(input))
         return result
 
-    def _get_transform_kwargs(self, parent, apply_kwargs):
-        if getattr(parent, "is_stack", None):
-            signal_class = (self.obligate_output_class or 
-                            self.get_output_class(parent.signals[0]))
+    def _get_transform_kwargs(self, input, apply_kwargs):
+        if getattr(input, "is_stack", None):
+            signal_class = (self.fixed_output_class or
+                            self._infer_output_class(input.signals[0]))
         else:
             signal_class = None
 
         kwargs = {"signal_class": signal_class}
-        kwargs.update(self._get_extra_transform_kwargs(parent, apply_kwargs))
+        kwargs.update(self._get_extra_transform_kwargs(input, apply_kwargs))
 
         return kwargs
 
     # These two methods get overridden
-    def _get_extra_apply_kwargs(self, parent):
+    def _get_extra_apply_kwargs(self, input):
         return {}
 
-    def _get_extra_transform_kwargs(self, parent, apply_kwargs):
+    def _get_extra_transform_kwargs(self, input, apply_kwargs):
         return deepcopy(apply_kwargs)
     
     @with_key_access

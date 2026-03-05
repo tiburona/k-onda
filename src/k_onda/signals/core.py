@@ -1,7 +1,12 @@
 import numpy as np
 import xarray as xr
+from collections.abc import Iterable
 
 from ..calculator_mixins import CalculateMixin, UnstackMixin, SelectMixin, IntersectionMixin
+
+
+
+
 
 
 class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
@@ -10,57 +15,59 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     # strategy is one of: "lazy", "memory", "disk"
     def __init__(
         self,
-        parent,
+        inputs,
         transform,
+        *,
         transformer=None,
+        optimizer=None,
         origin=None,
         start=None,
         duration=None,
+        source_signal=None,
         storage_strategy="lazy",
     ):
-        self.parent = parent
+        self.inputs = inputs if isinstance(inputs, Iterable) else (inputs,)
         self.transform = transform
         self.transformer = transformer
+        self.optimizers = []
+        if optimizer:
+            self.optimizers.append = optimizer
         self.origin = origin
-        self.start = start or self.parent.start
-        self.duration = duration or self.parent.duration
+        self.start = start or getattr(self.parent, 'start', None)
+        self.duration = duration or getattr(self.parent, 'duration', None)
+        self.source_signal = source_signal
         self._storage_strategy = storage_strategy
         self._cached_data = None
-        self._lineage = []
-        self._history = None
+        self._validate_inputs()
+      
+    
+    @property
+    def parent(self):
+        return self.inputs[0] if len(self.inputs) == 1 else None
         
     @property
     def origin(self):
         if hasattr(self, "_origin") and self._origin is not None:
             return self._origin
-        return getattr(self.parent, "origin", None)
+        self._origin = getattr(self.parent, "origin", None)
+        return self._origin
 
     @origin.setter
     def origin(self, value):
         self._origin = value
-     
+
     @property
-    def lineage(self):
-        # root to leaf
-        if not self._lineage and self.parent:
-            lineage = self._collect_lineage(self, self._lineage)
-            self._lineage = list(reversed(lineage))
-        
-        return self._lineage
-        
-    def _collect_lineage(self, signal, accum):
-        accum.append(signal)
-        if getattr(signal, 'parent', None):
-            return self._collect_lineage(signal.parent, accum)
-        else:
-            return accum
-        
-    @property
-    def history(self):
-        if self._history is None:
-            self._history = [signal.transform for signal in self.lineage]
-        return self._history
+    def output_schema(self):
+        input_schemas = [inp.output_schema for inp in self.inputs]
+        return self.transformer.output_schema(*input_schemas)
     
+    @property
+    def output_dims(self):
+        return self.output_schema.dims
+
+    def _validate_inputs(self):
+        return True
+
     def __add__(self, other):
         return self.add(other)
     
@@ -75,7 +82,8 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
     def _materialize(self):
         if self._cached_data is None:
-            self._cached_data = self.transform(self.parent.data)
+            input_data = [input.data for input in self.inputs]
+            self._cached_data = self.transform(*input_data)
         return self._cached_data
 
     @property
@@ -101,32 +109,14 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
             origin = self.origin
 
         return getattr(origin, "data_identity", None)
-
+    
 
 class TimeSeriesSignal(Signal):
     dim_defaults = {"time": "s"}
 
-    def __init__(
-            self, 
-            parent, 
-            transform, 
-            transformer=None, 
-            origin=None, 
-            start=None, 
-            duration=None,
-            storage_strategy="lazy"
-    ):
-        super().__init__(
-            parent, 
-            transform, 
-            transformer, 
-            origin, 
-            start, 
-            duration, 
-            storage_strategy
-            )
-        # there might be reason to overwrite this in a transform
-        self.sampling_rate = self.parent.sampling_rate
+    def __init__(self, inputs, transform, *, sampling_rate=None, **kwargs):
+        super().__init__(inputs, transform, **kwargs)
+        self.sampling_rate = sampling_rate or self.parent.sampling_rate
 
 
 class TimeFrequencySignal(TimeSeriesSignal, CalculateMixin, SelectMixin):
@@ -142,32 +132,19 @@ class EpochScalarSignal(Signal):
 
 
 class PointProcessSignal(Signal):
-    # stored as timestamps
-    # .window(epoch) returns timestamps in range
 
     def __init__(
-        self,
-        parent,
-        transform,
-        transformer=None,
-        origin=None,
-        coord_map=None,
-        start=None,
-        duration=None,
-        storage_strategy="lazy",
-    ):
-        super().__init__(
-            parent, 
+            self, 
+            inputs, 
             transform, 
-            transformer, 
-            origin, 
-            start, 
-            duration, 
-            storage_strategy)
-        
-        # there might be reason to overwrite this in a transform
-        self.sampling_rate = getattr(self.parent, 'sampling_rate', None)
-        self.coord_map = coord_map or getattr(self.parent, 'coord_map', None)
+            *, 
+            sampling_rate = None, 
+            coord_map=None, 
+            **kwargs):
+        super().__init__(inputs, transform, **kwargs)
+    
+        self.sampling_rate = sampling_rate or getattr(self.parent, 'sampling_rate', None)
+        self.coord_map = coord_map or getattr(self.parent, "coord_map", None)
 
     def __getitem__(self, key):
         return self.payload(key)
@@ -208,30 +185,10 @@ class BinarySignal(Signal):
     # stored as boolean array at some sampling rate
     # supports & | ~
 
-    def __init__(
-        self,
-        parent,
-        transform,
-        transformer=None,
-        origin=None,
-        start=None,
-        duration=None,
-        storage_strategy="lazy",
-        sampling_rate=None,
-        length=None,
-        intervals=None,
-    ):
-        super().__init__(
-            parent, 
-            transform, 
-            transformer, 
-            origin, 
-            start, 
-            duration, 
-            storage_strategy)
+    def __init__(self, inputs, transform, *, sampling_rate=None, intervals=None, **kwargs):
+        super().__init__(inputs, transform, **kwargs)
         
         self.intervals = intervals
-        self.length = length
         self.sampling_rate = sampling_rate or getattr(self.parent, "sampling_rate", None)
 
     def __and__(self, other):
@@ -248,7 +205,7 @@ class BinarySignal(Signal):
         return self._materialize()
 
     def _bool_train_from_intervals(self):
-        length = self.length or (self.endpoints[1] - self.endpoints[0]) / self.sampling_rate
+        length = self.duration or (self.endpoints[1] - self.endpoints[0]) / self.sampling_rate
         arr = np.full(length, False)
 
         for start, end in self.intervals:
@@ -262,11 +219,20 @@ class ValidityMask(BinarySignal):
 
 
 class SignalStack(CalculateMixin, UnstackMixin):
-    def __init__(self, parent, transform=None, calculator=None, signal_class=None):
-        self.parent = parent
-        self.signals = self.parent.signals
+    def __init__(self, collection=None, inputs=None, transform=None, transformer=None, signal_class=None):
+
+        if collection is not None:
+            self.collection = collection
+            self.signals = collection.signals
+            self.inputs = tuple(collection.signals)
+        elif inputs is not None:
+            self.collection = inputs[0].collection
+            self.signals = inputs[0].collection.signals
+            self.inputs = inputs
+        else:
+            raise ValueError(f"collection or inputs must be provided for SignalStack")
         self.transform = transform
-        self.calculator = calculator
+        self.transformer = transformer
         self._cached_data = None
         self.signal_class = signal_class or type(self.signals[0])
         self.is_stack = True
@@ -278,10 +244,25 @@ class SignalStack(CalculateMixin, UnstackMixin):
             else:
                 self._cached_data = self.transform(self.parent.data)
         return self._cached_data
-
+    
+    @property
+    def parent(self):
+        if len(self.inputs) == 1 and getattr(self.inputs[0], 'is_stack', False):
+            return self.inputs[0]
+        return self.collection
+        
     @property
     def data(self):
         return self._materialize()
+    
+    @property
+    def output_schema(self):
+        input_schemas = [inp.output_schema for inp in self.inputs]
+        return self.transformer.output_schema(*input_schemas)
+    
+    @property
+    def output_dims(self):
+        return self.output_schema.dims
 
     def group_by(self):
         # Placeholder for future API.

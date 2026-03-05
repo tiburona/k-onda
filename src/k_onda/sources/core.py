@@ -86,7 +86,7 @@ class DataIdentity:
         data_component.data_identity = None
 
 
-class Collection(StackMixin, CalculateMixin):
+class Collection(StackMixin, CalculateMixin, SelectMixin):
     def __init__(self, members):
         self.members = members
         self._signals = None
@@ -125,7 +125,7 @@ class Collection(StackMixin, CalculateMixin):
                 component.output_class(
                     component,
                     transform=lambda x: x,
-                    calculator=None,
+                    transformer=None,
                     origin=component,
                 )
                 for component in base_components
@@ -139,7 +139,7 @@ class Collection(StackMixin, CalculateMixin):
         return GroupedCollection(self.members, group_on, strict=strict)
 
 
-class GroupedCollection(MutableMapping, CalculateMixin):
+class GroupedCollection(MutableMapping, CalculateMixin, SelectMixin):
     def __init__(self, members=None, group_on=None, strict=True, groups=None):
         if groups is None:
             if members is None or group_on is None:

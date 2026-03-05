@@ -3,7 +3,7 @@ import csv
 import numpy as np
 import xarray as xr
 
-from ..central import ureg
+from ..central import ureg, Schema
 from ..signals import PointProcessSignal
 from .core import DataComponent, DataIdentity, DataSource
 
@@ -18,6 +18,10 @@ class PhyOutput(DataSource):
         self._cluster_groups = None
         self.spike_clusters = np.load(self.file_path / "spike_clusters.npy")
 
+    # @property
+    # def output_schema(self):
+    #     return Schema(set('time'))
+    
     @property
     def sampling_rate(self):
         if self._sampling_rate is None:

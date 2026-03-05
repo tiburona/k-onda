@@ -1,16 +1,14 @@
-from copy import deepcopy, copy
+from copy import deepcopy
 from functools import partial
-from collections import defaultdict
 from typing import Protocol, runtime_checkable
 from functools import reduce
 import xarray as xr
+from operator import attrgetter
 
 from k_onda.time import Epoch
-from .core import Transformer
+from .core import Transformer, Transform
 from k_onda.central import ureg
-from ..utils import scalar
-
-
+from k_onda.graph import walk_tree, new_tree
 
 @runtime_checkable
 class PointProcessLike(Protocol):
@@ -23,30 +21,9 @@ class FrequencyBand:
         self.f_lo = ureg.Quantity(f_lo, units=units)
         self.f_hi = ureg.Quantity(f_hi, units=units)
         self.mode = mode
-
-
-class SelectTransform:
-
-    def __init__(self, fn, selection, selection_endpoints=None, 
-                 padded_endpoints=None, padlen=None):
-        self.fn = fn
-        self.selection = selection
-        self.padlen = padlen
-        self.selection_endpoints = selection_endpoints
-        self.padded_endpoints = padded_endpoints
-            
-
-    def __call__(self, data):
-        return self.fn(data)
     
 
 class SelectMixin:
-
-    def band(self, freq_band):
-        return self.select(selection=freq_band, mode=freq_band.mode)
-
-    def window(self, epoch):
-        return self.select(selection=epoch, mode=epoch.mode)
     
     def select(self, mode='pushdown', selection=None, units=None, **dim_endpoints):
         return Selector(mode, selection, units, **dim_endpoints)(self)
@@ -59,86 +36,40 @@ class Selector(Transformer):
         self.selection = selection
         self.units = units
         self.dim_endpoints = dim_endpoints
+        self.old_tree = None
     
     def _call_on_signal(self, signal, key_spec=None):
+
+        self._input_validation(signal, key_spec=key_spec)
+
+        endpoints = self._process_endpoints(signal)
+
+        if self.mode == 'pushdown':
+            new_leaf = self._place_pushdown_windows(signal, endpoints)
+        else:
+            new_leaf = self._place_local_window(signal, endpoints)
+
+        self.old_tree = signal
+        new_leaf.optimizers.append(self)
+
+        return new_leaf
+    
+    def _input_validation(self, signal, key_spec=None):
 
         if key_spec and key_spec.input_name is not None:
             raise NotImplementedError(
                 "Use signal.payload(key).select(...) or signal[key].select"
                 )
         
-        child_class = self.get_output_class(signal)
-        transform = self._get_transform(signal)
-        eps = transform.selection_endpoints
-        if 'time' in eps:
-            duration = eps['time'][1] - eps['time'][0]
-        else:
-            duration = None
-        child_signal = child_class(
-            parent=signal, 
-            transform=transform, 
-            transformer=self, 
-            duration=duration)
-        return child_signal
-    
-    def _get_transform(self, parent):
-
-        plan = {
-            'selection_endpoints': ...,
-            'padded_endpoints': ...,
-            'padlen_by_dim': ...,
-            'ancestors_with_selectors': ...,
-            'when_to_select': ...,
-            'is_point_process': isinstance(parent, PointProcessLike)      
-        }
-
-        plan = self._process_endpoints(plan, parent.lineage)
-          
-        plan = self.accumulate_padlen(plan, parent.lineage)
-        
-        apply_kwargs = self._get_apply_kwargs(parent, plan)
-        
-        transform_kwargs = self._get_transform_kwargs(plan)
-
-        return SelectTransform(
-            partial(self._apply, **apply_kwargs), **transform_kwargs
-            )
-    
-    def _get_apply_kwargs(self, parent, plan):
-        return {
-            'plan': plan,
-            'lineage': parent.lineage
-            }
-    
-    def _get_transform_kwargs(self, plan):
-        return {
-            'selection_endpoints': plan['selection_endpoints'],
-            'selection': self.selection,
-            'padlen': plan['padlen_by_dim'],
-            'padded_endpoints': plan['padded_endpoints']
-        }
-    
-    def _apply(self, _data, plan, lineage):
-        
-        plan = self._get_ancestors_with_selectors(plan, lineage)
-
-        self.validate_selection(plan, lineage)
-        
-        if self.mode == 'pushdown':
-            plan = self._plan_pushdown_select_timing(plan)
-            return self.pushdown_selection(plan, lineage) 
-    
-        elif self.mode == 'local':
-            return self.local_selection(plan, lineage)
-        
-        else:
-            raise ValueError(f"Unknown selection placement {self.mode}")
-        
-    @staticmethod
-    def _create_dim_slices(dim_endpoints):
-        return {dim: slice(*eps) for dim, eps in dim_endpoints.items()}
-    
-    def _process_endpoints(self, plan, lineage):
+        for node, _, _ in walk_tree(signal):
+            if isinstance(node, Window) and node.selector_mode == self.mode:
+                common_dims = set(node.selection_endpoints) & set(self.dim_endpoints)
+                if common_dims:
+                    raise ValueError(
+                        f"Two selectors with mode {self.mode} for dims {common_dims}"
+                        )
+                
+    def _process_endpoints(self, input_signal):
         
         # Expand selection objects into endpoints
         if isinstance(self.selection, Epoch):
@@ -174,8 +105,8 @@ class Selector(Transformer):
         # If that didn't yield units, try to get them from the signal
         # First collect every default dim leading up to this selection
         dim_defaults = {}
-        for ancestor in lineage:
-            defaults = getattr(ancestor, 'dim_defaults', {})
+        for node, _, _ in walk_tree(input_signal):
+            defaults = getattr(node, 'dim_defaults', {})
             dim_defaults.update(defaults)
         
         # Then assign them to every non-unit-aware endpoint
@@ -191,161 +122,120 @@ class Selector(Transformer):
             else: 
                 selection_endpoints[dim] = list(selection_endpoints[dim])
 
-        plan['selection_endpoints'] = selection_endpoints
-        return plan
-    
-    def _get_ancestors_with_selectors(self, plan, lineage):
-        plan['ancestors_with_selectors'] = [
-            (i, ancestor) for i, ancestor in enumerate(lineage)
-            if isinstance(getattr(ancestor, 'transform', None), SelectTransform)
-            ]
-        return plan
-    
-    def accumulate_padlen(self, plan, lineage):
+        return selection_endpoints
 
-        selection_endpoints = plan['selection_endpoints']
-     
+    def _place_pushdown_windows(self, signal, endpoints):
+        
         def get_units(dim, index): 
             try: 
-                units = selection_endpoints[dim][index].units
+                units = endpoints[dim][index].units
             except:
                 units = 1
             finally:
                 return units
 
-        def reset_padlen_accumulator(dim):
-            return [0.0 * get_units(dim, 0), 0.0 * get_units(dim, 1)] 
-
-        our_padlen = {dim: reset_padlen_accumulator(dim) for dim in selection_endpoints}
-
-        padded_endpoints = deepcopy(selection_endpoints)
-        # assuming lineage is root-leaf
-        for ancestor in lineage:
-            
-            transform = getattr(ancestor, 'transform', None)
-            
-            if transform is None:
-                continue
-
-            elif isinstance(transform, SelectTransform):
-                their_selection_endpoints = transform.selection_endpoints
-                for dim in their_selection_endpoints:
-                    our_padlen[dim] = reset_padlen_accumulator(dim) # reset
-
-            else:
-                their_padlen = transform.padlen
-                for dim in selection_endpoints:
-                    if dim in their_padlen:
-                        our_padlen[dim][0] += their_padlen[dim][0]
-                        our_padlen[dim][1] += their_padlen[dim][1]
+        starting_val = {
+            dim: [0.0 * get_units(dim, 0), 0.0 * get_units(dim, 1)] 
+            for dim in endpoints
+            }
         
-        padded_endpoints = {
-            dim: [selection_endpoints[dim][0] - our_padlen[dim][0], 
-                  selection_endpoints[dim][1] + our_padlen[dim][1]] 
-                  for dim in selection_endpoints}
-        
-        plan['padlen_by_dim'] = our_padlen
-        plan['padded_endpoints'] = padded_endpoints
-        return plan
+        def accumulate_padlen(node, padlen):
+           
+            node_padlen = getattr(getattr(node, 'transform', None), 'padlen', {})
+       
+            dims = set(padlen) & set(node_padlen)
+            for dim in dims:
+                padlen[dim][0] += node_padlen[dim][0]
+                padlen[dim][1] += node_padlen[dim][1]
+            return padlen
+
+        new_leaf = new_tree(signal)
+            
+        done_dims = set()
+
+        def is_insertion_point(dim):
+            for inp in node.inputs:
+                for d in inp.output_dims:
+                    if d == dim:
+                        return False
+            return True
+
+        for node, padlen, last_node in walk_tree(
+            new_leaf, 
+            func=accumulate_padlen, 
+            starting_val=starting_val
+            ):
+
+            ours = set(endpoints); theirs = set(node.output_schema.dims)
+            dims = ours & theirs - done_dims
+            insertion_dims = set([dim for dim in dims if is_insertion_point(dim)])
+            if insertion_dims:
+                done_dims.update(insertion_dims)
+                eps = {dim: [p * 1.0 for p in points] 
+                       for dim, points in endpoints.items() 
+                       if dim in insertion_dims}
+                for dim in eps:
+                    eps[dim][0] -= padlen[dim][0]
+                    eps[dim][1] += padlen[dim][1]
+                new_node = Window(eps, self.mode)(node)
+                last_node.inputs = (new_node,)
+
+        new_window_leaf = Window(endpoints, self.mode)(new_leaf)
+
+        return new_window_leaf
     
-    def validate_selection(self, plan, lineage):
+    def _place_local_window(self, signal, endpoints):
 
-        def get_data_endpoints(ancestor):
-            return {
-                dim: 
-                [ancestor.data.coords[dim][0].item(), ancestor.data.coords[dim][-1].item()] 
-                for dim in ancestor.data.dims
-                }
+        new_leaf = new_tree(signal)
+        new_window_leaf = Window(endpoints, self.mode)(new_leaf)
+        return new_window_leaf
 
-        def compare_endpoints(theirs, ours):
-            for dim in ours:
-                if dim in theirs:
-                    if theirs[dim][0] > ours[dim][0] or theirs[dim][1] < ours[dim][1]:
-                        raise ValueError(f"Available data on dim {dim} is {theirs[dim]}.  " \
-                        f"Requested selection is {ours[dim]}") 
-                    
-        ours = plan['selection_endpoints']
-        theirs = get_data_endpoints(lineage[0])
 
-        compare_endpoints(theirs, ours)
-
-        if self.mode == 'pushdown':
-            for _, ancestor in plan['ancestors_with_selectors']:
-                theirs = ancestor.transform.selection_endpoints 
-                compare_endpoints(theirs, ours)
+class Window(Transformer):
     
-    def _plan_pushdown_select_timing(self, plan):
-        when_to_select = defaultdict(lambda: 0)
-        ours = plan['selection_endpoints']
+    def __init__(self, selection_endpoints, selector_mode):
+        self.selection_endpoints = selection_endpoints
+        self.selector_mode = selector_mode
 
-        for i, ancestor in plan['ancestors_with_selectors']:
-            theirs = ancestor.transform.selection_endpoints
+    def _call_on_signal(self, signal, key_spec=None):
+        # figure out what super does
+        output_signal = super()._call_on_signal(signal, key_spec=key_spec)
 
-            if self.mode == 'pushdown':
-                for dim in ours:
-                    if dim in theirs:
-                        when_to_select[dim] = i
+        if 'time' in self.selection_endpoints:
+            duration = self.selection_endpoints['time'][1] - self.selection_endpoints['time'][0]
+            start = self.selection_endpoints['time'][0]
+            output_signal.duration = duration
+            output_signal.start = start
 
-        plan['when_to_select'] = when_to_select
-        return plan
-    
-    def signal_type_select(self, endpoints, ancestor, data):
-         
-        if isinstance(ancestor, PointProcessLike):
-            return self.select_point_process(endpoints, ancestor, data)
+        return output_signal
+
+    def _get_transform(self, input, key_spec):
+        apply_kwargs = self._get_apply_kwargs(input)
+   
+        return Transform(partial(self._apply, **apply_kwargs))
+
+    def _get_apply_kwargs(self, input):
+
+        return {
+            'is_point_process': isinstance(input, PointProcessLike),
+            'coord_map': getattr(input, 'coord_map', None)
+            }
+
+    def _apply(self, data, is_point_process=False, coord_map=None):
+        # TODO: do I want to add validation of the the window boundaries versus
+        # the data boundaries or will the natural error be informative enough?s
+        if is_point_process:
+            return self.select_point_process(data, coord_map)
         else:
-            return data.sel(**self._create_dim_slices(endpoints))
-
-    def local_selection(self, plan, lineage):
-        selection_endpoints = plan['selection_endpoints']
-
-        ancestor = lineage[0]
-        data = ancestor.data
-
-        for ancestor in lineage[1:]:
-            transform = getattr(ancestor, 'transform', None)
-            if transform is not None:
-                data = transform(data)
-
-        return self.signal_type_select(selection_endpoints, ancestor, data)
-
-    def pushdown_selection(self, plan, lineage):
-
-        when_to_select = plan['when_to_select']
-        selection_endpoints = plan['selection_endpoints']
-        padded_endpoints = plan['padded_endpoints']
-
-        index_dims_dict = defaultdict(list)
-
-        for dim, index in when_to_select.items():
-            index_dims_dict[index].append(dim)
-
-        def select_dims_for_index(idx):
-            endpoints = {dim: padded_endpoints[dim] 
-                         for dim in index_dims_dict[idx]}
-            return self.signal_type_select(endpoints, ancestor, data)
-            
-        for i, ancestor in enumerate(lineage):
-
-            if i == 0:
-                data = ancestor.data
-                data = select_dims_for_index(0)
-            
-            else:
-                transform = getattr(ancestor, 'transform', None)
-                if transform is not None:
-                    data = transform(data)
-
-                if i in index_dims_dict:
-                    # do select
-                    data = select_dims_for_index(i)
-
-        return self.signal_type_select(selection_endpoints, lineage[-1], data)
+            return data.sel(**self._create_dim_slices(self.selection_endpoints))
+        
+    @staticmethod
+    def _create_dim_slices(dim_endpoints):
+        return {dim: slice(*eps) for dim, eps in dim_endpoints.items()}
     
-
-    def get_points(self, endpoints, ancestor, data, map_dims):
-
-        array_keys = list(ancestor.coord_map.values())
+    def get_points(self, data, coord_map, map_dims):
+        
+        array_keys = list(coord_map.values())
         first_array_key = array_keys[0]
         first_coord_arr = data[first_array_key]  # example coord_array: spike_times
         point_dim = first_coord_arr.dims[0]  # example event_dim: spikes
@@ -356,12 +246,12 @@ class Selector(Transformer):
         selected_points = []
 
         for dim in map_dims:
-            array_key = ancestor.coord_map[dim]  # dim is 'time' array_key is 'spike_times'
+            array_key = coord_map[dim]  # dim is 'time' array_key is 'spike_times'
             coord_array = data[array_key]  # the array of spike_times
             entries = set()
             for i, entry in enumerate(coord_array):  # i is the index of the spike. entry is the value of the spike time
-                if (endpoints[dim][0] <= entry and 
-                    entry < endpoints[dim][1]):
+                if (self.selection_endpoints[dim][0] <= entry and 
+                    entry < self.selection_endpoints[dim][1]):
                     entries.add(i)
             selected_points.append(entries)
 
@@ -370,16 +260,16 @@ class Selector(Transformer):
         else:
             selected_points = reduce(set.intersection, selected_points)
 
-        return point_dim, selected_points
+        return point_dim, selected_points 
     
-    def select_point_process(self, endpoints, ancestor, data):
-        # this is in process
+    def select_point_process(self, data, coord_map):
 
-        coord_map_dims = set(endpoints) & set(ancestor.coord_map)
+        endpoints = self.selection_endpoints
+        coord_map_dims = set(endpoints) & set(coord_map)
         other_dims = set(endpoints) - coord_map_dims
 
-        get_points_args = (endpoints, ancestor, data, coord_map_dims)
-        point_dim, selected_points = self.get_points(*get_points_args)
+        points_args = (data, coord_map, coord_map_dims)
+        point_dim, selected_points = self.get_points(*points_args)
        
         filtered = {}
 
@@ -399,6 +289,4 @@ class Selector(Transformer):
         )
 
         return result
-
-
-  
+        

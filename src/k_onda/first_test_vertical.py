@@ -179,6 +179,16 @@ band_power = (
     epoch_0_power.select(frequency=(4, 8)).data
 )
 
+spikes_and_filtered_waveforms = (experiment
+ .all_neurons
+ .stack_signals(dim='spikes')
+ .reduce(key='waveforms', dim='electrodes', method='mean')
+ .median_filter(key='waveforms', kernel_sizes={'samples': 5})
+ .unstack_signals()
+ .select(epoch_0)
+ .signals[0].data
+)
+
 threshold_1 = epoch_0_power.threshold('lt', 100)
 threshold_2 = epoch_0_power_sig_2.threshold('gt', 20)
 

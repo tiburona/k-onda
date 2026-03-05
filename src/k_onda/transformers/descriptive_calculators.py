@@ -6,6 +6,7 @@ import numpy as np
 import xarray as xr
 
 from .core import Calculator
+from k_onda.central import Schema
 
 
 class ReduceDim(Calculator):
@@ -20,6 +21,11 @@ class ReduceDim(Calculator):
         if self.weights is not None:
             data = data.weighted(self.weights, keep_attrs=True)
         return getattr(data, self.method)(dim=self.dim, keep_attrs=True)
+    
+    def output_schema(self, input_schema):
+        dims = set(input_schema.dims)
+        dims.discard(self.dim)
+        return Schema(dims=dims)
 
 
 class Histogram(Calculator):
@@ -54,10 +60,16 @@ class Histogram(Calculator):
             raise ValueError("Provide `bins` or `bin_size`, not both.")
 
     @property
-    def obligate_output_class(self):
+    def fixed_output_class(self):
         from ..signals import DistributionSignal
 
         return DistributionSignal
+    
+    def output_schema(self, input_schema):
+        dims = set(input_schema.dims)
+        dims.discard(self.dim)
+        dims.add(f'{self.dim}_bins')
+        return Schema(dims)
 
     def _prepare_hist_inputs(self, data):
         axis = data.dims.index(self.dim)
@@ -135,7 +147,7 @@ class Histogram(Calculator):
                 new_dims.append(dim)
                 new_coords[dim] = data.coords[dim]
             else:
-                new_dim = f"{dim}_counts"
+                new_dim = f"{dim}_bins"
                 new_dims.append(new_dim)
                 if self.bin_coord == "left":
                     new_coords[new_dim] = bin_edges[:-1]

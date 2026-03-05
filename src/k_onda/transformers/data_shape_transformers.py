@@ -1,8 +1,22 @@
+from collections import defaultdict
 from copy import deepcopy
 from functools import partial
 import xarray as xr
 
 from .core import Transformer
+from k_onda.central import Schema
+
+
+class ShapeTransform:
+
+    # You need this seemingly inert object to report to select transformers
+    # that they don't need to add any padlen
+    def __init__(self, fn):
+        self.fn = fn
+        self.padlen = {}
+
+    def __call__(self, data):
+        return self.fn(data)
 
 
 class StackSignals(Transformer):
@@ -11,10 +25,18 @@ class StackSignals(Transformer):
     def __init__(self, dim=None):
         self.dim = dim
 
-    def __call__(self, parent):
-        from ..signals import SignalStack
+    def output_schema(self, *input_schemas):
+        dims = set(input_schemas[0].dims)
+        dims.add(self.dim or 'members')
+        return Schema(dims)
 
-        return SignalStack(parent=parent, transform=self._apply, calculator=self)
+    def __call__(self, collection):
+        from ..signals import SignalStack
+        transform = self._get_transform()
+        return SignalStack(collection=collection, transform=transform, transformer=self)
+
+    def _get_transform(self):
+        return ShapeTransform(self._apply)
 
     def _gather_datasets(self, signals):
         keys = signals[0].data.keys()
@@ -31,12 +53,12 @@ class StackSignals(Transformer):
                     boundaries.append(boundaries[-1] + increment)
 
             data[key] = xr.concat(
-                arrays, dim=self.dim or "members", combine_attrs="no_conflicts"
+                arrays, dim=self.dim or 'members', combine_attrs='no_conflicts'
             )
 
         dataset = xr.Dataset(data)
-        dataset.attrs["boundaries"] = boundaries
-        dataset.attrs["stack_dim"] = self.dim
+        dataset.attrs['boundaries'] = boundaries
+        dataset.attrs['stack_dim'] = self.dim
 
         return dataset
 
@@ -67,7 +89,12 @@ class UnstackSignals(Transformer):
     def __init__(self, dim=None):
         self.dim = dim
 
-    def get_child_class(self):
+    def output_schema(self, input_schema):
+        dims = set(input_schema.dims)
+        dims.discard(self.dim or 'members')
+        return Schema(dims)
+
+    def resolve_output_class(self):
         from ..sources import Collection
         return Collection
 
@@ -76,22 +103,32 @@ class UnstackSignals(Transformer):
 
         for i in range(len(signal_stack.signals)):
             signal_class = signal_stack.transform.signal_class or signal_stack.signal_class
-            transform = partial(self._apply, idx=i)
+            transform = self._get_transform(i)
             origin = signal_stack.signals[i].origin
             signal = signal_class(
-                parent=signal_stack,
+                inputs=[signal_stack],
                 transform=transform,
                 origin=origin,
-                calculator=self,
+                transformer=self,
+                source_signal=signal_stack.signals[i],
+                start=signal_stack.signals[i].start,
+                duration=signal_stack.signals[i].duration
             )
             signals.append(signal)
 
-        return self.get_child_class()(signals)
+        return self.resolve_output_class()(signals)
+    
+    def _get_transform(self, idx):
+        apply_kwargs = self._get_apply_kwargs(idx)
+        return ShapeTransform(partial(self._apply, **apply_kwargs))
+    
+    def _get_apply_kwargs(self, idx):
+        return {'idx': idx}
 
-    def get_child_signal_class(self, signal):
-        if not hasattr(signal, "calculator"):
+    def _infer_output_class(self, signal):
+        if not hasattr(signal, 'transformer'):
             return signal.output_class
-        return signal.calculator.get_child_class()
+        return signal.transformer.resolve_output_class()
 
     def _apply(self, data, idx):
         attrs = deepcopy(data.attrs)
