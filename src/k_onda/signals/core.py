@@ -3,8 +3,7 @@ import xarray as xr
 from collections.abc import Iterable
 
 from ..calculator_mixins import CalculateMixin, UnstackMixin, SelectMixin, IntersectionMixin
-
-
+from k_onda.graph.traversal import build_generations
 
 
 
@@ -17,24 +16,28 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self,
         inputs,
         transform,
+        data_schema,
         *,
         transformer=None,
         optimizer=None,
         origin=None,
         start=None,
         duration=None,
+        coord_map=None,
         source_signal=None,
         storage_strategy="lazy",
     ):
         self.inputs = inputs if isinstance(inputs, Iterable) else (inputs,)
         self.transform = transform
         self.transformer = transformer
+        self.data_schema = data_schema
         self.optimizers = []
         if optimizer:
             self.optimizers.append = optimizer
         self.origin = origin
         self.start = start or getattr(self.parent, 'start', None)
         self.duration = duration or getattr(self.parent, 'duration', None)
+        self.coord_map = coord_map
         self.source_signal = source_signal
         self._storage_strategy = storage_strategy
         self._cached_data = None
@@ -55,15 +58,19 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     @origin.setter
     def origin(self, value):
         self._origin = value
-
-    @property
-    def output_schema(self):
-        input_schemas = [inp.output_schema for inp in self.inputs]
-        return self.transformer.output_schema(*input_schemas)
     
     @property
-    def output_dims(self):
-        return self.output_schema.dims
+    def data_dims(self):
+        return self.data_schema.dims
+    
+    @property
+    def generations(self):
+        return build_generations(self)
+    
+    @property
+    def transform_history(self):
+        func = lambda node, _: getattr(node, 'transformer', None)
+        return build_generations(self, func)
 
     def _validate_inputs(self):
         return True
@@ -185,8 +192,8 @@ class BinarySignal(Signal):
     # stored as boolean array at some sampling rate
     # supports & | ~
 
-    def __init__(self, inputs, transform, *, sampling_rate=None, intervals=None, **kwargs):
-        super().__init__(inputs, transform, **kwargs)
+    def __init__(self, inputs, transform, data_schema, *, sampling_rate=None, intervals=None, **kwargs):
+        super().__init__(inputs, transform, data_schema, **kwargs)
         
         self.intervals = intervals
         self.sampling_rate = sampling_rate or getattr(self.parent, "sampling_rate", None)
@@ -219,7 +226,14 @@ class ValidityMask(BinarySignal):
 
 
 class SignalStack(CalculateMixin, UnstackMixin):
-    def __init__(self, collection=None, inputs=None, transform=None, transformer=None, signal_class=None):
+    def __init__(
+            self, 
+            data_schema,
+            collection=None, 
+            inputs=None, 
+            transform=None, 
+            transformer=None, 
+            signal_class=None):
 
         if collection is not None:
             self.collection = collection
@@ -231,6 +245,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
             self.inputs = inputs
         else:
             raise ValueError(f"collection or inputs must be provided for SignalStack")
+        self.data_schema = data_schema
         self.transform = transform
         self.transformer = transformer
         self._cached_data = None
@@ -256,13 +271,8 @@ class SignalStack(CalculateMixin, UnstackMixin):
         return self._materialize()
     
     @property
-    def output_schema(self):
-        input_schemas = [inp.output_schema for inp in self.inputs]
-        return self.transformer.output_schema(*input_schemas)
-    
-    @property
-    def output_dims(self):
-        return self.output_schema.dims
+    def data_dims(self):
+        return self.data_schema.dims
 
     def group_by(self):
         # Placeholder for future API.

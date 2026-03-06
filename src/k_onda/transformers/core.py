@@ -5,7 +5,7 @@ import numpy as np
 import xarray as xr
 from copy import deepcopy
 
-from k_onda.central import SignalLike
+from k_onda.central import SignalLike, DatasetSchema
 
 
 def resolve_target_data(self, data, key):
@@ -39,7 +39,7 @@ def merge_keys(self, data, result, key_spec):
 
         if output_mode == 'replace':
             merged = data.copy()
-            merged[self.name] = result
+            merged[key_spec.input_name] = result
             return merged
 
         if output_mode == 'append':
@@ -90,16 +90,12 @@ class Transform:
 class Policies:
     pass
 
-KeySpec = namedtuple('KeySpec', 'input_name output_mode')
+KeySpec = namedtuple('KeySpec', 'input_name output_mode', defaults=[None, 'replace'])
 
 
 class Transformer:
 
     fixed_output_class = None
-
-    # this gets overridden
-    def output_schema(self, input_schema):
-        return input_schema
 
     def __call__(self, input, key=None, key_output_mode=None):
         from ..sources import Collection, GroupedCollection
@@ -138,10 +134,14 @@ class Transformer:
     def _call_on_signal(self, signal, key_spec):
         output_class = self.resolve_output_class(signal)
         transform = self._get_transform(signal, key_spec)
+        output_schema = self.make_output_schema(signal.data_schema, key_spec=key_spec)
+
         output_signal = output_class(
             inputs=(signal,), 
             transform=transform, 
-            transformer=self)
+            transformer=self,
+            data_schema=output_schema
+            )
         return output_signal
     
     def resolve_output_class(self, input):
@@ -155,6 +155,31 @@ class Transformer:
     @staticmethod
     def _infer_output_class(entity):
         return getattr(entity, "output_class", type(entity))
+    
+    def make_output_schema(self, *input_schemas, key_spec):
+        """Compute the output schema."""
+
+        input_schema = input_schemas[0]
+        key = key_spec.input_name
+        output_mode = key_spec.output_mode or getattr(self, 'key_mode', 'replace')
+
+        if isinstance(input_schema, DatasetSchema) and key is not None:
+            key_schema = input_schema[key]
+            new_key_schema = self.output_schema(key_schema)
+            if output_mode == 'standalone':
+                return new_key_schema
+            elif output_mode == 'replace':
+                return input_schema.replace_key(self.name, new_key_schema)
+            elif output_mode == 'append':
+                return input_schema.add_key(self.name, new_key_schema)
+
+        else:
+            # Plain Schema input 
+            return self.output_schema(*input_schemas)
+        
+    # this gets overridden
+    def output_schema(self, input_schema):
+        return input_schema
 
 
 class CalculatorPolicies(Policies):

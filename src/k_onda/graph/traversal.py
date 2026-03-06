@@ -4,20 +4,24 @@ from copy import deepcopy, copy
 from collections import deque
 
 
-def build_generations(leaf):
+
+
+def build_generations(leaf, func=None, starting_val=None):
     
     generations = []
     queue = deque()
-    queue.append((leaf,))
+    queue.append((leaf, starting_val))
 
     while queue:
         generation = []
         for _ in range(len(queue)): 
-            nodes = queue.popleft()
-            generation.append(nodes)
-            for node in nodes:
-                if len(node.inputs):
-                    queue.append(node.inputs)
+            node, value = queue.popleft()
+            new_value = func(node, value) if func else value
+            generation.append((node, new_value))
+            
+            if hasattr(node, 'inputs'):
+                for inp in node.inputs:
+                    queue.append((inp, new_value))
         generations.append(generation)
     return generations
 

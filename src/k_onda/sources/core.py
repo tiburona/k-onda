@@ -36,6 +36,10 @@ class DataComponent(CalculateMixin, SelectMixin):
         if self._data is None:
             self._data = self.data_loader()
         return self._data
+    
+    @property
+    def data_dims(self):
+        return self.data_schema.dims
 
     def assign_to_data_identity(self, data_identity):
         if data_identity is None:
@@ -127,6 +131,7 @@ class Collection(StackMixin, CalculateMixin, SelectMixin):
                     transform=lambda x: x,
                     transformer=None,
                     origin=component,
+                    data_schema=component.data_schema
                 )
                 for component in base_components
             ]

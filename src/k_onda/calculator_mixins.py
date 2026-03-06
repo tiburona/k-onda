@@ -85,21 +85,22 @@ class EventMixin:
 
 @with_key
 class GenericSelectMixin:
-    def select(self, selection=None, mode='pushdown', **dim_endpoints):
+    def select(self, selection=None, mode='pushdown', units=None, **dim_endpoints):
         from .transformers import Selector
-        return Selector(selection=selection, mode=mode, **dim_endpoints)
+        return Selector(mode, selection, units, **dim_endpoints)
     
 
 class DimSelectMixin:
     def band(self, freq_band):
         return self.select(frequency=(freq_band.f_lo, freq_band.f_hi), mode=freq_band.mode)
 
-    def window(self, epoch):
+    def span(self, epoch):
         return self.select(time=(epoch.t0, epoch.t1), mode=epoch.mode)
 
 
 class SelectMixin(GenericSelectMixin, DimSelectMixin):
     pass
+   
 
 
 class StackMixin:

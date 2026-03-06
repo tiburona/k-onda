@@ -1,18 +1,12 @@
 from copy import deepcopy
 from functools import partial
-from typing import Protocol, runtime_checkable
 from functools import reduce
 import xarray as xr
-from operator import attrgetter
 
 from k_onda.time import Epoch
 from .core import Transformer, Transform
 from k_onda.central import ureg
 from k_onda.graph import walk_tree, new_tree
-
-@runtime_checkable
-class PointProcessLike(Protocol):
-    coord_map: ...
 
 
 class FrequencyBand:
@@ -23,13 +17,14 @@ class FrequencyBand:
         self.mode = mode
     
 
-class SelectMixin:
+
     
-    def select(self, mode='pushdown', selection=None, units=None, **dim_endpoints):
-        return Selector(mode, selection, units, **dim_endpoints)(self)
+ 
 
 
 class Selector(Transformer):
+
+    name = 'selector'
 
     def __init__(self, mode='pushdown', selection=None, units=None, **dim_endpoints):
         self.mode = mode # pushdown | local
@@ -154,8 +149,10 @@ class Selector(Transformer):
         done_dims = set()
 
         def is_insertion_point(dim):
+            if not hasattr(node, 'inputs'):
+                return True
             for inp in node.inputs:
-                for d in inp.output_dims:
+                for d in inp.data_dims:
                     if d == dim:
                         return False
             return True
@@ -166,7 +163,7 @@ class Selector(Transformer):
             starting_val=starting_val
             ):
 
-            ours = set(endpoints); theirs = set(node.output_schema.dims)
+            ours = set(endpoints); theirs = set(node.data_schema.dims)
             dims = ours & theirs - done_dims
             insertion_dims = set([dim for dim in dims if is_insertion_point(dim)])
             if insertion_dims:
@@ -192,6 +189,8 @@ class Selector(Transformer):
 
 
 class Window(Transformer):
+
+    name = 'window'
     
     def __init__(self, selection_endpoints, selector_mode):
         self.selection_endpoints = selection_endpoints
@@ -215,9 +214,9 @@ class Window(Transformer):
         return Transform(partial(self._apply, **apply_kwargs))
 
     def _get_apply_kwargs(self, input):
-
+     
         return {
-            'is_point_process': isinstance(input, PointProcessLike),
+            'is_point_process': bool(getattr(input, 'coord_map', None)),
             'coord_map': getattr(input, 'coord_map', None)
             }
 

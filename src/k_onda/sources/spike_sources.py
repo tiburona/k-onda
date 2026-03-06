@@ -3,7 +3,7 @@ import csv
 import numpy as np
 import xarray as xr
 
-from ..central import ureg, Schema
+from ..central import ureg, Schema, DatasetSchema
 from ..signals import PointProcessSignal
 from .core import DataComponent, DataIdentity, DataSource
 
@@ -17,10 +17,6 @@ class PhyOutput(DataSource):
         self._spike_times = None
         self._cluster_groups = None
         self.spike_clusters = np.load(self.file_path / "spike_clusters.npy")
-
-    # @property
-    # def output_schema(self):
-    #     return Schema(set('time'))
     
     @property
     def sampling_rate(self):
@@ -97,6 +93,13 @@ class SpikeCluster(DataComponent):
         self.coord_map = {'time': 'spike_times'}
         if neuron is not None:
             self.assign_to_neuron(neuron)
+    
+    @property
+    def data_schema(self):
+         return DatasetSchema({
+             'spike_times': Schema({'spikes', 'time'}),
+             'waveforms': Schema({'spikes', 'samples', 'time'})
+         })
 
     @property
     def neuron(self):

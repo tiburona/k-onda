@@ -4,13 +4,15 @@ from functools import partial
 import xarray as xr
 
 from .core import Transformer
-from k_onda.central import Schema
+from k_onda.central import Schema, DatasetSchema
 
 
 class ShapeTransform:
 
     # You need this seemingly inert object to report to select transformers
     # that they don't need to add any padlen
+
+    # TODO: not anymore -- can I get rid if it, at least inherit the Transform object
     def __init__(self, fn):
         self.fn = fn
         self.padlen = {}
@@ -20,20 +22,32 @@ class ShapeTransform:
 
 
 class StackSignals(Transformer):
+    name = 'stack_signals'
+
     """Concatenate component signals so downstream calculations can be vectorized."""
 
     def __init__(self, dim=None):
         self.dim = dim
 
     def output_schema(self, *input_schemas):
+        stacking_dim = self.dim or 'members'
+        if isinstance(input_schemas[0], DatasetSchema):
+            return DatasetSchema({
+                key: Schema(schema.dims | {stacking_dim})
+                for key, schema in input_schemas[0].items()
+            })
+
         dims = set(input_schemas[0].dims)
         dims.add(self.dim or 'members')
         return Schema(dims)
 
     def __call__(self, collection):
         from ..signals import SignalStack
+        input_schemas = [s.data_schema for s in collection.signals]
+        output_schema = self.output_schema(*input_schemas)
         transform = self._get_transform()
-        return SignalStack(collection=collection, transform=transform, transformer=self)
+        return SignalStack(output_schema, collection=collection, transform=transform, 
+                           transformer=self)
 
     def _get_transform(self):
         return ShapeTransform(self._apply)
@@ -90,8 +104,14 @@ class UnstackSignals(Transformer):
         self.dim = dim
 
     def output_schema(self, input_schema):
+        stacking_dim = self.dim or 'members'
+        if isinstance(input_schema, DatasetSchema):
+            return DatasetSchema({
+                key: Schema(schema.dims - {stacking_dim})
+                for key, schema in input_schema.items()
+            })
         dims = set(input_schema.dims)
-        dims.discard(self.dim or 'members')
+        dims.discard(stacking_dim)
         return Schema(dims)
 
     def resolve_output_class(self):
@@ -100,6 +120,7 @@ class UnstackSignals(Transformer):
 
     def __call__(self, signal_stack):
         signals = []
+        output_schema = self.output_schema(signal_stack.data_schema)
 
         for i in range(len(signal_stack.signals)):
             signal_class = signal_stack.transform.signal_class or signal_stack.signal_class
@@ -108,11 +129,13 @@ class UnstackSignals(Transformer):
             signal = signal_class(
                 inputs=[signal_stack],
                 transform=transform,
+                data_schema=output_schema,
                 origin=origin,
                 transformer=self,
                 source_signal=signal_stack.signals[i],
                 start=signal_stack.signals[i].start,
-                duration=signal_stack.signals[i].duration
+                duration=signal_stack.signals[i].duration,
+                coord_map=signal_stack.signals[i].coord_map
             )
             signals.append(signal)
 

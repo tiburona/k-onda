@@ -132,76 +132,6 @@ lfp_channel_2 = LFPChannel(recording, channel_idx=2)
 epoch_0 = session.epochs['tone'][0]
 epoch_1 = session.epochs['tone'][1]
 
-preprocessed_signal_1 = (
-    lfp_channel_1
-    .scale(.25)
-    .filter(filter_config))
-
-
-
-preprocessed_signal_1 = (
-    lfp_channel_1
-    .scale(.25)
-    .filter(filter_config)
-    .normalize("rms")
-    )
-
-epoch_0_power = preprocessed_signal_1.spectrogram(power_config).window(epoch_0)
-epoch_0_power.data
-
-
-power_calculator = Spectrogram(power_config)
-
-epoch_0_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_0)
-epoch_1_power_sig_1 = power_calculator(preprocessed_signal_1).window(epoch_1)
-
-assert not epoch_0_power_sig_1.data.equals(epoch_1_power_sig_1.data)
-
-preprocessed_signal_2 = (
-    lfp_channel_2
-    .scale(.25)
-    .filter(filter_config)
-    .normalize("rms")
-    )
-
-epoch_0_power_sig_2 = power_calculator(preprocessed_signal_2).window(epoch_0)
-
-assert not epoch_0_power_sig_2.data.equals(epoch_0_power_sig_1.data)
-
-
-fb = FrequencyBand(4, 8)
-
-band_power = (
-    epoch_0_power
-    .band(fb)) 
-
-band_power = (
-    epoch_0_power.select(frequency=(4, 8)).data
-)
-
-spikes_and_filtered_waveforms = (experiment
- .all_neurons
- .stack_signals(dim='spikes')
- .reduce(key='waveforms', dim='electrodes', method='mean')
- .median_filter(key='waveforms', kernel_sizes={'samples': 5})
- .unstack_signals()
- .select(epoch_0)
- .signals[0].data
-)
-
-threshold_1 = epoch_0_power.threshold('lt', 100)
-threshold_2 = epoch_0_power_sig_2.threshold('gt', 20)
-
-intersection = threshold_1 & threshold_2
-
-
-
-masked_epoch_0_power_sig_2 = epoch_0_power_sig_2 & epoch_0_power_sig_2.threshold('gt', 20)
-
-masked_epoch_0_power_sig_1 = epoch_0_power_sig_2 
-
-
-masked_epoch_0_power_sig_2.data
 
 spikes_and_filtered_waveforms = (experiment
  .all_neurons
@@ -218,6 +148,83 @@ spikes_and_filtered_waveforms = (experiment
  .unstack_signals(dim='spikes')
  .group_by('neuron')
  )
+
+
+spikes_and_filtered_waveforms = (experiment
+ .all_neurons
+ .stack_signals(dim='spikes')
+ .reduce(key='waveforms', dim='electrodes', method='mean')
+ .median_filter(key='waveforms', kernel_sizes={'samples': 5})
+ .unstack_signals()
+ .select(epoch_0)
+ .signals[0].data
+)
+
+
+preprocessed_signal_1 = (
+    lfp_channel_1
+    .scale(.25)
+    .filter(filter_config))
+
+
+
+preprocessed_signal_1 = (
+    lfp_channel_1
+    .scale(.25)
+    .filter(filter_config)
+    .normalize("rms")
+    )
+
+epoch_0_power = preprocessed_signal_1.spectrogram(power_config).span(epoch_0)
+epoch_0_power.data
+
+
+power_calculator = Spectrogram(power_config)
+
+epoch_0_power_sig_1 = power_calculator(preprocessed_signal_1).span(epoch_0)
+epoch_1_power_sig_1 = power_calculator(preprocessed_signal_1).span(epoch_1)
+
+assert not epoch_0_power_sig_1.data.equals(epoch_1_power_sig_1.data)
+
+preprocessed_signal_2 = (
+    lfp_channel_2
+    .scale(.25)
+    .filter(filter_config)
+    .normalize("rms")
+    )
+
+epoch_0_power_sig_2 = power_calculator(preprocessed_signal_2).span(epoch_0)
+
+assert not epoch_0_power_sig_2.data.equals(epoch_0_power_sig_1.data)
+
+
+fb = FrequencyBand(4, 8)
+
+band_power = (
+    epoch_0_power
+    .band(fb)) 
+
+band_power = (
+    epoch_0_power.select(frequency=(4, 8)).data
+)
+
+
+
+threshold_1 = epoch_0_power.threshold('lt', 100)
+threshold_2 = epoch_0_power_sig_2.threshold('gt', 20)
+
+intersection = threshold_1 & threshold_2
+
+
+
+masked_epoch_0_power_sig_2 = epoch_0_power_sig_2 & epoch_0_power_sig_2.threshold('gt', 20)
+
+masked_epoch_0_power_sig_1 = epoch_0_power_sig_2 
+
+
+masked_epoch_0_power_sig_2.data
+
+
 
 
 

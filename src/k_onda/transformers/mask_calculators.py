@@ -2,7 +2,7 @@ from functools import partial
 
 import numpy as np
 
-from .core import Calculator, Transform
+from .core import Calculator, Transform, KeySpec
 from ..signals import BinarySignal, ValidityMask
 
 
@@ -79,29 +79,39 @@ class BinaryCalculatorMixin:
                 raise TypeError(f"{signal} is not of type BinarySignal.")
 
 
+# TODO: this and ApplyMasks __call__'s need to be evaluated for how they're
+# working with keys, how they apply to stacks, and in general to be brought up 
+# to date with the code base.  However given I might be refactoring key spec 
+# related stuff soon why don't I wait till I've done that.
 class Intersection(Calculator, BinaryCalculatorMixin):
     name = "intersection"
 
     def __init__(self, tolerance_decimals=9):
         self.tolerance = 10 ** (-tolerance_decimals)
 
-    def __call__(self, parent, other):
-        self.validate_sig_types([parent, other])
+    def __call__(self, a, b, key=None, key_output_mode=None):
+        self.validate_sig_types([a, b])
 
-        child_signal_class = self.resolve_output_class(parent)
+        output_signal_class = self.resolve_output_class(a)
 
-        transform = Transform(partial(self._apply, other=other))
+        transform = Transform(partial(self._apply, b=b))
 
-        return child_signal_class(
-            parent=parent,
+        key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
+
+        # TODO: actually make this transformer actually key aware
+        output_schema = self.make_output_schema(a.data_schema, key_spec=key_spec)
+        
+        return output_signal_class(
+            inputs=(a, b),
             transform=transform,
-            origin=(parent.origin, other.origin),
+            data_schema=output_schema,
+            origin=(a.origin, b.origin),
             transformer=self,
         )
 
-    def _apply_inner(self, parent_data, other):
-        parent_overlap, other_overlap = self.get_and_validate_sig_overlap(parent_data, other.data)
-        return parent_overlap.data & other_overlap.data
+    def _apply_inner(self, a_data, b):
+        a_overlap, b_overlap = self.get_and_validate_sig_overlap(a_data, b.data)
+        return a_overlap.data & b_overlap.data
 
 
 class ApplyMask(Calculator, BinaryCalculatorMixin):
@@ -111,23 +121,27 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
         self.mask = mask
 
     # TODO: all these calls need to be verified to work with SignalStack.
-    def __call__(self, parent_signal, mask=None):
+    def __call__(self, input, mask=None, key=None, key_output_mode=None):
         mask = mask or self.mask
         if mask is None:
             raise ValueError("mask must be provided at init or call time")
         self.validate_sig_types([mask])
-        child_signal_class = self.resolve_output_class(parent_signal)
+        output_signal_class = self.resolve_output_class(input)
+        key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
+        output_schema = self.make_output_schema(input, key_spec=key_spec)
+
         transform = Transform(partial(self._apply, mask=mask))
 
-        return child_signal_class(
-            parent=parent_signal,
+        return output_signal_class(
+            inputs=(input,),
             transform=transform,
-            origin=(parent_signal.origin, mask.origin),
-            calculator=self,
+            data_schema=output_schema,
+            origin=(input.origin, mask.origin),
+            transformer=self,
         )
 
-    def _apply_inner(self, parent_data, mask):
+    def _apply_inner(self, data, mask):
         # Verify xarray alignment behavior - should give masked overlap + NaN outside.
-        _, mask_overlap = self.get_and_validate_sig_overlap(parent_data, mask.data)
-        result = parent_data.where(mask_overlap, other=np.nan)
+        _, mask_overlap = self.get_and_validate_sig_overlap(data, mask.data)
+        result = data.where(mask_overlap, other=np.nan)
         return result
