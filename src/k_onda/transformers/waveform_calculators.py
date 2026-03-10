@@ -3,7 +3,7 @@ from scipy.signal import find_peaks, peak_widths
 import xarray as xr
 
 from .core import Calculator
-from k_onda.central import ureg
+from k_onda.central import ureg, Schema
 
 
 class FWHM(Calculator):
@@ -64,4 +64,9 @@ class FWHM(Calculator):
     
     def _wrap_result(self, result, *args):
         return xr.DataArray(result)
+    
+    def output_schema(self, input_schema):
+        dims = set(input_schema.dims)
+        dims.discard(self.dim)
+        return Schema(*dims)
 

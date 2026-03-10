@@ -50,4 +50,4 @@ class LFPChannel(DataComponent):
     
     @property
     def data_schema(self):
-        return Schema({'time'})
+        return Schema('time')

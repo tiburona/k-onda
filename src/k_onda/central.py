@@ -20,8 +20,14 @@ class SignalLike(Protocol):
 
 
 class Schema:
-    def __init__(self, dims):
-        self.dims = dims
+    def __init__(self, *dims, selectable_dims=None):
+        dims = list(dims)
+        self.dims = set(dims)
+        if selectable_dims is None:
+            self._selectable_dims = set()
+        else:
+            self._selectable_dims = set(selectable_dims)
+        self.selectable_dims = set(dims) | self._selectable_dims
 
 
 class DatasetSchema(MutableMapping):
@@ -47,6 +53,10 @@ class DatasetSchema(MutableMapping):
     def dims(self):
         # union: for Selector, a dim is 'available' here if any key has it
         return set.union(*(s.dims for s in self.key_schemas.values()))
+    
+    @property
+    def selectable_dims(self):
+        return set.union(*(s.selectable_dims for s in self.key_schemas.values()))
     
     def replace_key(self, key, new_schema):
         return DatasetSchema({**self.key_schemas, key: new_schema})

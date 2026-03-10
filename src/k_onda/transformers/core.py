@@ -76,9 +76,8 @@ def with_key_access(func):
 class Transform:
     """A transform function with optional metadata."""
 
-    def __init__(self, fn, padlen=None, signal_class=None, **kwargs):
+    def __init__(self, fn, signal_class=None, **kwargs):
         self.fn = fn
-        self.padlen = padlen or {}
         self.signal_class = signal_class
         self.kwargs = kwargs
 
@@ -98,28 +97,28 @@ class Transformer:
     fixed_output_class = None
 
     def __call__(self, input, key=None, key_output_mode=None):
-        from ..sources import Collection, GroupedCollection
+        from ..sources import Collection, CollectionMap
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
-        if isinstance(input, GroupedCollection):
-            return self._call_on_grouped_collection(input, key_spec)
+        if isinstance(input, CollectionMap):
+            return self._call_on_collection_map(input, key_spec)
         
         if isinstance(input, Collection):
             return self._call_on_collection(input, key_spec)
         
         return self._call_on_signal(input, key_spec)
     
-    def _call_on_grouped_collection(self, grouped_collection, key_spec):
+    def _call_on_collection_map(self, collection_map, key_spec):
 
-        from ..sources import GroupedCollection
+        from ..sources import CollectionMap
         
-        group_on = getattr(grouped_collection, "group_on", None)
+        group_on = getattr(collection_map, "group_on", None)
 
-        return GroupedCollection(
+        return CollectionMap(
             groups={
                 k: self._call_on_collection(v, key_spec)
-                for k, v in grouped_collection.items()
+                for k, v in collection_map.items()
             },
             group_on=group_on,
         )
@@ -152,8 +151,7 @@ class Transformer:
             return type(input)
         return self.fixed_output_class or self._infer_output_class(input)
 
-    @staticmethod
-    def _infer_output_class(entity):
+    def _infer_output_class(self, entity):
         return getattr(entity, "output_class", type(entity))
     
     def make_output_schema(self, *input_schemas, key_spec):
@@ -245,19 +243,26 @@ class Calculator(Transformer):
         
         if hasattr(data, "data_vars") and len(data.data_vars) == 0:
             raise ValueError(f"{type(self)}: Event dataset has no variables.")
-            
-        try:
-            mag = data.pint.magnitude  # preferred for pint-aware arrays
-        except Exception:
-            mag = data
-        arr = np.asarray(mag)
 
-        if not self.allow_empty and arr.size == 0:
-            raise ValueError(f"{type(self)}: An empty data array is not allowed.")
-        if self.require_all_finite and not np.isfinite(arr).all():
-            raise ValueError(f"{type(self)}: All values must be finite.")
-        if self.require_some_finite and not np.isfinite(arr).any():
-            raise ValueError(f"{type(self)}: The data contains no finite values.")
+        def get_magnitude(arr):
+            try:
+                mag = arr.pint.magnitude  # preferred for pint-aware arrays
+            except Exception:
+                mag = arr
+            return np.asarray(mag)
+
+        if isinstance(data, xr.Dataset):
+            arrays = [get_magnitude(arr) for arr in data.data_vars.values()]
+        else:
+            arrays = [get_magnitude(data)]
+             
+        for arr in arrays:
+            if not self.allow_empty and arr.size == 0:
+                raise ValueError(f"{type(self)}: An empty data array is not allowed.")
+            if self.require_all_finite and not np.isfinite(arr).all():
+                raise ValueError(f"{type(self)}: All values must be finite.")
+            if self.require_some_finite and not np.isfinite(arr).any():
+                raise ValueError(f"{type(self)}: The data contains no finite values.")
 
         dim = kwargs.get("dim") or getattr(self, "dim", None)
         if dim and dim not in data.dims:

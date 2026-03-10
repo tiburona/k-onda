@@ -1,24 +1,11 @@
-from collections import defaultdict
+
 from copy import deepcopy
 from functools import partial
 import xarray as xr
 
-from .core import Transformer
+from .core import Transformer, Transform
 from k_onda.central import Schema, DatasetSchema
-
-
-class ShapeTransform:
-
-    # You need this seemingly inert object to report to select transformers
-    # that they don't need to add any padlen
-
-    # TODO: not anymore -- can I get rid if it, at least inherit the Transform object
-    def __init__(self, fn):
-        self.fn = fn
-        self.padlen = {}
-
-    def __call__(self, data):
-        return self.fn(data)
+from .feature_registry import feature_registry
 
 
 class StackSignals(Transformer):
@@ -33,7 +20,7 @@ class StackSignals(Transformer):
         stacking_dim = self.dim or 'members'
         if isinstance(input_schemas[0], DatasetSchema):
             return DatasetSchema({
-                key: Schema(schema.dims | {stacking_dim})
+                key: Schema(*schema.dims, stacking_dim)
                 for key, schema in input_schemas[0].items()
             })
 
@@ -50,7 +37,7 @@ class StackSignals(Transformer):
                            transformer=self)
 
     def _get_transform(self):
-        return ShapeTransform(self._apply)
+        return Transform(self._apply)
 
     def _gather_datasets(self, signals):
         keys = signals[0].data.keys()
@@ -107,7 +94,7 @@ class UnstackSignals(Transformer):
         stacking_dim = self.dim or 'members'
         if isinstance(input_schema, DatasetSchema):
             return DatasetSchema({
-                key: Schema(schema.dims - {stacking_dim})
+                key: Schema(*(schema.dims - {stacking_dim}))
                 for key, schema in input_schema.items()
             })
         dims = set(input_schema.dims)
@@ -143,7 +130,7 @@ class UnstackSignals(Transformer):
     
     def _get_transform(self, idx):
         apply_kwargs = self._get_apply_kwargs(idx)
-        return ShapeTransform(partial(self._apply, **apply_kwargs))
+        return Transform(partial(self._apply, **apply_kwargs))
     
     def _get_apply_kwargs(self, idx):
         return {'idx': idx}

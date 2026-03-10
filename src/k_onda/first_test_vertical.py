@@ -108,9 +108,11 @@ neurons = initialize_neurons_from_phy(phy_output)
 #     .stack_signals(stack_dim='spikes').
 #     .reduce(key='waveforms', dim='electrodes', method='mean')
 #     .median_filter(key='waveforms', kernel_sizes={'samples': 5})
-#     .split_signals()
+#     .unstack_signals()
 #     .group_by('identity')
 #     .extract_features('firing_rate', 'fwhm')
+
+
 #     .kmeans()
 #     .apply_labels(to='neuron')
 
@@ -132,23 +134,23 @@ lfp_channel_2 = LFPChannel(recording, channel_idx=2)
 epoch_0 = session.epochs['tone'][0]
 epoch_1 = session.epochs['tone'][1]
 
+spikes_and_filtered_waveforms = (experiment
+ .all_neurons
+ .stack_signals(dim='spikes')
+ .reduce(key='waveforms', dim='electrodes', method='mean')
+ .median_filter(key='waveforms', kernel_sizes={'samples': 5})
+ .unstack_signals()
+ .group_by('neuron')
+ .extract_features('fwhm', 'firing_rate')
+ .data
+ )
+
 
 spikes_and_filtered_waveforms = (experiment
  .all_neurons
  .stack_signals(dim='spikes')
  .reduce(key='waveforms', dim='electrodes', method='mean')
  .median_filter(key='waveforms', kernel_sizes={'samples': 5}).data)
-
-
-spikes_and_filtered_waveforms = (experiment
- .all_neurons
- .stack_signals(dim='spikes')
- .reduce(key='waveforms', dim='electrodes', method='mean')
- .median_filter(key='waveforms', kernel_sizes={'samples': 5})
- .unstack_signals(dim='spikes')
- .group_by('neuron')
- )
-
 
 spikes_and_filtered_waveforms = (experiment
  .all_neurons
@@ -159,6 +161,27 @@ spikes_and_filtered_waveforms = (experiment
  .select(epoch_0)
  .signals[0].data
 )
+
+
+
+
+
+
+
+
+
+# spikes_and_filtered_waveforms = (experiment
+#  .all_neurons
+#  .stack_signals(dim='spikes')
+#  .reduce(key='waveforms', dim='electrodes', method='mean')
+#  .median_filter(key='waveforms', kernel_sizes={'samples': 5})
+#  .unstack_signals(dim='spikes')
+#  .group_by('neuron')
+#  .extract_features('fwhm', 'firing_rate')
+#  )
+
+
+
 
 
 preprocessed_signal_1 = (

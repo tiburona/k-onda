@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 from collections.abc import Iterable
 
-from ..calculator_mixins import CalculateMixin, UnstackMixin, SelectMixin, IntersectionMixin
+from ..transformers.transformer_mixins import CalculateMixin, UnstackMixin, SelectMixin, IntersectionMixin
 from k_onda.graph.traversal import build_generations
 
 
@@ -40,7 +40,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self.coord_map = coord_map
         self.source_signal = source_signal
         self._storage_strategy = storage_strategy
-        self._cached_data = None
+        self._cache = None
         self._validate_inputs()
       
     
@@ -88,10 +88,10 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         return self.divide_by(other)
 
     def _materialize(self):
-        if self._cached_data is None:
+        if self._cache is None:
             input_data = [input.data for input in self.inputs]
-            self._cached_data = self.transform(*input_data)
-        return self._cached_data
+            self._cache = self.transform(*input_data)
+        return self._cache
 
     @property
     def data(self):
@@ -138,7 +138,33 @@ class EpochScalarSignal(Signal):
     pass
 
 
-class PointProcessSignal(Signal):
+class DatasetSignal(Signal):
+
+    def __init__(self, inputs, transform, **kwargs):
+        super().__init__(inputs, transform, **kwargs)
+        
+    def __getitem__(self, key):
+        return self.payload(key)
+    
+    def payload(self, key):
+        def transform(data):
+            if not isinstance(data, (xr.Dataset, dict)):
+                raise TypeError("`data` must be a dictionary or xarray Dataset")
+            return data[key]
+
+        # TODO: I'm not sure that payload should be the same type for the DatasetSingals
+        # For PointProcessSignal, yes.  Need to think about this.
+
+        return type(self)(
+            inputs=(self,),
+            transform=transform,
+            origin=self.origin,
+            transformer=None,
+            data_schema=self.data_schema[key]
+        )
+
+
+class PointProcessSignal(DatasetSignal):
 
     def __init__(
             self, 
@@ -153,30 +179,14 @@ class PointProcessSignal(Signal):
         self.sampling_rate = sampling_rate or getattr(self.parent, 'sampling_rate', None)
         self.coord_map = coord_map or getattr(self.parent, "coord_map", None)
 
-    def __getitem__(self, key):
-        return self.payload(key)
-
     def to_binary(self):
         if self.sampling_rate is None:
             raise ValueError("can't expand signal to binary without sampling_rate")
         return BinarySignal(parent=self, sampling_rate=self.sampling_rate)
 
-    def payload(self, key):
-        def transform(data):
-            if not isinstance(data, (xr.Dataset, dict)):
-                raise TypeError("`data` must be a dictionary or xarray Dataset")
-            return data[key]
-
-        return PointProcessSignal(
-            parent=self,
-            transform=transform,
-            origin=self.origin,
-            transformer=None,
-        )
-
     @property
     def neuron(self):
-        # Convenience accessor for neuron-backed EventSignals.
+        # Convenience accessor for neuron-backed PointProcessSignals.
         from ..sources.spike_sources import Neuron
 
         if isinstance(self.data_identity, Neuron):
@@ -248,17 +258,17 @@ class SignalStack(CalculateMixin, UnstackMixin):
         self.data_schema = data_schema
         self.transform = transform
         self.transformer = transformer
-        self._cached_data = None
+        self._cache = None
         self.signal_class = signal_class or type(self.signals[0])
         self.is_stack = True
 
     def _materialize(self):
-        if self._cached_data is None:
+        if self._cache is None:
             if type(self.parent).__name__ == "Collection":
-                self._cached_data = self.transform(self.parent.signals)
+                self._cache = self.transform(self.parent.signals)
             else:
-                self._cached_data = self.transform(self.parent.data)
-        return self._cached_data
+                self._cache = self.transform(self.parent.data)
+        return self._cache
     
     @property
     def parent(self):
@@ -277,3 +287,37 @@ class SignalStack(CalculateMixin, UnstackMixin):
     def group_by(self):
         # Placeholder for future API.
         pass
+
+
+class AggregateSignal(Signal):
+
+    def _materialize(self):
+        if self._cache is None:
+            if hasattr(self.parent, 'signals'): # parent is a Collection
+                self._cache = self.transform(self.parent.signals)
+            else:
+                self._cache = self.transform(self.inputs)
+
+        return self._cache
+    
+
+class IndexedSignal(Signal):
+
+    def __init__(
+            self, 
+            inputs, 
+            transform, 
+            **kwargs):
+        super().__init__(inputs, transform, **kwargs)
+
+    def _materialize(self):
+        if self._cache is None:
+            self._cache = self.transform()
+        return self._cache
+
+
+
+
+
+   
+

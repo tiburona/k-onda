@@ -3,7 +3,8 @@ from .core import (
     DataComponent,
     DataIdentity,
     DataSource,
-    GroupedCollection,
+    CollectionMap,
+    SignalMap
 )
 from .lfp_sources import LFPChannel, LFPRecording
 __all__ = [
@@ -13,7 +14,8 @@ __all__ = [
     "DataIdentity",
     "LFPChannel",
     "Collection",
-    "GroupedCollection",
+    "CollectionMap",
+    "SignalMap"
 ]
 
 try:

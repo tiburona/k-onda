@@ -97,8 +97,8 @@ class SpikeCluster(DataComponent):
     @property
     def data_schema(self):
          return DatasetSchema({
-             'spike_times': Schema({'spikes', 'time'}),
-             'waveforms': Schema({'spikes', 'samples', 'time'})
+             'spike_times': Schema('spikes', selectable_dims={'time'}),
+             'waveforms': Schema('spikes', 'samples', selectable_dims={'time'})
          })
 
     @property

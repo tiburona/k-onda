@@ -163,7 +163,7 @@ class Selector(Transformer):
             starting_val=starting_val
             ):
 
-            ours = set(endpoints); theirs = set(node.data_schema.dims)
+            ours = set(endpoints); theirs = set(node.data_schema.selectable_dims)
             dims = ours & theirs - done_dims
             insertion_dims = set([dim for dim in dims if is_insertion_point(dim)])
             if insertion_dims:

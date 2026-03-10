@@ -3,18 +3,21 @@ from .core import Calculator, PaddingCalculator, Transform, Transformer, with_ke
 from .data_shape_transformers import StackSignals, UnstackSignals
 from .descriptive_calculators import Histogram, ReduceDim
 from .event_calculators import Rate
-from .feature_calculators import FWHM
+from .waveform_calculators import FWHM
 from .filter_calculators import Filter, MedianFilter
 from .mask_calculators import ApplyMask, Intersection, Threshold
 from .spectral_calculators import Spectrogram
 from .selector import FrequencyBand, Selector
+from .aggregator import Aggregator
+from .feature_registry import feature_registry
+from .feature_transformers import ExtractFeatures
 
 __all__ = [
     "with_key_access",
     "Transform",
     "Transformer",
     "Calculator",
-    "PaddingCalculator",
+    "PadidingCalculator",
     "Shift",
     "Scale",
     "ReduceDim",
@@ -32,4 +35,7 @@ __all__ = [
     "UnstackSignals",
     "FrequencyBand",
     "Selector",
+    "Aggregator",
+    "feature_registry",
+    "ExtractFeatures"
 ]

@@ -24,8 +24,27 @@ class ReduceDim(Calculator):
     
     def output_schema(self, input_schema):
         dims = set(input_schema.dims)
-        dims.discard(self.dim)
-        return Schema(dims=dims)
+        dims.discard(self.dim) 
+        return Schema(*dims)
+    
+    def resolve_output_class(self, input):
+        # If we're operating on a StackedSignal, preserve the stack type.
+        # If this calculator has a fixed output class, return that.
+        # Otherwise ask the parent signal what it would produce.
+        if getattr(input, "is_stack", False):
+            return type(input)
+        return self.fixed_output_class or self._infer_output_class(input)
+    
+    def _infer_output_class(self, input):
+        from ..signals import PointProcessSignal, ScalarSignal, DatasetSignal
+
+        if len(input.data_dims) == 1:
+            return ScalarSignal
+        if isinstance(input, PointProcessSignal) and ( 
+            not (set(input.coord_map or {}) - set(self.dim))):
+                return DatasetSignal
+        return super()._infer_output_class(input)
+        
 
 
 class Histogram(Calculator):

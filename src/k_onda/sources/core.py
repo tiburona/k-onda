@@ -1,11 +1,14 @@
 from collections import defaultdict
-from collections.abc import MutableMapping
 from operator import attrgetter
 from pathlib import Path
 import uuid
+import xarray as xr
+import numpy as np
 
-from ..calculator_mixins import CalculateMixin, StackMixin, SelectMixin
+from ..transformers.transformer_mixins import (
+    CalculateMixin, StackMixin, SelectMixin, AggregateMixin, PointProcessMixin)
 from ..signals import Signal
+from k_onda.utils import DictDelegator
 
 
 class DataSource:
@@ -90,7 +93,7 @@ class DataIdentity:
         data_component.data_identity = None
 
 
-class Collection(StackMixin, CalculateMixin, SelectMixin):
+class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointProcessMixin):
     def __init__(self, members):
         self.members = members
         self._signals = None
@@ -141,10 +144,47 @@ class Collection(StackMixin, CalculateMixin, SelectMixin):
         return base_components
 
     def group_by(self, group_on, strict=True):
-        return GroupedCollection(self.members, group_on, strict=strict)
+        return CollectionMap(self.members, group_on, strict=strict)
+    
 
 
-class GroupedCollection(MutableMapping, CalculateMixin, SelectMixin):
+
+
+
+
+
+from k_onda.transformers import feature_registry
+
+class MapMixin(DictDelegator):
+    
+    def extract_features(self, *features, registry=feature_registry):
+        from k_onda.transformers import ExtractFeatures
+        return ExtractFeatures(*features, registry=registry)((self,))
+
+
+class SignalMap(MapMixin):
+    _delegate_attr = 'map'
+
+    def __init__(self, map):
+        self.map = map
+        self._cache = None
+
+    @property
+    def data(self):
+        return self._materialize()
+
+    def _materialize(self):
+        if self._cache is None:
+            self.cache = {k: signal.data for k, signal in self.map.items()}
+        return self.cache
+    
+
+
+
+
+class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
+    _delegate_attr = 'groups'
+
     def __init__(self, members=None, group_on=None, strict=True, groups=None):
         if groups is None:
             if members is None or group_on is None:
@@ -160,21 +200,6 @@ class GroupedCollection(MutableMapping, CalculateMixin, SelectMixin):
                 for k, v in groups.items()
             }
             self.members = [m for coll in self.groups.values() for m in coll]
-
-    def __getitem__(self, key):
-        return self.groups[key]
-
-    def __setitem__(self, key, value):
-        self.groups[key] = value
-
-    def __delitem__(self, key):
-        del self.groups[key]
-
-    def __iter__(self):
-        return iter(self.groups)
-
-    def __len__(self):
-        return len(self.groups)
 
     def map_groups(self, strict=True):
         groups = defaultdict(list)
@@ -196,8 +221,8 @@ class GroupedCollection(MutableMapping, CalculateMixin, SelectMixin):
         def grouping_func(entity):
             if hasattr(entity, grouping):
                 return getattr(entity, grouping)
-            elif hasattr(entity, "data_identity") and hasattr(entity.data_identity, grouping):
-                return getattr(entity.data_identity, grouping)
+            elif hasattr(entity, 'data_identity') and getattr(entity.data_identity, 'name', None) == grouping:
+                return entity.data_identity
 
             try:
                 return attrgetter(grouping)(entity)
@@ -210,3 +235,8 @@ class GroupedCollection(MutableMapping, CalculateMixin, SelectMixin):
 
     def as_collection(self):
         return Collection([member for collection in self.values() for member in collection])
+    
+
+
+
+
