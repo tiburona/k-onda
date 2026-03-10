@@ -312,7 +312,11 @@ class IndexedSignal(Signal):
 
     def _materialize(self):
         if self._cache is None:
-            self._cache = self.transform()
+            if all(isinstance(inp, Signal) for inp in self.inputs):
+                input_data = [inp.data for inp in self.inputs]
+                self._cache = self.transform(*input_data)
+            else:
+                self._cache = self.transform()
         return self._cache
 
 

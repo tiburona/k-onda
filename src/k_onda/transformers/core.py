@@ -173,7 +173,7 @@ class Transformer:
 
         else:
             # Plain Schema input 
-            return self.output_schema(*input_schemas)
+            return self.output_schema(input_schema)
         
     # this gets overridden
     def output_schema(self, input_schema):
