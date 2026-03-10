@@ -19,7 +19,7 @@ K-Onda implements a lazy, symbolic data pipeline for electrophysiology analysis.
 ### Key abstractions
 
 **`Signal`** ([src/k_onda/signals/core.py](src/k_onda/signals/core.py))
-The fundamental pipeline node. Holds `inputs` (upstream signals), a `transform` callable, and a `data_schema`. Data is computed lazily on `.data` access and optionally cached. Subclasses: `TimeSeriesSignal`, `TimeFrequencySignal`, `PointProcessSignal`, `BinarySignal`, `SignalStack`.
+The fundamental pipeline node. Holds `inputs` (upstream signals), a `transform` callable, and a `data_schema`. Data is computed lazily on `.data` access and optionally cached. Subclasses: `TimeSeriesSignal`, `TimeFrequencySignal`, `PointProcessSignal`, `BinarySignal`, `IndexedSignal`, `SignalStack`.
 
 **`Transformer` / `Calculator`** ([src/k_onda/transformers/core.py](src/k_onda/transformers/core.py))
 Callable objects that consume a Signal and return a new Signal. Can operate on a single Signal, a `Collection`, or a `GroupedCollection` — the dispatch is handled internally. `Calculator` adds data validation and a `key_spec` mechanism for operating on named variables inside `xr.Dataset`-backed signals.
@@ -33,6 +33,12 @@ Containers for multiple signals. Transformers broadcast over them automatically.
 **`SignalStack`** ([src/k_onda/signals/core.py](src/k_onda/signals/core.py))
 Vectorized form of a Collection — signals stacked along a new dimension for performance.
 
+**`CollectionMap` / `SignalMap`** ([src/k_onda/sources/core.py](src/k_onda/sources/core.py))
+`CollectionMap` is a dict of label → Collection, produced by `Collection.group_by()`. `SignalMap` is a dict of label → Signal, produced by `Aggregator`. Both support `extract_features()`.
+
+**`FeatureRegistry` / `ExtractFeatures`** ([src/k_onda/transformers/feature_registry.py](src/k_onda/transformers/feature_registry.py), [src/k_onda/transformers/feature_transformers.py](src/k_onda/transformers/feature_transformers.py))
+`FeatureRegistry` is a named catalog of mini-pipelines (not specific to neurons or any domain). Each registered function takes a Collection and returns an aggregated Signal. `ExtractFeatures` is the Transformer that applies registered functions across a map and assembles the results into an `IndexedSignal`.
+
 **Mixin system** ([src/k_onda/transformers/transformer_mixins.py](src/k_onda/transformers/transformer_mixins.py))
 `CalculateMixin`, `SelectMixin`, `UnstackMixin`, `IntersectionMixin` — compose the fluent API onto Signal and SignalStack.
 
@@ -44,7 +50,7 @@ Vectorized form of a Collection — signals stacked along a new dimension for pe
 ### Source modules
 - [src/k_onda/sources/lfp_sources.py](src/k_onda/sources/lfp_sources.py) — LFP signal sources
 - [src/k_onda/sources/spike_sources.py](src/k_onda/sources/spike_sources.py) — spike/neuron sources
-- [src/k_onda/sources/core.py](src/k_onda/sources/core.py) — Collection, GroupedCollection
+- [src/k_onda/sources/core.py](src/k_onda/sources/core.py) — Collection, CollectionMap, SignalMap
 
 ### Transformer modules
 - [src/k_onda/transformers/](src/k_onda/transformers/) — spectral, filter, magnitude, feature, event, mask, selector, data_shape transformers

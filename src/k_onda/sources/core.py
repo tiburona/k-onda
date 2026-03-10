@@ -9,6 +9,7 @@ from ..transformers.transformer_mixins import (
     CalculateMixin, StackMixin, SelectMixin, AggregateMixin, PointProcessMixin)
 from ..signals import Signal
 from k_onda.utils import DictDelegator
+from k_onda.transformers import feature_registry
 
 
 class DataSource:
@@ -93,7 +94,14 @@ class DataIdentity:
         data_component.data_identity = None
 
 
-class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointProcessMixin):
+class FeatureMixin:
+    def extract_features(self, *features, registry=feature_registry, group_by=None):
+        from k_onda.transformers import ExtractFeatures
+        return ExtractFeatures(*features, registry=registry, group_by=group_by)((self,))
+
+
+class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointProcessMixin,
+                 FeatureMixin):
     def __init__(self, members):
         self.members = members
         self._signals = None
@@ -153,13 +161,10 @@ class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointP
 
 
 
-from k_onda.transformers import feature_registry
 
-class MapMixin(DictDelegator):
-    
-    def extract_features(self, *features, registry=feature_registry):
-        from k_onda.transformers import ExtractFeatures
-        return ExtractFeatures(*features, registry=registry)((self,))
+
+class MapMixin(DictDelegator, FeatureMixin):
+    pass
 
 
 class SignalMap(MapMixin):
@@ -178,9 +183,6 @@ class SignalMap(MapMixin):
             self.cache = {k: signal.data for k, signal in self.map.items()}
         return self.cache
     
-
-
-
 
 class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
     _delegate_attr = 'groups'

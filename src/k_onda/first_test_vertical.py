@@ -140,8 +140,7 @@ spikes_and_filtered_waveforms = (experiment
  .reduce(key='waveforms', dim='electrodes', method='mean')
  .median_filter(key='waveforms', kernel_sizes={'samples': 5})
  .unstack_signals()
- .group_by('neuron')
- .extract_features('fwhm', 'firing_rate')
+ .extract_features('fwhm', 'firing_rate', group_by='neuron')
  .data
  )
 

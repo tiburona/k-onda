@@ -10,18 +10,25 @@ class Aggregator:
     # TODO: do I want Aggregator to take an optional group by parameter
     # so that it can group a collection before aggregation?
 
-    def __init__(self, method='mean'):
+    def __init__(self, method='mean', group_by=None):
         self.method = method
+        self.group_by = group_by
 
     def __call__(self, input):
 
         from k_onda.sources import CollectionMap, Collection
 
         if isinstance(input, CollectionMap):
+            if self.group_by is not None:
+                raise ValueError("input of type CollectionMap is already grouped.")
             return self._call_on_collection_map(input)
         
         elif isinstance(input, Collection):
-            return self._call_on_collection(input)
+            if self.group_by is not None:
+                input = input.group_by(self.group_by)
+                return self._call_on_collection_map(input)
+            else:
+                return self._call_on_collection(input)
         
         else:
             raise ValueError("Aggregator must be called on a Collection or a Grouped_Collection ")
@@ -46,6 +53,8 @@ class Aggregator:
         )
     
     def _call_on_collection(self, collection):
+
+
         transform = self._get_transform()
         # need to figure out why transform is passed signal, not data
 
