@@ -143,6 +143,7 @@ spikes_and_filtered_waveforms = (
  .unstack_signals()
  .extract_features('fwhm', 'firing_rate', group_by='neuron')
  .normalize(method='zscore', dim='index')
+ .kmeans(n_clusters=2, random_state=0)
  .data
  )
 

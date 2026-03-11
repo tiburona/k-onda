@@ -318,6 +318,10 @@ class IndexedSignal(Signal):
             else:
                 self._cache = self.transform()
         return self._cache
+    
+    def kmeans(self, n_clusters=8, **kwargs):
+        from k_onda.transformers import KMeans
+        return KMeans(n_clusters=n_clusters, **kwargs)(self)
 
 
 

@@ -11,6 +11,7 @@ from .selector import FrequencyBand, Selector
 from .aggregator import Aggregator
 from .feature_registry import feature_registry
 from .feature_transformers import ExtractFeatures
+from .classifier_calculators import KMeans
 
 __all__ = [
     "with_key_access",
@@ -37,5 +38,6 @@ __all__ = [
     "Selector",
     "Aggregator",
     "feature_registry",
-    "ExtractFeatures"
+    "ExtractFeatures",
+    "KMeans"
 ]
