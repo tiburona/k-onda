@@ -20,7 +20,8 @@ class FWHM(Calculator):
     ):
         self.dim = dim
         self.include_valleys = include_valleys
-        self.permissible_distance = permissible_distance * distance_unit
+        self.distance_unit = distance_unit
+        self.permissible_distance = permissible_distance * self.distance_unit
 
     def fwhm(self, data):
         def find_max_peak(values):
@@ -63,7 +64,7 @@ class FWHM(Calculator):
         return self.fwhm(data.values)
     
     def _wrap_result(self, result, *args):
-        return xr.DataArray(result)
+        return xr.DataArray(result).pint.quantify(self.distance_unit)
     
     def output_schema(self, input_schema):
         dims = set(input_schema.dims)

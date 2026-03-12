@@ -64,3 +64,12 @@ class DictDelegator(MutableMapping):
 
     def __len__(self):
         return len(getattr(self, self._delegate_attr))
+    
+
+def np_from_xr(xr_val):
+    units = xr_val.pint.units
+    if units is not None:
+        arr = np.asarray(xr_val.pint.magnitude)
+    else:
+        arr = np.asarray(xr_val)  
+    return arr, units

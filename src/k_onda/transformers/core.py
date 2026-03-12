@@ -131,6 +131,7 @@ class Transformer:
              )
     
     def _call_on_signal(self, signal, key_spec):
+        self._validate_input(signal)
         output_class = self.resolve_output_class(signal)
         transform = self._get_transform(signal, key_spec)
         output_schema = self.make_output_schema(signal.data_schema, key_spec=key_spec)
@@ -191,7 +192,7 @@ class Calculator(Transformer):
     require_all_finite = False
     allow_empty = False
 
-    def _input_validation(self, input):
+    def _validate_input(self, input):
         if not isinstance(input, SignalLike):
             raise ValueError("Calculators can only operate on Data Components, Signals, " \
             "StackedSignals, Collections, and GroupedCollections.")

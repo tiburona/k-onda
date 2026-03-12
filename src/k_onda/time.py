@@ -183,7 +183,7 @@ class Session(NEVMixin):
 
         duration_sec = self.time_base.duration_sec
         if duration_sec is not None:
-            self._duration = duration_sec
+            self._duration = duration_sec * ureg.s
         else:
             duration_sample = self.time_base.duration_sample
             if duration_sample:

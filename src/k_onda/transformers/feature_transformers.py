@@ -5,6 +5,7 @@ from functools import partial
 from .feature_registry import feature_registry
 from k_onda.central import Schema
 from .core import Transform, Transformer
+from k_onda.utils import np_from_xr
 
 
 
@@ -54,7 +55,18 @@ class ExtractFeatures(Transformer):
     
     def _apply(self, keys, arrays):
         
-        values = [[sig.data for sig in row] for row in arrays]
+        feature_units = {}
+        values = []
+
+        for i, row in enumerate(arrays):
+            row_vals = []
+            for j, sig in enumerate(row):
+                d = sig.data
+                arr, units = np_from_xr(d)
+                if i == 0:
+                    feature_units[self.features[j]] = units
+                row_vals.append(arr)
+            values.append(row_vals)
 
         return xr.DataArray(
             np.array(values),
@@ -63,7 +75,6 @@ class ExtractFeatures(Transformer):
                 'index': keys,
                 'feature': list(self.features)
             }
-
-        )
+        ).assign_attrs({'feature_units': feature_units})
         
         

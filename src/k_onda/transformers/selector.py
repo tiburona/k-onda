@@ -35,7 +35,7 @@ class Selector(Transformer):
     
     def _call_on_signal(self, signal, key_spec=None):
 
-        self._input_validation(signal, key_spec=key_spec)
+        self._validate_input(signal, key_spec=key_spec)
 
         endpoints = self._process_endpoints(signal)
 
@@ -49,7 +49,7 @@ class Selector(Transformer):
 
         return new_leaf
     
-    def _input_validation(self, signal, key_spec=None):
+    def _validate_input(self, signal, key_spec=None):
 
         if key_spec and key_spec.input_name is not None:
             raise NotImplementedError(

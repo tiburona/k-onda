@@ -1,6 +1,9 @@
+from collections.abc import Iterable
+
 import numpy as np
 
 from .core import Calculator
+from k_onda.utils import np_from_xr
 
 
 class Shift(Calculator):
@@ -42,22 +45,38 @@ class Normalize(Calculator):
         dim = self.dim
         if self.method == "rms":
             rms = np.sqrt((data**2).mean(dim=dim))
-            normalization_params = {'rms': rms}
+            norm_params = {'rms': rms}
             result = data / rms
         elif self.method == "zscore":
             mean = data.mean(dim=dim); std = data.std(dim=dim)
-            normalization_params = {'mean': mean, 'std': std}
+            norm_params = {'mean': mean, 'std': std}
             result = (data - mean) / std
         elif self.method == "minmax":
             data_min = data.min(dim=dim); data_max = data.max(dim=dim)
-            normalization_params = {'data_min': data_min, 'data_max': data_max}
+            norm_params = {'data_min': data_min, 'data_max': data_max}
             result = (data - data.min(dim=dim)) / (data.max(dim=dim) - data.min(dim=dim))
         else:
             raise ValueError("Unknown normalize method")
 
-        return result, {'normalization_params': normalization_params}
+        return result, {'norm_params': norm_params}
     
-    def _wrap_result(self, result, _, normalization_params=None):
-        if normalization_params is not None:
-            result = result.assign_attrs(normalization_params=normalization_params)
+    def _wrap_result(self, result, data, norm_params=None):
+
+        if norm_params is not None:
+            stripped = {}
+            units = {}
+
+            for key, param in norm_params.items():
+                stripped[key], units[key] = np_from_xr(param)
+            
+            prenorm_units = (
+                data.attrs.get('feature_units')  # e.g. {'fwhm': unit, 'firing_rate': unit}
+                or {'data': next(iter(units.values()), None)}  # e.g. {'data': unit}
+            )
+            
+            result = result.assign_attrs(
+                norm_dim = self.dim,
+                norm_params=stripped,
+                prenorm_units = prenorm_units)
+            
         return result

@@ -30,7 +30,7 @@ class Rate(Calculator):
 
         }
 
-    def _input_validation(self, parent):
+    def _validate_input(self, parent):
         from ..signals import BinarySignal, PointProcessSignal
 
         if not isinstance(parent, (PointProcessSignal, BinarySignal)):
