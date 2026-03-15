@@ -73,10 +73,11 @@ class Normalize(Calculator):
                 data.attrs.get('feature_units')  # e.g. {'fwhm': unit, 'firing_rate': unit}
                 or {'data': next(iter(units.values()), None)}  # e.g. {'data': unit}
             )
-            
+
             result = result.assign_attrs(
                 norm_dim = self.dim,
                 norm_params=stripped,
                 prenorm_units = prenorm_units)
-            
+        
+        result = super()._wrap_result(result)
         return result

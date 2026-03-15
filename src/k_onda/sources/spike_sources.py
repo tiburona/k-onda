@@ -76,23 +76,36 @@ class PhyOutput(DataSource):
 
 
 class Neuron(DataIdentity):
-    name = "neuron"
+    name = 'neuron'
+    _snapshot_fields = ('neuron_type',)
 
-    def __init__(self, data_components, neuron_type=None):
+    def __init__(self, data_components):
         super().__init__(data_components)
-        self.neuron_type = neuron_type
+
+    @property
+    def neuron_type(self):
+        for ann in reversed(self._annotations):
+            if ann.key == 'neuron_type':
+                return ann.value
+        return None
+        
 
 
 class SpikeCluster(DataComponent):
     output_class = PointProcessSignal
     data_type = xr.Dataset
+    coord_map = {'time': 'spike_times'}
 
-    def __init__(self, data_source, cluster_idx, neuron=None):
+    def __init__(self, data_source, cluster_id, neuron=None):
         super().__init__(data_source)
-        self.cluster_idx = cluster_idx
-        self.coord_map = {'time': 'spike_times'}
+        self.cluster_id = cluster_id
+        self.component_id = (self.data_source)
         if neuron is not None:
             self.assign_to_neuron(neuron)
+
+    @property
+    def identifiers(self):
+        return [f"cluster_{self.cluster_id}"]
     
     @property
     def data_schema(self):
@@ -104,14 +117,21 @@ class SpikeCluster(DataComponent):
     @property
     def neuron(self):
         return self.data_identity
+    
+    def to_signal(self):
+        signal = super().to_signal()
+        signal.coord_map = self.coord_map
+        signal.duration = self.duration
+        return signal
+
 
     def data_loader(self):
-        spike_times = self.data_source.get_spike_times_for_cluster(self.cluster_idx)
+        spike_times = self.data_source.get_spike_times_for_cluster(self.cluster_id)
         spike_times = xr.DataArray(
             spike_times * ureg.s,  # TODO is this the actual unit they come from phy in?
             dims=("spikes",),
         )
-        waveforms = self.data_source.get_waveforms(self.cluster_idx)
+        waveforms = self.data_source.get_waveforms(self.cluster_id)
         waveforms = xr.DataArray(waveforms, dims=('spikes', 'samples', 'electrodes'))
 
         return xr.Dataset(

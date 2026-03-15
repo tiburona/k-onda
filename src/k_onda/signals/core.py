@@ -18,6 +18,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         transform,
         data_schema,
         *,
+        context=None,
         transformer=None,
         optimizer=None,
         origin=None,
@@ -31,6 +32,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self.transform = transform
         self.transformer = transformer
         self.data_schema = data_schema
+        self.context = context
         self.optimizers = []
         if optimizer:
             self.optimizers.append = optimizer
@@ -106,6 +108,13 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
     @property
     def data_identity(self):
+        # TODO: architectural debt. Threading data_identity through the origin
+        # chain means deepcopying any signal drags the entire entity graph along,
+        # causing hash failures on partially-constructed DataIdentity objects
+        # (deepcopy uses __new__, not __init__). Short-term fix: add __deepcopy__
+        # to DataIdentity to return self. Long-term fix: store data_identity_id
+        # (uid) on the root signal and resolve it via a registry, so signals can
+        # still belong to a DataIdentity without holding a live reference.
         if type(self.origin) in [tuple, list]:
             origin = None
             for entity in self.origin:
@@ -123,8 +132,13 @@ class TimeSeriesSignal(Signal):
 
     def __init__(self, inputs, transform, *, sampling_rate=None, **kwargs):
         super().__init__(inputs, transform, **kwargs)
-        self.sampling_rate = sampling_rate or self.parent.sampling_rate
+        self.sampling_rate = sampling_rate or self._sampling_rate_from_context()
 
+    def _sampling_rate_from_context(self):
+        origin = self.origin
+        if isinstance(origin, tuple):
+            origin = next((o for o in origin if o is not None), None)
+        return getattr(origin, 'sampling_rate', None)
 
 class TimeFrequencySignal(TimeSeriesSignal, CalculateMixin, SelectMixin):
     dim_defaults = {"time": "s", "frequency": "Hz"}
@@ -322,6 +336,17 @@ class IndexedSignal(Signal):
     def kmeans(self, n_clusters=8, **kwargs):
         from k_onda.transformers import KMeans
         return KMeans(n_clusters=n_clusters, **kwargs)(self)
+    
+    def classify(self, label_name, label_spec=None, label_func=None):
+        from k_onda.sinks import Classify
+        chain = []
+        node = self
+        while isinstance(node, IndexedSignal):
+            chain.append(node)
+            node = node.inputs[0] if node.inputs else None
+
+        return Classify(label_name, label_spec=label_spec, label_func=label_func)(*chain)
+        
 
 
 

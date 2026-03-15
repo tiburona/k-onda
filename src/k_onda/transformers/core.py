@@ -274,7 +274,7 @@ class Calculator(Transformer):
         return data
     
     def _wrap_result(self, result, *args):
-        return result
+        return result.assign_attrs({'transformer': self._calculator_name()})
 
     def _calculator_name(self):
         return self.name or type(self).__name__.lower()  

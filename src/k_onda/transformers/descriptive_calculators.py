@@ -25,7 +25,7 @@ class ReduceDim(Calculator):
     def output_schema(self, input_schema):
         dims = set(input_schema.dims)
         dims.discard(self.dim) 
-        return Schema(*dims)
+        return Schema(*dims, selectable_dims=input_schema._selectable_dims)
     
     def resolve_output_class(self, input):
         # If we're operating on a StackedSignal, preserve the stack type.
@@ -88,7 +88,7 @@ class Histogram(Calculator):
         dims = set(input_schema.dims)
         dims.discard(self.dim)
         dims.add(f'{self.dim}_bins')
-        return Schema(dims)
+        return Schema(dims, selectable_dims=input_schema._selectable_dims)
 
     def _prepare_hist_inputs(self, data):
         axis = data.dims.index(self.dim)
@@ -187,7 +187,7 @@ class Histogram(Calculator):
             new_attrs.pop("boundaries")
 
         result = xr.DataArray(result, dims=new_dims, coords=new_coords, attrs=new_attrs)
-
+        result = super()._wrap_result(result)
         return result
 
     def _apply_inner(self, data):

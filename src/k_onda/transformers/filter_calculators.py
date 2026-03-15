@@ -75,6 +75,7 @@ class Filter(PaddingCalculator):
     
     def _wrap_result(self, result, data):
         result = xr.DataArray(result, coords=data.coords, dims=data.dims, attrs=data.attrs)
+        result = super()._wrap_result(result)
         return result
 
 
@@ -92,4 +93,5 @@ class MedianFilter(Calculator):
     
     def _wrap_result(self, result, data):
         result = xr.DataArray(result, coords=data.coords, dims=data.dims, attrs=data.attrs)
+        result = super()._wrap_result(result)
         return result

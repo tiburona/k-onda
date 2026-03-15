@@ -3,18 +3,17 @@
 import numpy as np
 import pint 
 import pint_xarray
-from collections import defaultdict
 
-from .time import Session
+
+from .model import Session, Experiment, Subject
 from .sources import (
-    Collection,
     LFPChannel,
     LFPRecording,
     PhyOutput,
     initialize_neurons_from_phy,
 )
 from .central import LFP_SAMPLING_RATE
-from .signals import TimeFrequencySignal
+
 from .transformers import FrequencyBand
 from .transformers import Spectrogram
 from .central import ureg
@@ -22,7 +21,8 @@ from .central import ureg
 
 lfp_data_loader_config = {
     "file_path": "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.ns3",
-    "file_ext": "ns3"
+    "file_ext": "ns3",
+    "row_to_brain_region": {0: 'bla'}
 }
 
 spike_data_loader_config = {
@@ -53,38 +53,10 @@ power_config = {
     "output": "power"}
 
 
-class Experiment:
-    
-    def __init__(self, experiment_id, subjects=None):
-        self.experiment_id = experiment_id
-        if subjects is None:
-            self.subjects = []
-        else:
-            self.subjects = subjects
-
-    @property
-    def all_neurons(self):
-        return Collection([n for s in self.subjects for n in s.neurons])
 
 
-class Subject:
-    
-    def __init__(self, subject_id):
-        self.subject_id = subject_id
-        self.sessions = []
-        self.data_identities = defaultdict(list)
 
 
-    def add_to_experiment(self, experiment):
-        experiment.subjects.append(self)
-
-    @property
-    def experiments(self):
-        return list({s.experiment for s in self.sessions})
-    
-    @property
-    def neurons(self):
-        return self.data_identities['neuron']
     
 
 experiment = Experiment("IG_INED_SAFETY_RECALL")
@@ -134,7 +106,17 @@ lfp_channel_2 = LFPChannel(recording, channel_idx=2)
 epoch_0 = session.epochs['tone'][0]
 epoch_1 = session.epochs['tone'][1]
 
-spikes_and_filtered_waveforms = (
+
+label_spec = """
+- type: classifier
+  feature: fwhm
+  order: ascending
+  labels:
+    - IN
+    - PN
+"""
+
+categorized_neurons = (
   experiment
  .all_neurons
  .stack_signals(dim='spikes')
@@ -144,7 +126,7 @@ spikes_and_filtered_waveforms = (
  .extract_features('fwhm', 'firing_rate', group_by='neuron')
  .normalize(method='zscore', dim='index')
  .kmeans(n_clusters=2, random_state=0)
- .data
+ .classify('neuron_type', label_spec=label_spec)
  )
 
 
@@ -160,10 +142,13 @@ spikes_and_filtered_waveforms = (experiment
  .reduce(key='waveforms', dim='electrodes', method='mean')
  .median_filter(key='waveforms', kernel_sizes={'samples': 5})
  .unstack_signals()
+)
+
+
+selected_data =(spikes_and_filtered_waveforms
  .select(epoch_0)
  .signals[0].data
 )
-
 
 
 
@@ -188,6 +173,7 @@ spikes_and_filtered_waveforms = (experiment
 
 preprocessed_signal_1 = (
     lfp_channel_1
+    .signal
     .scale(.25)
     .filter(filter_config))
 
@@ -195,6 +181,7 @@ preprocessed_signal_1 = (
 
 preprocessed_signal_1 = (
     lfp_channel_1
+    .signal
     .scale(.25)
     .filter(filter_config)
     .normalize("rms")
@@ -213,6 +200,7 @@ assert not epoch_0_power_sig_1.data.equals(epoch_1_power_sig_1.data)
 
 preprocessed_signal_2 = (
     lfp_channel_2
+    .signal
     .scale(.25)
     .filter(filter_config)
     .normalize("rms")

@@ -75,6 +75,10 @@ class ExtractFeatures(Transformer):
                 'index': keys,
                 'feature': list(self.features)
             }
-        ).assign_attrs({'feature_units': feature_units})
+        ).assign_attrs(
+            {'feature_units': feature_units, 'transformer': 'extractfeatures'}
+            )
+    
+        
         
         

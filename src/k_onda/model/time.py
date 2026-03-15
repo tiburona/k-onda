@@ -3,9 +3,10 @@ import h5py
 from datetime import datetime
 from dataclasses import dataclass
 from copy import deepcopy
+import uuid
 
-from .central import ureg
-from .utils import group_to_dict
+from ..central import ureg
+from ..utils import group_to_dict
 
 class Epoch:
     
@@ -20,8 +21,6 @@ class Epoch:
         self.t0 = self.onset
         self.t1 = self.onset + self.duration
         
-
-
 
 @dataclass(frozen=True)
 class TimeBase:
@@ -96,18 +95,31 @@ class NEVMixin:
 
 class Session(NEVMixin):
     
-    def __init__(self, experiment, subject, config, ureg):
+    def __init__(self, experiment, subject, config, ureg, label=None):
+        self.uid = uuid.uuid4()
         self.experiment = experiment
         self.subject = subject
         self.config = config
         self.ureg = ureg
+        self.label = None
         self.subject.sessions.append(self)
         self._time_base = None
         self._markers = None
         self._epochs = defaultdict(list)
         self._start = None
         self._duration = None
-      
+        
+    @property
+    def display_id(self):
+        parts = [self.experiment.experiment_id, self.subject.subject_id]
+        if self.label:
+            parts.append(self.label)
+        if self.time_base.start_datetime:
+            parts.append(str(self.time_base.start_datetime))
+        else:
+            parts.append(str(self.uid)[:8])
+        return ':'.join(parts)
+
     @property
     def time_base(self):
         if self._time_base is None:

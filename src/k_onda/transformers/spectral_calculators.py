@@ -28,7 +28,7 @@ class Spectrogram(PaddingCalculator):
     def output_schema(self, input_schema):
         dims = set(input_schema.dims)
         dims.add('frequency')
-        return Schema(*dims)
+        return Schema(*dims, selectable_dims=input_schema._selectable_dims)
 
     def _compute_padlen(self, _, apply_kwargs):
         n_cycles = self.config["n_cycles"]
@@ -94,4 +94,6 @@ class Spectrogram(PaddingCalculator):
 
         # TODO include units here
 
-        return da
+
+        result = super()._wrap_result(da)
+        return result

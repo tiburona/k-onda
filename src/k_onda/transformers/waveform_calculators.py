@@ -64,10 +64,11 @@ class FWHM(Calculator):
         return self.fwhm(data.values)
     
     def _wrap_result(self, result, *args):
-        return xr.DataArray(result).pint.quantify(self.distance_unit)
+        result = xr.DataArray(result).pint.quantify(self.distance_unit)
+        return super()._wrap_result(result)
     
     def output_schema(self, input_schema):
         dims = set(input_schema.dims)
         dims.discard(self.dim)
-        return Schema(*dims)
+        return Schema(*dims, selectable_dims=input_schema._selectable_dims)
 

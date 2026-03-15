@@ -3,7 +3,7 @@ from functools import partial
 from functools import reduce
 import xarray as xr
 
-from k_onda.time import Epoch
+from k_onda.model.time import Epoch
 from .core import Transformer, Transform
 from k_onda.central import ureg
 from k_onda.graph import walk_tree, new_tree
@@ -152,7 +152,7 @@ class Selector(Transformer):
             if not hasattr(node, 'inputs'):
                 return True
             for inp in node.inputs:
-                for d in inp.data_dims:
+                for d in inp.data_schema.selectable_dims:
                     if d == dim:
                         return False
             return True
@@ -196,6 +196,8 @@ class Window(Transformer):
         self.selection_endpoints = selection_endpoints
         self.selector_mode = selector_mode
 
+    
+
     def _call_on_signal(self, signal, key_spec=None):
         # figure out what super does
         output_signal = super()._call_on_signal(signal, key_spec=key_spec)
@@ -207,6 +209,11 @@ class Window(Transformer):
             output_signal.start = start
 
         return output_signal
+
+    def _validate_input(self, signal):
+        for dim in set(self.selection_endpoints):
+            if dim not in signal.data_schema.selectable_dims:
+                raise ValueError(f"Signal data does not have dimension {dim}.")
 
     def _get_transform(self, input, key_spec):
         apply_kwargs = self._get_apply_kwargs(input)

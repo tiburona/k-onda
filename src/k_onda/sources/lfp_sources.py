@@ -48,6 +48,20 @@ class LFPChannel(DataComponent):
         da = make_time_series(data, self.sampling_rate)
         return da
     
+    def to_signal(self):
+        signal = super().to_signal()
+        signal.sampling_rate = self.sampling_rate
+        return signal
+    
     @property
     def data_schema(self):
         return Schema('time')
+    
+    @property
+    def identifiers(self):
+        ids = [self.channel_idx]
+        row_to_brain_region = self.data_source.data_loader_config.get('row_to_brain_region')
+        if row_to_brain_region:
+            ids.append(row_to_brain_region[self.channel_idx])
+
+

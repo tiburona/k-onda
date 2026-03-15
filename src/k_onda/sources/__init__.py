@@ -6,7 +6,9 @@ from .core import (
     CollectionMap,
     SignalMap
 )
+
 from .lfp_sources import LFPChannel, LFPRecording
+
 __all__ = [
     "DataSource",
     "LFPRecording",

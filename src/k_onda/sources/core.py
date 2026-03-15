@@ -1,9 +1,12 @@
 from collections import defaultdict
 from operator import attrgetter
 from pathlib import Path
+import time
 import uuid
-import xarray as xr
-import numpy as np
+from dataclasses import dataclass, field
+from typing import Optional, Any
+from frozendict import frozendict
+
 
 from ..transformers.transformer_mixins import (
     CalculateMixin, StackMixin, SelectMixin, AggregateMixin, PointProcessMixin)
@@ -12,38 +15,105 @@ from k_onda.utils import DictDelegator
 from k_onda.transformers import feature_registry
 
 
+@dataclass
+class ProvenanceContext:
+    """Immutable snapshopt of facts known when a signal entered the DAG."""
+    component_id: str
+    data_identity_id: Optional[str] = None
+    data_identity_snapshot: Optional[frozendict] = None
+    session_id: Optional[str] = None
+    annotations: frozendict = field(default_factory=frozendict)
+
+
 class DataSource:
     """A file or resource containing experimental data."""
 
-    def __init__(self, session, data_loader_config):
+    def __init__(self, session, data_loader_config, label=None):
+        self.uid = uuid.uuid4()
         self.session = session
         self.data_loader_config = data_loader_config
+        self.label = label
         self.file_path = Path(self.data_loader_config["file_path"])
         self.file_ext = self.data_loader_config.get("file_ext")
         self._raw_data = None
         self.subject = self.session.subject
 
+    @property
+    def display_id(self):
+        parts = [self.session.display_id]
+        if self.label:
+            parts.append(self.label)
+        elif self.identifiers:
+            parts.extend(self.identifiers)
+        else:
+            parts.append(str(self.uid)[:8])
+        return ":".join(parts)
+
+    @property
+    def identifiers(self):
+        return []
+
 
 class DataComponent(CalculateMixin, SelectMixin):
     output_class = Signal
 
-    def __init__(self, source):
+    def __init__(self, source, data_identity=None):
+        self.uid = uuid.uuid4()
         self.data_source = source
+        self.data_identity = data_identity
         self.subject = self.data_source.subject
         self._data = None
-        self.data_identity = None
         self.start = self.data_source.session.start
         self.duration = self.data_source.session.duration
 
     @property
-    def data(self):
+    def display_id(self):
+        parts = [self.data_source.session.display_id]
+        if self.label:
+            parts.append(self.label)
+        elif self.identifiers:
+            parts.extend(self.identifiers)
+        else:
+            parts.append(str(self.uid)[:8])
+        return ":".join(parts)
+    
+    @property
+    def identifiers(self):
+        return []
+
+    def data_loader(self):
         if self._data is None:
-            self._data = self.data_loader()
+            self._data = self._data_loader()
         return self._data
     
+    # subclasses override
+    def _data_loader(self):
+        pass
+    
+    @property
+    def signal(self):
+        return self.to_signal()
+
     @property
     def data_dims(self):
         return self.data_schema.dims
+    
+    def to_signal(self) -> Signal:
+        context = ProvenanceContext(
+            component_id=self.uid,
+            session_id=self.data_source.session.uid,
+            data_identity_id=self.data_identity.uid if self.data_identity else None,
+            data_identity_snapshot=self.data_identity.snapshot() if self.data_identity else None
+        )
+        loader = self.data_loader
+        return self.output_class(
+            inputs=(),
+            context=context,
+            transform=lambda: loader(),
+            data_schema=self.data_schema,
+            origin=self
+        )
+      
 
     def assign_to_data_identity(self, data_identity):
         if data_identity is None:
@@ -56,19 +126,25 @@ class DataComponent(CalculateMixin, SelectMixin):
 
 class DataIdentity:
     name = "identity"
+    _snapshot_fields = ()
 
     def __init__(self, data_components=None):
-        self.uuid = uuid.uuid4()
+        self.uid = uuid.uuid4()
         self.data_components = set()
         self.subject = None
+        self._annotations = []
+        self._version = 0
         if data_components is not None:
             self.add_data_components(data_components)
 
+    def __deepcopy__(self, memo):
+        return self
+        
     def __hash__(self):
-        return hash(self.uuid)
+        return hash(self.uid)
 
     def __eq__(self, other):
-        return isinstance(other, DataIdentity) and other.uuid == self.uuid
+        return isinstance(other, DataIdentity) and other.uid == self.uid
 
     def add_data_components(self, data_components):
         for i, data_component in enumerate(data_components):
@@ -92,6 +168,36 @@ class DataIdentity:
         if self in self.subject.data_identities[self.name]:
             self.subject.data_identities[self.name].remove(self)
         data_component.data_identity = None
+
+    def set_annotation(self, key, value, annotator=None, source_signal=None):
+        annotation = Annotation(
+            key=key,
+            value=value,
+            annotator=annotator,
+            source_signal=source_signal,
+            timestamp=time.time(),
+        )
+        self._annotations.append(annotation)
+        self._version += 1
+
+    def snapshot(self):
+        return frozendict({
+            field: getattr(self, field)
+            for field in self._snapshot_fields
+        })
+    
+    @property
+    def version(self):
+        return self._version
+
+
+@dataclass
+class Annotation:
+    key: str
+    value: Any
+    annotator: Optional[object] = None
+    source_signal: Optional[Signal] = None
+    timestamp: float = field(default_factory=time.time)
 
 
 class FeatureMixin:
@@ -136,18 +242,7 @@ class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointP
 
         # If components aren't yet signals they need to be made into them.
         if isinstance(base_components[0], DataComponent):
-            signals = [
-                component.output_class(
-                    component,
-                    transform=lambda x: x,
-                    transformer=None,
-                    origin=component,
-                    data_schema=component.data_schema
-                )
-                for component in base_components
-            ]
-
-            return signals
+            return [component.signal for component in base_components]
 
         return base_components
 

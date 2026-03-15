@@ -20,7 +20,7 @@ class StackSignals(Transformer):
         stacking_dim = self.dim or 'members'
         if isinstance(input_schemas[0], DatasetSchema):
             return DatasetSchema({
-                key: Schema(*schema.dims, stacking_dim)
+                key: Schema(*schema.dims, stacking_dim, selectable_dims=schema._selectable_dims)
                 for key, schema in input_schemas[0].items()
             })
 
@@ -94,12 +94,13 @@ class UnstackSignals(Transformer):
         stacking_dim = self.dim or 'members'
         if isinstance(input_schema, DatasetSchema):
             return DatasetSchema({
-                key: Schema(*(schema.dims - {stacking_dim}))
+                key: Schema(*(schema.dims - {stacking_dim}), 
+                            selectable_dims=schema._selectable_dims)
                 for key, schema in input_schema.items()
             })
         dims = set(input_schema.dims)
         dims.discard(stacking_dim)
-        return Schema(dims)
+        return Schema(dims, selectable_dims=input_schema._selectable_dims)
 
     def resolve_output_class(self):
         from ..sources import Collection

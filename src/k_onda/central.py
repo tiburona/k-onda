@@ -14,6 +14,18 @@ ureg.define("raw_sample = second / 30000 = rs")
 ureg.define("lfp_sample = second / 2000 = ls")
 
 
+operations = {
+    '==': lambda a, b: a == b,
+    '<': lambda a, b: a < b,
+    '>': lambda a, b: a > b,
+    '<=': lambda a, b: a <= b,
+    '>=': lambda a, b: a >= b,
+    'in': lambda a, b: a in b,
+    '!=': lambda a, b: a != b,
+    'not in': lambda a, b: a not in b
+    }
+
+
 @runtime_checkable
 class SignalLike(Protocol):
     data: ...

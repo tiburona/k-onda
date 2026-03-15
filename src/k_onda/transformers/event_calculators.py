@@ -79,7 +79,7 @@ class Rate(Calculator):
         self._validate_rate_inputs(time_key, intervals, exclude_initial)
 
         if not time_key:
-            return len(data[data.keys()[0]]) / duration
+            return len(data[list(data.keys())[0]]) / duration
 
         if isinstance(data, xr.Dataset):
             selected_data = data[time_key]
@@ -107,5 +107,7 @@ class Rate(Calculator):
         return len(selected_data) / duration
     
     def _wrap_result(self, result, *args):
-        return xr.DataArray(result)
+        result = xr.DataArray(result)
+        result = super()._wrap_result(result)
+        return result
     
