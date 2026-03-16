@@ -15,6 +15,7 @@ dependencies = [
     "numpy",
     "pint",
     "pint-xarray",
+    "pytest>=9.0.2",
     "pyyaml",
     "scikit-learn",
     "scipy",

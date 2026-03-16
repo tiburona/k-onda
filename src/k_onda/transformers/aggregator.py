@@ -7,8 +7,6 @@ from k_onda.central import DatasetSchema
 
 class Aggregator:
 
-    # TODO: do I want Aggregator to take an optional group by parameter
-    # so that it can group a collection before aggregation?
 
     def __init__(self, method='mean', group_by=None):
         self.method = method

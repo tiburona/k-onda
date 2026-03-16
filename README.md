@@ -15,7 +15,7 @@ It operates under the following principles (all of which were sometimes violated
 9. Plotting, tabular export, and statistical analysis all derive from a single canonical data representation, preventing divergence.
 10. Where feasible, K-Onda looks for data representations that are general, and can extend beyond any particular data format or collection strategy.  It will provide a foundation that can extend even beyond electrophysiology, to other kinds of data in the biological and social sciences.
 
-The original project included a declarative plotting specification that let users compose complex multipanel, multilayer figures. The new version will reimplement and extend this functionality. For more on planned features, see the roadmap.  (link)
+The original project included a declarative plotting specification that let users compose complex multipanel, multilayer figures. The new version will reimplement and extend this functionality. For more on planned features, see the [roadmap](plans/Roadmap.md).  
 
 
 Statement on the use of generative AI in this project:

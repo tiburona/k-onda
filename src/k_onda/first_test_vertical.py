@@ -71,31 +71,24 @@ phy_output = PhyOutput(session, spike_data_loader_config)
 
 neurons = initialize_neurons_from_phy(phy_output)
 
-#experiment.all_neurons.signals().median_filter(key='waveform')
-# recording an idea I had: you should be able to define mini pipelines, assign them to identities or components with names
-# and then do extract features with the named pipeline
+# tone_vals = experiment.all_neurons.histogram(some_args).select_grid(tone_epochs)
+# pretone_vals = experiment.all_neurons.histogram(some_args).select_grid(pretone_epochs).reduce('time_bin')
 
-# # Vectorized
-# experiment.all_neurons
-#     .stack_signals(stack_dim='spikes').
-#     .reduce(key='waveforms', dim='electrodes', method='mean')
-#     .median_filter(key='waveforms', kernel_sizes={'samples': 5})
-#     .unstack_signals()
-#     .group_by('identity')
-#     .extract_features('firing_rate', 'fwhm')
+# evoked_vals = tone_vals - pretone_vals
 
+# let's say experiment already knows about its epochs
+# evoked_vals = experiment.all_neurons.histogram(some_args).select_grid(experiment.epochs['tone'], experiment.epochs['pretone']).pipe(a, b.reduce(some args)).pipe(a - b) 
 
-#     .kmeans()
-#     .apply_labels(to='neuron')
+# evoked_vals.aggregate('event').aggregate('epoch').aggregate('neuron', group_by='neuron_type').aggregate('subject', group_by='condition')
+# evoked_vals.view('event', config).aggregate( 'subject', 'neuron', 'epoch', group_by={'neuron': 'neuron_type', 'subject': 'condition'}, method='mean'))
 
+# yaml
 
-# # Iterating
-# experiment.all_neurons
-#     .reduce(key='waveforms', dim='electrode s', method='mean')
-#     .median_filter(key='waveforms', kernel_sizes={'samples': 5})
-#     .group_by('identity')
-
-
+# - view: 
+#    - event
+#    - config
+# - aggregate
+#   - subject
 
 
 
