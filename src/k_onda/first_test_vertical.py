@@ -90,6 +90,9 @@ neurons = initialize_neurons_from_phy(phy_output)
 # - aggregate
 #   - subject
 
+# There are two ways to generate markers -- from onsets
+# experiment.all_neurons
+
 
 
 lfp_channel_1 = LFPChannel(recording, channel_idx=1)
@@ -159,6 +162,51 @@ selected_data =(spikes_and_filtered_waveforms
 #  .group_by('neuron')
 #  .extract_features('fwhm', 'firing_rate')
 #  )
+
+
+initialized_experiment = experiment.configure('some_config').initialize()
+classified_neurons = initialized_experiment.classify_neurons('some_config')
+# .configure(some_config)
+# .intialize()
+
+# experiment
+# .configure(some_config)
+# .intialize()
+# .all_neurons
+# .classify_neurons(some_config)   <- classify_neurons comes from a recipe for the already built pipeline
+# .select(experiment.epochs, dim='trial')
+# .select(epochs.events, window=(-0.05, 0.3), dim='pip')  <- this is gonna have to know to iterate over the epochs
+# .count(some_config)
+# .mean([{'across':'pip'}, {'across': 'trial',  group_by: 'stimulus_type'}, 
+# {'across': 'neuron', 'group_by': 'neuron_type'}, {'across': 'animal', group_by: 'treatment_group'}]) <- mean is gonna have to route to Aggregator or ReduceDim as apporpriate
+# 
+
+
+pretone_vals = (
+    classified_neurons
+    .select(experiment.epochs, dim='trial', condition='pretone')
+    .select('events', window=(-0.05, 0.3), dim='pip')
+    .count('some_config')
+    .mean({'across': 'pip'})
+)
+
+tone_vals = (
+    classified_neurons
+    .select(experiment.epochs, dim='trial', condition='pretone')
+    .select('events', window=(-0.05, 0.3), dim='pip')  # for this to work an EpochSet needs to have an 'events' property and one of the things 'select' needs to be able to take as an argument is a string attr
+    .count('some_config')
+)
+
+tone_vals_std = tone_vals.std()
+
+normalized_tone_vals = (tone_vals - pretone_vals)/tone_vals_std
+
+final_vals = (normalized_tone_vals
+              .mean([
+                  {'across': 'trial', 'group_by': 'stimulus_type'},
+                  {'across': 'neuron', 'group_by': 'neuron_type'},
+                  {'across': 'subject', 'group_by': 'treatment_group'}
+                  ]))
 
 
 

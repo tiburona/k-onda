@@ -3,7 +3,7 @@ from functools import partial
 from functools import reduce
 import xarray as xr
 
-from k_onda.model.time import Epoch
+from k_onda.model.session import Epoch
 from .core import Transformer, Transform
 from k_onda.central import ureg
 from k_onda.graph import walk_tree, new_tree
@@ -16,10 +16,6 @@ class FrequencyBand:
         self.f_hi = ureg.Quantity(f_hi, units=units)
         self.mode = mode
     
-
-
-    
- 
 
 
 class Selector(Transformer):

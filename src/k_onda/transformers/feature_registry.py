@@ -1,4 +1,4 @@
-from k_onda.utils import DictDelegator
+from k_onda.mixins import DictDelegator
 from k_onda.transformers import *
 
 

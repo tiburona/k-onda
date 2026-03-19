@@ -77,17 +77,13 @@ class PhyOutput(DataSource):
 
 class Neuron(DataIdentity):
     name = 'neuron'
-    _snapshot_fields = ('neuron_type',)
+    _snapshot_fields = DataIdentity._snapshot_fields + ('neuron_type',)
 
     def __init__(self, data_components):
         super().__init__(data_components)
+        self.neuron_type = None
 
-    @property
-    def neuron_type(self):
-        for ann in reversed(self._annotations):
-            if ann.key == 'neuron_type':
-                return ann.value
-        return None
+    
         
 
 

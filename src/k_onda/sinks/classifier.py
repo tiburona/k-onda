@@ -127,6 +127,7 @@ class Classify:
                 test_func = operations[operator]
                 for entity, fval in zip(entities_to_label, feature_vals):
                     if test_func(fval, value):
+                        setattr(entity, self.label_name, value)
                         entity.set_annotation(self.label_name, label, annotator=self, source_signal=feature_set)
     
             elif spec_type == 'default':
@@ -139,6 +140,7 @@ class Classify:
                 value = rule['value']
                 
                 for entity in entities_to_label:
+                    setattr(entity, self.label_name, value)
                     entity.set_annotation(self.label_name, value, annotator=self, source_signal=None)
                 
             else:

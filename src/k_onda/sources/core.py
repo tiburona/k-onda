@@ -1,31 +1,21 @@
 from collections import defaultdict
 from operator import attrgetter
 from pathlib import Path
-import time
 import uuid
-from dataclasses import dataclass, field
-from typing import Optional, Any
-from frozendict import frozendict
+
+from k_onda.provenance import AnnotatorMixin
+
 
 
 from ..transformers.transformer_mixins import (
     CalculateMixin, StackMixin, SelectMixin, AggregateMixin, PointProcessMixin)
 from ..signals import Signal
-from k_onda.utils import DictDelegator
+from k_onda.mixins import DictDelegator, ConfigSetter
 from k_onda.transformers import feature_registry
+from k_onda.provenance import ProvenanceContext
 
 
-@dataclass
-class ProvenanceContext:
-    """Immutable snapshopt of facts known when a signal entered the DAG."""
-    component_id: str
-    data_identity_id: Optional[str] = None
-    data_identity_snapshot: Optional[frozendict] = None
-    session_id: Optional[str] = None
-    annotations: frozendict = field(default_factory=frozendict)
-
-
-class DataSource:
+class DataSource(ConfigSetter):
     """A file or resource containing experimental data."""
 
     def __init__(self, session, data_loader_config, label=None):
@@ -33,7 +23,7 @@ class DataSource:
         self.session = session
         self.data_loader_config = data_loader_config
         self.label = label
-        self.file_path = Path(self.data_loader_config["file_path"])
+        self.file_path = Path(self.fill_fields(self.data_loader_config['path']))
         self.file_ext = self.data_loader_config.get("file_ext")
         self._raw_data = None
         self.subject = self.session.subject
@@ -103,7 +93,8 @@ class DataComponent(CalculateMixin, SelectMixin):
             component_id=self.uid,
             session_id=self.data_source.session.uid,
             data_identity_id=self.data_identity.uid if self.data_identity else None,
-            data_identity_snapshot=self.data_identity.snapshot() if self.data_identity else None
+            data_identity_snapshot=self.data_identity.snapshot() if self.data_identity else None,
+            subject_id=self.data_source.session.subject
         )
         loader = self.data_loader
         return self.output_class(
@@ -124,18 +115,17 @@ class DataComponent(CalculateMixin, SelectMixin):
         data_identity.add_data_components([self])
 
 
-class DataIdentity:
+class DataIdentity(AnnotatorMixin):
     name = "identity"
-    _snapshot_fields = ()
+    _snapshot_fields = ('component_ids')
 
     def __init__(self, data_components=None):
         self.uid = uuid.uuid4()
         self.data_components = set()
         self.subject = None
-        self._annotations = []
-        self._version = 0
         if data_components is not None:
             self.add_data_components(data_components)
+        self._init_annotations()
 
     def __deepcopy__(self, memo):
         return self
@@ -145,6 +135,10 @@ class DataIdentity:
 
     def __eq__(self, other):
         return isinstance(other, DataIdentity) and other.uid == self.uid
+    
+    @property
+    def component_ids(self):
+        return (dc.uid for dc in self.data_components)
 
     def add_data_components(self, data_components):
         for i, data_component in enumerate(data_components):
@@ -162,42 +156,13 @@ class DataIdentity:
                 if old_identity is not self:
                     old_identity.remove_data_component(data_component)
             data_component.data_identity = self
+        self.set_annotation('add_data_components', self.component_ids, self)
+        
 
     def remove_data_component(self, data_component):
         self.data_components.discard(data_component)
-        if self in self.subject.data_identities[self.name]:
-            self.subject.data_identities[self.name].remove(self)
         data_component.data_identity = None
-
-    def set_annotation(self, key, value, annotator=None, source_signal=None):
-        annotation = Annotation(
-            key=key,
-            value=value,
-            annotator=annotator,
-            source_signal=source_signal,
-            timestamp=time.time(),
-        )
-        self._annotations.append(annotation)
-        self._version += 1
-
-    def snapshot(self):
-        return frozendict({
-            field: getattr(self, field)
-            for field in self._snapshot_fields
-        })
-    
-    @property
-    def version(self):
-        return self._version
-
-
-@dataclass
-class Annotation:
-    key: str
-    value: Any
-    annotator: Optional[object] = None
-    source_signal: Optional[Signal] = None
-    timestamp: float = field(default_factory=time.time)
+        self.set_annotation('remove_data_component', data_component.uid, self)
 
 
 class FeatureMixin:
