@@ -9,9 +9,10 @@ from .core import (
     TimeFrequencySignal,
     TimeSeriesSignal,
     ValidityMask,
-    AggregateSignal,
+    AggregatedSignal,
     DatasetSignal,
-    IndexedSignal
+    IndexedSignal, 
+    SelectorSignal
 )
 
 __all__ = [
@@ -25,7 +26,8 @@ __all__ = [
     "BinarySignal",
     "ValidityMask",
     "SignalStack",
-    "AggregateSignal",
+    "AggregatedSignal",
     "DatasetSignal",
-    "IndexedSignal"
+    "IndexedSignal", 
+    "SelectorSignal"
 ]

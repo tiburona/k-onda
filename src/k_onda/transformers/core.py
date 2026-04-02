@@ -76,10 +76,12 @@ def with_key_access(func):
 class Transform:
     """A transform function with optional metadata."""
 
-    def __init__(self, fn, signal_class=None, **kwargs):
+    def __init__(self, fn, padlen=None, signal_class=None, **kwargs):
         self.fn = fn
         self.signal_class = signal_class
+        self.padlen = padlen
         self.kwargs = kwargs
+        
 
     def __call__(self, data):
         return self.fn(data)
@@ -131,7 +133,7 @@ class Transformer:
              )
     
     def _call_on_signal(self, signal, key_spec):
-        self._validate_input(signal)
+        self._validate_input(signal, key_spec=key_spec)
         output_class = self.resolve_output_class(signal)
         transform = self._get_transform(signal, key_spec)
         output_schema = self.make_output_schema(signal.data_schema, key_spec=key_spec)
@@ -192,7 +194,7 @@ class Calculator(Transformer):
     require_all_finite = False
     allow_empty = False
 
-    def _validate_input(self, input):
+    def _validate_input(self, input, **kwargs):
         if not isinstance(input, SignalLike):
             raise ValueError("Calculators can only operate on Data Components, Signals, " \
             "StackedSignals, Collections, and GroupedCollections.")

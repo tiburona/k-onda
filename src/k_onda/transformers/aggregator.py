@@ -1,6 +1,6 @@
 import xarray as xr
 
-from k_onda.signals import AggregateSignal
+from k_onda.signals import AggregatedSignal
 from .core import Transform
 from k_onda.central import DatasetSchema
 
@@ -40,7 +40,7 @@ class Aggregator:
 
         return SignalMap(
             map={
-                k: AggregateSignal(
+                k: AggregatedSignal(
                     inputs=collection.signals,
                     data_schema=collection.signals[0].data_schema,
                     transformer=self,
@@ -56,7 +56,7 @@ class Aggregator:
         transform = self._get_transform()
         # need to figure out why transform is passed signal, not data
 
-        return AggregateSignal(
+        return AggregatedSignal(
             inputs=collection.signals,
             transformer=self,
             transform=transform,

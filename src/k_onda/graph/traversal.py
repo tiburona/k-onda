@@ -40,13 +40,23 @@ def walk_tree(leaf, func=None, starting_val=None):
 
         visited.add(current_node)
 
-        new_value = func(current_node, value) if func else value
+        new_value = func(current_node, last_node, value) if func else value
         
         yield current_node, new_value, last_node
 
         for inp in getattr(current_node, 'inputs', []):
             stack.append((inp, deepcopy(new_value), current_node))
 
+
+def list_nodes(leaf):
+    nodes = []
+
+    def add(node, _, node_list):
+        node_list.append(node)
+
+    walk_tree(leaf, func=add, starting_val=nodes)
+
+    return nodes
 
 
 def new_tree(leaf):

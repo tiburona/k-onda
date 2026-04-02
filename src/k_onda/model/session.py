@@ -8,7 +8,7 @@ import re
 
 from k_onda.mixins import ConfigSetter
 from k_onda.utils import group_to_dict
-from k_onda.loci import Epoch
+from k_onda.loci import Epoch, EpochSet, Event, EventSet
 
 
 from k_onda.sources import LFPRecording, PhyOutput, initialize_neurons_from_phy
@@ -99,17 +99,19 @@ class NEVMixin:
 
 class Session(NEVMixin, ConfigSetter):
     
-    def __init__(self, experiment, subject, config, label=None):
+    def __init__(self, experiment, subject, config, label=None, conditions=None):
         self.uid = uuid.uuid4()
         self.experiment = experiment
         self.subject = subject
         self.config = config
         self.label = label or self.config.get('label')
+        self.conditions = conditions or self.config.get('conditions')
         self.data_sources = []
         self.ureg = self.experiment.ureg
         self._time_base = None
         self._onsets = None
-        self._epochs = defaultdict(list)
+        self._epochs = defaultdict(EpochSet(self, epochs=[]))
+        self._events = defaultdict(EventSet(self, events=[]))
         self._start = None
         self._duration = None
         self.initialize_data_sources()
@@ -141,7 +143,20 @@ class Session(NEVMixin, ConfigSetter):
     def epochs(self):
         if not self._epochs:
             self.create_epochs()
-        return self._epochs
+        return EpochSet(
+            self, 
+            [epoch for epoch_list in self._epochs.values() for epoch in epoch_list], 
+            conditions=self.conditions)
+    
+    @property
+    def events(self):
+        if not self._events:
+            self.create_events()
+        return EventSet(
+            self, 
+            [event for event_list in self._events.values() for event in event_list], 
+            conditions=self.conditions)
+
     
     @property
     def start(self):
@@ -174,7 +189,8 @@ class Session(NEVMixin, ConfigSetter):
         
     def create_epochs(self):
 
-        for epoch_type, epoch_config in self.config.get('epochs', {}).items():
+        for epoch_type in self.config.get('epochs', {}):
+            epoch_config = self.experiment.epochs_config['epoch_type']
             conditions = epoch_config.get('conditions', {})
             if 'from_nev' in epoch_config:
                 self.nev_epoch_config(epoch_type, epoch_config, conditions)
@@ -202,7 +218,8 @@ class Session(NEVMixin, ConfigSetter):
                 
         duration = epoch_config['duration'] * self.ureg('second')
         self._epochs[epoch_type].extend([
-            Epoch(self, onset.in_secs, duration, conditions=conditions) 
+            Epoch(self, onset.in_secs, duration, conditions=conditions, 
+                  config=epoch_config) 
             for onset in unitful_onsets
             ])
 
@@ -220,7 +237,8 @@ class Session(NEVMixin, ConfigSetter):
         if baseline_ind is not None:
             target_epochs = [target_epochs[baseline_ind]]
         self._epochs[epoch_type].extend(
-            [Epoch(self, epoch.onset - shift, duration, conditions) 
+            [Epoch(self, epoch.onset - shift, duration, conditions=conditions, 
+                   config=epoch_config) 
             for epoch in target_epochs])
             
     def get_start_and_duration(self):
@@ -237,9 +255,14 @@ class Session(NEVMixin, ConfigSetter):
                 duration_sample *= self.ureg.raw_sample
                 self._duration = duration_sample.to('s')
 
-    def get_events(self, event_config):
-        # TODO: similar to epoch_config, this should record events that aren't epochs
-        pass
+    def create_events(self):
+        if self.config.get('events'):
+            # this is where events that had some definition independent of epochs would live
+            pass
+        else:
+            for epoch_type, epoch in self._epochs:
+                self._events[epoch_type].extend([epoch.events])
+
                 
                 
   

@@ -9,8 +9,13 @@ class DictDelegator(MutableMapping):
     _delegate_attr: str  # subclass sets this
 
     def __getitem__(self, key):
-        return getattr(self, self._delegate_attr)[key]
-
+        try:
+            return getattr(self, self._delegate_attr)[key]
+        except KeyError:
+            if hasattr(self, '__missing__'):
+                return self.__missing__(key)
+            raise
+        
     def __setitem__(self, key, value):
         getattr(self, self._delegate_attr)[key] = value
 

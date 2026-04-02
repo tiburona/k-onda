@@ -7,7 +7,7 @@ import xarray as xr
 from ..central import ureg
 from .core import Calculator, PaddingCalculator
 
-from ..utils import scalar
+from ..utils.utils import scalar
 
 
 class Filter(PaddingCalculator):

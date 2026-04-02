@@ -106,7 +106,7 @@ class Intersection(Calculator, BinaryCalculatorMixin):
             transform=transform,
             data_schema=output_schema,
             origin=(a.origin, b.origin),
-            transformer=self,
+            transformer=self
         )
 
     def _apply_inner(self, a_data, b):
@@ -137,7 +137,7 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
             transform=transform,
             data_schema=output_schema,
             origin=(input.origin, mask.origin),
-            transformer=self,
+            transformer=self
         )
 
     def _apply_inner(self, data, mask):

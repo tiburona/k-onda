@@ -6,8 +6,6 @@ from ..transformers.transformer_mixins import CalculateMixin, UnstackMixin, Sele
 from k_onda.graph.traversal import build_generations
 
 
-
-
 class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
 
@@ -31,7 +29,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self.inputs = inputs if isinstance(inputs, Iterable) else (inputs,)
         self.transform = transform
         self.transformer = transformer
-        self.data_schema = data_schema
+        self._data_schema = data_schema
         self.context = context
         self.optimizers = []
         if optimizer:
@@ -43,6 +41,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self.source_signal = source_signal
         self._storage_strategy = storage_strategy
         self._cache = None
+        self.conditions = {}
         self._validate_inputs()
       
     
@@ -126,6 +125,10 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
         return getattr(origin, "data_identity", None)
     
+    def output_class_for_selection(self):
+        pass
+
+    
 
 class TimeSeriesSignal(Signal):
     dim_defaults = {"time": "s"}
@@ -140,16 +143,17 @@ class TimeSeriesSignal(Signal):
             origin = next((o for o in origin if o is not None), None)
         return getattr(origin, 'sampling_rate', None)
 
+
 class TimeFrequencySignal(TimeSeriesSignal, CalculateMixin, SelectMixin):
     dim_defaults = {"time": "s", "frequency": "Hz"}
+
+
 
 
 class ScalarSignal(Signal):
     pass
 
 
-class EpochScalarSignal(Signal):
-    pass
 
 
 class DatasetSignal(Signal):
@@ -256,7 +260,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
             collection=None, 
             inputs=None, 
             transform=None, 
-            transformer=None, 
+            transformer=None,
             signal_class=None):
 
         if collection is not None:
@@ -269,7 +273,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
             self.inputs = inputs
         else:
             raise ValueError(f"collection or inputs must be provided for SignalStack")
-        self.data_schema = data_schema
+        self._data_schema = data_schema
         self.transform = transform
         self.transformer = transformer
         self._cache = None
@@ -303,7 +307,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
         pass
 
 
-class AggregateSignal(Signal):
+class AggregatedSignal(Signal):
 
     def _materialize(self):
         if self._cache is None:
@@ -349,6 +353,28 @@ class IndexedSignal(Signal):
         
 
 
+class SelectorSignal(Signal):
+
+
+    def __init__(
+            self, 
+            inputs, 
+            transform, 
+            metadim_map=None,
+            **kwargs):
+        super().__init__(inputs, transform, **kwargs)
+        self.metadim_map = metadim_map
+    
+    @property
+    def output_class(self):
+        return getattr(self.inputs[0], "output_class", type(self.inputs[0]))
+    
+  
+    
+    
+    
+
+    
 
 
 

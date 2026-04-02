@@ -21,6 +21,8 @@ This fits naturally into K-Onda's design. An IntervalSet can stay symbolic/lazy 
 
 ### 2. Validity That Propagates Automatically
 
+Katie's note: this was a review synthesized from two LLM's opinions, and it was mistaken about propagation.  K-Onda's selection is structural (data outside the selected regions isn't present in the output) and validity propogates automatically.  
+
 In Pynapple, every time series carries an IntervalSet called `time_support` that says "here's where this signal is actually valid." (K-Onda will use a different name for this concept.) When you restrict a signal to certain epochs, the resulting signal's validity intervals update automatically. Downstream operations respect them without the user having to think about it.
 
 K-Onda has the ValidityMask concept, but it's not yet interval-based and doesn't propagate through the pipeline automatically. The goal: if a signal has been restricted to correct trials, a downstream Rate calculator shouldn't accidentally count inter-trial silence. The Schema could carry interval information, and restrict operations could update it.
@@ -45,6 +47,8 @@ Two operations came up repeatedly:
 ## Medium Priority: Important But Not Blocking
 
 ### 5. Neuroscience-Friendly Verbs
+
+Katie's note: K-Onda establishes different verbs and I am not at all convinced that importing restrict and align will add to usability. count as a mixin method that calls Histogram seems fine.  I am unsure what bin does that calling count to invoke a Histogram transformer does not.
 
 Both reviews emphasized that users should be able to say things like `restrict`, `count`, `align_to`, `bin` without needing to understand the generic pipeline machinery. The internal architecture can stay generic (Calculators, Transformers, Selectors), but the public API should offer domain-specific method names that feel natural to a neuroscientist. Think of it as a thin vocabulary layer on top of the powerful engine.
 

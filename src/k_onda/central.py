@@ -40,6 +40,8 @@ class Schema:
         else:
             self._selectable_dims = set(selectable_dims)
         self.selectable_dims = set(dims) | self._selectable_dims
+    
+    
 
 
 class DatasetSchema(MutableMapping):

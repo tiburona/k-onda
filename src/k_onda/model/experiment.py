@@ -16,10 +16,10 @@ from k_onda.utils import recursive_update
 
 top_level_config = {
     'root': 'some_path',
-     'units_to_set': {
-         'raw_sample': (1/30000, 's', 'rs'),
-         'lfp_sample': (1/2000, 's', 'ls')
-         }
+    'units_to_set': {
+        'raw_sample': (1/30000, 's', 'rs'),
+        'lfp_sample': (1/2000, 's', 'ls')
+    }
 }
 
 subjects_config = {
@@ -35,23 +35,13 @@ subjects_config = {
         }
     }
 
+# TODO: this is incomplete.  You need to to be able to assign events to conditions
+# See also the TODO in loci/corp.py Interval class
 sessions_config = {
     'base': {
         'nev_path': '{experiment.root}/{subject.id}/{session.label}/{session.label}.mat',
         'data_sources': ['phy', 'lfp'],
-        'epochs':  {
-            'tone': {
-                'from_nev': True,
-                'code': 65502,
-                'duration': 30,
-                'conditions': {'stimulus': 'tone'},
-            },
-            'pretone': {
-                'relative_to': 'tone',
-                'shift': -30,
-                'duration': 30,
-                'conditions': {'stimulus': 'pretone'},
-            }},
+        'epochs': ['pretone', 'tone'],
     },
     'learning': {
         'inherits': 'base',
@@ -71,7 +61,7 @@ sessions_config = {
         },
     'recall145': {
         'inherits': 'recall',
-        'epochs': {'tone': {'code': 65503}},
+        'epochs': ['pretone', 'tone65503'],
         'data_sources': ['phy', 'lfp_swapped']
     }
 }
@@ -87,6 +77,35 @@ data_sources_config = {
     }
 }
 
+epochs_config = {
+
+    'base': {
+        'events': ['pip'],
+        'units': 's',
+        'duration': 30
+    },
+    'tone': {
+        'inherits': 'base',
+        'from_nev': True,
+        'code': 65502,
+        'conditions': {'stimulus': 'tone'},
+        },
+    'tone65503': {
+        'inherits': 'tone',
+        'code': 65503
+        },
+    'pretone': {
+        'inherits': 'base',
+        'relative_to': 'tone',
+        'shift': -30,
+        'conditions': {'stimulus': 'pretone'},
+        }
+}
+
+events_config = {
+    'pip': {'spacing': 1}  # in this experiment, there is only one kind of event
+}
+
 
 class Experiment(AnnotatorMixin):
 
@@ -100,6 +119,8 @@ class Experiment(AnnotatorMixin):
             subjects_config=None, 
             sessions_config=None,
             data_sources_config=None,
+            epochs_config=None, 
+            events_config=None
             ):
         self.id = experiment_id
         if subjects is None:
@@ -110,6 +131,8 @@ class Experiment(AnnotatorMixin):
         self.subjects_config = subjects_config or {}
         self.sessions_config = sessions_config or {}
         self.data_sources_config = data_sources_config or {}
+        self.epochs_config = epochs_config or {}
+        self.events_config = events_config or {}
         self.root = None
         self.ureg = None
         self.path_constructor_id = self.id

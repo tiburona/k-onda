@@ -7,7 +7,7 @@ from .waveform_calculators import FWHM
 from .filter_calculators import Filter, MedianFilter
 from .mask_calculators import ApplyMask, Intersection, Threshold
 from .spectral_calculators import Spectrogram
-from .selector import FrequencyBand, Selector, Window
+from .selector import FrequencyBand, Selector, Slicer, DimBounds
 from .aggregator import Aggregator
 from .feature_registry import feature_registry
 from .feature_transformers import ExtractFeatures
@@ -40,5 +40,6 @@ __all__ = [
     "feature_registry",
     "ExtractFeatures",
     "KMeans",
-    "Window"
+    "Slicer",
+    "DimBounds"
 ]
