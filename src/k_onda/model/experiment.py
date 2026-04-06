@@ -12,99 +12,114 @@ from k_onda.utils import recursive_update
 
 
 
-# some sample config dictionaries
+# # some sample config dictionaries
 
-top_level_config = {
-    'root': 'some_path',
-    'units_to_set': {
-        'raw_sample': (1/30000, 's', 'rs'),
-        'lfp_sample': (1/2000, 's', 'ls')
-    }
-}
+# top_level_config = {
+#     'root': 'some_path',
+#     'units_to_set': {
+#         'raw_sample': (1/30000, 's', 'rs'),
+#         'lfp_sample': (1/2000, 's', 'ls')
+#     }
+# }
 
-subjects_config = {
-    '_base': {
-        'sessions': ['learning_day_1', 'learning_day_2', 'recall']
-    },
-    'IG144': {
-        'conditions': {'treatment': 'control'},
-        },
-    'IG145': {
-        'conditions': {'treatment': 'defeat'},
-        'sessions': ['learning_day_1', 'learning_day_2', 'recall145']
-        }
-    }
+# subjects_config = {
+#     '_base': {
+#         'sessions': ['learning_day_1', 'learning_day_2', 'recall']
+#     },
+#     'IG144': {
+#         'conditions': {'treatment': 'control'},
+#         },
+#     'IG145': {
+#         'conditions': {'treatment': 'defeat'},
+#         'sessions': ['learning_day_1', 'learning_day_2', 'recall145']
+#         }
+#     }
 
-# TODO: this is incomplete.  You need to to be able to assign events to conditions
-# See also the TODO in loci/corp.py Interval class
-sessions_config = {
-    'base': {
-        'nev_path': '{experiment.root}/{subject.id}/{session.label}/{session.label}.mat',
-        'data_sources': ['phy', 'lfp'],
-        'epochs': ['pretone', 'tone'],
-    },
-    'learning': {
-        'inherits': 'base',
-        'label': 'learning'
-        },
-    'learning_day_1': {
-        'inherits': 'learning',
-        'label': 'learning_day_1'
-        },
-    'learning_day_2': {
-        'inherits': 'learning',
-        'label': 'learning_day_2'
-        },
-    'recall': {
-        'inherits': 'base',
-        'label': 'recall'
-        },
-    'recall145': {
-        'inherits': 'recall',
-        'epochs': ['pretone', 'tone65503'],
-        'data_sources': ['phy', 'lfp_swapped']
-    }
-}
+# # TODO: this is incomplete.  You need to to be able to assign events to conditions
+# # See also the TODO in loci/corp.py Interval class
+# sessions_config = {
+#     'base': {
+#         'nev_path': '{experiment.root}/{subject.id}/{session.label}/{session.label}.mat',
+#         'data_sources': ['phy', 'lfp'],
+#         'epochs': ['pretone', 'tone'],
+#     },
+#     'learning': {
+#         'inherits': 'base',
+#         'label': 'learning'
+#         },
+#     'learning_day_1': {
+#         'inherits': 'learning',
+#         'label': 'learning_day_1'
+#         },
+#     'learning_day_2': {
+#         'inherits': 'learning',
+#         'label': 'learning_day_2'
+#         },
+#     'recall': {
+#         'inherits': 'base',
+#         'label': 'recall'
+#         },
+#     'recall145': {
+#         'inherits': 'recall',
+#         'epochs': ['pretone', 'tone65503'],
+#         'data_sources': ['spike', 'lfp_swapped']
+#     }
+# }
 
-data_sources_config = {
-    'spike': {'path': '{experiment.root}/{subject.id}/{session.label}/spike', 'registry_key': 'phy'},
-    'lfp': {'path': '{experiment.root}/{subject.id}/{session.label}/lfp/{session.label}.ns3', 
-            'region_to_row': {'bla': 0, 'pl': 1}, 
-            'registry_key': 'lfp'},
-    'lfp_swapped': {
-        'inherits': 'lfp',
-        'region_to_row': {'bla': 1, 'pl': 0},
-    }
-}
+# data_sources_config = {
+#     'spike': {
+#         'path': '{experiment.root}/{subject.id}/{session.label}/spike', 
+#         'registry_key': 'phy', 
+#         'label': 'spike'
+#         },
+#     'lfp': {'path': '{experiment.root}/{subject.id}/{session.label}/lfp/{session.label}.ns3', 
+#             'row_to_region': {0: 'bla', 1: 'pl'}, 
+#             'registry_key': 'lfp',
+#             'label': 'lfp'},
+#     'lfp_swapped': {
+#         'inherits': 'lfp',
+#         'row_to_region': {1: 'bla',  0: 'pl'},
+#     }
+# }
 
-epochs_config = {
+# data_identity_config = {
+#     'neuron': {'source': 'phy', 'match_by': None},
+#     'lfp_brain_region': {'source': 'lfp', 'match_by': 'label'}
+# }
 
-    'base': {
-        'events': ['pip'],
-        'units': 's',
-        'duration': 30
-    },
-    'tone': {
-        'inherits': 'base',
-        'from_nev': True,
-        'code': 65502,
-        'conditions': {'stimulus': 'tone'},
-        },
-    'tone65503': {
-        'inherits': 'tone',
-        'code': 65503
-        },
-    'pretone': {
-        'inherits': 'base',
-        'relative_to': 'tone',
-        'shift': -30,
-        'conditions': {'stimulus': 'pretone'},
-        }
-}
+# epochs_config = {
 
-events_config = {
-    'pip': {'spacing': 1}  # in this experiment, there is only one kind of event
-}
+#     'base': {
+#         'events': ['pip'],
+#         'units': 's',
+#         'duration': 30
+#     },
+#     'tone': {
+#         'inherits': 'base',
+#         'from_nev': True,
+#         'code': 65502,
+#         'conditions': {'stimulus': 'tone'},
+#         'label': 'tone'
+#         },
+#     'tone65503': {
+#         'inherits': 'tone',
+#         'code': 65503
+#         },
+#     'pretone': {
+#         'inherits': 'base',
+#         'relative_to': 'tone',
+#         'shift': -30,
+#         'conditions': {'stimulus': 'pretone'},
+#         'label': 'pretone'
+#         }
+# }
+
+# events_config = {
+#     'pip': {'spacing': 1}  # in this experiment, there is only one kind of event
+# }
+
+
+# TODO: should I be annotating upon adding a subject to an experiment?
 
 
 class Experiment(AnnotatorMixin):
@@ -115,10 +130,12 @@ class Experiment(AnnotatorMixin):
             self, 
             experiment_id, 
             subjects=None, 
+            global_config = None,
             top_level_config=None, 
             subjects_config=None, 
             sessions_config=None,
             data_sources_config=None,
+            data_identity_config=None,
             epochs_config=None, 
             events_config=None
             ):
@@ -127,51 +144,84 @@ class Experiment(AnnotatorMixin):
             self.subjects = set()
         else:
             self.subjects = set(subjects)
-        self.top_level_config = top_level_config or {}
-        self.subjects_config = subjects_config or {}
+        self.global_config = global_config or {}
+        self.top_level_config = top_level_config or {} 
+        self.subjects_config = subjects_config or {} 
         self.sessions_config = sessions_config or {}
         self.data_sources_config = data_sources_config or {}
+        self.data_identity_config = data_identity_config or {}
         self.epochs_config = epochs_config or {}
         self.events_config = events_config or {}
         self.root = None
         self.ureg = None
         self.path_constructor_id = self.id
         self.subject_conditions = defaultdict(dict)
+        self.configure_global()
         self._init_annotations()
+
+    @classmethod
+    def from_config(cls, experiment_id, **kwargs):
+        exp = Experiment(experiment_id, **kwargs)
+        return exp
 
     @property
     def all_neurons(self):
         return Collection([n for s in self.subjects for n in s.neurons])
+    
+    @property
+    def all_lfp_brain_regions(self):
+        pass
 
     @property
     def subject_ids(self):
         return frozenset([subject.id for subject in self.subjects])
     
+    @staticmethod
+    def get_ext(config):
+      
+        if isinstance(config, dict):
+            return None
+        elif isinstance(config, str):
+            return PurePath(config).suffix
+        elif isinstance(config, PurePath):
+            return config.suffix
+        else:
+            raise TypeError("Unknown type for experiment config.")
+    
+    def load_config(self, config):
+        ext = self.get_ext(config)
+            
+        if ext == '.yaml':
+            with open(config) as f:
+                config = yaml.safe_load(f)
+        elif ext == '.json':
+            with open(config) as f:
+                config = json.load(f)
+        elif ext is None:
+            pass
+        else:
+            raise ValueError("Unknown extension for config")
+        
+        return config
+    
+    def configure_global(self):
+
+        global_config = self.load_config(self.global_config)
+        self.configure(**global_config)
+        self.resolve_configs()
+
+    def resolve_configs(self):
+        for name in ['top_level_config', 'subjects_config', 'sessions_config',
+            'data_sources_config', 'data_identity_config',
+            'epochs_config', 'events_config']:
+            setattr(self, name, self.load_config(getattr(self, name)))
+    
     def configure(self, **configs):
         
-        for config_label, config in configs.items():
-
-            if isinstance(config, dict):
-                ext = None
-            elif isinstance(config, str):
-                ext = PurePath(config).suffix
-            elif isinstance(config, PurePath):
-                ext = config.suffix
-            else:
-                raise TypeError("Unknown type for experiment config.")
-            
-            if ext == '.yaml':
-                config = yaml.safe_load(config)
-            elif ext == '.json':
-                config = json.loads(config)
-            elif ext is None:
-                pass
-            else:
-                raise ValueError("Unknown extension for config")
-            
+        for config_label, config in configs.items():            
+            config = self.load_config(config)
             existing_config = getattr(self, config_label) 
             setattr(self, config_label, recursive_update(existing_config, config))
-        
 
     def initialize(self):
         self.configure_top_level()
@@ -201,8 +251,10 @@ class Experiment(AnnotatorMixin):
                 subject_config = base_config | subject_config
                 self.create_subject(subject_id, subject_config)
 
-    def create_subject(self, subject_id, subject_config):
-        subject_sessions = subject_config.get('sessions')
+    def create_subject(self, subject_id, subject_config=None):
+        if subject_config is None:
+            subject_config = {}
+        subject_sessions = subject_config.get('sessions', [])
         subject = Subject(subject_id)
         self.subject_conditions[subject_id] = subject_config.get('conditions', {})
         subject.create_sessions(self, subject_sessions)
@@ -213,7 +265,7 @@ class Experiment(AnnotatorMixin):
         # to implement later
         pass
         
-    def add_subject(self, subject_id, sessions=None):
+    def add_subject(self, subject, sessions=None):
         # to implement later
         pass
 

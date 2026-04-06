@@ -4,8 +4,8 @@ from functools import partial
 
 from .feature_registry import feature_registry
 from k_onda.central import Schema
-from .core import Transform, Transformer
-from k_onda.utils.utils import np_from_xr
+from .core import Transformer
+from k_onda.utils import np_from_xr
 
 
 

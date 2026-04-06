@@ -9,13 +9,14 @@ import re
 from k_onda.mixins import ConfigSetter
 from k_onda.utils import group_to_dict
 from k_onda.loci import Epoch, EpochSet, Event, EventSet
+from k_onda.sources import Collection
 
 
-from k_onda.sources import LFPRecording, PhyOutput, initialize_neurons_from_phy
+from k_onda.sources import LFPRecording, PhyOutput, Neuron, LFPBrainRegion
 
 data_source_registry = {
     'lfp': {'class': LFPRecording},
-    'phy': {'class': PhyOutput, 'followup': initialize_neurons_from_phy}
+    'phy': {'class': PhyOutput}
 }
 
         
@@ -106,15 +107,30 @@ class Session(NEVMixin, ConfigSetter):
         self.config = config
         self.label = label or self.config.get('label')
         self.conditions = conditions or self.config.get('conditions')
-        self.data_sources = []
+        self.data_sources = {}
         self.ureg = self.experiment.ureg
         self._time_base = None
         self._onsets = None
-        self._epochs = defaultdict(EpochSet(self, epochs=[]))
-        self._events = defaultdict(EventSet(self, events=[]))
+        self._epochs = defaultdict(lambda: EpochSet(self, epochs=[]))
+        self._events = defaultdict(lambda: EventSet(self, events=[]))
         self._start = None
         self._duration = None
         self.initialize_data_sources()
+        self.create_epochs(self.config.get('epochs'))
+        self.identities_initalized = set()
+
+    @property
+    def neurons(self):
+        # do whatever you need to do to initialize neurons
+        # then return self.data_identities['neurons']
+        pass
+
+    @property
+    def lfp_brain_regions(self):
+        # do whatever you need to do to initialize lfp brain regions
+        # then return self.data_identities['lfp_brain_regions']
+        pass
+        
         
     @property
     def display_id(self):
@@ -139,14 +155,21 @@ class Session(NEVMixin, ConfigSetter):
             self.metadata_loader()
         return self._onsets
 
+
+    # TODO: it would be nice to be able to make epochs
+    # accessible as a dictionary keyed by epoch type
+    # and as an epoch set queryable with where
+    # I made a label property for epochs, the dict should be keyed by
+    # label and not epoch type
     @property
     def epochs(self):
         if not self._epochs:
             self.create_epochs()
         return EpochSet(
             self, 
-            [epoch for epoch_list in self._epochs.values() for epoch in epoch_list], 
-            conditions=self.conditions)
+            epochs = [epoch for epoch_list in self._epochs.values() for epoch in epoch_list], 
+            conditions=self.conditions
+            )
     
     @property
     def events(self):
@@ -157,7 +180,6 @@ class Session(NEVMixin, ConfigSetter):
             [event for event_list in self._events.values() for event in event_list], 
             conditions=self.conditions)
 
-    
     @property
     def start(self):
         if self._start is None:
@@ -169,17 +191,72 @@ class Session(NEVMixin, ConfigSetter):
         if self._duration is None:
             self.get_start_and_duration()
         return self._duration
+
+    def ensure_neurons(self):
+        return self.ensure_identity('neuron', Neuron)
+                        
+    def ensure_lfp_brain_regions(self):
+        return self.ensure_identity('lfp_brain_region', LFPBrainRegion)
     
-    def initialize_data_sources(self):
-        for data_source in self.config.get('data_sources', []):
-            data_source_config = self.resolve_config(data_source, self.experiment.data_sources_config)
-            data_source_class = data_source_registry[data_source_config['registry_key']]['class']
-            self.data_sources.append(data_source_class(self, data_source_config))
+    def ensure_identity(self, identity_string, identity_class):
+        if identity_string in self.identities_initalized:
+            return
+       
+        identity_config = self.experiment.data_identity_config.get(identity_string)
+        if not identity_config:
+            raise ValueError("neurons were not configured for this experiment")
+        data_source_key = identity_config['source']
+        data_source = self.data_sources[data_source_key]
+        components = data_source.components
+        match_key = identity_config.get('match')
+        if not match_key:
+            for component in components:
+                self.create_identity(
+                    [component], 
+                    identity_string, 
+                    identity_class, 
+                    identity_config
+                    )
+
+        else: 
+            matched_components = []  
+            for di in self.subject.data_identities[identity_string]:
+                match_comps = [
+                    comp for comp in components 
+                    if getattr(comp, match_key) == getattr(di, match_key)
+                    ]
+                matched_components.extend(match_comps)
+                di.add_components(matched_components)
+
+            for component in set(components) - set(matched_components):
+                self.create_identity(
+                    [component], 
+                    identity_class, 
+                    identity_string, 
+                    identity_config
+                )
+                
+    def create_identity(self, identity_class, identity_string, components, config):
+        identity = identity_class(components, config=config)
+        self.subject.data_identities[identity_string].append(identity)
+    
+    def initialize_data_sources(self, data_sources_config=None):
+        data_sources_config = self.resolve_config(
+            data_sources_config, self.config.get('data_sources')
+            )
+        for key, data_source_config in data_sources_config.items():
+            self.initialize_data_source(key, data_source_config)
+
+    def initialize_data_source(self, data_source_key, data_source_config):
+        data_source_class = data_source_registry[data_source_config['registry_key']]['class']
+        data_source = data_source_class(self, data_source_config)
+        self.data_sources[data_source_key] = data_source
 
     def metadata_loader(self):
 
-        if self.config.get('nev_path'):
-            nev_data = self.load_nev(self.config['nev_path'])
+        if self.config.get('nev'):
+            nev_config = self.config['nev']
+            nev_data = self.load_nev(nev_config['path'])
             self._time_base = self.get_nev_time_base(nev_data)
             self._onsets = self.get_nev_onsets(nev_data)
 
@@ -187,15 +264,14 @@ class Session(NEVMixin, ConfigSetter):
             raise NotImplementedError("Need to add more metadata types")
         # other kinds of metadata will follow
         
-    def create_epochs(self):
-
-        for epoch_type in self.config.get('epochs', {}):
-            epoch_config = self.experiment.epochs_config['epoch_type']
-            conditions = epoch_config.get('conditions', {})
-            if 'from_nev' in epoch_config:
-                self.nev_epoch_config(epoch_type, epoch_config, conditions)
-            elif 'relative_to' in epoch_config:
-                self.relative_epoch_config(epoch_type, epoch_config, conditions)
+    def create_epochs(self, epochs_config=None):
+        epochs_config = self.resolve_config(epochs_config, self.experiment.epochs_config)
+        for key, config in epochs_config.items():
+            conditions = config.get('conditions', {})
+            if 'from_nev' in config:
+                self.nev_epoch_config(key, config, conditions)
+            elif 'relative_to' in config:
+                self.relative_epoch_config(key, config, conditions)
                 
     def nev_epoch_config(self, epoch_type, epoch_config, conditions):
         code = epoch_config['code']
@@ -262,6 +338,13 @@ class Session(NEVMixin, ConfigSetter):
         else:
             for epoch_type, epoch in self._epochs:
                 self._events[epoch_type].extend([epoch.events])
+
+
+      
+
+   
+
+
 
                 
                 

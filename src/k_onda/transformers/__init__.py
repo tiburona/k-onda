@@ -7,7 +7,7 @@ from .waveform_calculators import FWHM
 from .filter_calculators import Filter, MedianFilter
 from .mask_calculators import ApplyMask, Intersection, Threshold
 from .spectral_calculators import Spectrogram
-from .selector import FrequencyBand, Selector, Slicer, DimBounds
+from .selector import Selector, Slicer, DimBounds
 from .aggregator import Aggregator
 from .feature_registry import feature_registry
 from .feature_transformers import ExtractFeatures
@@ -34,7 +34,6 @@ __all__ = [
     "ApplyMask",
     "StackSignals",
     "UnstackSignals",
-    "FrequencyBand",
     "Selector",
     "Aggregator",
     "feature_registry",

@@ -17,7 +17,8 @@ class PhyOutput(DataSource):
         self._spike_times = None
         self._cluster_groups = None
         self.spike_clusters = np.load(self.file_path / "spike_clusters.npy")
-    
+        self._components = []
+
     @property
     def sampling_rate(self):
         if self._sampling_rate is None:
@@ -44,7 +45,16 @@ class PhyOutput(DataSource):
         if self._cluster_groups is None:
             self._cluster_groups = self.get_cluster_groups()
         return self._cluster_groups
-
+    
+    @property
+    def components(self):
+        if not len (self._components):
+            for cluster_id, group in self.cluster_groups.items():
+                if group == "good":
+                    spike_cluster = SpikeCluster(self, cluster_id)
+                    self._components.append(spike_cluster)
+        return self._components
+                
     def get_cluster_groups(self):
         with open(self.file_path / "cluster_info.tsv") as file:
             tsv_file = csv.DictReader(file, delimiter="\t")
@@ -73,19 +83,30 @@ class PhyOutput(DataSource):
 
     def get_spike_times_for_cluster(self, cluster_idx):
         return self.spike_times[self.get_spike_ids_for_cluster(cluster_idx)]
+    
+    
 
 
 class Neuron(DataIdentity):
     name = 'neuron'
     _snapshot_fields = DataIdentity._snapshot_fields + ('neuron_type',)
 
-    def __init__(self, data_components):
+    def __init__(self, data_components, config):
         super().__init__(data_components)
         self.neuron_type = None
+        self._label = self.generate_label()
 
+    def generate_label(self):
+        preexisting_neurons = self.subject.data_identities['neurons']
+        integer_ids = [int(neuron.label[7:]) for neuron in preexisting_neurons]
+        integer_id = 0 if not len(integer_ids) else max(integer_ids) + 1
+        label = f'neuron{integer_id}'
+        return label
+
+    @property
+    def label(self):
+        return self._label
     
-        
-
 
 class SpikeCluster(DataComponent):
     output_class = PointProcessSignal
@@ -139,11 +160,4 @@ class SpikeCluster(DataComponent):
         self.assign_to_data_identity(neuron)
 
 
-def initialize_neurons_from_phy(phy_output):
-    neurons = []
-    for cluster_id, group in phy_output.cluster_groups.items():
-        if group == "good":
-            spike_cluster = SpikeCluster(phy_output, cluster_id)
-            neuron = Neuron(data_components=[spike_cluster])
-            neurons.append(neuron)
-    return neurons
+

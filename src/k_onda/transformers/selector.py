@@ -2,18 +2,14 @@ from copy import deepcopy, copy
 from functools import partial
 from functools import reduce
 import xarray as xr
-from dataclasses import dataclass
 from collections import defaultdict
-from collections.abc import MutableMapping
 from operator import and_
 
-
-from k_onda.loci import Locus, Epoch, FrequencyBand, IntervalSet, EpochSet, Interval
+from k_onda.loci import  IntervalSet
 from .core import Transformer, Transform, PaddingCalculator
-from k_onda.graph import walk_tree, new_tree, list_nodes
+from k_onda.graph import list_nodes
 from k_onda.central import Schema, DatasetSchema
-
-from k_onda.loci.core import DIM_DEFAULT_UNITS, DimPair, SpanDimPair, DimBounds
+from k_onda.loci.core import DimBounds
 
 
 
@@ -391,7 +387,4 @@ class Slicer(PaddingCalculator):
 
         return data
     
-    
-   
-  
         

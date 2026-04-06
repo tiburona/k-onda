@@ -9,36 +9,43 @@ from .model import Session, Experiment, Subject
 from .sources import (
     LFPChannel,
     LFPRecording,
-    PhyOutput,
-    initialize_neurons_from_phy,
+    PhyOutput, 
+    SpikeCluster,
+    Neuron
 )
 from .central import LFP_SAMPLING_RATE
 
-from .transformers import FrequencyBand
 from .transformers import Spectrogram
 from .central import ureg
 
 
 lfp_data_loader_config = {
-    "file_path": "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.ns3",
+    "path": "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.ns3",
     "file_ext": "ns3",
     "row_to_brain_region": {0: 'bla'}
 }
 
 spike_data_loader_config = {
-    'file_path': "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/IG180/"
+    'path': "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/IG180/"
 }
+
 
 session_config = {
     'nev': {
         'path': "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.mat",
-        'epochs': {
-            'tone': {
-                'code': 65502,
-                'duration': 30
-                }
-    }
-}}
+    },
+    'epochs': {
+        'tone': {
+            'inherits': 'base',
+            'from_nev': True,
+            'code': 65502,
+            'duration': 30,
+            'conditions': {'stimulus': 'tone'},
+            }
+        }
+}
+    
+        
 
 filter_config = {"method": "iir_notch", "f_lo": 59, "f_hi": 61
     }
@@ -53,21 +60,39 @@ power_config = {
     "output": "power"}
 
 
-
+# Experiment.from_config(
+#     'Safety_Recall',
+#     global_config='/Users/katie/likhtik/analysis/k-onda-analysis/IG_INED_Safety/config/k_onda/ig_safety_recall.yaml'
+#     )
 
 
 
     
 
 experiment = Experiment("IG_INED_SAFETY_RECALL")
-animal = Subject("INED18")
-animal.add_to_experiment(experiment)
+experiment.configure(top_level_config={'units_to_set': 
+                      {'raw_sample': (1/30000, 's', 'rs'),
+                       'lfp_sample': (1/2000, 's', 'ls')}})
+
+experiment.initialize()
+
+animal = experiment.create_subject("INED18")
 
 session = Session(experiment, animal, session_config, ureg)
 
 recording = LFPRecording(session, lfp_data_loader_config, sampling_rate=LFP_SAMPLING_RATE)
 
 phy_output = PhyOutput(session, spike_data_loader_config)
+
+
+def initialize_neurons_from_phy(phy_output):
+    neurons = []
+    for cluster_id, group in phy_output.cluster_groups.items():
+        if group == "good":
+            spike_cluster = SpikeCluster(phy_output, cluster_id)
+            neuron = Neuron(data_components=[spike_cluster], config={'source': 'phy', 'match_by': None})
+            neurons.append(neuron)
+    return neurons
 
 neurons = initialize_neurons_from_phy(phy_output)
 
@@ -99,8 +124,8 @@ lfp_channel_1 = LFPChannel(recording, channel_idx=1)
 lfp_channel_2 = LFPChannel(recording, channel_idx=2)
 
 
-epoch_0 = session.epochs['tone'][0]
-epoch_1 = session.epochs['tone'][1]
+epoch_0 = session.epochs.where(stimulus='tone')[0]
+epoch_1 = session.epochs.where(stimulus='tone')[1]
 
 
 label_spec = """
@@ -185,6 +210,31 @@ classified_neurons = initialized_experiment.classify_neurons('some_config')
 # 
 
 # or: .mean(hierarchical=True, 'group_by': ['stimulus', 'neuron_type', 'treatment_group'])
+
+
+top_level_config = {
+    'root': '/Users/katie/likhtik/IG_INED_SAFETY_RECALL',
+    'units_to_set': {
+        'raw_sample': (1/30000, 's', 'rs'),
+        'lfp_sample': (1/2000, 's', 'ls')
+    }
+}
+
+subjects_config = {
+   
+    '_base': {
+        'sessions': ['learning_day_1', 'learning_day_2', 'recall']
+    },
+    'IG144': {
+        'conditions': {'treatment': 'control'},
+        },
+    'IG145': {
+        'conditions': {'treatment': 'defeat'},
+        'sessions': ['learning_day_1', 'learning_day_2', 'recall145']
+        }
+    }
+
+
 
 
 pretone_vals = (

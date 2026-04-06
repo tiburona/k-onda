@@ -143,12 +143,13 @@ class Locus:
         self.dim = dim
         self.units = units
         self.ureg = ureg
-        self.conditions = self.validate_conditions(conditions)
+        self.conditions = conditions or {}
+        self.conditions = self.validate_conditions()
         self.metadim = metadim
 
-    def validate_conditions(self, conditions):
+    def validate_conditions(self):
         # TODO when I actually have docs the messages should be replaced with a nice link to the docs.
-        for key in conditions.keys():
+        for key in self.conditions.keys():
             if any([string in key for string in [
                 'time', 'frequency', 'position', 'distance', 'sample', 'spike'
                 ]]):
@@ -156,8 +157,6 @@ class Locus:
                 "'distance', 'sample', or 'spike' in a condition name.")
             if any([key == string for string in ['x', 'y']]):
                 raise ValueError("'x' and 'y' are forbidden condition names.")
-            
-        return conditions
     
     def w_units(self, value):
         if is_unitful(value):
@@ -224,12 +223,13 @@ class Interval(Locus):
     marker_class = Marker
   
     def __init__(self, dim, span, parent_interval=None, anchor=None, units=None, 
-                 ureg=None, index=None, conditions=None, metadim=None):
+                 ureg=None, index=None, conditions=None, metadim=None, label=None):
         super().__init__(dim, units=units, ureg=ureg, conditions=conditions)
         self.span = SpanDimPair(lo=self.w_units(span)[0], hi=self.w_units(span)[1]) 
         self.parent_interval = parent_interval
         self.anchor = anchor
         self.index = index
+        self.label = label
         self.extent = self.span.hi - self.span.lo
         self.metadim = self.get_metadim(metadim)
 
@@ -288,7 +288,7 @@ class Epoch(Interval):
     marker_class = Event
     
     def __init__(self, session, onset, duration, units='s', parent_epoch=None, index=None, 
-                 conditions=None, epoch_type=None):
+                 conditions=None, epoch_type=None, config=None, label=None):
         super().__init__(
             'time',
             (onset, onset + duration),
@@ -297,7 +297,8 @@ class Epoch(Interval):
             units=units, 
             ureg=session.experiment.ureg, 
             conditions=conditions,
-            metadim='time'
+            metadim='time',
+            label = config.get('label') or label
             )
         self.session = session
         self.duration = self.w_units(duration)
@@ -305,6 +306,7 @@ class Epoch(Interval):
         # epoch_type isn't the condition, but the key that allows you to identify
         # the epoch in the epoch config
         self.epoch_type = epoch_type  
+        self.config = config
         self.parent_epoch = self.parent_interval
         self._events = defaultdict(list)
 
@@ -369,15 +371,9 @@ class LocusSet(Locus):
 
     def __init__(self, loci, conditions=None, metadim=None):
         self.conditions = conditions or {}
-        self.validate([loci])
-        self.loci = loci
+        self._loci = loci
+        self.validate(loci)
         self.metadim = metadim
-    
-    @property
-    def dim_bounds(self):
-        dim = self.loci[0].dim
-        bounds = [locus.dim_bounds[dim] for locus in self.loci]
-        return {dim: bounds}
     
     def __iter__(self):
         return iter(self.loci)
@@ -385,22 +381,21 @@ class LocusSet(Locus):
     def __len__(self):
         return len(self.loci)
     
+    @property
+    def loci(self):
+        return self._loci
+    
     def append(self, locus):
         self.validate([locus])
-        self.loci.append(locus)
+        self._loci.append(locus)
 
     def extend(self, loci):
         self.validate(loci)
-        self.loci.extend(loci)
+        self._loci.extend(loci)
 
     def validate(self, loci):
         if len(self.loci) and not all([type(locus) == type(self.loci[0]) for locus in loci]):
             raise ValueError(f"All loci in a {self.__class__.__name__} must be of the same type.")
-
-        # maybe this is not helpful.
-        # if self.conditions and not all([locus.conditions == self.conditions for locus in loci]):
-        #     raise ValueError(f"If conditions is defined on a {self.__class__.__name__} " \
-        #                      "all members must have the same conditions.")
     
     def conditions_are_met(self, conditions):
         for key, value in conditions.items():
@@ -408,10 +403,14 @@ class LocusSet(Locus):
                 return False
         return True
                 
-    def where(self, conditions):
+    def where(self, conditions=None, **kwargs):
+        if conditions is None:
+            conditions = {}
+        conditions.update(kwargs)
         loci = [locus for locus in self.loci if self.conditions_are_met(conditions)]
         if not len(loci):
             raise ValueError(f"Selection of {conditions} resulted in a length 0 {self.__class__.__name__}")
+        return loci
 
 
 class MarkerSet(LocusSet):
@@ -422,7 +421,7 @@ class MarkerSet(LocusSet):
             raise ValueError("One of places or markers must not be None")
         if markers is None and dim is None:
             raise ValueError("You must supply `dim` if you're not passing markers that already have one.")
-        self.markers = markers
+        self._loci = markers
         self.places = None
         self.dim = dim or self.markers[0].dim
         self.conditions = conditions
@@ -431,8 +430,8 @@ class MarkerSet(LocusSet):
         self.metadim = None
 
     @property
-    def loci(self):
-        return self.markers
+    def markers(self):
+        return self._loci
     
     def markers_from_places(self):
         self.intervals = [
@@ -481,15 +480,14 @@ class IntervalSet(LocusSet):
     def __init__(self, dim, spans=None, intervals=None, ureg=None, units=None, conditions=None, metadim=None):
         if spans is None and intervals is None:
             raise ValueError("One of intervals or spans must not be None")
+        super().__init__(loci=intervals, conditions=conditions, metadim=metadim)
         self.dim = dim
         self.spans = spans
-        self.intervals = intervals
-        self.conditions = conditions
         self.ureg = ureg
         self.units = units
         self.metadim = metadim
 
-        if self.intervals is None:
+        if intervals is None:
             self.intervals_from_spans()
 
         self.dim_bounds = DimBounds(
@@ -502,14 +500,12 @@ class IntervalSet(LocusSet):
         self.metadim_map = {self.metadim: self.dim}
         self.dim_map = {self.dim: self.metadim}
 
-        
-
     @property
-    def loci(self):
-        return self.intervals
+    def intervals(self):
+        return self._loci
 
     def intervals_from_spans(self):
-        self.intervals = [
+        self._loci = [
             self.locus_class(
                 self.dim, 
                 span, 
@@ -534,6 +530,7 @@ class EpochSet(IntervalSet):
                  epochs=None, 
                  conditions=None, 
                  units='s'):
+        self.session = session
         super().__init__(
             'time', 
             spans=spans,
@@ -542,14 +539,13 @@ class EpochSet(IntervalSet):
             units=units, 
             ureg=session.experiment.ureg,
             metadim='time')
-        self.session = session
-
+        
     @property
     def epochs(self):
-        return self.loci
+        return self._loci
         
     def epochs_from_spans(self):   
-        self.loci = [
+        self._loci = [
             Epoch(
                 self.session, 
                 span[0],
@@ -560,7 +556,7 @@ class EpochSet(IntervalSet):
             for i, span in enumerate(self.spans)]
 
     def intervals_from_spans(self):
-        return self.epochs_from_intervals()
+        return self.epochs_from_spans()
     
     def validate_type(self, epochs):
         super().validate(epochs)

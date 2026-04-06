@@ -8,6 +8,8 @@ DIM_DEFAULT_UNITS = {'time': 's', 'frequency': 'Hz'}
 
 
 def is_unitful(value):
+    if isinstance(value, pint.Quantity):
+        return True
     if isinstance(value, Iterable):
         if all([isinstance(v, pint.Quantity) for v in value]):
             return True
@@ -16,7 +18,7 @@ def is_unitful(value):
         else:
             raise ValueError("Array with some unitful and some plain values " \
             "passed to is_unitful")
-    return isinstance(value, pint.Quantity)
+    return False
 
 
 def w_units(value, dim=None, units=None, ureg=None):

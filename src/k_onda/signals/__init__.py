@@ -1,7 +1,6 @@
 from .core import (
     BinarySignal,
     DistributionSignal,
-    EpochScalarSignal,
     PointProcessSignal,
     ScalarSignal,
     Signal,
@@ -15,12 +14,13 @@ from .core import (
     SelectorSignal
 )
 
+from ..central.registry import types
+
 __all__ = [
     "Signal",
     "TimeSeriesSignal",
     "TimeFrequencySignal",
     "ScalarSignal",
-    "EpochScalarSignal",
     "PointProcessSignal",
     "DistributionSignal",
     "BinarySignal",
@@ -29,5 +29,6 @@ __all__ = [
     "AggregatedSignal",
     "DatasetSignal",
     "IndexedSignal", 
-    "SelectorSignal"
+    "SelectorSignal",
+    "types"
 ]

@@ -13,8 +13,10 @@ from ..signals import Signal
 from k_onda.mixins import DictDelegator, ConfigSetter
 from k_onda.transformers import feature_registry
 from k_onda.provenance import ProvenanceContext
+from k_onda.central import types
 
 
+@types.register
 class DataSource(ConfigSetter):
     """A file or resource containing experimental data."""
 
@@ -23,7 +25,13 @@ class DataSource(ConfigSetter):
         self.session = session
         self.data_loader_config = data_loader_config
         self.label = label
-        self.file_path = Path(self.fill_fields(self.data_loader_config['path']))
+        self.file_path = Path(
+            self.fill_fields(
+                self.data_loader_config['path'],
+                experiment=self.session.experiment,
+                subject = self.session.subject,
+                session = self.session
+            ))
         self.file_ext = self.data_loader_config.get("file_ext")
         self._raw_data = None
         self.subject = self.session.subject
@@ -44,6 +52,7 @@ class DataSource(ConfigSetter):
         return []
 
 
+@types.register
 class DataComponent(CalculateMixin, SelectMixin):
     output_class = Signal
 
@@ -89,13 +98,7 @@ class DataComponent(CalculateMixin, SelectMixin):
         return self.data_schema.dims
     
     def to_signal(self) -> Signal:
-        context = ProvenanceContext(
-            component_id=self.uid,
-            session_id=self.data_source.session.uid,
-            data_identity_id=self.data_identity.uid if self.data_identity else None,
-            data_identity_snapshot=self.data_identity.snapshot() if self.data_identity else None,
-            subject_id=self.data_source.session.subject
-        )
+        context = ProvenanceContext(component=self)
         loader = self.data_loader
         return self.output_class(
             inputs=(),
@@ -115,17 +118,20 @@ class DataComponent(CalculateMixin, SelectMixin):
         data_identity.add_data_components([self])
 
 
+@types.register
 class DataIdentity(AnnotatorMixin):
     name = "identity"
-    _snapshot_fields = ('component_ids')
+    _snapshot_fields = ('component_ids',)
 
-    def __init__(self, data_components=None):
+    def __init__(self, data_components=None, config=None):
         self.uid = uuid.uuid4()
+        self.config = config
         self.data_components = set()
         self.subject = None
+        self._init_annotations()
         if data_components is not None:
             self.add_data_components(data_components)
-        self._init_annotations()
+        
 
     def __deepcopy__(self, memo):
         return self
@@ -135,6 +141,11 @@ class DataIdentity(AnnotatorMixin):
 
     def __eq__(self, other):
         return isinstance(other, DataIdentity) and other.uid == self.uid
+    
+    # this gets overridden by subclasses
+    @property
+    def label(self):
+        return None
     
     @property
     def component_ids(self):
@@ -171,6 +182,7 @@ class FeatureMixin:
         return ExtractFeatures(*features, registry=registry, group_by=group_by)((self,))
 
 
+@types.register
 class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointProcessMixin,
                  FeatureMixin):
     def __init__(self, members):
@@ -216,17 +228,11 @@ class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointP
     
 
 
-
-
-
-
-
-
-
 class MapMixin(DictDelegator, FeatureMixin):
     pass
 
 
+@types.register
 class SignalMap(MapMixin):
     _delegate_attr = 'map'
 
@@ -244,6 +250,7 @@ class SignalMap(MapMixin):
         return self.cache
     
 
+@types.register
 class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
     _delegate_attr = 'groups'
 

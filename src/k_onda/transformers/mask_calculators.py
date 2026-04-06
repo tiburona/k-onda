@@ -3,12 +3,12 @@ from functools import partial
 import numpy as np
 
 from .core import Calculator, Transform, KeySpec
-from ..signals import BinarySignal, ValidityMask
+
 
 
 class Threshold(Calculator):
     name = "threshold"
-    fixed_output_class = ValidityMask
+    
 
     def __init__(self, comparison, threshold):
         self.threshold = threshold
@@ -19,6 +19,11 @@ class Threshold(Calculator):
             "ge": lambda data, value: data >= value,
             "le": lambda data, value: data <= value,
         }
+
+    @property
+    def fixed_output_class(self):
+        from ..signals import ValidityMask
+        return ValidityMask
 
     def _apply_inner(self, data):
         return self.operations[self.comparison](data, self.threshold)
@@ -72,8 +77,9 @@ class BinaryCalculatorMixin:
         return parent_overlap, other_overlap
 
     def validate_sig_types(self, signals):
-        
 
+        from ..signals import BinarySignal
+        
         for signal in signals:
             if not isinstance(signal, BinarySignal):
                 raise TypeError(f"{signal} is not of type BinarySignal.")

@@ -4,8 +4,10 @@ from collections.abc import Iterable
 
 from ..transformers.transformer_mixins import CalculateMixin, UnstackMixin, SelectMixin, IntersectionMixin
 from k_onda.graph.traversal import build_generations
+from k_onda.central.registry import types
 
 
+@types.register
 class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
 
@@ -129,7 +131,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         pass
 
     
-
+@types.register
 class TimeSeriesSignal(Signal):
     dim_defaults = {"time": "s"}
 
@@ -144,18 +146,18 @@ class TimeSeriesSignal(Signal):
         return getattr(origin, 'sampling_rate', None)
 
 
+@types.register
 class TimeFrequencySignal(TimeSeriesSignal, CalculateMixin, SelectMixin):
     dim_defaults = {"time": "s", "frequency": "Hz"}
 
 
-
-
+@types.register
 class ScalarSignal(Signal):
     pass
 
 
 
-
+@types.register
 class DatasetSignal(Signal):
 
     def __init__(self, inputs, transform, **kwargs):
@@ -182,6 +184,7 @@ class DatasetSignal(Signal):
         )
 
 
+@types.register
 class PointProcessSignal(DatasetSignal):
 
     def __init__(
@@ -212,10 +215,12 @@ class PointProcessSignal(DatasetSignal):
         return None
 
 
+@types.register
 class DistributionSignal(Signal):
     pass
 
 
+@types.register
 class BinarySignal(Signal):
     # stored as boolean array at some sampling rate
     # supports & | ~
@@ -249,10 +254,12 @@ class BinarySignal(Signal):
         return arr
 
 
+@types.register
 class ValidityMask(BinarySignal):
     pass
 
 
+@types.register
 class SignalStack(CalculateMixin, UnstackMixin):
     def __init__(
             self, 
@@ -307,6 +314,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
         pass
 
 
+@types.register
 class AggregatedSignal(Signal):
 
     def _materialize(self):
@@ -319,6 +327,7 @@ class AggregatedSignal(Signal):
         return self._cache
     
 
+@types.register
 class IndexedSignal(Signal):
 
     def __init__(
@@ -352,7 +361,7 @@ class IndexedSignal(Signal):
         return Classify(label_name, label_spec=label_spec, label_func=label_func)(*chain)
         
 
-
+@types.register
 class SelectorSignal(Signal):
 
 

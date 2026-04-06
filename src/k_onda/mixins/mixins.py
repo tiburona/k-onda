@@ -31,7 +31,19 @@ class DictDelegator(MutableMapping):
 
 class ConfigSetter:
 
-    def resolve_config(self, config_key, config_source):
+    def resolve_config(self, config, config_source):
+        if isinstance(config, dict):
+            return config
+        if config is None:
+            config = []
+        config_to_return = {}
+        for key in config:
+            config_to_return[key] = self.resolve_inheritance(key, config_source)
+        return config_to_return
+
+    def resolve_inheritance(self, config_key, config_source):
+        if not config_source:
+            return {}
         config = config_source[config_key]
         configs = [config]
         seen = set()

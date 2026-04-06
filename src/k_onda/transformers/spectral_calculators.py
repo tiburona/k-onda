@@ -5,7 +5,7 @@ import xarray as xr
 
 from ..central import ureg, Schema
 from .core import PaddingCalculator
-from ..utils.utils import scalar
+from ..utils import scalar
 
 
 # TODO: Right now this calculator has a baked in assumption that we are computing

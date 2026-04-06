@@ -1,6 +1,6 @@
 from ..dataarray_factories import make_time_series
 from ..signals import TimeSeriesSignal
-from .core import DataComponent, DataSource
+from .core import DataComponent, DataSource, DataIdentity
 from k_onda.central import Schema
 
 
@@ -60,8 +60,19 @@ class LFPChannel(DataComponent):
     @property
     def identifiers(self):
         ids = [self.channel_idx]
-        row_to_brain_region = self.data_source.data_loader_config.get('row_to_brain_region')
-        if row_to_brain_region:
-            ids.append(row_to_brain_region[self.channel_idx])
+        row_to_region = self.data_source.data_loader_config.get('row_to_region')
+        if row_to_region:
+            ids.append(row_to_region[self.channel_idx])
 
 
+class LFPBrainRegion(DataIdentity):
+    name = 'lfp_brain_region'
+
+    def __init__(self, data_components):
+        super().__init__(data_components)
+        self._label = data_components[0].region
+
+    @property
+    def label(self):
+        return self._label
+        

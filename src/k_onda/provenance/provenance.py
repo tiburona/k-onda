@@ -30,10 +30,10 @@ class ProvenanceContext:
             self.data_identity_snapshot = data_identity.snapshot()
         self.session_id = session.uid
         subject = session.subject
-        self.subject_id = subject.uid
+        self.subject_id = subject.id
         self.subject_snapshot = subject.snapshot()
-        experiment = subject.experiment
-        self.experiment_id = experiment.uid
+        experiment = self.component.data_source.session.experiment
+        self.experiment_id = experiment.id
         self.experiment_snapshot = experiment.snapshot()
         self.component = None
     

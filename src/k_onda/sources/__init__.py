@@ -7,11 +7,12 @@ from .core import (
     SignalMap
 )
 
-from .lfp_sources import LFPChannel, LFPRecording
+from .lfp_sources import LFPChannel, LFPRecording, LFPBrainRegion
 
 __all__ = [
     "DataSource",
     "LFPRecording",
+    "LFPBrainRegion",
     "DataComponent",
     "DataIdentity",
     "LFPChannel",
@@ -20,16 +21,21 @@ __all__ = [
     "SignalMap"
 ]
 
-try:
-    from .spike_sources import (
+from .spike_sources import (
         Neuron,
         PhyOutput,
-        SpikeCluster,
-        initialize_neurons_from_phy,
+        SpikeCluster
+    )
+   
+
+__all__.extend(
+        ["PhyOutput", "Neuron", "SpikeCluster"]
     )
 
-    __all__.extend(
-        ["PhyOutput", "Neuron", "SpikeCluster", "initialize_neurons_from_phy"]
-    )
-except ModuleNotFoundError:
-    pass
+
+class DataIdentityView:
+
+    def __init__(self, data_identity, subject):
+        self.data_identity = data_identity
+        self.subject = subject
+        self.attributes = {}
