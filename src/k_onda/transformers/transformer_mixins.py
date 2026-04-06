@@ -101,6 +101,8 @@ class SelectMixin:
             raise ValueError("You can't create a new_dim unless you're selecting an " \
             "IntervalSet (or MarkerSet when it gets implemented)")
         
+        dim_bounds = None
+
         if kwargs:
             dim_bounds, conditions = self.parse_kwargs(kwargs, selection, conditions)
 

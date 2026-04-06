@@ -61,6 +61,10 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     @origin.setter
     def origin(self, value):
         self._origin = value
+
+    @property
+    def data_schema(self):
+        return self._data_schema
     
     @property
     def data_dims(self):
@@ -304,6 +308,10 @@ class SignalStack(CalculateMixin, UnstackMixin):
     @property
     def data(self):
         return self._materialize()
+    
+    @property
+    def data_schema(self):
+        return self._data_schema
     
     @property
     def data_dims(self):

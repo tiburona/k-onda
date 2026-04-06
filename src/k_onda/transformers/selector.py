@@ -33,7 +33,7 @@ class Selector(Transformer):
             output.conditions.update(self.locus.conditions)
         return output
       
-    def _get_transform(self):
+    def _get_transform(self, signal, key_spec):
         return Transform(fn = lambda x: x, padlen=self.window)
     
     @property

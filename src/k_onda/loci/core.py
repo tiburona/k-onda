@@ -144,7 +144,7 @@ class Locus:
         self.units = units
         self.ureg = ureg
         self.conditions = conditions or {}
-        self.conditions = self.validate_conditions()
+        self.validate_conditions()
         self.metadim = metadim
 
     def validate_conditions(self):

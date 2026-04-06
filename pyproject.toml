@@ -13,6 +13,7 @@ dependencies = [
     "h5py",
     "mne",
     "numpy",
+    "phylib>=2.7.0",
     "pint",
     "pint-xarray",
     "pytest>=9.0.2",
