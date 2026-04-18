@@ -2,7 +2,9 @@ from .registry import types, SignalLike
 
 from .schema import Schema, DatasetSchema
 
-from .central import ureg, LFP_SAMPLING_RATE, SAMPLING_RATE, operations
+from .central import operations
+
+from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds
 
 
 
@@ -11,9 +13,10 @@ __all__ = [
     "SignalLike",
     "Schema",
     "DatasetSchema",
-    "ureg",
-    "LFP_SAMPLING_RATE",
-    "SAMPLING_RATE",
-    "operations"
+    "operations",
+    "DimPair",
+    "PadDimPair",
+    "SpanDimPair",
+    "DimBounds"
     
 ]

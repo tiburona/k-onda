@@ -56,7 +56,7 @@ class Subject(AnnotatorMixin, ConfigSetter):
         sessions = []
         sessions_config = self.resolve_config(subject_sessions_config, experiment.sessions_config)
         for key, config in sessions_config.items():
-            session = self.create_session(experiment, key, config)
+            session = self.create_session(experiment, config)
             sessions.append(session)
         self.sessions.extend(sessions)
         return sessions

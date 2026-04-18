@@ -7,9 +7,10 @@ from k_onda.provenance import AnnotatorMixin
 
 
 
-from ..transformers.transformer_mixins import (
-    CalculateMixin, StackMixin, SelectMixin, AggregateMixin, PointProcessMixin)
-from ..signals import Signal
+from k_onda.transformers.transformer_mixins import (
+    CalculateMixin, StackMixin, AggregateMixin, PointProcessMixin)
+from k_onda.transformers import SelectMixin
+from k_onda.signals import Signal
 from k_onda.mixins import DictDelegator, ConfigSetter
 from k_onda.transformers import feature_registry
 from k_onda.provenance import ProvenanceContext
@@ -62,8 +63,10 @@ class DataComponent(CalculateMixin, SelectMixin):
         self.data_identity = data_identity
         self.subject = self.data_source.subject
         self._data = None
-        self.start = self.data_source.session.start
-        self.duration = self.data_source.session.duration
+        self.session = self.data_source.session
+        self.start = self.session.start
+        self.duration = self.session.duration
+        self.origin = self
 
     @property
     def display_id(self):
@@ -119,7 +122,7 @@ class DataComponent(CalculateMixin, SelectMixin):
 
 
 @types.register
-class DataIdentity(AnnotatorMixin):
+class DataIdentity(AnnotatorMixin, SelectMixin):
     name = "identity"
     _snapshot_fields = ('component_ids',)
 
@@ -169,7 +172,6 @@ class DataIdentity(AnnotatorMixin):
             data_component.data_identity = self
         self.set_annotation('add_data_components', self.component_ids, self)
         
-
     def remove_data_component(self, data_component):
         self.data_components.discard(data_component)
         data_component.data_identity = None
@@ -185,8 +187,9 @@ class FeatureMixin:
 @types.register
 class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointProcessMixin,
                  FeatureMixin):
-    def __init__(self, members):
+    def __init__(self, members, origin=None):
         self.members = members
+        self.origin = origin
         self._signals = None
 
     def __iter__(self):
@@ -226,6 +229,11 @@ class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointP
     def group_by(self, group_on, strict=True):
         return CollectionMap(self.members, group_on, strict=strict)
     
+    def classify(self, label_spec, recipe=None):
+        from k_onda.transformers.recipes import classification_registry
+        if recipe is None and isinstance(self.members[0], types.Neuron):
+            recipe = 'classify_neurons'
+        return classification_registry[recipe](self, label_spec)
 
 
 class MapMixin(DictDelegator, FeatureMixin):
@@ -245,6 +253,7 @@ class SignalMap(MapMixin):
         return self._materialize()
 
     def _materialize(self):
+        self.plan_selection()
         if self._cache is None:
             self.cache = {k: signal.data for k, signal in self.map.items()}
         return self.cache

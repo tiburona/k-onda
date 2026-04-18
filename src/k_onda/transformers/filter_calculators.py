@@ -3,8 +3,9 @@ from functools import lru_cache
 import numpy as np
 from scipy.signal import iirnotch, medfilt, sosfilt, sosfiltfilt, tf2sos
 import xarray as xr
+import pint
 
-from ..central import ureg
+from ..central import DimBounds, DimPair
 from .core import Calculator, PaddingCalculator
 
 from ..utils import scalar
@@ -59,9 +60,9 @@ class Filter(PaddingCalculator):
         peak = np.max(np.abs(h))
         settled = np.where(np.abs(h) > threshold * peak)[0]
         pad_needed = settled[-1] if len(settled) > 0 else 0
-        pad_seconds = pad_needed / fs * ureg.s
+        pad_seconds = pad_needed / fs * pint.application_registry.s
 
-        return {"time": (pad_seconds, pad_seconds)}
+        return DimBounds({"time": DimPair([pad_seconds, pad_seconds])})
 
     def _apply_inner(self, data, designed_filter):
         dim = self.dim

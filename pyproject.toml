@@ -12,6 +12,7 @@ dependencies = [
     "frozendict>=2.4.7",
     "h5py",
     "mne",
+    "neo>=0.14.4",
     "numpy",
     "phylib>=2.7.0",
     "pint",

@@ -5,7 +5,6 @@ import xarray as xr
 
 from .core import Transformer, Transform
 from k_onda.central import Schema, DatasetSchema
-from .feature_registry import feature_registry
 
 
 class StackSignals(Transformer):

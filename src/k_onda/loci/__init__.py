@@ -8,6 +8,5 @@ from .core import (
     MarkerSet,
     IntervalSet,
     EpochSet, 
-    EventSet,
-    DimPair
+    EventSet
 )

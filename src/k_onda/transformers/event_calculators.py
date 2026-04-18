@@ -1,7 +1,7 @@
 import numpy as np
 import xarray as xr
 
-from ..central import ureg
+import pint
 from .core import Calculator
 
 
@@ -94,6 +94,7 @@ class Rate(Calculator):
             return num_events / duration
 
         if intervals:
+            ureg = pint.application_registry
             starts = np.searchsorted(selected_data, [interval[0] for interval in intervals])
             stops = np.searchsorted(
                 selected_data, [interval[1] + 10 ** (-9) * ureg.s for interval in intervals]

@@ -5,7 +5,7 @@ import numpy as np
 import xarray as xr
 from copy import deepcopy
 
-from k_onda.central import SignalLike, DatasetSchema
+from k_onda.central import SignalLike, DatasetSchema, types
 
 
 def resolve_target_data(self, data, key):
@@ -83,7 +83,9 @@ class Transform:
         self.kwargs = kwargs
         
 
-    def __call__(self, data):
+    def __call__(self, data=None):
+        if data is None:
+            return self.fn()
         return self.fn(data)
     
 
@@ -134,12 +136,16 @@ class Transformer:
     
     def _call_on_signal(self, signal, key_spec):
         self._validate_input(signal, key_spec=key_spec)
+        if isinstance(signal, types.DataComponent):
+            signal = signal.to_signal()
+        inputs=(signal,)
         output_class = self.resolve_output_class(signal)
         transform = self._get_transform(signal, key_spec)
         output_schema = self.make_output_schema(signal.data_schema, key_spec=key_spec)
+        
 
         output_signal = output_class(
-            inputs=(signal,), 
+            inputs=inputs, 
             transform=transform, 
             transformer=self,
             data_schema=output_schema

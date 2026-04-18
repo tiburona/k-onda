@@ -5,7 +5,7 @@ from collections import defaultdict
 from copy import deepcopy
 
 from k_onda.utils import is_unitful
-from k_onda.mixins import DictDelegator
+from k_onda.central import types, SpanDimPair, DimBounds
 
 
 DIM_DEFAULT_UNITS = {'time': 's', 'frequency': 'Hz'}
@@ -16,125 +16,7 @@ DIM_DEFAULT_UNITS = {'time': 's', 'frequency': 'Hz'}
 # TODO: Construction log 
 
 
-class DimPair:
-    def __init__(self, units=None, lo=None, hi=None):
-        if units is None and any([bound is None for bound in [lo, hi]]):
-            raise ValueError("You must define either bounds or units")
-        self.units = units
-        self.lo = lo if lo is not None else 0 * units
-        self.hi = hi if hi is not None else 0 * units
-
-
-    def __iter__(self):
-        return iter((self.lo, self.hi))
-    
-    def __add__(self, other):
-        self.validate_add(other)
-        return DimPair(self.lo + other.lo, self.hi + other.hi)
-    
-    def __iadd__(self, other):
-        self.validate_add(other)
-        self.lo = self.lo + other.lo
-        self.hi = self.hi + other.hi
-        return self
-    
-    def validate_add(self, other):
-        if all([isinstance(dp, SpanDimPair) for dp in (self, other)]):
-            raise(ValueError("Don't add two SpanDimPairs; this operation is for " \
-            "widening bounds."))
-    
-
-class SpanDimPair(DimPair):
-    pass
-
-
-   
-class PadDimPair(DimPair):
-    pass
-
-
-class DimBounds(DictDelegator):
-
-    _delegate_attr = '_dim_bounds' 
-
-    def __init__(self, dim_pair_map=None, dim_pair_type= 'pad'):
-        self._dim_bounds = dict(dim_pair_map) if dim_pair_map else {}
-        self._dim_pair_type = PadDimPair if dim_pair_type == 'pad' else SpanDimPair
-  
-    def __missing__(self, dim):
-       
-        if dim in DIM_DEFAULT_UNITS:
-            units = DIM_DEFAULT_UNITS[dim]
-            default = self._dim_pair_type(units)
-            self._dim_bounds[dim] = default
-            return default
-        else:
-            raise KeyError(f"dim {dim} not in DimBounds")
-    
-    def __and__(self, other):
-        # todo, define this
-        pass
-
-    def __add__(self, other):
-        self_copy = deepcopy(self)
-        return self_copy.merge(other)
-
-    def __iadd__(self, other):
-        return self.merge(other)
-        
-    def _plus(self, other, inclusive=True):
-        for dim in other:
-            if dim in self:
-                if isinstance(self[dim], DimPair):
-                    if isinstance(other[dim], DimPair):
-                        self[dim] += other[dim]
-                    else:
-                        other_dim = deepcopy(other[dim])
-                        for bounds in other_dim:
-                            bounds += self[dim]
-                        self[dim] = other_dim
-                        
-                else:
-                    if isinstance(other[dim], DimPair):
-                        for bounds in self[dim]:
-                            bounds += other[dim]
-                    else:
-                        if len(self[dim]) == len(other[dim]):
-                            for i, bounds in enumerate(self[dim]):
-                                bounds += other[dim][i]
-                        else:
-                            raise ValueError(
-                                f"{self} and {other} have incompatible dimensions"
-                                )
-            else:
-                if inclusive:
-                    self.__setitem__(dim, other[dim])
-
-        return self
-    
-    def merge(self, other):
-        return self._plus(other, inclusive=True)
-    
-    def accumulate(self, other):
-        return self._plus(other, inclusive=False)
-    
-    def to_array_of_dicts(self):
-       
-        if isinstance(next(iter(self._dim_bounds.values())), DimPair):
-            return [self._dim_bounds]
-        else:
-            # I have a dictionary of lists
-            # and I want a list of dictionaries
-            n = len(list(self._dim_bounds.values())[0])
-            return [
-                {dim: bounds[i] for dim, bounds in self._dim_bounds.items()} 
-                for i in range(n)
-                ]
-        
-            
-        
-
-
+@types.register
 class Locus:
 
     name = 'locus'
@@ -174,7 +56,7 @@ class Locus:
             return value * self.ureg(self.units)
 
 
-
+@types.register
 class Marker(Locus):
 
     name = 'marker'
@@ -188,7 +70,7 @@ class Marker(Locus):
     def to_interval(self, window):
         return Interval(
             self.dim, 
-            (self.value - window[0], self.value + window[1]),
+            span=(self.value - window[0], self.value + window[1]),
             units=self.units, 
             anchor=self, 
             ureg=self.ureg, 
@@ -200,6 +82,7 @@ class Marker(Locus):
         return self.to_interval(window)
 
 
+@types.register
 class Event(Marker):
 
     name = 'event'
@@ -218,6 +101,7 @@ class Event(Marker):
         self.metadim = 'time'
 
 
+@types.register
 class Interval(Locus):
 
     marker_class = Marker
@@ -225,16 +109,18 @@ class Interval(Locus):
     def __init__(self, dim, span, parent_interval=None, anchor=None, units=None, 
                  ureg=None, index=None, conditions=None, metadim=None, label=None):
         super().__init__(dim, units=units, ureg=ureg, conditions=conditions)
-        self.span = SpanDimPair(lo=self.w_units(span)[0], hi=self.w_units(span)[1]) 
+        
+        self.span = (span if isinstance(span, SpanDimPair) 
+                     else SpanDimPair(pair=(self.w_units(span))))
         self.parent_interval = parent_interval
         self.anchor = anchor
         self.index = index
         self.label = label
-        self.extent = self.span.hi - self.span.lo
+        self.extent = self.span[1] - self.span[0]
         self.metadim = self.get_metadim(metadim)
 
-        self.dim_bounds = DimBounds({self.dim: span})
-        self.metadim_bounds = DimBounds({self.metadim: span})
+        self.dim_bounds = DimBounds({self.dim: [self.span]})
+        self.metadim_bounds = DimBounds({self.metadim: [self.span]})
 
         self.metadim_map = {self.metadim: self.dim}
         self.dim_map = {self.dim: self.metadim}
@@ -252,36 +138,44 @@ class Interval(Locus):
                 raise ValueError("Metadim was not provided and cannot be inferred.")
 
     # TODO: it should probably also be an option to pass 'absolute'
-    def generate_markers(self, spacing=None, offsets=None, count=None, positions=None, linspace=None):
+    def generate_markers(self, spacing=None, offsets=None, count=None, positions=None, linspace=None, conditions=None):
         if len([arg for arg in (spacing, offsets, count, positions, linspace) if arg is not None]) != 1:
-            raise ValueError("You must pass exactly 1 keyword argument to generate_markers")
+            raise ValueError("You must pass one and only one of `spacing`, `offsets`, `count`, " \
+            "`positions`, `linspace` to generate_markers")
+        # TODO: don't think this is right for the plural ones, offsets and positions
+        lo, hi, extent, spacing, offsets, count, positions, linspace = [
+            q.magnitude if q is not None else None 
+            for q in [*self.span, self.extent, spacing, offsets, count, positions, linspace]
+        ]
         if count is not None:
-            places = np.arange(count) * (self.extent)/count + self.span[0]
+            places = np.arange(count) * (extent)/count + lo
         elif spacing is not None:
-            places = np.arange(self.span[0], self.span[1], spacing)
+            places = np.arange(lo, hi, spacing)
         elif offsets is not None:
-            places = [offset + self.span[0] for offset in offsets]
+            places = [offset + lo for offset in offsets]
         elif positions is not None:
-            places = [position for position in positions if self.span[0] <= position < self.span[1]]
+            places = [position for position in positions if lo <= position < hi]
         elif linspace is not None:
-            places = np.linspace(self.span[0], self.span[1], linspace)
+            places = np.linspace(lo, hi, linspace)
 
-        return self.get_markers(places)
+        return self.get_markers(places, conditions=conditions)
     
     @property
     def marker_set_class(self):
         return MarkerSet
     
-    def get_markers(self, places):
+    def get_markers(self, places, conditions=None):
+        conditions = self.conditions | (conditions or {})
         return self.marker_set_class([
             self.marker_class(self.dim, place + self.span[0], index=i, units=self.units, conditions=self.conditions) 
             for i, place in enumerate(places)
-            ], conditions=self.conditions)
+            ], conditions=conditions)
     
     def metadim_to_dim(self, metadim):
         return self.metadim_map[metadim]
     
-            
+
+@types.register         
 class Epoch(Interval):
 
     name = 'epoch'
@@ -313,16 +207,15 @@ class Epoch(Interval):
     @property
     def events(self):
         if not self._events:
-            event_types = (self.session.config
-                      .get('epochs', {})
-                      .get(self.epoch_type, {})
-                      .get('events'))
+            event_types = self.config.get('events', [])
             for event_type in event_types:
                 config = self.session.experiment.events_config.get(event_type)
                 if config is None: 
                     raise ValueError(
                         f"Events not configured for epoch of type {self.epoch_type} \
                         and events of type {event_type}")
+                for key, val in config.items():
+                    config[key] = self.w_units(val).to('s')
                 self._events[event_type] = self.generate_events(**config)
         
         return [event for event_list in self._events.values() for event in event_list]
@@ -342,14 +235,15 @@ class Epoch(Interval):
     def marker_set_class(self):
         return EventSet
     
-    def get_markers(self, markers): 
-
+    def get_markers(self, markers, conditions=None): 
+        conditions = self.conditions | (conditions or {})
         return ([Event(
-            self.session, place, index=i, parent_epoch=self, conditions=self.conditions) 
+            self.session, place, index=i, epoch=self, conditions=self.conditions) 
             for i, place in enumerate(markers)
             ])
      
 
+@types.register
 class FrequencyBand(Interval):
 
     name = 'frequency_band'
@@ -365,6 +259,7 @@ class FrequencyBand(Interval):
             metadim='frequency')
 
 
+@types.register
 class LocusSet(Locus):
 
     # TODO put set algebra here
@@ -394,7 +289,7 @@ class LocusSet(Locus):
         self._loci.extend(loci)
 
     def validate(self, loci):
-        if len(self.loci) and not all([type(locus) == type(self.loci[0]) for locus in loci]):
+        if self.loci and not all([type(locus) == type(self.loci[0]) for locus in loci]):
             raise ValueError(f"All loci in a {self.__class__.__name__} must be of the same type.")
     
     def conditions_are_met(self, conditions):
@@ -413,6 +308,7 @@ class LocusSet(Locus):
         return loci
 
 
+@types.register
 class MarkerSet(LocusSet):
 
 
@@ -421,10 +317,12 @@ class MarkerSet(LocusSet):
             raise ValueError("One of places or markers must not be None")
         if markers is None and dim is None:
             raise ValueError("You must supply `dim` if you're not passing markers that already have one.")
-        self._loci = markers
         self.places = None
+        if markers is None:
+            self.markers = self.markers_from_places()
+        self._loci = markers
         self.dim = dim or self.markers[0].dim
-        self.conditions = conditions
+        self.conditions = conditions or {}
         self.units = units
         self.ureg = ureg
         self.metadim = None
@@ -434,7 +332,7 @@ class MarkerSet(LocusSet):
         return self._loci
     
     def markers_from_places(self):
-        self.intervals = [
+        self.markers = [
             self.marker_class(
                 self.dim, 
                 place, 
@@ -450,17 +348,19 @@ class MarkerSet(LocusSet):
     
     def to_interval_set(self, window):
         intervals = [marker.to_interval(window) for marker in self.markers]
-        return IntervalSet(self.dim, intervals, self.conditions, self.metadim)
+        return IntervalSet(self.dim, intervals=intervals, ureg=self.ureg, units=self.units, conditions=self.conditions, metadim=self.metadim)
 
 
+@types.register
 class EventSet(MarkerSet):
-    def __init__(self, session, events, conditions=None, units='s'):
+    def __init__(self, session, events=None, places=None, conditions=None, units='s'):
         super().__init__(
-            events, 
+            markers=events,
+            places=places, 
+            dim='time',
             conditions=conditions, 
             units=units, 
             ureg=session.experiment.ureg)
-        self.dim = 'time'
         self.session = session
         self.metadim = 'time'
 
@@ -473,6 +373,7 @@ class EventSet(MarkerSet):
         return super().to_intervals(window)
 
 
+@types.register
 class IntervalSet(LocusSet):
 
     locus_class = Interval
@@ -486,15 +387,16 @@ class IntervalSet(LocusSet):
         self.ureg = ureg
         self.units = units
         self.metadim = metadim
+        self.conditions = conditions or {}
 
         if intervals is None:
             self.intervals_from_spans()
 
         self.dim_bounds = DimBounds(
-            {self.dim: [interval.dim_bounds[dim] for interval in self.intervals]}
+            {self.dim: [interval.dim_bounds[dim][0] for interval in self.intervals]}
             )
         self.metadim_bounds = DimBounds(
-            {self.metadim: [interval.dim_bounds[dim] for interval in self.intervals]}
+            {self.metadim: [interval.dim_bounds[dim][0] for interval in self.intervals]}
         )
 
         self.metadim_map = {self.metadim: self.dim}
@@ -520,6 +422,7 @@ class IntervalSet(LocusSet):
         return self.metadim_map[metadim]
 
 
+@types.register
 class EpochSet(IntervalSet):
 
     locus_class = Epoch

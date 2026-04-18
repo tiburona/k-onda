@@ -2,12 +2,16 @@ import csv
 
 import numpy as np
 import xarray as xr
+import pint
 
-from ..central import ureg, Schema, DatasetSchema
+from ..central import Schema, DatasetSchema
 from ..signals import PointProcessSignal
 from .core import DataComponent, DataIdentity, DataSource
+from k_onda.central import types
 
 
+
+@types.register
 class PhyOutput(DataSource):
     def __init__(self, session, data_loader_config, sampling_rate=None):
         super().__init__(session, data_loader_config)
@@ -22,7 +26,7 @@ class PhyOutput(DataSource):
     @property
     def sampling_rate(self):
         if self._sampling_rate is None:
-            self._sampling_rate = self.phy_model.sample_rate * ureg.Hz
+            self._sampling_rate = self.phy_model.sample_rate * pint.application_registry.Hz
         return self._sampling_rate
 
     @property
@@ -85,8 +89,7 @@ class PhyOutput(DataSource):
         return self.spike_times[self.get_spike_ids_for_cluster(cluster_idx)]
     
     
-
-
+@types.register
 class Neuron(DataIdentity):
     name = 'neuron'
     _snapshot_fields = DataIdentity._snapshot_fields + ('neuron_type',)
@@ -107,7 +110,7 @@ class Neuron(DataIdentity):
     def label(self):
         return self._label
     
-
+@types.register
 class SpikeCluster(DataComponent):
     output_class = PointProcessSignal
     data_type = xr.Dataset
@@ -145,7 +148,7 @@ class SpikeCluster(DataComponent):
     def data_loader(self):
         spike_times = self.data_source.get_spike_times_for_cluster(self.cluster_id)
         spike_times = xr.DataArray(
-            spike_times * ureg.s,  # TODO is this the actual unit they come from phy in?
+            spike_times * pint.application_registry.s,  # TODO is this the actual unit they come from phy in?
             dims=("spikes",),
         )
         waveforms = self.data_source.get_waveforms(self.cluster_id)

@@ -1,4 +1,4 @@
-from ..dataarray_factories import make_time_series
+from ..central.dataarray_factories import make_time_series
 from ..signals import TimeSeriesSignal
 from .core import DataComponent, DataSource, DataIdentity
 from k_onda.central import Schema

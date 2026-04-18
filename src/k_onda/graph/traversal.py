@@ -1,9 +1,5 @@
-from copy import deepcopy, copy
-
-
-from collections import deque
-
-
+from copy import deepcopy
+from collections import deque, defaultdict
 
 
 def build_generations(leaf, func=None, starting_val=None):
@@ -35,10 +31,10 @@ def walk_tree(leaf, func=None, starting_val=None):
         
         current_node, value, last_node = stack.pop()
         
-        if current_node in visited:
+        if id(current_node) in visited:
             continue
 
-        visited.add(current_node)
+        visited.add(id(current_node))
 
         new_value = func(current_node, last_node, value) if func else value
         
@@ -49,14 +45,15 @@ def walk_tree(leaf, func=None, starting_val=None):
 
 
 def list_nodes(leaf):
-    nodes = []
+    return [node for node, _, _ in walk_tree(leaf)]
 
-    def add(node, _, node_list):
-        node_list.append(node)
 
-    walk_tree(leaf, func=add, starting_val=nodes)
-
-    return nodes
+def build_consumers_map(leaf):
+    consumers = defaultdict(list)
+    for node in list_nodes(leaf):
+        for inp in getattr(node, 'inputs', []):
+            consumers[id(inp)].append(node)
+    return consumers
 
 
 def new_tree(leaf):

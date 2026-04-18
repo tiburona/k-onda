@@ -2,12 +2,15 @@ from collections.abc import Iterable
 
 import pint
 
+from k_onda.central import types
 
 DIM_DEFAULT_UNITS = {'time': 's', 'frequency': 'Hz'}
 
 
 
 def is_unitful(value):
+    if isinstance(value, (types.Locus, types.LocusSet)):
+        return True
     if isinstance(value, pint.Quantity):
         return True
     if isinstance(value, Iterable):

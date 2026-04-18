@@ -1,4 +1,4 @@
-from k_onda.sources import Collection
+
 from pathlib import PurePath
 from collections import defaultdict
 import pint
@@ -6,6 +6,8 @@ import pint_xarray
 import yaml
 import json
 
+from k_onda.sources import Collection, CollectionMap
+from k_onda.mixins import ConfigSetter
 from .subject import Subject
 from k_onda.provenance import AnnotatorMixin
 from k_onda.utils import recursive_update
@@ -22,18 +24,26 @@ from k_onda.utils import recursive_update
 #     }
 # }
 
-# subjects_config = {
+#subjects_config = {
 #     '_base': {
 #         'sessions': ['learning_day_1', 'learning_day_2', 'recall']
 #     },
-#     'IG144': {
+#     'control': {
 #         'conditions': {'treatment': 'control'},
-#         },
-#     'IG145': {
+#         'members': ['IG165', 'IG66', 'IG144']
+#     },
+#     'defeat': {
 #         'conditions': {'treatment': 'defeat'},
+#         'members': ['IG145', 'IG160']
+#     },
+#     'IG145': {
+#         'inherits': 'defeat',
 #         'sessions': ['learning_day_1', 'learning_day_2', 'recall145']
-#         }
 #     }
+# }
+
+# subjects_config = {}
+#  _base: 
 
 # # TODO: this is incomplete.  You need to to be able to assign events to conditions
 # # See also the TODO in loci/corp.py Interval class
@@ -122,7 +132,7 @@ from k_onda.utils import recursive_update
 # TODO: should I be annotating upon adding a subject to an experiment?
 
 
-class Experiment(AnnotatorMixin):
+class Experiment(AnnotatorMixin, ConfigSetter):
 
     _snapshot_fields = ('subject_ids',)
     
@@ -226,6 +236,7 @@ class Experiment(AnnotatorMixin):
     def initialize(self):
         self.configure_top_level()
         self.create_subjects()
+        return self
   
     def configure_top_level(self):
         # sample dictionary
@@ -240,16 +251,20 @@ class Experiment(AnnotatorMixin):
             ureg = pint.UnitRegistry()
             pint.set_application_registry(ureg)
             pint_xarray.setup_registry(ureg)
+          
             for unit_name, (mag, ref_unit, abbrev) in units_to_set.items():
                 ureg.define(f'{unit_name} = {mag} * {ref_unit} = {abbrev}')
+          
             self.ureg = ureg
 
     def create_subjects(self):
-        base_config = self.subjects_config.get('_base', {})
-        for subject_id, subject_config in self.subjects_config.items():
-            if subject_id != '_base':
-                subject_config = base_config | subject_config
-                self.create_subject(subject_id, subject_config)
+        for subject_key, subject_config in self.subjects_config.items():
+            config = self.resolve_config(subject_config, self.subjects_config)
+            if 'members' in config:
+                for member in config['members']:
+                    self.create_subject(member, config)
+            elif not subject_key.startswith('_'):
+                self.create_subject(subject_key, config)
 
     def create_subject(self, subject_id, subject_config=None):
         if subject_config is None:

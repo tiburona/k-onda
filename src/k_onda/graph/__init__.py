@@ -1,1 +1,1 @@
-from .traversal import walk_tree, new_tree, list_nodes
+from .traversal import walk_tree, new_tree, list_nodes, build_consumers_map

@@ -2,8 +2,9 @@ from copy import deepcopy
 from mne.time_frequency import tfr_array_multitaper
 import numpy as np
 import xarray as xr
+import pint
 
-from ..central import ureg, Schema
+from ..central import Schema, DimBounds, DimPair
 from .core import PaddingCalculator
 from ..utils import scalar
 
@@ -39,9 +40,9 @@ class Spectrogram(PaddingCalculator):
             pad_needed = np.max(n_cycles / freqs) / 2
         else:
             pad_needed = n_cycles / (2 * f_min)
-        pad_seconds = pad_needed * ureg.seconds
+        pad_seconds = pad_needed * pint.application_registry.seconds
 
-        return {"time": (pad_seconds, pad_seconds)}
+        return DimBounds({"time": DimPair([pad_seconds, pad_seconds])})
     
     def _get_extra_apply_kwargs(self, parent):
         return {'fs': scalar(parent.sampling_rate)}

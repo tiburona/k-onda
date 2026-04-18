@@ -2,7 +2,8 @@ import numpy as np
 import xarray as xr
 from collections.abc import Iterable
 
-from ..transformers.transformer_mixins import CalculateMixin, UnstackMixin, SelectMixin, IntersectionMixin
+from ..transformers.transformer_mixins import CalculateMixin, UnstackMixin, IntersectionMixin
+from k_onda.transformers import SelectMixin
 from k_onda.graph.traversal import build_generations
 from k_onda.central.registry import types
 
@@ -45,6 +46,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self._cache = None
         self.conditions = {}
         self._validate_inputs()
+        self._selection_planned = False
       
     
     @property
@@ -95,6 +97,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         return self.divide_by(other)
 
     def _materialize(self):
+        self.plan_selection()
         if self._cache is None:
             input_data = [input.data for input in self.inputs]
             self._cache = self.transform(*input_data)
@@ -202,7 +205,7 @@ class PointProcessSignal(DatasetSignal):
         super().__init__(inputs, transform, **kwargs)
     
         self.sampling_rate = sampling_rate or getattr(self.parent, 'sampling_rate', None)
-        self.coord_map = coord_map or getattr(self.parent, "coord_map", None)
+        self.coord_map = coord_map or getattr(self.origin, "coord_map", None)
 
     def to_binary(self):
         if self.sampling_rate is None:
@@ -290,6 +293,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
         self._cache = None
         self.signal_class = signal_class or type(self.signals[0])
         self.is_stack = True
+        self._selection_planned = False
 
     def _materialize(self):
         if self._cache is None:
@@ -326,6 +330,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
 class AggregatedSignal(Signal):
 
     def _materialize(self):
+        self.plan_selection()
         if self._cache is None:
             if hasattr(self.parent, 'signals'): # parent is a Collection
                 self._cache = self.transform(self.parent.signals)
@@ -346,6 +351,7 @@ class IndexedSignal(Signal):
         super().__init__(inputs, transform, **kwargs)
 
     def _materialize(self):
+        self.plan_selection()
         if self._cache is None:
             if all(isinstance(inp, Signal) for inp in self.inputs):
                 input_data = [inp.data for inp in self.inputs]

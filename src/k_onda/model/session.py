@@ -111,8 +111,8 @@ class Session(NEVMixin, ConfigSetter):
         self.ureg = self.experiment.ureg
         self._time_base = None
         self._onsets = None
-        self._epochs = defaultdict(lambda: EpochSet(self, epochs=[]))
-        self._events = defaultdict(lambda: EventSet(self, events=[]))
+        self._epoch_sets = defaultdict(lambda: EpochSet(self, epochs=[]))
+        self._event_sets = defaultdict(lambda: EventSet(self, events=[]))
         self._start = None
         self._duration = None
         self.initialize_data_sources()
@@ -157,27 +157,26 @@ class Session(NEVMixin, ConfigSetter):
 
 
     # TODO: it would be nice to be able to make epochs
-    # accessible as a dictionary keyed by epoch type
-    # and as an epoch set queryable with where
-    # I made a label property for epochs, the dict should be keyed by
-    # label and not epoch type
+    # into an epochs_view that could be 
+    # so you could access epochs.tone, epochs.pretone 
+    # the same way I had the idea to be able tok do subj.learning_day_1.lfp.bla etc.
     @property
     def epochs(self):
-        if not self._epochs:
+        if not self._epoch_sets:
             self.create_epochs()
         return EpochSet(
             self, 
-            epochs = [epoch for epoch_list in self._epochs.values() for epoch in epoch_list], 
+            epochs = [epoch for epoch_list in self._epoch_sets.values() for epoch in epoch_list], 
             conditions=self.conditions
             )
     
     @property
     def events(self):
-        if not self._events:
+        if not self._event_sets:
             self.create_events()
         return EventSet(
             self, 
-            [event for event_list in self._events.values() for event in event_list], 
+            [event for event_list in self._event_sets.values() for event in event_list], 
             conditions=self.conditions)
 
     @property
@@ -205,16 +204,23 @@ class Session(NEVMixin, ConfigSetter):
         identity_config = self.experiment.data_identity_config.get(identity_string)
         if not identity_config:
             raise ValueError("neurons were not configured for this experiment")
-        data_source_key = identity_config['source']
-        data_source = self.data_sources[data_source_key]
+        
+        # TODO: I need to figure this out.  identity_config['source'] is 'phy'
+        # but self.data_sources is keyed by spike
+        registry_key = identity_config['source']
+        data_sources = [ds for ds in self.data_sources.values() 
+                        if ds.data_loader_config['registry_key'] == registry_key]
+        if not len(data_sources):
+            return
+        data_source = data_sources[0]
         components = data_source.components
         match_key = identity_config.get('match')
         if not match_key:
             for component in components:
                 self.create_identity(
-                    [component], 
-                    identity_string, 
                     identity_class, 
+                    identity_string, 
+                    [component], 
                     identity_config
                     )
 
@@ -229,10 +235,10 @@ class Session(NEVMixin, ConfigSetter):
                 di.add_components(matched_components)
 
             for component in set(components) - set(matched_components):
-                self.create_identity(
-                    [component], 
+                self.create_identity( 
                     identity_class, 
                     identity_string, 
+                    [component],
                     identity_config
                 )
                 
@@ -241,9 +247,13 @@ class Session(NEVMixin, ConfigSetter):
         self.subject.data_identities[identity_string].append(identity)
     
     def initialize_data_sources(self, data_sources_config=None):
+    
+        data_sources_config = data_sources_config or self.config.get('data_sources', [])
+      
         data_sources_config = self.resolve_config(
-            data_sources_config, self.config.get('data_sources')
+            data_sources_config, self.experiment.data_sources_config
             )
+        self.data_sources_config = data_sources_config
         for key, data_source_config in data_sources_config.items():
             self.initialize_data_source(key, data_source_config)
 
@@ -293,11 +303,12 @@ class Session(NEVMixin, ConfigSetter):
                 onset.in_secs = onset.in_samples.to('s')
                 
         duration = epoch_config['duration'] * self.ureg('second')
-        self._epochs[epoch_type].extend([
+        self._epoch_sets[epoch_type].extend([
             Epoch(self, onset.in_secs, duration, conditions=conditions, 
                   config=epoch_config) 
             for onset in unitful_onsets
             ])
+        a = 'foo'
 
     def relative_epoch_config(self, epoch_type, epoch_config, conditions):
         relative_to = epoch_config['relative_to']
@@ -307,12 +318,12 @@ class Session(NEVMixin, ConfigSetter):
             baseline_ind = int(bracket_matches[0])
             relative_to = relative_to[:relative_to.index('[')]
         
-        target_epochs = self.epochs[relative_to]
+        target_epochs = self._epoch_sets[relative_to]
         shift = epoch_config['shift'] * self.experiment.ureg('s')
         duration = epoch_config['duration'] * self.experiment.ureg('s')
         if baseline_ind is not None:
             target_epochs = [target_epochs[baseline_ind]]
-        self._epochs[epoch_type].extend(
+        self._epoch_sets[epoch_type].extend(
             [Epoch(self, epoch.onset - shift, duration, conditions=conditions, 
                    config=epoch_config) 
             for epoch in target_epochs])
@@ -336,8 +347,9 @@ class Session(NEVMixin, ConfigSetter):
             # this is where events that had some definition independent of epochs would live
             pass
         else:
-            for epoch_type, epoch in self._epochs:
-                self._events[epoch_type].extend([epoch.events])
+            for epoch_type, epoch_set in self._epoch_sets.items():
+                for epoch in epoch_set:
+                    self._event_sets[epoch_type].extend(epoch.events)
 
 
       

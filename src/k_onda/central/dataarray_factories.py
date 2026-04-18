@@ -1,8 +1,9 @@
 
 import numpy as np
 import xarray as xr
+import pint
 
-from .central import ureg
+ureg = pint.application_registry
 
 
 def get_time_coords(data, start, sampling_rate=None, dt=None):

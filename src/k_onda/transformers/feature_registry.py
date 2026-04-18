@@ -2,8 +2,6 @@ from k_onda.mixins import DictDelegator
 from k_onda.transformers import *
 
 
-
-
 class FeatureRegistry(DictDelegator):
     _delegate_attr = 'registry'
 
@@ -12,9 +10,6 @@ class FeatureRegistry(DictDelegator):
 
 
 feature_registry = FeatureRegistry()
-
-
-
 
 
 def fwhm(input, config=None):

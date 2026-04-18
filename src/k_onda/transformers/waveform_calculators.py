@@ -1,9 +1,10 @@
 import numpy as np
 from scipy.signal import find_peaks, peak_widths
 import xarray as xr
+import pint
 
 from .core import Calculator
-from k_onda.central import ureg, Schema
+from k_onda.central import Schema
 
 
 class FWHM(Calculator):
@@ -16,11 +17,11 @@ class FWHM(Calculator):
         dim="samples",
         include_valleys=True,
         permissible_distance=50,
-        distance_unit=ureg.raw_sample,
+        distance_unit=None,
     ):
         self.dim = dim
         self.include_valleys = include_valleys
-        self.distance_unit = distance_unit
+        self.distance_unit = distance_unit or pint.application_registry.raw_sample
         self.permissible_distance = permissible_distance * self.distance_unit
 
     def fwhm(self, data):

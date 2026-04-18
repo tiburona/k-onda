@@ -3,10 +3,9 @@ import numpy as np
 from functools import partial
 
 from .feature_registry import feature_registry
-from k_onda.central import Schema
-from .core import Transformer
+from k_onda.central import Schema, types
+from .core import Transformer, Transform
 from k_onda.utils import np_from_xr
-
 
 
 class ExtractFeatures(Transformer):
@@ -19,13 +18,11 @@ class ExtractFeatures(Transformer):
 
 
     def __call__(self, inputs):
-        from k_onda.signals import IndexedSignal
-        from k_onda.sources import Collection
         
         input = inputs[0]
         self._validate_input(input)
 
-        if isinstance(input, Collection):
+        if isinstance(input, types.Collection):
             input = input.group_by(self.group_by)
 
         arrays = [[func(val) for func in self.funcs] 
@@ -33,23 +30,22 @@ class ExtractFeatures(Transformer):
 
         transform = self._get_transform(list(input.keys()), arrays)
 
-        return IndexedSignal(
+        return types.IndexedSignal(
             inputs=(input,),
             transform=transform,
             data_schema=Schema('index', 'features')
         )
     
     def _get_transform(self, keys, arrays):
-        return partial(self._apply, keys, arrays)
-    
+        return Transform(partial(self._apply, keys, arrays))
+        
     def _validate_input(self, input):
-        from k_onda.sources import SignalMap, CollectionMap, Collection
 
-        if isinstance(input, Collection) and self.group_by is None:
+        if isinstance(input, types.Collection) and self.group_by is None:
             raise ValueError("If ExtractFeatures is called on Collection, group_on must"
             "be defined.")
 
-        if not isinstance(input, (SignalMap, CollectionMap, Collection)):
+        if not isinstance(input, (types.SignalMap, types.CollectionMap, types.Collection)):
             raise ValueError("ExtractFeatures is only defined on SignalMap, CollectionMap,"
             "and Collection.")
     

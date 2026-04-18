@@ -13,10 +13,8 @@ from .sources import (
     SpikeCluster,
     Neuron
 )
-from .central import LFP_SAMPLING_RATE
 
 from .transformers import Spectrogram
-from .central import ureg
 
 
 lfp_data_loader_config = {
@@ -60,10 +58,7 @@ power_config = {
     "output": "power"}
 
 
-# Experiment.from_config(
-#     'Safety_Recall',
-#     global_config='/Users/katie/likhtik/analysis/k-onda-analysis/IG_INED_Safety/config/k_onda/ig_safety_recall.yaml'
-#     )
+
 
 
 
@@ -78,8 +73,10 @@ experiment.initialize()
 
 animal = experiment.create_subject("INED18")
 
+ureg = pint.application_registry
 session = Session(experiment, animal, session_config, ureg)
 
+LFP_SAMPLING_RATE = 1/2000
 recording = LFPRecording(session, lfp_data_loader_config, sampling_rate=LFP_SAMPLING_RATE)
 
 phy_output = PhyOutput(session, spike_data_loader_config)
@@ -174,7 +171,10 @@ selected_data =(spikes_and_filtered_waveforms
 
 
 
-
+Experiment.from_config(
+    'Safety_Recall',
+    global_config='/Users/katie/likhtik/analysis/k-onda-analysis/IG_INED_Safety/config/k_onda/ig_safety_recall.yaml'
+    )
 
 
 
@@ -189,8 +189,8 @@ selected_data =(spikes_and_filtered_waveforms
 #  )
 
 
-initialized_experiment = experiment.configure('some_config').initialize()
-classified_neurons = initialized_experiment.classify_neurons('some_config')
+# initialized_experiment = experiment.configure('some_config').initialize()
+# classified_neurons = initialized_experiment.classify_neurons('some_config')
 # .configure(some_config)
 # .intialize()
 
@@ -235,22 +235,45 @@ subjects_config = {
     }
 
 
+label_spec = """
+- type: classifier
+  feature: fwhm
+  order: ascending
+  labels:
+    - IN
+    - PN
+"""
 
-
-pretone_vals = (
-    classified_neurons
-    .select(experiment.epochs, dim='trial', condition='pretone')
+selected_and_classified_neurons = (Experiment.from_config(
+    'Safety_Recall',
+    global_config='/Users/katie/likhtik/analysis/k-onda-analysis/IG_INED_Safety/config/k_onda/ig_safety_recall.yaml'
+    )
+    .initialize()
+    .all_neurons
+    .classify(label_spec=label_spec)
+    .select('epochs', stimulus='tone', new_dim='trial', mode='pushdown')
     .select('events', window=(-0.05, 0.3), new_dim='pip')
-    .count('some_config')
-    .mean({'across': 'pip'})
 )
 
-tone_vals = (
-    classified_neurons
-    .select(experiment.epochs, dim='trial', condition='pretone')
-    .select('events', window=(-0.05, 0.3), dim='pip')  # for this to work an EpochSet needs to have an 'events' property and one of the things 'select' needs to be able to take as an argument is a string attr
-    .count('some_config')
-)
+first_neuron = selected_and_classified_neurons[0]
+
+first_neuron.members[0].data
+
+a = 'foo'
+# pretone_vals = (
+#     classified_neurons
+#     .select(experiment.epochs, dim='trial', condition='pretone')
+#     .select('events', window=(-0.05, 0.3), new_dim='pip')
+#     .count('some_config')
+#     .mean({'across': 'pip'})
+# )
+
+# tone_vals = (
+#     classified_neurons
+#     .select(experiment.epochs, dim='trial', condition='pretone')
+#     .select('events', window=(-0.05, 0.3), dim='pip')  # for this to work an EpochSet needs to have an 'events' property and one of the things 'select' needs to be able to take as an argument is a string attr
+#     .count('some_config')
+# )
 
 tone_vals_std = tone_vals.std()
 

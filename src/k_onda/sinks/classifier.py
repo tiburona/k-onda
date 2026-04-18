@@ -1,8 +1,9 @@
 import json
 import yaml
+import pint
 
 from k_onda.transformers import KMeans, ExtractFeatures
-from k_onda.central import ureg, operations
+from k_onda.central import operations
 from k_onda.sources import Collection
 
 
@@ -105,7 +106,7 @@ class Classify:
                 from_computed_features = rule.get('from_computed_features')
                 unit = rule.get('unit')
                 if unit:
-                    value *= ureg(unit)
+                    value *= pint.application_registry(unit)
                 label = rule['label'] 
 
                 feature_set = None
