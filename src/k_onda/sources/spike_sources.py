@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 import pint
 
-from ..central import Schema, DatasetSchema
+from ..central import Schema, DatasetSchema, AxisInfo, AxisKind
 from ..signals import PointProcessSignal
 from .core import DataComponent, DataIdentity, DataSource
 from k_onda.central import types
@@ -114,7 +114,6 @@ class Neuron(DataIdentity):
 class SpikeCluster(DataComponent):
     output_class = PointProcessSignal
     data_type = xr.Dataset
-    coord_map = {'time': 'spike_times'}
 
     def __init__(self, data_source, cluster_id, neuron=None):
         super().__init__(data_source)
@@ -129,10 +128,19 @@ class SpikeCluster(DataComponent):
     
     @property
     def data_schema(self):
-         return DatasetSchema({
-             'spike_times': Schema('spikes', selectable_dims={'time'}),
-             'waveforms': Schema('spikes', 'samples', selectable_dims={'time'})
-         })
+        spike_times_schema = Schema(
+            axes=[AxisInfo('spikes', kind=AxisKind.POINT_PROCESS_INDEX)],
+            value_metadim='time')
+        waveforms_schema = Schema(
+            axes=[AxisInfo('spikes', AxisKind.POINT_PROCESS_INDEX, metadim=None),
+                  AxisInfo('samples', AxisKind.AXIS, metadim='time'),
+                  AxisInfo('electrodes', AxisKind.AXIS, metadim=None)],
+            value_metadim='voltage'
+        )
+        return DatasetSchema({
+             'spike_times': spike_times_schema,
+             'waveforms': waveforms_schema
+        })
 
     @property
     def neuron(self):
@@ -140,7 +148,6 @@ class SpikeCluster(DataComponent):
     
     def to_signal(self):
         signal = super().to_signal()
-        signal.coord_map = self.coord_map
         signal.duration = self.duration
         return signal
 
@@ -155,8 +162,7 @@ class SpikeCluster(DataComponent):
         waveforms = xr.DataArray(waveforms, dims=('spikes', 'samples', 'electrodes'))
 
         return xr.Dataset(
-            {'spike_times': spike_times, 'waveforms': waveforms},
-            attrs={'coord_map': self.coord_map},
+            {'spike_times': spike_times, 'waveforms': waveforms}
         )
 
     def assign_to_neuron(self, neuron):

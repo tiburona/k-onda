@@ -11,7 +11,7 @@ class KMeans(Calculator):
         self.n_clusters=n_clusters
         self.kmeans_kwargs=kwargs
 
-    def _apply_inner(self, data):
+    def _apply_inner(self, data, *args, **kwargs):
         kmeans = k_means(n_clusters=self.n_clusters, **self.kmeans_kwargs)
         kmeans.fit(data)
         labels = kmeans.labels_

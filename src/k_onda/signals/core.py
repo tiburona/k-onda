@@ -25,7 +25,6 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         origin=None,
         start=None,
         duration=None,
-        coord_map=None,
         source_signal=None,
         storage_strategy="lazy",
     ):
@@ -40,7 +39,6 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self.origin = origin
         self.start = start or getattr(self.parent, 'start', None)
         self.duration = duration or getattr(self.parent, 'duration', None)
-        self.coord_map = coord_map
         self.source_signal = source_signal
         self._storage_strategy = storage_strategy
         self._cache = None
@@ -65,12 +63,12 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self._origin = value
 
     @property
+    def is_source(self):
+        return not getattr(self, 'inputs', None)
+
+    @property
     def data_schema(self):
         return self._data_schema
-    
-    @property
-    def data_dims(self):
-        return self.data_schema.dims
     
     @property
     def generations(self):
@@ -97,9 +95,11 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         return self.divide_by(other)
 
     def _materialize(self):
-        self.plan_selection()
-        if self._cache is None:
-            input_data = [input.data for input in self.inputs]
+        leaf = self.plan_selection()
+        if leaf is None:
+            leaf = self
+        if leaf._cache is None:
+            input_data = [input.data for input in leaf.inputs]
             self._cache = self.transform(*input_data)
         return self._cache
 
@@ -192,20 +192,18 @@ class DatasetSignal(Signal):
 
 
 @types.register
-class PointProcessSignal(DatasetSignal):
+class PointProcessSignal(Signal):
 
     def __init__(
             self, 
             inputs, 
             transform, 
             *, 
-            sampling_rate = None, 
-            coord_map=None, 
+            sampling_rate = None,
             **kwargs):
         super().__init__(inputs, transform, **kwargs)
     
         self.sampling_rate = sampling_rate or getattr(self.parent, 'sampling_rate', None)
-        self.coord_map = coord_map or getattr(self.origin, "coord_map", None)
 
     def to_binary(self):
         if self.sampling_rate is None:
@@ -316,10 +314,6 @@ class SignalStack(CalculateMixin, UnstackMixin):
     @property
     def data_schema(self):
         return self._data_schema
-    
-    @property
-    def data_dims(self):
-        return self.data_schema.dims
 
     def group_by(self):
         # Placeholder for future API.
@@ -383,10 +377,8 @@ class SelectorSignal(Signal):
             self, 
             inputs, 
             transform, 
-            metadim_map=None,
             **kwargs):
         super().__init__(inputs, transform, **kwargs)
-        self.metadim_map = metadim_map
     
     @property
     def output_class(self):

@@ -53,7 +53,7 @@ class FWHM(Calculator):
         widths = peak_widths(signal_for_width, [peak_idx], rel_height=0.5)[0]
         return widths[0]
 
-    def _apply_inner(self, data):
+    def _apply_inner(self, data, *args, **kwargs):
         if data.ndim > 1:
             return xr.apply_ufunc(
                 self.fwhm,
@@ -69,7 +69,5 @@ class FWHM(Calculator):
         return super()._wrap_result(result)
     
     def output_schema(self, input_schema):
-        dims = set(input_schema.dims)
-        dims.discard(self.dim)
-        return Schema(*dims, selectable_dims=input_schema._selectable_dims)
+        return input_schema.without(self.dim)
 

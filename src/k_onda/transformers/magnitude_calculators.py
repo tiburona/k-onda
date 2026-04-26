@@ -41,7 +41,7 @@ class Normalize(Calculator):
         self.dim = dim
         self.method = method
 
-    def _apply_inner(self, data):
+    def _apply_inner(self, data, *args, **kwargs):
         dim = self.dim
         if self.method == "rms":
             rms = np.sqrt((data**2).mean(dim=dim))

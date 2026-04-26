@@ -57,6 +57,15 @@ class CalculateMixin:
         if config is None:
             config = {}
         return FWHM(**config)(self, key=key, key_output_mode=key_output_mode)
+    
+    # TODO: is it problematic that these config dictionaries do not make for inspectable
+    # signatures?  Probably.  
+    def count(self, config=None, key=None, key_output_mode=None, **kwargs):
+        from . import Histogram
+        config = config or {} | kwargs
+        if config.get('bins') is None and config.get('bin_size') is None:
+            config['bins'] = 10
+        return Histogram(**config)(self, key=key, key_output_mode=key_output_mode)
 
 
 class IntersectionMixin:

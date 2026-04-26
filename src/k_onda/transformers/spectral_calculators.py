@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 import pint
 
-from ..central import Schema, DimBounds, DimPair
+from k_onda.central import DimBounds, DimPair, AxisInfo, AxisKind, types
 from .core import PaddingCalculator
 from ..utils import scalar
 
@@ -23,14 +23,12 @@ class Spectrogram(PaddingCalculator):
 
     @property
     def fixed_output_class(self):
-        from ..signals import TimeFrequencySignal
-        return TimeFrequencySignal
+        return types.TimeFrequencySignal
     
     def output_schema(self, input_schema):
-        dims = set(input_schema.dims)
-        dims.add('frequency')
-        return Schema(*dims, selectable_dims=input_schema._selectable_dims)
-
+        new_axis = AxisInfo(name='frequency', metadim='frequency', kind=AxisKind.AXIS)
+        return input_schema.with_added(new_axis)
+        
     def _compute_padlen(self, _, apply_kwargs):
         n_cycles = self.config["n_cycles"]
         freqs = self.config["freqs"]

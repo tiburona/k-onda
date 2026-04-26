@@ -4,6 +4,8 @@ import xarray as xr
 import pint
 from .core import Calculator
 
+from k_onda.central import types
+
 
 class Rate(Calculator):
 
@@ -25,28 +27,30 @@ class Rate(Calculator):
 
         return {
             'duration': parent.duration,
-            'is_binary': isinstance(parent, BinarySignal),
-            'coord_map': getattr(parent, 'coord_map', None)
-
+            'is_binary': isinstance(parent, BinarySignal)
         }
 
-    def _validate_input(self, parent, **kwargs):
+    def _validate_input(self, input, **kwargs):
         from ..signals import BinarySignal, PointProcessSignal
 
-        if not isinstance(parent, (PointProcessSignal, BinarySignal)):
+        if not isinstance(input, (PointProcessSignal, BinarySignal)):
             raise ValueError("Rate can only operate on EventSignal or BinarySignal.")
 
-    def _validate_rate_inputs(self, time_key, intervals=None, exclude_initial=None):
-        # todo: add some validation in here: if you got passed a data array,
-        # it's name is not time key, and (intervals or exclude_initial), raise
-        if not time_key and (intervals or exclude_initial):
-            raise ValueError("Cannot select data if `time_key` is not defined.")
+    def _prepare_rate_inputs(self, data, data_schema, intervals, exclude_initial):
+        if isinstance(data_schema, types.DatasetSchema):
+            time_key = data_schema.default_variable_for('time')
+            data = data[time_key]
+            data_schema = data_schema[time_key]
 
-    def _prepare_rate_inputs(self, data, coord_map, intervals, exclude_initial):
-        time_key = None if coord_map is None else coord_map.get('time')
+        concrete_dim = data_schema.concrete_dim_from('time')
+
+        if not concrete_dim:
+            raise ValueError("Right now Rate only works on time dims and no dim in your DataSchema " \
+            "represents time.")
+      
         intervals = intervals(data) if callable(intervals) else intervals
         exclude_initial = exclude_initial(data) if callable(exclude_initial) else exclude_initial
-        return time_key, intervals, exclude_initial
+        return data, data_schema, concrete_dim, intervals, exclude_initial
 
     @staticmethod
     def _count_binary_events(data):
@@ -64,7 +68,7 @@ class Rate(Calculator):
 
         return int(arr[0]) + np.count_nonzero(arr[1:] & ~arr[:-1])
 
-    def _apply_inner(self, data, duration=None, is_binary=False, coord_map=None):
+    def _apply_inner(self, data, duration=None, is_binary=False, data_schema=None, *args, **kwargs):
 
         if is_binary:
             if self.intervals is not None or self.exclude_initial is not None:
@@ -73,18 +77,9 @@ class Rate(Calculator):
                 )
             return self._count_binary_events(data) / duration
 
-        time_key, intervals, exclude_initial = self._prepare_rate_inputs(
-            data, coord_map, self.intervals, self.exclude_initial
+        selected_data, data_schema, concrete_dim, intervals, exclude_initial = self._prepare_rate_inputs(
+            data, data_schema, self.intervals, self.exclude_initial
         )
-        self._validate_rate_inputs(time_key, intervals, exclude_initial)
-
-        if not time_key:
-            return len(data[list(data.keys())[0]]) / duration
-
-        if isinstance(data, xr.Dataset):
-            selected_data = data[time_key]
-        else:
-            selected_data = data
 
         if exclude_initial:
             index = np.searchsorted(selected_data, exclude_initial)

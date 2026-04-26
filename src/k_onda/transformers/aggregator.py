@@ -75,7 +75,7 @@ class Aggregator:
     
 
             data[key] = xr.concat(
-                arrays, dim=self.dim or 'members', combine_attrs='no_conflicts'
+                arrays, dim= 'members', combine_attrs='no_conflicts'
             )
 
         dataset = xr.Dataset(data)

@@ -4,7 +4,7 @@ from functools import partial
 import xarray as xr
 
 from .core import Transformer, Transform
-from k_onda.central import Schema, DatasetSchema
+from k_onda.central import Schema, DatasetSchema, AxisInfo, AxisKind
 
 
 class StackSignals(Transformer):
@@ -17,15 +17,15 @@ class StackSignals(Transformer):
 
     def output_schema(self, *input_schemas):
         stacking_dim = self.dim or 'members'
+        # TODO: is there a functional reason to introduce another kind of AxisKind for
+        # the stacking dim? 
+        axis = AxisInfo(name=stacking_dim, kind=AxisKind.AXIS)
         if isinstance(input_schemas[0], DatasetSchema):
             return DatasetSchema({
-                key: Schema(*schema.dims, stacking_dim, selectable_dims=schema._selectable_dims)
+                key: schema.with_added(axis)
                 for key, schema in input_schemas[0].items()
             })
-
-        dims = set(input_schemas[0].dims)
-        dims.add(self.dim or 'members')
-        return Schema(dims)
+        return input_schemas[0].with_added(axis)
 
     def __call__(self, collection):
         from ..signals import SignalStack
@@ -93,13 +93,11 @@ class UnstackSignals(Transformer):
         stacking_dim = self.dim or 'members'
         if isinstance(input_schema, DatasetSchema):
             return DatasetSchema({
-                key: Schema(*(schema.dims - {stacking_dim}), 
-                            selectable_dims=schema._selectable_dims)
+                key: schema.without(stacking_dim)
                 for key, schema in input_schema.items()
             })
-        dims = set(input_schema.dims)
-        dims.discard(stacking_dim)
-        return Schema(dims, selectable_dims=input_schema._selectable_dims)
+    
+        return input_schema.without(stacking_dim)
 
     def resolve_output_class(self):
         from ..sources import Collection
@@ -121,8 +119,7 @@ class UnstackSignals(Transformer):
                 transformer=self,
                 source_signal=signal_stack.signals[i],
                 start=signal_stack.signals[i].start,
-                duration=signal_stack.signals[i].duration,
-                coord_map=signal_stack.signals[i].coord_map
+                duration=signal_stack.signals[i].duration
             )
             signals.append(signal)
 

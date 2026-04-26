@@ -251,13 +251,36 @@ selected_and_classified_neurons = (Experiment.from_config(
     .initialize()
     .all_neurons
     .classify(label_spec=label_spec)
-    .select('epochs', stimulus='tone', new_dim='trial', mode='pushdown')
+    .count(bin_size=.01, range_source='session'))
+
+first_neuron = selected_and_classified_neurons[0]
+first_neuron.members[0].data
+
+a = 'foo'
+
+
+selected_and_classified_neurons = (Experiment.from_config(
+    'Safety_Recall',
+    global_config='/Users/katie/likhtik/analysis/k-onda-analysis/IG_INED_Safety/config/k_onda/ig_safety_recall.yaml'
+    )
+    .initialize()
+    .all_neurons
+    .classify(label_spec=label_spec)
+    .count(bin_size=.01, range_source='session')
+    .select('epochs', stimulus='tone', new_dim='trial')
     .select('events', window=(-0.05, 0.3), new_dim='pip')
 )
 
 first_neuron = selected_and_classified_neurons[0]
 
+plan = first_neuron.members[0].plan_selection()
 first_neuron.members[0].data
+
+
+print(type(plan).__name__)       # expect SelectorSignal wrapping Slicer — the event slicer
+print(plan.inputs[0] is first_neuron.members[0])  # True: slicer → selector
+print(plan.data.dims)            # This should give you the trial × pip × pip_time you wanted
+print(first_neuron.members[0].data.dims)  # Still trial × trial_time — selector's view
 
 a = 'foo'
 # pretone_vals = (

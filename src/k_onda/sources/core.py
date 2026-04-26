@@ -96,10 +96,6 @@ class DataComponent(CalculateMixin, SelectMixin):
     def signal(self):
         return self.to_signal()
 
-    @property
-    def data_dims(self):
-        return self.data_schema.dims
-    
     def to_signal(self) -> Signal:
         context = ProvenanceContext(component=self)
         loader = self.data_loader

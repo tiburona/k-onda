@@ -120,10 +120,7 @@ class Interval(Locus):
         self.metadim = self.get_metadim(metadim)
 
         self.dim_bounds = DimBounds({self.dim: [self.span]})
-        self.metadim_bounds = DimBounds({self.metadim: [self.span]})
 
-        self.metadim_map = {self.metadim: self.dim}
-        self.dim_map = {self.dim: self.metadim}
 
     def get_metadim(self, metadim):
         if metadim is not None:
@@ -170,9 +167,6 @@ class Interval(Locus):
             self.marker_class(self.dim, place + self.span[0], index=i, units=self.units, conditions=self.conditions) 
             for i, place in enumerate(places)
             ], conditions=conditions)
-    
-    def metadim_to_dim(self, metadim):
-        return self.metadim_map[metadim]
     
 
 @types.register         
@@ -395,12 +389,7 @@ class IntervalSet(LocusSet):
         self.dim_bounds = DimBounds(
             {self.dim: [interval.dim_bounds[dim][0] for interval in self.intervals]}
             )
-        self.metadim_bounds = DimBounds(
-            {self.metadim: [interval.dim_bounds[dim][0] for interval in self.intervals]}
-        )
-
-        self.metadim_map = {self.metadim: self.dim}
-        self.dim_map = {self.dim: self.metadim}
+      
 
     @property
     def intervals(self):
@@ -417,9 +406,6 @@ class IntervalSet(LocusSet):
                 conditions=self.conditions,
                 metadim=self.metadim) 
             for i, span in enumerate(self.spans)]
-        
-    def metadim_to_dim(self, metadim):
-        return self.metadim_map[metadim]
 
 
 @types.register

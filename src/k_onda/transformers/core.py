@@ -53,18 +53,21 @@ def merge_keys(self, data, result, key_spec):
         raise ValueError("Unknown key mode")
 
 
+# TODO: I am really questioning the wisdom of this decorator.  The whole point 
+# of the Calculator core is to act as a template.  This is just fragmenting the 
+# template.  Reintegrate this at some point.
 def with_key_access(func):
     @wraps(func)
-    def wrapper(self, data, *args, key_spec=None, **kwargs):
+    def wrapper(self, data, *args,  key_spec=None, **kwargs):
 
         if key_spec is None:
             return func(self, data, *args, **kwargs)
         
         key = key_spec.input_name
 
-        subset = resolve_target_data(self, data, key)
+        subset_data = resolve_target_data(self, data, key)
 
-        result = func(self, subset, *args, **kwargs)
+        result = func(self, subset_data, *args, **kwargs)
 
         merged_result = merge_keys(self, data, result, key_spec)
     
@@ -101,25 +104,25 @@ class Transformer:
     fixed_output_class = None
 
     def __call__(self, input, key=None, key_output_mode=None):
-        from ..sources import Collection, CollectionMap
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
-        if isinstance(input, CollectionMap):
+        if isinstance(input, types.CollectionMap):
             return self._call_on_collection_map(input, key_spec)
         
-        if isinstance(input, Collection):
+        if isinstance(input, types.Collection):
             return self._call_on_collection(input, key_spec)
+        
+        if isinstance(input, types.DataIdentity):
+            return self._call_on_data_identity(input, key_spec)
         
         return self._call_on_signal(input, key_spec)
     
     def _call_on_collection_map(self, collection_map, key_spec):
-
-        from ..sources import CollectionMap
         
         group_on = getattr(collection_map, "group_on", None)
 
-        return CollectionMap(
+        return types.CollectionMap(
             groups={
                 k: self._call_on_collection(v, key_spec)
                 for k, v in collection_map.items()
@@ -128,11 +131,27 @@ class Transformer:
         )
 
     def _call_on_collection(self, collection, key_spec):
-        from ..sources import Collection
+        if isinstance(collection.members[0], types.Signal):  
+            return types.Collection(
+                [self._call_on_signal(signal, key_spec) for signal in collection]
+                )
+        elif isinstance(collection.members[0], types.DataIdentity):
+            return types.Collection(
+                [self._call_on_data_identity(di, key_spec) for di in collection.members]
+                )
+        elif isinstance(collection.members[0], types.Collection):
+            return types.Collection(
+                [self._call_on_collection(member, key_spec) for member in collection.members]
+            )
+        else:
+            raise ValueError("What did you put in this collection, bro?")
 
-        return Collection(
-            [self._call_on_signal(signal, key_spec) for signal in collection]
-             )
+    
+    def _call_on_data_identity(self, data_identity, key_spec):
+        return types.Collection(
+            [self._call_on_signal(component.to_signal(), key_spec) 
+             for component in data_identity.data_components]
+        )
     
     def _call_on_signal(self, signal, key_spec):
         self._validate_input(signal, key_spec=key_spec)
@@ -140,6 +159,8 @@ class Transformer:
             signal = signal.to_signal()
         inputs=(signal,)
         output_class = self.resolve_output_class(signal)
+        if isinstance(signal.data_schema, types.DatasetSchema):
+            key_spec = self.resolve_dataset_defaults(key_spec, signal, output_class)
         transform = self._get_transform(signal, key_spec)
         output_schema = self.make_output_schema(signal.data_schema, key_spec=key_spec)
         
@@ -151,6 +172,20 @@ class Transformer:
             data_schema=output_schema
             )
         return output_signal
+    
+    def resolve_dataset_defaults(self, key_spec, signal, output_class):
+        input_name = key_spec.input_name
+        output_mode = key_spec.output_mode or getattr(self, 'key_mode', 'replace')
+
+        if input_name is None:
+            dim = getattr(self, 'dim', None)
+            if dim:
+                input_name = signal.data_schema.default_variable_for(self.dim)
+                if input_name is None:
+                    raise ValueError("You didn't provide a Dataset key and it can't be" \
+                    "inferred.")
+        key_spec = KeySpec(input_name=input_name, output_mode=output_mode)
+        return key_spec
     
     def resolve_output_class(self, input):
         # If we're operating on a StackedSignal, preserve the stack type.
@@ -201,9 +236,10 @@ class Calculator(Transformer):
     allow_empty = False
 
     def _validate_input(self, input, **kwargs):
-        if not isinstance(input, SignalLike):
-            raise ValueError("Calculators can only operate on Data Components, Signals, " \
-            "StackedSignals, Collections, and GroupedCollections.")
+        acceptable_types = [types.Signal, types.SignalStack, types.Collection, types.CollectionMap,
+                            types.DataIdentity]
+        if not any([isinstance(input, typ) for typ in acceptable_types]):
+            raise ValueError(f"Calculators can't operate on type {type(input)}")
 
     def _get_transform(self, input, key_spec):
 
@@ -212,7 +248,10 @@ class Calculator(Transformer):
         return Transform(partial(self._apply, **apply_kwargs), **transform_kwargs)
 
     def _get_apply_kwargs(self, input, key_spec):
-        result = {'key_spec': key_spec}
+        schema = input.data_schema
+        if key_spec.input_name and isinstance(schema, types.DatasetSchema):
+            schema = schema[key_spec.input_name]
+        result = {'key_spec': key_spec, 'data_schema': schema}
         result.update(self._get_extra_apply_kwargs(input))
         return result
 
@@ -272,10 +311,6 @@ class Calculator(Transformer):
                 raise ValueError(f"{type(self)}: All values must be finite.")
             if self.require_some_finite and not np.isfinite(arr).any():
                 raise ValueError(f"{type(self)}: The data contains no finite values.")
-
-        dim = kwargs.get("dim") or getattr(self, "dim", None)
-        if dim and dim not in data.dims:
-            raise ValueError(f"dim {dim} was not found in the data.")
         
     # This method gets overridden by every Calculator.
     def _apply_inner(self, data, *args, **kwargs):

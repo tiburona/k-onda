@@ -9,7 +9,7 @@ import pint
 from k_onda.loci import  IntervalSet
 from ..core import Transformer, Transform, PaddingCalculator
 from k_onda.graph import list_nodes, walk_tree, build_consumers_map
-from k_onda.central import Schema, DatasetSchema, types, DimBounds
+from k_onda.central import Schema, DatasetSchema, types, DimBounds, AxisInfo, AxisKind
 
 
 # TODO: Selector was working for multiple dims, but work on Interval selection
@@ -17,12 +17,14 @@ from k_onda.central import Schema, DatasetSchema, types, DimBounds
 
 # Why it requires three different classes to accomplish selection:
 # The first, Selector, marks the user's intention to select with whatever 
-# configurationvthey chose.  
+# configuration they chose.  
 # 
 # The second, SelectionPlanner, executes only when the user requests `.data`, 
-# because correctly calculating padlen and deciding when to trim depend on 
-# knowing the entire shape of the graph. Specifically, a selection's bounds 
-# can depend on whether a later selector had a window. 
+# or calls `plan_selection()` for debugging purposes, because correctly 
+# calculating padlen and deciding when to trim depend on knowing the entire 
+# shape of the graph. Specifically, a selection's bounds can depend on whether 
+# a later selector had a window. Further, you should only trim padding once, 
+# after every selection has concluded.
 # 
 # The third, Slicer, actually performs select operations on the data array.  
 
@@ -56,7 +58,12 @@ class Selector(Transformer):
             raise NotImplementedError(
                 "Use signal.payload(key).select(...) or signal[key].select"
                 )
-    
+
+        if (signal.data_schema.is_value_metadim(self.locus.dim) and 
+            isinstance(self.locus, types.LocusSet)):
+            raise NotImplementedError("This operation will result in a ragged array and " \
+            "support for that is not yet implemented.")
+
 
 class SelectionPlanner(Transformer):
 
@@ -67,31 +74,35 @@ class SelectionPlanner(Transformer):
     def _call_on_signal(self, signal, key_spec=None):
 
         all_nodes, padlen_accumulators, selectors = self._gather_selectors(signal)
-
+        leaf = signal
         if len(selectors):
             self._accumulate_window_padlen(all_nodes, padlen_accumulators)
             self._accumulate_calculator_padlen(all_nodes, padlen_accumulators)
             leaf = self._place_slicers(all_nodes, selectors, padlen_accumulators)
+        return leaf
             
 
     def _gather_selectors(self, signal):
 
         all_nodes = [node for node in list_nodes(signal) if hasattr(node, 'transformer')]
-        ureg = pint.application_registry.get()
-        padlen_accumulators = [DimBounds(units=ureg('s')) for _ in range(len(all_nodes))]
+        padlen_accumulators = [
+            DimBounds(metadim_of=signal.data_schema.metadim_from) 
+            for _ in range(len(all_nodes))
+            ]
         selectors = [
             node for node in all_nodes if isinstance(node.transformer, Selector)
             ]
         return all_nodes, padlen_accumulators, selectors
 
-    # Start iterating through nodes downstream->upstream. If you find a 
-    # selector with a window, every window breadth is added to every 
-    # padlen accumulator upstream 
-    # Example: imagine 5 (pseudocode) nodes, listed downstream->upstream
+    # Example for the following two methods:
+    # Imagine 5 (pseudocode) nodes, listed downstream->upstream
     # [select_event(window=w), select_epoch, filter, scale, source]
-    # Because window and epoch share a metadim, time, an events window can be 
-    # outside the range of the epoch. So every slot upstream of window must be 
-    # padded.
+
+    # If you find a selector with a window, every window breadth is added to 
+    # every  padlen accumulator upstream.
+    # In our example: because window and epoch share a metadim, time, an events 
+    # window can be outside the range of the epoch. So every slot upstream of 
+    # window must be padded.
     def _accumulate_window_padlen(self, all_nodes, padlen_accumulators):
         for i, node in enumerate(all_nodes):
             transformer = getattr(node, 'transformer', None)
@@ -99,14 +110,11 @@ class SelectionPlanner(Transformer):
                 for pa in padlen_accumulators[i+1:]:
                     pa += node.transformer.window
 
-    # Start iterating through nodes downstream->upstream. If you find a 
-    # calculator that generates a padlen requirement, add that requirement to 
-    # to every upstream node.  
-    # Example: imagine 5 (pseudocode) nodes, listed downstream->upstream
-    # [select_event(window=w), select_epoch, filter, scale, source]
-    # If the selector is going to get pushed upstream of filter, which needs
-    # padding it must add padlen to accommodate the filter.  If it stays 
-    # downstream of filter, it doesn't need to pad.
+    # If you find a calculator that generates a padlen requirement, add that 
+    # requirement to to every upstream node.  
+    # In our example: if the selector is going to get pushed upstream of filter, 
+    # which needs padding, it must add padlen to accommodate the filter.  If it 
+    # stays downstream of filter, it doesn't need to pad.
     def _accumulate_calculator_padlen(self, all_nodes, padlen_accumulators):
         for i, node in enumerate(all_nodes):
             if hasattr(node, 'transform') and getattr(node.transform, 'padlen', None): 
@@ -128,6 +136,9 @@ class SelectionPlanner(Transformer):
                 pushdown_selector_nodes.append(s)
             else:
                 local_selector_nodes.append(s)
+        
+        pushdown_selector_nodes.reverse()
+        local_selector_nodes.reverse()
 
         leaf = all_nodes[0]
         node_index = {id(node): i for i, node in enumerate(all_nodes)}
@@ -158,14 +169,14 @@ class SelectionPlanner(Transformer):
       
         for ls_node in local_selector_nodes:
             padlen = padlen_accumulators[node_index[id(ls_node)]]
-            dim_bounds = deepcopy(ls_node.transformer.locus.metadim_bounds)
+            dim_bounds = deepcopy(ls_node.transformer.locus.dim_bounds)
             dim_bounds += padlen
-            slicer_signal = self.place_slicer(ls_node, ls_node, dim_bounds, 
-                                              consumers=consumers_map[id(ls_node)])
+            slicer_signal = self.place_slicer(
+                ls_node, ls_node, dim_bounds, consumers=consumers_map[id(ls_node)]
+                )
             leaf = slicer_signal
         
         return leaf
-    
     
     def _place_pushdown_slicers(self, leaf, pushdown_selector_nodes, padlen_accumulators, 
                                 node_index, consumers_map):
@@ -196,31 +207,32 @@ class SelectionPlanner(Transformer):
                          node_index, selector_ancestors, consumers_map):
         
        
-        selectable_dims = node.data_schema.selectable_dims
+        selectable_dims = node.data_schema.selectable
+        dim_in_inputs = lambda node, dim: any(dim in inp.data_schema.selectable 
+                                              for inp in node.inputs)
 
         if not live_dims:
             return live_dims
         for dim in selectable_dims:
             if dim not in live_dims:
                 continue
-            elif not getattr(node, 'inputs', None) and not live_dims & node.data_schema.selectable_dims:
-                raise ValueError(f"dim {dim} was not found on any node.")
-            elif hasattr(node, 'inputs') and any(
-                [dim in input.data_schema.selectable_dims for input in node.inputs]):
+            elif not node.is_source and dim_in_inputs(node, dim):
                 continue
-            else:
+            elif live_dims and not node.is_source:
                 padlen = padlen_accumulators[node_index[id(node)]]
-                dim_bounds = deepcopy(ps_node.transformer.locus.metadim_bounds)
+                dim_bounds = deepcopy(ps_node.transformer.locus.dim_bounds)
                 dim_bounds += padlen
-                concrete_dim_bounds = DimBounds(
-                    {ps_node.transformer.locus.metadim_to_dim(metadim): bounds 
-                     for metadim, bounds in dim_bounds.items()}
-                     )
+            
                 self.place_slicer(
-                    node, ps_node, concrete_dim_bounds, selector_ancestors=selector_ancestors, 
+                    node, ps_node, dim_bounds, selector_ancestors=selector_ancestors, 
                     consumers=consumers_map[id(node)], check_ancestors=True
                     )
+                
                 live_dims.remove(dim)
+            elif live_dims and node.is_source:
+                raise ValueError(f"dims {live_dims} were not found.")
+            else:
+                break
                 
         return live_dims
 
@@ -239,7 +251,7 @@ class SelectionPlanner(Transformer):
     def place_slicer(
             self, 
             node, 
-            selector_signal, 
+            selector_signal,
             selection_bounds, 
             selector_ancestors=None, 
             consumers=None, 
@@ -250,6 +262,7 @@ class SelectionPlanner(Transformer):
         new_dim = selector.new_dim if allow_new_dim else None
         slicer_signal = Slicer(
             selection_bounds, selector.mode, selector.locus, new_dim)(node)
+        slicer_signal._selection_planned = True
         for consumer in consumers or []:
             if not check_ancestors or id(consumer) in selector_ancestors:
                 consumer.inputs = [slicer_signal if inp is node else inp for inp in consumer.inputs]
@@ -266,45 +279,23 @@ class Slicer(PaddingCalculator):
         self.multi_select = isinstance(locus, IntervalSet)
 
     def _call_on_signal(self, signal, key_spec=None):
-
-        from k_onda.signals import PointProcessSignal
-      
         output_signal = super()._call_on_signal(signal, key_spec=key_spec)
-
-        # TODO: ? is self.selection_bounds guaranteed to be keyed by metadim?
-        if 'time' in self.selection_bounds:
-            start, duration = list(zip(*[
-                self.start_and_duration(bounds) for bounds in self.selection_bounds['time']
-                ]))
-            output_signal.duration = duration
-            output_signal.start = start
-
-        if isinstance(signal, PointProcessSignal) and self.new_dim:
-                    
-            output_signal.coord_map.update({
-                f"{self.new_dim}_{self.locus.metadim}": 
-                f"{self.new_dim}_{output_signal.coord_map[dim]}"
-                for dim in set(self.selection_bounds) & set(output_signal.coord_map)
-            })
-
+        output_signal = self.start_and_duration(output_signal)
         return output_signal
-    
+       
     def make_output_schema(self, data_schema, key_spec):
         if not self.new_dim:
             return data_schema
 
+        # TODO is this reflecting the actual order of the dims in the xarray data array?
+        # I think it's not, and I have code above that assumes the append is in this order
+        # I need to check this, and maybe have an index property that's the reverse
+        # of when the axes appear in the list self.axes
         def update_schema(arr_schema):
-            metadim = self.locus.metadim
-            dims = copy(arr_schema.dims)
-            selectable_dims = copy(arr_schema._selectable_dims)
-            if metadim in arr_schema.dims:
-                dims = dims.remove(metadim)
-                selectable_dims.add(metadim)
-            dims.add(self.new_dim)
-            dims.add(f'{self.new_dim}_{metadim}')
+            metadim = arr_schema.metadim_from(self.locus.dim)
+            new_axis = AxisInfo(name=self.new_dim, metadim=metadim, kind=AxisKind.AXIS)
+            return arr_schema.with_added(new_axis)
             
-            return Schema(*list(dims), selectable_dims=selectable_dims)
-
         if isinstance(data_schema, Schema):
             return update_schema(data_schema)
         else:
@@ -312,15 +303,32 @@ class Slicer(PaddingCalculator):
                 {key: update_schema(val) for key, val in data_schema.items()}
                 )
     
-    def start_and_duration(self, bounds):
-        duration = bounds[1] - bounds[0]
-        start = bounds[0]
-        return start, duration
+    def start_and_duration(self, signal):
+
+        def _start_and_duration(bounds): 
+            duration = bounds[1] - bounds[0]
+            start = bounds[0]
+            return start, duration
+
+        time_dim = next((dim for dim in self.selection_bounds
+                         if signal.data_schema.metadim_from(dim) == 'time'
+                        ), None)
+        
+        # TODO: Check the order that dims are added to the schema.  This is only
+        # gonna work right if epoch, pip, etc. get added later
+        if time_dim:
+            start, duration = list(zip(*[
+                _start_and_duration(bounds) for bounds in self.selection_bounds[time_dim]
+                ]))
+            signal.duration = duration
+            signal.start = start
+        
+        return signal
 
     def _validate_input(self, signal, key_spec=None):
         for dim in set(self.selection_bounds):
-            if dim not in signal.data_schema.selectable_dims:
-                raise ValueError(f"Signal data does not have dimension {dim}.")
+            if not signal.data_schema.is_selectable(dim):
+                raise ValueError(f"Signal data can not be selected on dimension {dim}.")
 
     def _get_transform(self, input, key_spec):
         apply_kwargs = self._get_apply_kwargs(input)
@@ -330,19 +338,34 @@ class Slicer(PaddingCalculator):
     def _get_apply_kwargs(self, input):
      
         return {
-            'is_point_process': bool(getattr(input, 'coord_map', None)),
-            'coord_map': getattr(input, 'coord_map', None)
+            'is_point_process': isinstance(input, types.PointProcessSignal),
+            'data_schema': getattr(input, 'data_schema')
             }
 
-    def _apply(self, data, is_point_process=False, coord_map=None):
+    def _apply(self, data, is_point_process=False, data_schema=None):
         # TODO: do I want to add validation of the the window boundaries versus
-        # the data boundaries or will the natural error be informative enough?s
-        if is_point_process:
-            return self.select_point_process(data, coord_map)
+        # the data boundaries or will the natural error be informative enough?
+        
+        if isinstance(data_schema, types.DatasetSchema):
+        
+            if data_schema.is_point_process(require_all=True):
+                return self.select_point_process(data, data_schema)
+            else:
+                if data_schema.is_point_process(require_all=False):
+                    raise ValueError("Can't select over datasets with both " \
+                    "continuous and point process data.  You need to extract " \
+                    "the keys. ")
+                else:
+                    raise NotImplementedError("Selection over a continuous dataset "
+                    "is not yet implemented.")
+                    # self.select_continuous(data, data_schema)
         else:
-            return self.select_continuous(data)
+            if data_schema.is_point_process():
+                return self.select_point_process(data, data_schema)
+            else:
+                return self.select_continuous(data, data_schema)
 
-    def select_continuous(self, data):
+    def select_continuous(self, data, data_schema):
 
         selection_bounds = self.selection_bounds.to_array_of_dicts()
 
@@ -356,117 +379,116 @@ class Slicer(PaddingCalculator):
             selected.append(data.where(mask, drop=True))
 
         if self.new_dim:
-            selected = self.attach_continuous_relative_coords(selected)
-            selected = self.swap_coords(selected)
+            original_dim = data_schema.concrete_dim_from(self.locus.dim)
+            selected = self.attach_continuous_relative_coords(selected, original_dim)
+            selected = self.swap_coords(selected, original_dim)
 
         return self.concat_or_extract(selected)
 
     def _new_dim_coord(self):
-        return f'{self.new_dim}_{self.locus.metadim}'
+        return f'{self.new_dim}_{self.locus.metadim}' # e.g., epoch_time
     
-    def attach_continuous_relative_coords(self, selected_data):
+    def attach_continuous_relative_coords(self, selected_data, original_dim):
         result = []
-        for arr in selected_data:
-            relative_coord = arr.coords[self.locus.dim] - arr.coords[self.locus.dim][0]
+        for i, arr in enumerate(selected_data):
+            if i == 0:
+                relative_coord = arr.coords[self.locus.dim] - arr.coords[self.locus.dim][0]
 
             # every arr will have coord relative_foo
             arr = arr.assign_coords(
-                {f'relative_{self.locus.metadim}':(self.locus.dim, relative_coord)}) 
+                {f'relative_{self.locus.metadim}':(original_dim, relative_coord.data)}) 
             
             # for example, if dim is time new_dim is block, now every block will have coord block_time
             if self.new_dim: 
-                arr = arr.assign_coords({self._new_dim_coord(): (self.locus.dim, relative_coord)})
+                arr = arr.assign_coords({self._new_dim_coord(): (original_dim, relative_coord.data)})
             
             result.append(arr)
         
         return result
     
-    def swap_coords(self, selected_data):
+    def swap_coords(self, selected_data, target_dim):
         # If you've created a new_dim 'block', the main time dim becomes 'block_time', the 
         # time relative to the block, and 'time', the absolute time relative to the session
         # becomes an auxiliary coordinate.
         return [(
             arr
-            .swap_dims({self.locus.dim: self._new_dim_coord()})
-            .assign_coords(
-                {self.locus.dim: (self._new_dim_coord(), arr[self.locus.dim].values())}
-                )
+            .swap_dims({target_dim: self._new_dim_coord()}) # after swap, dim is epoch_time
+            # .assign_coords(
+            #     {target_dim: (self._new_dim_coord(), arr.coords[target_dim].data)}
+            #     )
             ) for arr in selected_data]
     
     def concat_or_extract(self, data):
+
+        for i, arr in enumerate(data):
+            if i == 0:
+                canonical_shape = arr.shape
+            if arr.shape != canonical_shape:
+                raise ValueError("You are calling a method on a ragged array " \
+                "that is designed for a uniform one.")
+
         if self.multi_select:
             selected_data = xr.concat(
             data, 
             dim=self.new_dim or 'intervals', 
-            combine_attrs='no_conflicts'
+            combine_attrs='no_conflicts',
+            join='exact',
+            coords='different'
             )
         else:
             selected_data = data[0]
         return selected_data
     
 
-    def select_point_process(self, data, coord_map):
+    def select_point_process(self, data, data_schema):
 
-        map_dims = set(self.selection_bounds) & set(coord_map)
-        other_dims = set(self.selection_bounds) - map_dims
-        
-        # I want to select time,  My dims are spikes.  coord_map tells 
-        # me that I can find time in spike_times
-        # if I selected epoch I'd have spikes, epochs, and epoch_time/time 
+        dim_source_map = {}
+
+        for dim in self.selection_bounds:
+            if data_schema.is_value_metadim(dim):
+                if isinstance(data_schema, types.DatasetSchema):
+                    source = data[data_schema.variable_for_metadim(dim)]
+                else:
+                    source = data
+
+            else:
+                source = data.coords[data_schema.concrete_dim_from(dim)]
+            dim_source_map[dim] = source
      
-
         selection_bounds = self.selection_bounds.to_array_of_dicts()
-
-        map_selection_bounds = [
-            {dim: bounds for dim, bounds in dim_bounds.items() if dim in map_dims} 
-            for dim_bounds in selection_bounds
-            ]
 
         selected = []
 
-        for bounds in map_selection_bounds:
-            map_dim_mask = reduce(and_, [
-                (data[coord_map[dim]] >= bounds[dim][0]) & 
-                (data[coord_map[dim]] < bounds[dim][1])
-                for dim in map_dims
-            ])
-
-            if len(other_dims):
-                other_dim_mask = reduce(and_, [
-                    (data.coords[dim] >= bounds[dim][0]) & 
-                    (data.coords[dim] < bounds[dim][1])
-                    for dim in other_dims
-                ])
-
-            mask = map_dim_mask
-
-            if len(other_dims):
-                mask = mask & other_dim_mask
-
+        for bounds in selection_bounds:
+            mask = reduce(and_, [
+                (source >= bounds[dim][0]) & (source < bounds[dim][1]) 
+                for dim, source in dim_source_map.items()]
+                )
             selected.append(data.where(mask, drop=True))
 
         selected = self.concat_or_extract(selected)
 
-        data = self.attach_point_process_relative_coords(selected, map_selection_bounds, coord_map)
+        if self.new_dim:
+            selected = self.attach_point_process_relative_coords(selected, selection_bounds)
 
-        return data
+        return selected
     
 
-    def attach_point_process_relative_coords(self, data, selection_bounds, coord_map):
+    def attach_point_process_relative_coords(self, data, selection_bounds):
 
         # say we've selected on time, and created dim epoch.
         # the arrays now need dim epoch_spikes, epochs
         # there needs to be a key spike_times, and a key epoch_spike_times
-        # we need to be know the epoch boundaries from the locus in order to 
+
+        # this can probably be the same logic as attach_continuous_relative_coords 
+        # except if you've selected on `time` you effectively need a dataset with 
+        # a new key: `relative_spike_times`
+        # in point of fact select point process isn't going to work at all until
+        # I implement some kind of solution for ragged arrays so maybe I should
+        # just hold off implementing this until then
+
+        pass
 
 
-        for orig_dim, key in coord_map.items():
-            arr = data[key]  # e.g dims epochs, spike_times
-            new_arr = deepcopy(arr)
-            for i in arr[self.new_dim]:
-                new_arr[i] -= selection_bounds[i][orig_dim].lo
-            data[f"{self.new_dim}_{orig_dim}"] = new_arr
-
-        return data
-    
+      
         

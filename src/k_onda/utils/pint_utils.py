@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 
 import pint
+import numpy as np
 
 from k_onda.central import types
 
@@ -33,8 +34,10 @@ def w_units(value, dim=None, units=None, ureg=None):
         else:
             raise ValueError("units were not provided")
     if ureg is None:
-        raise ValueError("ureg was not provided")
+        ureg = pint.get_application_registry()
+    if isinstance(units, str):
+        units = ureg(units)
     if isinstance(value, Iterable):
-        return [v * ureg(units) for v in value]
+        return np.array(value) * units
     else:
-        return value * ureg(units)
+        return value * units

@@ -74,7 +74,8 @@ class SelectMixin:
     
     def select_on_data_identity(self, data_identity, params):
         return types.Collection(
-            [self.select_on_signal(component, params) for component in data_identity.data_components]
+            [self.select_on_signal(component.to_signal(), params) 
+             for component in data_identity.data_components]
         )
 
     def select_on_signal(self, signal, params):
@@ -191,7 +192,8 @@ class SelectMixin:
             return
         for node in list_nodes(signal):
             node._selection_planned = True
-        SelectionPlanner()(signal)
+        leaf = SelectionPlanner()(signal)
+        return leaf
 
     def plan_on_collection(self, collection):
         return types.Collection([self.plan_on_signal(signal) for signal in collection.members])

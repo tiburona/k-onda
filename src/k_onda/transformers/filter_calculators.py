@@ -64,7 +64,7 @@ class Filter(PaddingCalculator):
 
         return DimBounds({"time": DimPair([pad_seconds, pad_seconds])})
 
-    def _apply_inner(self, data, designed_filter):
+    def _apply_inner(self, data, designed_filter, *args, **kwargs):
         dim = self.dim
         if dim != "time":
             raise NotImplementedError(
@@ -86,7 +86,7 @@ class MedianFilter(Calculator):
     def __init__(self, kernel_sizes):
         self.kernel_sizes = kernel_sizes
 
-    def _apply_inner(self, data):
+    def _apply_inner(self, data, *args, **kwargs):
         # kernel_sizes is a dictionary like {'samples': 5}
         kernel_size = tuple(self.kernel_sizes.get(dim, 1) for dim in data.dims)
         result = medfilt(data, kernel_size=kernel_size)

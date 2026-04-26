@@ -15,10 +15,6 @@ def spike_dataset():
     return xr.Dataset({"spike_times": xr.DataArray(times, dims=["spikes"])})
 
 
-@pytest.fixture
-def coord_map():
-    return {"time": "spike_times"}
-
 
 def _make_window(t0_s, t1_s):
     return Slicer(
@@ -79,10 +75,6 @@ def frequency_dataset():
         }
     )
 
-
-@pytest.fixture
-def two_coord_map():
-    return {"x": "x_pos", "y": "y_pos"}
 
 
 def _make_two_coord_window(x0, x1, y0, y1, x_unit=ureg.mm, y_unit=ureg.mm):

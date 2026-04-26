@@ -1,6 +1,6 @@
 from .registry import types, SignalLike
 
-from .schema import Schema, DatasetSchema
+from .schema import Schema, DatasetSchema, AxisInfo, AxisKind
 
 from .central import operations
 
