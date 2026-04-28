@@ -169,29 +169,8 @@ class SelectMixin:
         cls = types.Interval if isinstance(dim_bounds, dict) else types.IntervalSet
             
         return cls(dim, span, ureg=ureg, units=units, metadim=metadim, conditions=conditions)  
-
-    def plan_selection(self):
-
-        if isinstance(self, types.Signal):
-            return self.plan_on_signal(self)
-        elif isinstance(self, types.Collection):
-            return self.plan_on_collection(self)
-        elif isinstance(self, types.CollectionMap):
-            group_on = getattr(self, "group_on", None)
-
-            return types.CollectionMap(
-                groups={
-                    k: self.plan_on_collection(v)
-                    for k, v in self.items()
-                },
-                group_on=group_on,
-            )
-            
-    def plan_on_signal(self, signal):
-        if signal._selection_planned:
-            return signal
-        leaf = SelectionPlanner()(signal)
+         
+    def plan_on_signal(self):
+        leaf = SelectionPlanner()(self)
         return leaf
 
-    def plan_on_collection(self, collection):
-        return types.Collection([self.plan_on_signal(signal) for signal in collection.members])

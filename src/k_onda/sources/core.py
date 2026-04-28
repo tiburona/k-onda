@@ -107,7 +107,6 @@ class DataComponent(CalculateMixin, SelectMixin):
             origin=self
         )
       
-
     def assign_to_data_identity(self, data_identity):
         if data_identity is None:
             if self.data_identity is None:
@@ -149,6 +148,9 @@ class DataIdentity(AnnotatorMixin, SelectMixin):
     @property
     def component_ids(self):
         return (dc.uid for dc in self.data_components)
+    
+    def compile(self):
+        raise ValueError("You can't call .compile on DataIdentities, only signals.")
 
     def add_data_components(self, data_components):
         for i, data_component in enumerate(data_components):
@@ -203,6 +205,12 @@ class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointP
             self._signals = self.collect_signals()
         return self._signals
     
+    def compile(self, memo=None):
+        memo = {} if memo is None else memo
+        compiled = Collection([member.compile(memo=memo) for member in self.members])
+        compiled._is_compiled = True
+        return compiled
+    
     def collect_base_components(self):
         if isinstance(self.members[0], DataIdentity):
             components = [c for m in self.members for c in m.data_components]
@@ -243,16 +251,24 @@ class SignalMap(MapMixin):
     def __init__(self, map):
         self.map = map
         self._cache = None
+        self._is_compiled = False
 
     @property
     def data(self):
         return self._materialize()
 
+    def compile(self):
+        new_map = SignalMap({k: v.compile() for k, v in self.items()})
+        new_map._is_compiled = True
+        return new_map
+
     def _materialize(self):
-        self.plan_selection()
+        if not self._is_compiled:
+            raise ValueError("You must call .compile() on a signal before accessing"
+            "the .data property.")
         if self._cache is None:
-            self.cache = {k: signal.data for k, signal in self.map.items()}
-        return self.cache
+            self._cache = {k: signal.data for k, signal in self.map.items()}
+        return self._cache
     
 
 @types.register
@@ -306,6 +322,11 @@ class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
                 return None
 
         return grouping_func
+    
+    def compile(self):
+        compiled = CollectionMap(groups = {k: v.compile() for k, v in self.items()})
+        compiled._is_compiled = True
+        return compiled
 
     def as_collection(self):
         return Collection([member for collection in self.values() for member in collection])

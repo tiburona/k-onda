@@ -4,7 +4,7 @@ from collections.abc import Iterable
 
 from ..transformers.transformer_mixins import CalculateMixin, UnstackMixin, IntersectionMixin
 from k_onda.transformers import SelectMixin
-from k_onda.graph.traversal import build_generations, list_nodes
+from k_onda.graph.traversal import build_generations, list_nodes, new_tree
 from k_onda.central.registry import types
 
 
@@ -44,7 +44,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self._cache = None
         self.conditions = {}
         self._validate_inputs()
-        self._selection_planned = False
+        self._is_compiled = False
       
     
     @property
@@ -78,6 +78,14 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     def transform_history(self):
         func = lambda node, _: getattr(node, 'transformer', None)
         return build_generations(self, func)
+    
+    def compile(self, memo=None):
+        memo = {} if memo is None else memo
+        leaf = new_tree(self, memo=memo)
+        plan = leaf.plan_on_signal()
+        for node in list_nodes(plan):
+            node._is_compiled = True
+        return plan
 
     def _validate_inputs(self):
         return True
@@ -95,14 +103,12 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         return self.divide_by(other)
 
     def _materialize(self):
-        leaf = self.plan_selection()
-        if leaf is None:
-            leaf = self
-        for node in list_nodes(leaf):
-            node._selection_planned = True
-        if leaf._cache is None:
-            input_data = [input.data for input in leaf.inputs]
-            self._cache = leaf.transform(*input_data)
+        if not self._is_compiled:
+            raise ValueError("You must call .compile() on a signal before accessing"
+            "the .data property.")
+        if self._cache is None:
+            input_data = [input.data for input in self.inputs]
+            self._cache = self.transform(*input_data)
         return self._cache
 
     @property
@@ -293,9 +299,19 @@ class SignalStack(CalculateMixin, UnstackMixin):
         self._cache = None
         self.signal_class = signal_class or type(self.signals[0])
         self.is_stack = True
-        self._selection_planned = False
+        self._is_compiled = False
 
+    def compile(self):
+        # TODO: What this should eventually do is find the constituent signals, call compile on them
+        # and rewrite the graph.
+        raise ValueError("SignalStack cannot currently be compiled as a terminal node. " \
+            "Compile a downstream signal or unstack before materialization.")
+    
     def _materialize(self):
+        if not self._is_compiled:
+            raise ValueError("SignalStack cannot currently be compiled as a terminal node. " \
+            "Compile a downstream signal or unstack before materialization.")
+       
         if self._cache is None:
             if type(self.parent).__name__ == "Collection":
                 self._cache = self.transform(self.parent.signals)
@@ -326,7 +342,9 @@ class SignalStack(CalculateMixin, UnstackMixin):
 class AggregatedSignal(Signal):
 
     def _materialize(self):
-        self.plan_selection()
+        if not self._is_compiled:
+            raise ValueError("You must call .compile() on an aggregated signal before accessing"
+            "the .data property.")
         if self._cache is None:
             if hasattr(self.parent, 'signals'): # parent is a Collection
                 self._cache = self.transform(self.parent.signals)
@@ -347,10 +365,13 @@ class IndexedSignal(Signal):
         super().__init__(inputs, transform, **kwargs)
 
     def _materialize(self):
-        self.plan_selection()
+        if not self._is_compiled:
+            raise ValueError("You must call .compile() on a signal before accessing"
+            "the .data property.")
         if self._cache is None:
+
             if all(isinstance(inp, Signal) for inp in self.inputs):
-                input_data = [inp.data for inp in self.inputs]
+                input_data = [input.data for input in self.inputs]
                 self._cache = self.transform(*input_data)
             else:
                 self._cache = self.transform()
@@ -362,8 +383,8 @@ class IndexedSignal(Signal):
     
     def classify(self, label_name, label_spec=None, label_func=None):
         from k_onda.sinks import Classify
+        node = self.compile()
         chain = []
-        node = self
         while isinstance(node, IndexedSignal):
             chain.append(node)
             node = node.inputs[0] if node.inputs else None

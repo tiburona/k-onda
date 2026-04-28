@@ -3,7 +3,7 @@ import numpy as np
 from functools import partial
 
 from .feature_registry import feature_registry
-from k_onda.central import Schema, types
+from k_onda.central import Schema, types, AxisInfo, AxisKind
 from .core import Transformer, Transform
 from k_onda.utils import np_from_xr
 
@@ -25,19 +25,27 @@ class ExtractFeatures(Transformer):
         if isinstance(input, types.Collection):
             input = input.group_by(self.group_by)
 
-        arrays = [[func(val) for func in self.funcs] 
-                  for val in input.values()]
+        rows = [[func(val) for func in self.funcs] for val in input.values()]
+        flat_inputs = tuple(sig for row in rows for sig in row)
 
-        transform = self._get_transform(list(input.keys()), arrays)
+        transform = self._get_transform(
+            list(input.keys()),
+            n_rows=len(rows),
+            n_features=len(self.features),)
 
         return types.IndexedSignal(
-            inputs=(input,),
+            inputs=(flat_inputs),
             transform=transform,
-            data_schema=Schema('index', 'features')
+            data_schema=Schema(
+                axes=[
+                    AxisInfo(name='index', kind=AxisKind.AXIS),
+                    AxisInfo(name='feature', kind=AxisKind.AXIS)
+                ]
+            )
         )
     
-    def _get_transform(self, keys, arrays):
-        return Transform(partial(self._apply, keys, arrays))
+    def _get_transform(self, keys, n_rows, n_features):
+        return Transform(partial(self._apply, keys, n_rows, n_features))
         
     def _validate_input(self, input):
 
@@ -49,15 +57,19 @@ class ExtractFeatures(Transformer):
             raise ValueError("ExtractFeatures is only defined on SignalMap, CollectionMap,"
             "and Collection.")
     
-    def _apply(self, keys, arrays):
+    def _apply(self, keys, n_rows, n_features, *feature_data):
         
         feature_units = {}
         values = []
+        
+        idx = 0
 
-        for i, row in enumerate(arrays):
+        for i in range(n_rows):
             row_vals = []
-            for j, sig in enumerate(row):
-                d = sig.data
+            for j in range(n_features):
+                d = feature_data[idx]
+                idx += 1
+
                 arr, units = np_from_xr(d)
                 if i == 0:
                     feature_units[self.features[j]] = units

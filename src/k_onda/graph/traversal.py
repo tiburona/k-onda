@@ -56,8 +56,9 @@ def build_consumers_map(leaf):
     return consumers
 
 
-def new_tree(leaf):
-    new_leaf = deepcopy(leaf)
+def new_tree(leaf, memo=None):
+    memo = {} if memo is None else memo
+    new_leaf = deepcopy(leaf, memo)
 
     if len(leaf.inputs) == 0:
         return new_leaf

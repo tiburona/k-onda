@@ -86,10 +86,10 @@ class Transform:
         self.kwargs = kwargs
         
 
-    def __call__(self, data=None):
-        if data is None:
+    def __call__(self, *data):
+        if not data:
             return self.fn()
-        return self.fn(data)
+        return self.fn(*data)
     
 
 @dataclass

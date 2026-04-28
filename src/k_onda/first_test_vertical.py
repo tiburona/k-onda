@@ -258,12 +258,12 @@ selected_and_classified_neurons = (
     .count(bin_size=.01, range_source='session')
     .select('epochs', stimulus='tone', new_dim='trial')
     .select('events', window=(-0.05, 0.3), new_dim='pip')
+    .compile()
 )
 
 first_neuron = selected_and_classified_neurons[0]
 
-plan = first_neuron.members[0].plan_selection()
-plan.data
+
 first_neuron.members[0].data
 
 a = 'foo'
