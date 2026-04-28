@@ -7,10 +7,12 @@
 - Every signal has DAG-based provenance. 
 - `StackSignals` and `UnstackSignals` allow vectorized computation.
 - Mixin Methods on signals that call transformers are the basis of a fluent API
-- `Selector` can select data on multiple dimensions.  It can optionally walk a signal's provenance graph to enable pushdown selection. Validity propagates automatically through output signals.  
+- `Selector` can optionally walk a signal's provenance graph to enable pushdown selection. Validity propagates automatically through output signals.  
 - `Intersection` and `ApplyMask` calculators form the basis for masking based on data quality.
 - A pipeline to categorize neurons on the basis of extracted features is complete
 - A system of `Annotation`s allows changes to mutable entities (like neurons that are categorized) while communicating the context when a signal enters the DAG.
+- Selector can to select over multiple intervals at once 
+- Create classes to better represent selections (e.g. `IntervalSet`)
 
 
 ## Phase 0 - To a Minimal Demo
@@ -18,11 +20,10 @@ Produce a PSTH plot from our own data.
 
 ### 1. Multi-Select  (Currently in Progress)
 
-- Refactor Selector to be able to select over multiple intervals at once 
-- Create classes to better represent selections (e.g. `IntervalSet`)
-- Create mechanism for the forward propagation 
-- A tentative [implmentation plan](event_interval_multiselect_summary.md) exists.
-- Begin writing tests, since Selector is a prime candidate for unit tests to prevent regression.
+- Mostly done.  
+- A tentative [implmentation plan](event_interval_multiselect_summary.md) exists.  Check implementation 
+  plan against reality.
+- Begin writing at least a few tests before moving on to Aggregation.
 
 ### 2. Multilevel Aggregation API
 
@@ -50,6 +51,8 @@ Make K-Onda a reliable and user-friendly electrophysiology tool for our lab and 
 
 ### 5. Expansion of Select Functionality
 
+- Only letting selectors select one dim was a deliberate regression/simplification, but multiple dim 
+  support should be added.
 - Right now `where` (a method on the `SelectMixin`) only tests for equality of conditions. Expand to: negation, multi-value, ranges on numeric conditions (intensity > 60), and boolean combinations. 
 - Develop an ergonomic API for "this event should be normalized relative to its own baseline window."
 - Figure out how to handle ragged epochs.

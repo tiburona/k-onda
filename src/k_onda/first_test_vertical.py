@@ -181,11 +181,6 @@ label_spec = """
 #  )
 
 
-# initialized_experiment = experiment.configure('some_config').initialize()
-# classified_neurons = initialized_experiment.classify_neurons('some_config')
-# .configure(some_config)
-# .intialize()
-
 
 # or Experiment.from_config(some_config).initialize(). etc
 
@@ -266,7 +261,7 @@ first_neuron = selected_and_classified_neurons[0]
 
 first_neuron.members[0].data
 
-a = 'foo'
+
 # pretone_vals = (
 #     classified_neurons
 #     .select(experiment.epochs, dim='trial', condition='pretone')
