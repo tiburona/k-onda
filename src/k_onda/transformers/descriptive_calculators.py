@@ -58,7 +58,8 @@ class ReduceDim(Calculator):
 
 @types.register
 class Histogram(Calculator):
-    name = "histogram"
+    name = 'histogram'
+    key_mode = 'standalone'
 
     def __init__(
         self,
@@ -93,8 +94,11 @@ class Histogram(Calculator):
         return types.DistributionSignal
     
     def output_schema(self, input_schema):
-        schema = input_schema.without(self.dim)
+        schema = input_schema.without_dim(self.dim)
         # TODO: should I write an metadim_from(dim) method on schema?
+        # I'm not even really sure if metadim is exactly what I want here
+        # This is okay for this limited use case but I need to think about the
+        # general one.
         axis = input_schema.axis_by_name(self.dim)
         metadim = axis.metadim if axis else input_schema.value_metadim
         schema = schema.with_added(
@@ -104,6 +108,7 @@ class Histogram(Calculator):
                 metadim=metadim or self.dim
             )
         )
+        schema.value_metadim = None
         return schema
         
     def _get_extra_apply_kwargs(self, input):

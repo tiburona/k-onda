@@ -4,7 +4,7 @@ from functools import reduce
 import xarray as xr
 from collections import defaultdict
 from operator import and_
-import pint
+import numpy as np
 
 from k_onda.loci import  IntervalSet
 from ..core import Transformer, Transform, PaddingCalculator
@@ -58,8 +58,7 @@ class Selector(Transformer):
             raise NotImplementedError(
                 "Use signal.payload(key).select(...) or signal[key].select"
                 )
-
-        if (signal.data_schema.is_value_metadim(self.locus.dim) and 
+        if (signal.data_schema.is_point_process() and 
             isinstance(self.locus, types.LocusSet)):
             raise NotImplementedError("This operation will result in a ragged array and " \
             "support for that is not yet implemented.")
@@ -76,12 +75,10 @@ class SelectionPlanner(Transformer):
         all_nodes, padlen_accumulators, selectors = self._gather_selectors(signal)
         leaf = signal
         if len(selectors):
-            self._accumulate_window_padlen(all_nodes, padlen_accumulators)
-            self._accumulate_calculator_padlen(all_nodes, padlen_accumulators)
+            self._accumulate_padlen(all_nodes, padlen_accumulators)
             leaf = self._place_slicers(all_nodes, selectors, padlen_accumulators)
         return leaf
             
-
     def _gather_selectors(self, signal):
 
         all_nodes = [node for node in list_nodes(signal) if hasattr(node, 'transformer')]
@@ -94,7 +91,6 @@ class SelectionPlanner(Transformer):
             ]
         return all_nodes, padlen_accumulators, selectors
 
-    # Example for the following two methods:
     # Imagine 5 (pseudocode) nodes, listed downstream->upstream
     # [select_event(window=w), select_epoch, filter, scale, source]
 
@@ -103,19 +99,13 @@ class SelectionPlanner(Transformer):
     # In our example: because window and epoch share a metadim, time, an events 
     # window can be outside the range of the epoch. So every slot upstream of 
     # window must be padded.
-    def _accumulate_window_padlen(self, all_nodes, padlen_accumulators):
-        for i, node in enumerate(all_nodes):
-            transformer = getattr(node, 'transformer', None)
-            if isinstance(transformer, Selector) and transformer.window:
-                for pa in padlen_accumulators[i+1:]:
-                    pa += node.transformer.window
-
+    
     # If you find a calculator that generates a padlen requirement, add that 
     # requirement to to every upstream node.  
     # In our example: if the selector is going to get pushed upstream of filter, 
     # which needs padding, it must add padlen to accommodate the filter.  If it 
     # stays downstream of filter, it doesn't need to pad.
-    def _accumulate_calculator_padlen(self, all_nodes, padlen_accumulators):
+    def _accumulate_padlen(self, all_nodes, padlen_accumulators):
         for i, node in enumerate(all_nodes):
             if hasattr(node, 'transform') and getattr(node.transform, 'padlen', None): 
                 for pa in padlen_accumulators[i+1:]: 
@@ -239,7 +229,6 @@ class SelectionPlanner(Transformer):
     def _place_trim_slicers(self, leaf, pushdown_selector_nodes):
         # For every pushdown selector place a slicer with the selector's original 
         # bounds
-        
         for ps_node in pushdown_selector_nodes:
             slicer_signal = self.place_slicer(
                 leaf, ps_node, ps_node.transformer.locus.dim_bounds, allow_new_dim=False
@@ -338,11 +327,10 @@ class Slicer(PaddingCalculator):
     def _get_apply_kwargs(self, input):
      
         return {
-            'is_point_process': isinstance(input, types.PointProcessSignal),
             'data_schema': getattr(input, 'data_schema')
             }
 
-    def _apply(self, data, is_point_process=False, data_schema=None):
+    def _apply(self, data, data_schema=None):
         # TODO: do I want to add validation of the the window boundaries versus
         # the data boundaries or will the natural error be informative enough?
         
@@ -367,6 +355,10 @@ class Slicer(PaddingCalculator):
 
     def select_continuous(self, data, data_schema):
 
+        if self.new_dim == 'pip':
+            a = 'foo'
+        original_dim = data_schema.concrete_dim_from(self.locus.dim)
+
         selection_bounds = self.selection_bounds.to_array_of_dicts()
 
         selected = []
@@ -376,19 +368,54 @@ class Slicer(PaddingCalculator):
                 (data.coords[dim] >= bounds[dim][0]) & (data.coords[dim] < bounds[dim][1])
                 for dim in bounds
             ])
-            selected.append(data.where(mask, drop=True))
+            sliced = data.where(mask, drop=True)
+            for d in list(sliced.dims):
+                if d != original_dim and sliced.sizes[d] == 1:
+                    sliced = sliced.squeeze(d)
+            selected.append(sliced)
 
         if self.new_dim:
-            original_dim = data_schema.concrete_dim_from(self.locus.dim)
-            selected = self.attach_continuous_relative_coords(selected, original_dim)
-            selected = self.swap_coords(selected, original_dim)
+            
+            selected = self.attach_continuous_relative_coords(selected)
+            selected = self.swap_coords(selected)
 
-        return self.concat_or_extract(selected)
+        selected = self.concat_or_extract(selected)
+        selected = self.unfold_new_dim(selected)    
+        return selected
+
+    def unfold_new_dim(self, arr):
+        new_dim = self.new_dim
+        structure = [
+            name for name, c in arr.coords.items()
+            if c.dims == (new_dim,) and name != new_dim
+        ]
+
+        if not structure:
+            return arr
+        
+        # inner index: position within each unique tuple of structure-values
+        keys = list(zip(*[arr.coords[s].data for s in structure]))
+        counts = {}
+        inner = np.empty(len(keys), dtype=int)
+        for i, k in enumerate(keys):
+            counts[k] = counts.get(k, -1) + 1
+            inner[i] = counts[k]
+
+        inner_name = f'__{new_dim}_inner' # unique placeholder
+
+        return (
+            arr
+            .drop_vars(new_dim)
+            .assign_coords({inner_name: (new_dim, inner)})
+            .set_index({new_dim: structure + [inner_name]})
+            .unstack(new_dim)
+            .rename({inner_name: new_dim})
+        )
 
     def _new_dim_coord(self):
         return f'{self.new_dim}_{self.locus.metadim}' # e.g., epoch_time
     
-    def attach_continuous_relative_coords(self, selected_data, original_dim):
+    def attach_continuous_relative_coords(self, selected_data):
         result = []
         for i, arr in enumerate(selected_data):
             if i == 0:
@@ -396,26 +423,25 @@ class Slicer(PaddingCalculator):
 
             # every arr will have coord relative_foo
             arr = arr.assign_coords(
-                {f'relative_{self.locus.metadim}':(original_dim, relative_coord.data)}) 
+                {f'relative_{self.locus.metadim}':(relative_coord.dims, relative_coord.data)}) 
             
             # for example, if dim is time new_dim is block, now every block will have coord block_time
             if self.new_dim: 
-                arr = arr.assign_coords({self._new_dim_coord(): (original_dim, relative_coord.data)})
+                arr = arr.assign_coords({self._new_dim_coord(): (relative_coord.dims, relative_coord.data)})
             
             result.append(arr)
         
         return result
     
-    def swap_coords(self, selected_data, target_dim):
+    def swap_coords(self, selected_data):
         # If you've created a new_dim 'block', the main time dim becomes 'block_time', the 
         # time relative to the block, and 'time', the absolute time relative to the session
         # becomes an auxiliary coordinate.
+
+        new_dim_coord = self._new_dim_coord()
         return [(
             arr
-            .swap_dims({target_dim: self._new_dim_coord()}) # after swap, dim is epoch_time
-            # .assign_coords(
-            #     {target_dim: (self._new_dim_coord(), arr.coords[target_dim].data)}
-            #     )
+            .swap_dims({arr.coords[new_dim_coord].dims[0]: new_dim_coord}) # after swap, dim is epoch_time
             ) for arr in selected_data]
     
     def concat_or_extract(self, data):
@@ -429,12 +455,16 @@ class Slicer(PaddingCalculator):
 
         if self.multi_select:
             selected_data = xr.concat(
-            data, 
-            dim=self.new_dim or 'intervals', 
-            combine_attrs='no_conflicts',
-            join='exact',
-            coords='different'
+                data, 
+                dim=self.new_dim or 'intervals', 
+                combine_attrs='no_conflicts',
+                join='exact',
+                coords='different'
             )
+            selected_data = selected_data.assign_coords({
+                self.new_dim or 'intervals': np.arange(
+                    selected_data.sizes[self.new_dim or 'intervals'])
+            })
         else:
             selected_data = data[0]
         return selected_data

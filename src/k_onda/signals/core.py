@@ -4,7 +4,7 @@ from collections.abc import Iterable
 
 from ..transformers.transformer_mixins import CalculateMixin, UnstackMixin, IntersectionMixin
 from k_onda.transformers import SelectMixin
-from k_onda.graph.traversal import build_generations
+from k_onda.graph.traversal import build_generations, list_nodes
 from k_onda.central.registry import types
 
 
@@ -98,9 +98,11 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         leaf = self.plan_selection()
         if leaf is None:
             leaf = self
+        for node in list_nodes(leaf):
+            node._selection_planned = True
         if leaf._cache is None:
             input_data = [input.data for input in leaf.inputs]
-            self._cache = self.transform(*input_data)
+            self._cache = leaf.transform(*input_data)
         return self._cache
 
     @property
@@ -394,4 +396,3 @@ class SelectorSignal(Signal):
 
 
    
-

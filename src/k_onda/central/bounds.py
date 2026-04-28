@@ -16,6 +16,9 @@ class DimPair:
             self.pair = [0 * units, 0 * units]
         else:
             self.pair = pair
+
+    def __repr__(self):
+        return f"{self[0]}, {self[1]}"
        
     def __iter__(self):
         return iter(self.pair)
@@ -29,7 +32,8 @@ class DimPair:
     
     def __iadd__(self, other):
         self.validate_add(other)
-        return DimPair(pair=(self[0] + other[0], self[1] + other[1]))
+        self.pair = (self[0] + other[0], self[1] + other[1])
+        return self
     
     def validate_add(self, other):
         if all([isinstance(dp, SpanDimPair) for dp in (self, other)]):
@@ -56,6 +60,9 @@ class DimBounds(DictDelegator):
         self._dim_pair_type = PadDimPair if dim_pair_type == 'pad' else SpanDimPair
         self.units = units
         self._metadim_of = metadim_of
+
+    def __repr__(self):
+        return self._dim_bounds
   
     def __missing__(self, dim):
        

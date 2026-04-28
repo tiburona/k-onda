@@ -189,12 +189,9 @@ class SelectMixin:
             
     def plan_on_signal(self, signal):
         if signal._selection_planned:
-            return
-        for node in list_nodes(signal):
-            node._selection_planned = True
+            return signal
         leaf = SelectionPlanner()(signal)
         return leaf
 
     def plan_on_collection(self, collection):
         return types.Collection([self.plan_on_signal(signal) for signal in collection.members])
-

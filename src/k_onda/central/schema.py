@@ -75,7 +75,13 @@ class Schema:
         new_schema = copy(self)
         new_schema.axes = [ax for ax in self.axes if ax.name != name]
         return new_schema
-
+    
+    def without_dim(self, dim) -> Schema:
+        new_schema = copy(self)
+        new_schema.axes = [ax for ax in self.axes 
+                           if ax is not self.ax_with_concrete_dim(dim)] 
+        return new_schema
+        
     def with_added(self, axis) -> Schema:
         new_schema = copy(self)
         new_schema.axes.append(axis)

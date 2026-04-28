@@ -17,45 +17,45 @@ from .sources import (
 from .transformers import Spectrogram
 
 
-lfp_data_loader_config = {
-    "path": "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.ns3",
-    "file_ext": "ns3",
-    "row_to_brain_region": {0: 'bla'}
-}
+# lfp_data_loader_config = {
+#     "path": "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.ns3",
+#     "file_ext": "ns3",
+#     "row_to_brain_region": {0: 'bla'}
+# }
 
-spike_data_loader_config = {
-    'path': "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/IG180/"
-}
+# spike_data_loader_config = {
+#     'path': "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/IG180/"
+# }
 
 
-session_config = {
-    'nev': {
-        'path': "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.mat",
-    },
-    'epochs': {
-        'tone': {
-            'inherits': 'base',
-            'from_nev': True,
-            'code': 65502,
-            'duration': 30,
-            'conditions': {'stimulus': 'tone'},
-            }
-        }
-}
+# session_config = {
+#     'nev': {
+#         'path': "/Users/katie/likhtik/IG_INED_SAFETY_RECALL/INED18/INED18.mat",
+#     },
+#     'epochs': {
+#         'tone': {
+#             'inherits': 'base',
+#             'from_nev': True,
+#             'code': 65502,
+#             'duration': 30,
+#             'conditions': {'stimulus': 'tone'},
+#             }
+#         }
+# }
     
         
 
-filter_config = {"method": "iir_notch", "f_lo": 59, "f_hi": 61
-    }
+# filter_config = {"method": "iir_notch", "f_lo": 59, "f_hi": 61
+#     }
 
-freqs = np.arange(1, 21, 1)
+# freqs = np.arange(1, 21, 1)
 
-power_config = {
-    "freqs": freqs, 
-    "decim": 20, 
-    "n_cycles": freqs * 0.5,
-    "time_bandwidth": 2, 
-    "output": "power"}
+# power_config = {
+#     "freqs": freqs, 
+#     "decim": 20, 
+#     "n_cycles": freqs * 0.5,
+#     "time_bandwidth": 2, 
+#     "output": "power"}
 
 
 
@@ -64,34 +64,34 @@ power_config = {
 
     
 
-experiment = Experiment("IG_INED_SAFETY_RECALL")
-experiment.configure(top_level_config={'units_to_set': 
-                      {'raw_sample': (1/30000, 's', 'rs'),
-                       'lfp_sample': (1/2000, 's', 'ls')}})
+# experiment = Experiment("IG_INED_SAFETY_RECALL")
+# experiment.configure(top_level_config={'units_to_set': 
+#                       {'raw_sample': (1/30000, 's', 'rs'),
+#                        'lfp_sample': (1/2000, 's', 'ls')}})
 
-experiment.initialize()
+# experiment.initialize()
 
-animal = experiment.create_subject("INED18")
+# animal = experiment.create_subject("INED18")
 
-ureg = pint.application_registry
-session = Session(experiment, animal, session_config, ureg)
+# ureg = pint.application_registry
+# session = Session(experiment, animal, session_config, ureg)
 
-LFP_SAMPLING_RATE = 1/2000
-recording = LFPRecording(session, lfp_data_loader_config, sampling_rate=LFP_SAMPLING_RATE)
+# LFP_SAMPLING_RATE = 1/2000
+# recording = LFPRecording(session, lfp_data_loader_config, sampling_rate=LFP_SAMPLING_RATE)
 
-phy_output = PhyOutput(session, spike_data_loader_config)
+# phy_output = PhyOutput(session, spike_data_loader_config)
 
 
-def initialize_neurons_from_phy(phy_output):
-    neurons = []
-    for cluster_id, group in phy_output.cluster_groups.items():
-        if group == "good":
-            spike_cluster = SpikeCluster(phy_output, cluster_id)
-            neuron = Neuron(data_components=[spike_cluster], config={'source': 'phy', 'match_by': None})
-            neurons.append(neuron)
-    return neurons
+# def initialize_neurons_from_phy(phy_output):
+#     neurons = []
+#     for cluster_id, group in phy_output.cluster_groups.items():
+#         if group == "good":
+#             spike_cluster = SpikeCluster(phy_output, cluster_id)
+#             neuron = Neuron(data_components=[spike_cluster], config={'source': 'phy', 'match_by': None})
+#             neurons.append(neuron)
+#     return neurons
 
-neurons = initialize_neurons_from_phy(phy_output)
+# neurons = initialize_neurons_from_phy(phy_output)
 
 # tone_vals = experiment.all_neurons.histogram(some_args).select_grid(tone_epochs)
 # pretone_vals = experiment.all_neurons.histogram(some_args).select_grid(pretone_epochs).reduce('time_bin')
@@ -117,12 +117,12 @@ neurons = initialize_neurons_from_phy(phy_output)
 
 
 
-lfp_channel_1 = LFPChannel(recording, channel_idx=1)
-lfp_channel_2 = LFPChannel(recording, channel_idx=2)
+# lfp_channel_1 = LFPChannel(recording, channel_idx=1)
+# lfp_channel_2 = LFPChannel(recording, channel_idx=2)
 
 
-epoch_0 = session.epochs.where(stimulus='tone')[0]
-epoch_1 = session.epochs.where(stimulus='tone')[1]
+# epoch_0 = session.epochs.where(stimulus='tone')[0]
+# epoch_1 = session.epochs.where(stimulus='tone')[1]
 
 
 label_spec = """
@@ -134,47 +134,39 @@ label_spec = """
     - PN
 """
 
-categorized_neurons = (
-  experiment
- .all_neurons
- .stack_signals(dim='spikes')
- .reduce(key='waveforms', dim='electrodes', method='mean')
- .median_filter(key='waveforms', kernel_sizes={'samples': 5})
- .unstack_signals()
- .extract_features('fwhm', 'firing_rate', group_by='neuron')
- .normalize(method='zscore', dim='index')
- .kmeans(n_clusters=2, random_state=0)
- .classify('neuron_type', label_spec=label_spec)
- )
+# categorized_neurons = (
+#   experiment
+#  .all_neurons
+#  .stack_signals(dim='spikes')
+#  .reduce(key='waveforms', dim='electrodes', method='mean')
+#  .median_filter(key='waveforms', kernel_sizes={'samples': 5})
+#  .unstack_signals()
+#  .extract_features('fwhm', 'firing_rate', group_by='neuron')
+#  .normalize(method='zscore', dim='index')
+#  .kmeans(n_clusters=2, random_state=0)
+#  .classify('neuron_type', label_spec=label_spec)
+#  )
 
 
-spikes_and_filtered_waveforms = (experiment
- .all_neurons
- .stack_signals(dim='spikes')
- .reduce(key='waveforms', dim='electrodes', method='mean')
- .median_filter(key='waveforms', kernel_sizes={'samples': 5}).data)
+# spikes_and_filtered_waveforms = (experiment
+#  .all_neurons
+#  .stack_signals(dim='spikes')
+#  .reduce(key='waveforms', dim='electrodes', method='mean')
+#  .median_filter(key='waveforms', kernel_sizes={'samples': 5}).data)
 
-spikes_and_filtered_waveforms = (experiment
- .all_neurons
- .stack_signals(dim='spikes')
- .reduce(key='waveforms', dim='electrodes', method='mean')
- .median_filter(key='waveforms', kernel_sizes={'samples': 5})
- .unstack_signals()
-)
-
-
-selected_data =(spikes_and_filtered_waveforms
- .select(epoch_0)
- .signals[0].data
-)
+# spikes_and_filtered_waveforms = (experiment
+#  .all_neurons
+#  .stack_signals(dim='spikes')
+#  .reduce(key='waveforms', dim='electrodes', method='mean')
+#  .median_filter(key='waveforms', kernel_sizes={'samples': 5})
+#  .unstack_signals()
+# )
 
 
 
 
-Experiment.from_config(
-    'Safety_Recall',
-    global_config='/Users/katie/likhtik/analysis/k-onda-analysis/IG_INED_Safety/config/k_onda/ig_safety_recall.yaml'
-    )
+
+
 
 
 
@@ -244,26 +236,23 @@ label_spec = """
     - PN
 """
 
-selected_and_classified_neurons = (Experiment.from_config(
+experiment = (Experiment.from_config(
     'Safety_Recall',
     global_config='/Users/katie/likhtik/analysis/k-onda-analysis/IG_INED_Safety/config/k_onda/ig_safety_recall.yaml'
     )
-    .initialize()
-    .all_neurons
-    .classify(label_spec=label_spec)
-    .count(bin_size=.01, range_source='session'))
+    .initialize())
 
-first_neuron = selected_and_classified_neurons[0]
-first_neuron.members[0].data
+# selected_and_classified_neurons = (
+#     experiment
+#     .all_neurons
+#      .classify(label_spec=label_spec)
+#     .count(bin_size=.01, range_source='session'))
 
-a = 'foo'
+# first_neuron = selected_and_classified_neurons[0]
+# first_neuron.members[0].data
 
-
-selected_and_classified_neurons = (Experiment.from_config(
-    'Safety_Recall',
-    global_config='/Users/katie/likhtik/analysis/k-onda-analysis/IG_INED_Safety/config/k_onda/ig_safety_recall.yaml'
-    )
-    .initialize()
+selected_and_classified_neurons = (
+    experiment
     .all_neurons
     .classify(label_spec=label_spec)
     .count(bin_size=.01, range_source='session')
@@ -274,13 +263,8 @@ selected_and_classified_neurons = (Experiment.from_config(
 first_neuron = selected_and_classified_neurons[0]
 
 plan = first_neuron.members[0].plan_selection()
+plan.data
 first_neuron.members[0].data
-
-
-print(type(plan).__name__)       # expect SelectorSignal wrapping Slicer — the event slicer
-print(plan.inputs[0] is first_neuron.members[0])  # True: slicer → selector
-print(plan.data.dims)            # This should give you the trial × pip × pip_time you wanted
-print(first_neuron.members[0].data.dims)  # Still trial × trial_time — selector's view
 
 a = 'foo'
 # pretone_vals = (

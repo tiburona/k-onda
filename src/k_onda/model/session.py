@@ -308,7 +308,6 @@ class Session(NEVMixin, ConfigSetter):
                   config=epoch_config) 
             for onset in unitful_onsets
             ])
-        a = 'foo'
 
     def relative_epoch_config(self, epoch_type, epoch_config, conditions):
         relative_to = epoch_config['relative_to']

@@ -70,7 +70,7 @@ class Marker(Locus):
     def to_interval(self, window):
         return Interval(
             self.dim, 
-            span=(self.value - window[0], self.value + window[1]),
+            span=(self.value + window[0], self.value + window[1]),
             units=self.units, 
             anchor=self, 
             ureg=self.ureg, 
