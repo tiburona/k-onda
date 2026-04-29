@@ -5,14 +5,17 @@
 - Pipelines to preprocess LFP data and compute a spectrogram from a single epoch established immutable `Signal`/pure-at-execution `Transformer` architecture.
 - `Caclulator`s include (not exhaustive): `ReduceDims`, `Histogram`, `FWHM`, `Spectrogram`, `Filter`, `KMeans`, `Normalize`, `Rate`
 - Every signal has DAG-based provenance. 
+- Data `Schema`s propogate information about the signal forward.  
 - `StackSignals` and `UnstackSignals` allow vectorized computation.
 - Mixin Methods on signals that call transformers are the basis of a fluent API
 - `Selector` can optionally walk a signal's provenance graph to enable pushdown selection. Validity propagates automatically through output signals.  
+- Selector can select over multiple intervals at once 
+- `Locus` classes can flexibly represent selections (e.g. `Epoch`, `IntervalSet`, etc.)
+- Users can create dimensions with arbitrary names when selecting sets; these become dimensions on the xarray data.  
 - `Intersection` and `ApplyMask` calculators form the basis for masking based on data quality.
 - A pipeline to categorize neurons on the basis of extracted features is complete
 - A system of `Annotation`s allows changes to mutable entities (like neurons that are categorized) while communicating the context when a signal enters the DAG.
-- Selector can to select over multiple intervals at once 
-- Create classes to better represent selections (e.g. `IntervalSet`)
+
 
 
 ## Phase 0 - To a Minimal Demo
@@ -22,7 +25,7 @@ Produce a PSTH plot from our own data.
 
 - Mostly done.  
 - A tentative [implmentation plan](event_interval_multiselect_summary.md) exists.  Check implementation 
-  plan against reality.
+  plan against current reality.
 - Begin writing at least a few tests before moving on to Aggregation.
 
 ### 2. Multilevel Aggregation API

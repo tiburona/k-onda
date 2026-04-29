@@ -23,6 +23,7 @@ class AxisInfo:
     kind: AxisKind                              # structural: how the machinery treats it
     metadim: str | None = None                  # semantic: what physical quantity it represents
     coords: tuple[CoordInfo, ...] = ()          # all the coords available on the axis 
+    relative_coords: tuple[CoordInfo, ...] = () # all the relative coords available on the axis
 
 
 @types.register

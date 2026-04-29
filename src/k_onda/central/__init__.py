@@ -4,7 +4,7 @@ from .schema import Schema, DatasetSchema, AxisInfo, AxisKind
 
 from .central import operations
 
-from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds
+from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds, DimOffset
 
 
 
@@ -17,6 +17,7 @@ __all__ = [
     "DimPair",
     "PadDimPair",
     "SpanDimPair",
-    "DimBounds"
+    "DimBounds",
+    "DimOffset"
     
 ]

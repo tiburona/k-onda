@@ -7,9 +7,9 @@ from operator import and_
 import numpy as np
 
 from k_onda.loci import  IntervalSet
-from ..core import Transformer, Transform, PaddingCalculator
+from ..core import Transformer, Transform, Calculator
 from k_onda.graph import list_nodes, walk_tree, build_consumers_map
-from k_onda.central import Schema, DatasetSchema, types, DimBounds, AxisInfo, AxisKind
+from k_onda.central import Schema, DatasetSchema, types, DimBounds, DimOffset, AxisInfo, AxisKind
 
 
 # TODO: Selector was working for multiple dims, but work on Interval selection
@@ -76,46 +76,67 @@ class SelectionPlanner(Transformer):
         leaf = signal
         if len(selectors):
             self._accumulate_padlen(all_nodes, padlen_accumulators)
-            leaf = self._place_slicers(all_nodes, selectors, padlen_accumulators)
+            lower_bound_offsets = self._lower_bound_correction(signal, selectors)
+            leaf = self._place_slicers(all_nodes, selectors, padlen_accumulators, 
+                                       lower_bound_offsets)
         return leaf
             
     def _gather_selectors(self, signal):
 
         all_nodes = [node for node in list_nodes(signal) if hasattr(node, 'transformer')]
+        
+        selector_nodes = [
+            node for node in all_nodes if isinstance(node.transformer, Selector)
+            ]
+        return signal, all_nodes, selector_nodes
+
+    # TODO:
+    # I'm not sure that signal as the source of the metadim_of callable makes sense
+    # forever, at least in Schema's current state.
+    # It's possible to have a pushdown selector that destroys dims downstream 
+    # that are selectable upstream.  This needs more thought, but I need to check
+    # that a data schema can do metadim translation on all the dims a signal's 
+    # ancestors had.  Deferred for now.
+
+    def _accumulate_padlen(self, signal, all_nodes, padlen_accumulators):
+        # Imagine 5 (pseudocode) nodes, listed downstream->upstream
+        # [select_event(window=w), select_epoch, filter, scale, source]
+
+        # In our example: because window and epoch share a metadim, time, an events 
+        # window can be outside the range of the epoch. So every slot upstream of 
+        # window must be padded.
+
+        # If the selector is going to get pushed upstream of filter, 
+        # which needs padding, it must add padlen to accommodate the filter.  If it 
+        # stays downstream of filter, it doesn't need to pad.
+
         padlen_accumulators = [
             DimBounds(metadim_of=signal.data_schema.metadim_from) 
             for _ in range(len(all_nodes))
             ]
-        selectors = [
-            node for node in all_nodes if isinstance(node.transformer, Selector)
-            ]
-        return all_nodes, padlen_accumulators, selectors
-
-    # Imagine 5 (pseudocode) nodes, listed downstream->upstream
-    # [select_event(window=w), select_epoch, filter, scale, source]
-
-    # If you find a selector with a window, every window breadth is added to 
-    # every  padlen accumulator upstream.
-    # In our example: because window and epoch share a metadim, time, an events 
-    # window can be outside the range of the epoch. So every slot upstream of 
-    # window must be padded.
     
-    # If you find a calculator that generates a padlen requirement, add that 
-    # requirement to to every upstream node.  
-    # In our example: if the selector is going to get pushed upstream of filter, 
-    # which needs padding, it must add padlen to accommodate the filter.  If it 
-    # stays downstream of filter, it doesn't need to pad.
-    def _accumulate_padlen(self, all_nodes, padlen_accumulators):
         for i, node in enumerate(all_nodes):
             if hasattr(node, 'transform') and getattr(node.transform, 'padlen', None): 
                 for pa in padlen_accumulators[i+1:]: 
                     pa += node.transform.padlen
+
+    
+    def _lower_bound_correction(self, selector_nodes):
+        lower_bound_offsets = {}
+
+        for selector_node in selector_nodes:
+            if selector_node.transformer.window:
+                if selector_node.transformer.locus.metadim in lower_bound_offsets:
+                    continue
+                lower_bound_offsets[selector_node.transformer.locus.metadim] = selector_node
+        return lower_bound_offsets
     
     def _place_slicers(
             self, 
             all_nodes,
             selector_signals, 
-            padlen_accumulators
+            padlen_accumulators,
+            lower_bound_offsets
             ):
         
         pushdown_selector_nodes = []
@@ -152,7 +173,7 @@ class SelectionPlanner(Transformer):
                 consumers_map
             )
 
-        return self._place_trim_slicers(leaf, pushdown_selector_nodes)
+        return self._place_trim_slicers(leaf, pushdown_selector_nodes, lower_bound_offsets)
 
     def _place_local_slicers(self, leaf, local_selector_nodes, padlen_accumulators, 
                              node_index, consumers_map):
@@ -161,7 +182,7 @@ class SelectionPlanner(Transformer):
             padlen = padlen_accumulators[node_index[id(ls_node)]]
             dim_bounds = deepcopy(ls_node.transformer.locus.dim_bounds)
             dim_bounds += padlen
-            slicer_signal = self.place_slicer(
+            slicer_signal = self._place_slicer(
                 ls_node, ls_node, dim_bounds, consumers=consumers_map[id(ls_node)]
                 )
             leaf = slicer_signal
@@ -213,7 +234,7 @@ class SelectionPlanner(Transformer):
                 dim_bounds = deepcopy(ps_node.transformer.locus.dim_bounds)
                 dim_bounds += padlen
             
-                self.place_slicer(
+                self._place_slicer(
                     node, ps_node, dim_bounds, selector_ancestors=selector_ancestors, 
                     consumers=consumers_map[id(node)], check_ancestors=True
                     )
@@ -226,18 +247,21 @@ class SelectionPlanner(Transformer):
                 
         return live_dims
 
-    def _place_trim_slicers(self, leaf, pushdown_selector_nodes):
+    def _place_trim_slicers(self, leaf, pushdown_selector_nodes, lower_bound_offsets):
         # For every pushdown selector place a slicer with the selector's original 
         # bounds
         for ps_node in pushdown_selector_nodes:
-            slicer_signal = self.place_slicer(
-                leaf, ps_node, ps_node.transformer.locus.dim_bounds, allow_new_dim=False
+            slicer_signal = self._place_slicer(
+                leaf, ps_node, ps_node.transformer.locus.dim_bounds, is_trim=True
                 )
             leaf = slicer_signal
+
+        for metadim, offset in lower_bound_offsets.items():
+            leaf = CoordTranslator(leaf, meatdim=metadim, offset=offset)(leaf)
            
         return leaf
     
-    def place_slicer(
+    def _place_slicer(
             self, 
             node, 
             selector_signal,
@@ -245,12 +269,14 @@ class SelectionPlanner(Transformer):
             selector_ancestors=None, 
             consumers=None, 
             check_ancestors=False,
-            allow_new_dim=True
+            is_trim=False,
+            offset=None
             ):
         selector = selector_signal.transformer
-        new_dim = selector.new_dim if allow_new_dim else None
+        new_dim = selector.new_dim if not is_trim else None
+        window = selector.window if not is_trim else None
         slicer_signal = Slicer(
-            selection_bounds, selector.mode, selector.locus, new_dim)(node)
+            selection_bounds, selector.mode, selector.locus, new_dim, window, offset)(node)
         slicer_signal._selection_planned = True
         for consumer in consumers or []:
             if not check_ancestors or id(consumer) in selector_ancestors:
@@ -258,22 +284,23 @@ class SelectionPlanner(Transformer):
         return slicer_signal
      
 
-class Slicer(PaddingCalculator):
+class Slicer(Calculator):
 
-    def __init__(self, selection_bounds, mode, locus, new_dim):
+    def __init__(self, selection_bounds, mode, locus, new_dim, window):
         self.mode = mode
         self.locus = locus
         self.new_dim = new_dim
+        self.window = window
         self.selection_bounds = selection_bounds
         self.multi_select = isinstance(locus, IntervalSet)
-
+        
     def _call_on_signal(self, signal, key_spec=None):
         output_signal = super()._call_on_signal(signal, key_spec=key_spec)
         output_signal = self.start_and_duration(output_signal)
         return output_signal
        
     def make_output_schema(self, data_schema, key_spec):
-        if not self.new_dim:
+        if not self.new_dim or self.is_trim:
             return data_schema
 
         # TODO is this reflecting the actual order of the dims in the xarray data array?
@@ -282,7 +309,12 @@ class Slicer(PaddingCalculator):
         # of when the axes appear in the list self.axes
         def update_schema(arr_schema):
             metadim = arr_schema.metadim_from(self.locus.dim)
-            new_axis = AxisInfo(name=self.new_dim, metadim=metadim, kind=AxisKind.AXIS)
+            prev_coords = arr_schema.axes_by_metadim[0].coords
+            prev_relative_coords = arr_schema.axes_by_metadim[0].relative_coords
+            new_axis = AxisInfo(
+                name=self.new_dim, metadim=metadim, kind=AxisKind.AXIS,
+                coords=prev_coords + (f'{self.new_dim}_{metadim}', self.new_dim),
+                relative_coords=prev_relative_coords + (f'{self.new_dim}_{metadim}'))
             return arr_schema.with_added(new_axis)
             
         if isinstance(data_schema, Schema):
@@ -318,12 +350,8 @@ class Slicer(PaddingCalculator):
         for dim in set(self.selection_bounds):
             if not signal.data_schema.is_selectable(dim):
                 raise ValueError(f"Signal data can not be selected on dimension {dim}.")
-
-    def _get_transform(self, input, key_spec):
-        apply_kwargs = self._get_apply_kwargs(input)
-   
-        return Transform(partial(self._apply, **apply_kwargs))
-
+            
+    
     def _get_apply_kwargs(self, input):
      
         return {
@@ -380,7 +408,8 @@ class Slicer(PaddingCalculator):
             selected = self.swap_coords(selected)
 
         selected = self.concat_or_extract(selected)
-        selected = self.unfold_new_dim(selected)    
+        selected = self.unfold_new_dim(selected) 
+
         return selected
 
     def unfold_new_dim(self, arr):
@@ -420,7 +449,7 @@ class Slicer(PaddingCalculator):
         for i, arr in enumerate(selected_data):
             if i == 0:
                 relative_coord = arr.coords[self.locus.dim] - arr.coords[self.locus.dim][0]
-
+        
             # every arr will have coord relative_foo
             arr = arr.assign_coords(
                 {f'relative_{self.locus.metadim}':(relative_coord.dims, relative_coord.data)}) 
@@ -518,6 +547,36 @@ class Slicer(PaddingCalculator):
         # just hold off implementing this until then
 
         pass
+
+
+class CoordTranslator(Calculator):
+
+    def __init__(self, metadim, offset):
+        self.metadim = metadim
+        self.offset = offset
+
+    def _call_on_signal(self, signal, key_spec=None):
+        output_signal = super()._call_on_signal(signal, key_spec=key_spec)
+        for attr in ('start', 'duration'):
+            val = getattr(signal, attr, None)
+            if val is not None:
+                setattr(output_signal, attr, val)
+
+        return output_signal
+    
+
+    def _get_apply_kwargs(self, input):
+     
+        return {
+            'data_schema': getattr(input, 'data_schema')
+            }
+    
+    def _apply(self, data, *, data_schema=None, **_):
+       
+        ax = [ax for ax in data_schema.axes if ax.metadim == self.metadim][0]
+        for coord in data.coords:
+            if coord in ax.relative_coords:
+                coord += self.offset 
 
 
       
