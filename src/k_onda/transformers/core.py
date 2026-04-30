@@ -79,10 +79,11 @@ def with_key_access(func):
 class Transform:
     """A transform function with optional metadata."""
 
-    def __init__(self, fn, padlen=None, signal_class=None, **kwargs):
+    def __init__(self, fn, padlen=None, signal_class=None, key_spec=None, **kwargs):
         self.fn = fn
         self.signal_class = signal_class
         self.padlen = padlen
+        self.key_spec = key_spec
         self.kwargs = kwargs
         
 

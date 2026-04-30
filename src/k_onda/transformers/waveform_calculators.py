@@ -54,6 +54,8 @@ class FWHM(Calculator):
         return widths[0]
 
     def _apply_inner(self, data, *args, **kwargs):
+
+
         if data.ndim > 1:
             return xr.apply_ufunc(
                 self.fwhm,

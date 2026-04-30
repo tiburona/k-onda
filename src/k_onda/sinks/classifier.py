@@ -35,6 +35,7 @@ class Classify:
         return Collection(labeled_entities)
     
     def _parse_spec(self, *chain):
+
         
         entities_to_label = chain[0].data.coords['index'].values
 

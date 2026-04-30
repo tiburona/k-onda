@@ -46,7 +46,7 @@ class Selector(Transformer):
         return output
       
     def _get_transform(self, signal, key_spec):
-        return Transform(fn = lambda x: x, padlen=self.window)
+        return Transform(fn = lambda x: x, padlen=self.window, key_spec=key_spec)
     
     @property
     def fixed_output_class(self):
@@ -317,13 +317,14 @@ class Slicer(Calculator):
 
             # update coords on the old dim
             metadim_axis = arr_schema.axes_by_metadim(metadim)[0]
-            coords=(CoordInfo(name=self._new_dim_coord, metadim=metadim, is_relative=True),)
+            coords=(CoordInfo(name=self._new_dim_coord(), metadim=metadim, is_relative=True),)
             if f'relative_{metadim}' not in arr_schema.coord_names:
                 coords += (CoordInfo(name=f'relative_{metadim}', metadim=metadim, is_relative=True),)
             arr_schema = arr_schema.update_axis_coords(metadim_axis, coords=coords)
 
             # add the new dim
-            new_axis = AxisInfo(name=self.new_dim, metadim=metadim, kind=AxisKind.AXIS)
+            new_axis = AxisInfo(name=self.new_dim, metadim=metadim, kind=AxisKind.AXIS, 
+                                coords=(CoordInfo(name=self.new_dim, metadim=metadim),))
             arr_schema = arr_schema.with_added(new_axis)
 
             return arr_schema
@@ -476,10 +477,25 @@ class Slicer(Calculator):
         # becomes an auxiliary coordinate.
 
         new_dim_coord = self._new_dim_coord()
-        return [(
-            arr
-            .swap_dims({arr.coords[new_dim_coord].dims[0]: new_dim_coord}) # after swap, dim is epoch_time
-            ) for arr in selected_data]
+        swapped = []
+
+        for arr in selected_data:
+            old_dim = arr.coords[new_dim_coord].dims[0]
+            units = arr.coords[new_dim_coord].pint.units
+
+            arr = arr.swap_dims({old_dim: new_dim_coord})
+
+            if units is not None:
+                arr = (
+                    arr
+                    .drop_indexes(new_dim_coord)
+                    .set_xindex(new_dim_coord)
+                    .pint.quantify({new_dim_coord: units})
+                )
+
+            swapped.append(arr)
+
+        return swapped
     
     def concat_or_extract(self, data):
 
@@ -574,10 +590,7 @@ class CoordTranslator(Calculator):
     
 
     def _get_apply_kwargs(self, input, *args):
-     
-        return {
-            'data_schema': getattr(input, 'data_schema')
-            }
+        return {'data_schema': getattr(input, 'data_schema')}
     
     def _apply(self, data, *, data_schema=None, **_):
        

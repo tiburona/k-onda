@@ -28,7 +28,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         source_signal=None,
         storage_strategy="lazy",
     ):
-        self.inputs = inputs if isinstance(inputs, Iterable) else (inputs,)
+        self._inputs = inputs if isinstance(inputs, Iterable) else (inputs,)
         self.transform = transform
         self.transformer = transformer
         self._data_schema = data_schema
@@ -42,7 +42,28 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self.conditions = {}
         self._validate_inputs()
         self._is_compiled = False
-   
+
+    @property
+    def inputs(self):
+        return self._inputs
+    
+    @inputs.setter
+    def inputs(self, value):
+        self._inputs = value
+        self._data_schema = None
+
+    @property
+    def data(self):
+        return self._materialize()
+    
+    @property
+    def data_schema(self):
+        if self._data_schema is None:
+            self._data_schema = self.transformer.make_output_schema(
+                self.inputs[0].data_schema, key_spec=self.transform.key_spec
+            )
+        return self._data_schema
+    
     @property
     def parent(self):
         return self.inputs[0] if len(self.inputs) == 1 else None
@@ -61,10 +82,6 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     @property
     def is_source(self):
         return not getattr(self, 'inputs', None)
-
-    @property
-    def data_schema(self):
-        return self._data_schema
     
     @property
     def generations(self):
@@ -128,10 +145,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
             self._cache = self.transform(*input_data)
         return self._cache
 
-    @property
-    def data(self):
-        return self._materialize()
-    
+  
     @property
     def endpoints(self):
         return {
