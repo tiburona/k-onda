@@ -15,6 +15,7 @@ class AxisKind(Enum):
 class CoordInfo:
     name: str
     metadim: str | None = None
+    is_relative: str | bool = False
 
 
 @dataclass(frozen=True)
@@ -23,7 +24,6 @@ class AxisInfo:
     kind: AxisKind                              # structural: how the machinery treats it
     metadim: str | None = None                  # semantic: what physical quantity it represents
     coords: tuple[CoordInfo, ...] = ()          # all the coords available on the axis 
-    relative_coords: tuple[CoordInfo, ...] = () # all the relative coords available on the axis
 
 
 @types.register
@@ -72,6 +72,12 @@ class Schema:
     def axes_of_kind(self, kind) -> list[AxisInfo]:
         return [ax for ax in self.axes if ax.kind == kind]
     
+    def coord_by_name(self, name) -> CoordInfo:
+        for ax in self.axes:
+            for coord in ax.coords:
+                if coord.name == name:
+                    return coord
+                
     def without(self, name) -> Schema:
         new_schema = copy(self)
         new_schema.axes = [ax for ax in self.axes if ax.name != name]
@@ -153,6 +159,15 @@ class Schema:
     
     def is_value_metadim(self, dim) -> bool:
         return self.value_metadim == dim
+    
+    def update_axis_coords(self, ax, coords):
+        new_schema = copy(self)
+        coords = copy(ax.coords) + coords
+        new_ax = AxisInfo(name=ax.name, metadim=ax.metadim, kind=ax.kind, coords=coords)
+        new_schema = new_schema.without(ax.name)
+        new_schema = new_schema.with_added(new_ax)
+        return new_schema
+
     
 
 @types.register

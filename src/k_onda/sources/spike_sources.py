@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 import pint
 
-from ..central import Schema, DatasetSchema, AxisInfo, AxisKind
+from ..central import Schema, DatasetSchema, AxisInfo, AxisKind, CoordInfo
 from ..signals import PointProcessSignal
 from .core import DataComponent, DataIdentity, DataSource
 from k_onda.central import types
@@ -129,10 +129,12 @@ class SpikeCluster(DataComponent):
     @property
     def data_schema(self):
         spike_times_schema = Schema(
-            axes=[AxisInfo('spikes', kind=AxisKind.POINT_PROCESS_INDEX)],
+            axes=[AxisInfo('spikes', kind=AxisKind.POINT_PROCESS_INDEX, 
+                           coords=(CoordInfo(name='spike'),))],
             value_metadim='time')
         waveforms_schema = Schema(
-            axes=[AxisInfo('spikes', AxisKind.POINT_PROCESS_INDEX, metadim=None),
+            axes=[AxisInfo('spikes', AxisKind.POINT_PROCESS_INDEX, metadim=None, 
+                           coords=(CoordInfo(name='spike'),)),
                   AxisInfo('samples', AxisKind.AXIS, metadim='time'),
                   AxisInfo('electrodes', AxisKind.AXIS, metadim=None)],
             value_metadim='voltage'

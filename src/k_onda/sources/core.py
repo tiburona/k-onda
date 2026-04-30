@@ -130,7 +130,6 @@ class DataIdentity(AnnotatorMixin, SelectMixin):
         if data_components is not None:
             self.add_data_components(data_components)
         
-
     def __deepcopy__(self, memo):
         return self
         

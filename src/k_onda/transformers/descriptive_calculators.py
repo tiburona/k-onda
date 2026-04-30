@@ -8,7 +8,7 @@ import numpy as np
 import xarray as xr
 
 from .core import Calculator
-from k_onda.central import types, AxisInfo, AxisKind
+from k_onda.central import types, AxisInfo, AxisKind, CoordInfo
 from k_onda.utils import is_unitful, w_units
 
 
@@ -105,7 +105,11 @@ class Histogram(Calculator):
             AxisInfo(
                 f'{self.dim}_bins',
                 AxisKind.AXIS,
-                metadim=metadim or self.dim
+                metadim=metadim or self.dim,
+                coords=(
+                    CoordInfo(name=f'{self.dim}_bins', metadim=metadim), 
+                    CoordInfo(name=self.dim, metadim=metadim)
+                    )
             )
         )
         schema.value_metadim = None

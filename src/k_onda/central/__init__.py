@@ -1,10 +1,10 @@
 from .registry import types, SignalLike
 
-from .schema import Schema, DatasetSchema, AxisInfo, AxisKind
+from .schema import Schema, DatasetSchema, AxisInfo, AxisKind, CoordInfo
 
 from .central import operations
 
-from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds, DimOffset
+from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds
 
 
 
@@ -18,6 +18,8 @@ __all__ = [
     "PadDimPair",
     "SpanDimPair",
     "DimBounds",
-    "DimOffset"
+    "AxisInfo",
+    "AxisKind",
+    "CoordInfo"
     
 ]

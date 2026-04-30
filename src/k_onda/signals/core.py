@@ -1,6 +1,7 @@
 import numpy as np
 import xarray as xr
 from collections.abc import Iterable
+from copy import deepcopy
 
 from ..transformers.transformer_mixins import CalculateMixin, UnstackMixin, IntersectionMixin
 from k_onda.transformers import SelectMixin
@@ -21,7 +22,6 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         *,
         context=None,
         transformer=None,
-        optimizer=None,
         origin=None,
         start=None,
         duration=None,
@@ -33,9 +33,6 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self.transformer = transformer
         self._data_schema = data_schema
         self.context = context
-        self.optimizers = []
-        if optimizer:
-            self.optimizers.append = optimizer
         self.origin = origin
         self.start = start or getattr(self.parent, 'start', None)
         self.duration = duration or getattr(self.parent, 'duration', None)
@@ -45,8 +42,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self.conditions = {}
         self._validate_inputs()
         self._is_compiled = False
-      
-    
+   
     @property
     def parent(self):
         return self.inputs[0] if len(self.inputs) == 1 else None
@@ -101,6 +97,27 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     
     def __truediv__(self, other):
         return self.divide_by(other)
+    
+    def __deepcopy__(self, memo):
+        cls = type(self)
+        copied = cls.__new__(cls)
+        memo[id(self)] = copied
+
+        copied.inputs = tuple(deepcopy(inp, memo) for inp in self.inputs)
+        copied.transform = self.transform
+        copied.transformer = self.transformer
+        copied._data_schema = deepcopy(self._data_schema, memo)
+        copied.context = self.context
+        copied.origin = self.origin
+        copied.start = self.start
+        copied.duration = self.duration
+        copied.source_signal = self.source_signal
+        copied._storage_strategy = self._storage_strategy
+        copied._cache = None
+        copied.conditions = deepcopy(self.conditions, memo)
+        copied._is_compiled = self._is_compiled
+
+        return copied
 
     def _materialize(self):
         if not self._is_compiled:

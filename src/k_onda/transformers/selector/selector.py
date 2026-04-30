@@ -9,7 +9,7 @@ import numpy as np
 from k_onda.loci import  IntervalSet
 from ..core import Transformer, Transform, Calculator
 from k_onda.graph import list_nodes, walk_tree, build_consumers_map
-from k_onda.central import Schema, DatasetSchema, types, DimBounds, DimOffset, AxisInfo, AxisKind
+from k_onda.central import Schema, DatasetSchema, types, DimBounds, AxisInfo, AxisKind, CoordInfo
 
 
 # TODO: Selector was working for multiple dims, but work on Interval selection
@@ -72,13 +72,14 @@ class SelectionPlanner(Transformer):
 
     def _call_on_signal(self, signal, key_spec=None):
 
-        all_nodes, padlen_accumulators, selectors = self._gather_selectors(signal)
+        all_nodes, selector_nodes = self._gather_selectors(signal)
         leaf = signal
-        if len(selectors):
-            self._accumulate_padlen(all_nodes, padlen_accumulators)
-            lower_bound_offsets = self._lower_bound_correction(signal, selectors)
-            leaf = self._place_slicers(all_nodes, selectors, padlen_accumulators, 
-                                       lower_bound_offsets)
+        if len(selector_nodes):
+            padlen_accumulators = self._accumulate_padlen(signal, all_nodes)
+            lower_bound_offsets = self._lower_bound_correction(selector_nodes)
+            leaf = self._place_slicers(
+                all_nodes, selector_nodes, padlen_accumulators, lower_bound_offsets
+                )
         return leaf
             
     def _gather_selectors(self, signal):
@@ -88,17 +89,16 @@ class SelectionPlanner(Transformer):
         selector_nodes = [
             node for node in all_nodes if isinstance(node.transformer, Selector)
             ]
-        return signal, all_nodes, selector_nodes
+        return  all_nodes, selector_nodes
 
-    # TODO:
-    # I'm not sure that signal as the source of the metadim_of callable makes sense
-    # forever, at least in Schema's current state.
+    # TODO: I'm not sure that signal as the source of the metadim_of callable 
+    # makes sense forever, at least in Schema's current state.
     # It's possible to have a pushdown selector that destroys dims downstream 
     # that are selectable upstream.  This needs more thought, but I need to check
     # that a data schema can do metadim translation on all the dims a signal's 
     # ancestors had.  Deferred for now.
 
-    def _accumulate_padlen(self, signal, all_nodes, padlen_accumulators):
+    def _accumulate_padlen(self, signal, all_nodes):
         # Imagine 5 (pseudocode) nodes, listed downstream->upstream
         # [select_event(window=w), select_epoch, filter, scale, source]
 
@@ -120,16 +120,19 @@ class SelectionPlanner(Transformer):
                 for pa in padlen_accumulators[i+1:]: 
                     pa += node.transform.padlen
 
+        return padlen_accumulators
+
     
     def _lower_bound_correction(self, selector_nodes):
-        lower_bound_offsets = {}
+        offsets = {}
 
         for selector_node in selector_nodes:
             if selector_node.transformer.window:
-                if selector_node.transformer.locus.metadim in lower_bound_offsets:
+                metadim = selector_node.transformer.locus.metadim  
+                if metadim in offsets:
                     continue
-                lower_bound_offsets[selector_node.transformer.locus.metadim] = selector_node
-        return lower_bound_offsets
+                offsets[metadim] = selector_node.transformer.window[metadim][0]
+        return offsets
     
     def _place_slicers(
             self, 
@@ -257,7 +260,7 @@ class SelectionPlanner(Transformer):
             leaf = slicer_signal
 
         for metadim, offset in lower_bound_offsets.items():
-            leaf = CoordTranslator(leaf, meatdim=metadim, offset=offset)(leaf)
+            leaf = CoordTranslator(metadim=metadim, offset=offset)(leaf)
            
         return leaf
     
@@ -269,14 +272,14 @@ class SelectionPlanner(Transformer):
             selector_ancestors=None, 
             consumers=None, 
             check_ancestors=False,
-            is_trim=False,
-            offset=None
+            is_trim=False
             ):
         selector = selector_signal.transformer
         new_dim = selector.new_dim if not is_trim else None
         window = selector.window if not is_trim else None
         slicer_signal = Slicer(
-            selection_bounds, selector.mode, selector.locus, new_dim, window, offset)(node)
+            selection_bounds, selector.mode, selector.locus, new_dim, window, 
+            is_trim=is_trim)(node)
         slicer_signal._selection_planned = True
         for consumer in consumers or []:
             if not check_ancestors or id(consumer) in selector_ancestors:
@@ -286,11 +289,12 @@ class SelectionPlanner(Transformer):
 
 class Slicer(Calculator):
 
-    def __init__(self, selection_bounds, mode, locus, new_dim, window):
+    def __init__(self, selection_bounds, mode, locus, new_dim, window, is_trim=False):
         self.mode = mode
         self.locus = locus
         self.new_dim = new_dim
         self.window = window
+        self.is_trim = is_trim
         self.selection_bounds = selection_bounds
         self.multi_select = isinstance(locus, IntervalSet)
         
@@ -308,15 +312,22 @@ class Slicer(Calculator):
         # I need to check this, and maybe have an index property that's the reverse
         # of when the axes appear in the list self.axes
         def update_schema(arr_schema):
+        
             metadim = arr_schema.metadim_from(self.locus.dim)
-            prev_coords = arr_schema.axes_by_metadim[0].coords
-            prev_relative_coords = arr_schema.axes_by_metadim[0].relative_coords
-            new_axis = AxisInfo(
-                name=self.new_dim, metadim=metadim, kind=AxisKind.AXIS,
-                coords=prev_coords + (f'{self.new_dim}_{metadim}', self.new_dim),
-                relative_coords=prev_relative_coords + (f'{self.new_dim}_{metadim}'))
-            return arr_schema.with_added(new_axis)
-            
+
+            # update coords on the old dim
+            metadim_axis = arr_schema.axes_by_metadim(metadim)[0]
+            coords=(CoordInfo(name=self._new_dim_coord, metadim=metadim, is_relative=True),)
+            if f'relative_{metadim}' not in arr_schema.coord_names:
+                coords += (CoordInfo(name=f'relative_{metadim}', metadim=metadim, is_relative=True),)
+            arr_schema = arr_schema.update_axis_coords(metadim_axis, coords=coords)
+
+            # add the new dim
+            new_axis = AxisInfo(name=self.new_dim, metadim=metadim, kind=AxisKind.AXIS)
+            arr_schema = arr_schema.with_added(new_axis)
+
+            return arr_schema
+        
         if isinstance(data_schema, Schema):
             return update_schema(data_schema)
         else:
@@ -351,8 +362,7 @@ class Slicer(Calculator):
             if not signal.data_schema.is_selectable(dim):
                 raise ValueError(f"Signal data can not be selected on dimension {dim}.")
             
-    
-    def _get_apply_kwargs(self, input):
+    def _get_apply_kwargs(self, input, *args):
      
         return {
             'data_schema': getattr(input, 'data_schema')
@@ -383,8 +393,6 @@ class Slicer(Calculator):
 
     def select_continuous(self, data, data_schema):
 
-        if self.new_dim == 'pip':
-            a = 'foo'
         original_dim = data_schema.concrete_dim_from(self.locus.dim)
 
         selection_bounds = self.selection_bounds.to_array_of_dicts()
@@ -565,7 +573,7 @@ class CoordTranslator(Calculator):
         return output_signal
     
 
-    def _get_apply_kwargs(self, input):
+    def _get_apply_kwargs(self, input, *args):
      
         return {
             'data_schema': getattr(input, 'data_schema')
@@ -573,10 +581,14 @@ class CoordTranslator(Calculator):
     
     def _apply(self, data, *, data_schema=None, **_):
        
-        ax = [ax for ax in data_schema.axes if ax.metadim == self.metadim][0]
-        for coord in data.coords:
-            if coord in ax.relative_coords:
-                coord += self.offset 
+        ax = next(ax for ax in data_schema.axes if ax.metadim == self.metadim)
+        updated = {
+            name: data.coords[name] + self.offset
+            for name in data.coords
+            if data_schema.coord_by_name(name).is_relative 
+        }
+        
+        return data.assign_coords(updated) if updated else data 
 
 
       
