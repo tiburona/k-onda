@@ -10,7 +10,6 @@ from .core import DataComponent, DataIdentity, DataSource
 from k_onda.central import types
 
 
-
 @types.register
 class PhyOutput(DataSource):
     def __init__(self, session, data_loader_config, sampling_rate=None):
@@ -26,7 +25,9 @@ class PhyOutput(DataSource):
     @property
     def sampling_rate(self):
         if self._sampling_rate is None:
-            self._sampling_rate = self.phy_model.sample_rate * pint.application_registry.Hz
+            self._sampling_rate = (
+                self.phy_model.sample_rate * pint.application_registry.Hz
+            )
         return self._sampling_rate
 
     @property
@@ -49,16 +50,16 @@ class PhyOutput(DataSource):
         if self._cluster_groups is None:
             self._cluster_groups = self.get_cluster_groups()
         return self._cluster_groups
-    
+
     @property
     def components(self):
-        if not len (self._components):
+        if not len(self._components):
             for cluster_id, group in self.cluster_groups.items():
                 if group == "good":
                     spike_cluster = SpikeCluster(self, cluster_id)
                     self._components.append(spike_cluster)
         return self._components
-                
+
     def get_cluster_groups(self):
         with open(self.file_path / "cluster_info.tsv") as file:
             tsv_file = csv.DictReader(file, delimiter="\t")
@@ -87,12 +88,12 @@ class PhyOutput(DataSource):
 
     def get_spike_times_for_cluster(self, cluster_idx):
         return self.spike_times[self.get_spike_ids_for_cluster(cluster_idx)]
-    
-    
+
+
 @types.register
 class Neuron(DataIdentity):
-    name = 'neuron'
-    _snapshot_fields = DataIdentity._snapshot_fields + ('neuron_type',)
+    name = "neuron"
+    _snapshot_fields = DataIdentity._snapshot_fields + ("neuron_type",)
 
     def __init__(self, data_components, config):
         super().__init__(data_components)
@@ -100,16 +101,17 @@ class Neuron(DataIdentity):
         self._label = self.generate_label()
 
     def generate_label(self):
-        preexisting_neurons = self.subject.data_identities['neurons']
+        preexisting_neurons = self.subject.data_identities["neurons"]
         integer_ids = [int(neuron.label[7:]) for neuron in preexisting_neurons]
         integer_id = 0 if not len(integer_ids) else max(integer_ids) + 1
-        label = f'neuron{integer_id}'
+        label = f"neuron{integer_id}"
         return label
 
     @property
     def label(self):
         return self._label
-    
+
+
 @types.register
 class SpikeCluster(DataComponent):
     output_class = PointProcessSignal
@@ -118,57 +120,63 @@ class SpikeCluster(DataComponent):
     def __init__(self, data_source, cluster_id, neuron=None):
         super().__init__(data_source)
         self.cluster_id = cluster_id
-        self.component_id = (self.data_source)
+        self.component_id = self.data_source
         if neuron is not None:
             self.assign_to_neuron(neuron)
 
     @property
     def identifiers(self):
         return [f"cluster_{self.cluster_id}"]
-    
+
     @property
     def data_schema(self):
         spike_times_schema = Schema(
-            axes=[AxisInfo('spikes', kind=AxisKind.POINT_PROCESS_INDEX, 
-                           coords=(CoordInfo(name='spike'),))],
-            value_metadim='time')
-        waveforms_schema = Schema(
-            axes=[AxisInfo('spikes', AxisKind.POINT_PROCESS_INDEX, metadim=None, 
-                           coords=(CoordInfo(name='spike'),)),
-                  AxisInfo('samples', AxisKind.AXIS, metadim='time'),
-                  AxisInfo('electrodes', AxisKind.AXIS, metadim=None)],
-            value_metadim='voltage'
+            axes=[
+                AxisInfo(
+                    "spikes",
+                    kind=AxisKind.POINT_PROCESS_INDEX,
+                    coords=(CoordInfo(name="spike"),),
+                )
+            ],
+            value_metadim="time",
         )
-        return DatasetSchema({
-             'spike_times': spike_times_schema,
-             'waveforms': waveforms_schema
-        })
+        waveforms_schema = Schema(
+            axes=[
+                AxisInfo(
+                    "spikes",
+                    AxisKind.POINT_PROCESS_INDEX,
+                    metadim=None,
+                    coords=(CoordInfo(name="spike"),),
+                ),
+                AxisInfo("samples", AxisKind.AXIS, metadim="time"),
+                AxisInfo("electrodes", AxisKind.AXIS, metadim=None),
+            ],
+            value_metadim="voltage",
+        )
+        return DatasetSchema(
+            {"spike_times": spike_times_schema, "waveforms": waveforms_schema}
+        )
 
     @property
     def neuron(self):
         return self.data_identity
-    
+
     def to_signal(self):
         signal = super().to_signal()
         signal.duration = self.duration
         return signal
 
-
     def data_loader(self):
         spike_times = self.data_source.get_spike_times_for_cluster(self.cluster_id)
         spike_times = xr.DataArray(
-            spike_times * pint.application_registry.s,  # TODO is this the actual unit they come from phy in?
+            spike_times
+            * pint.application_registry.s,  # TODO is this the actual unit they come from phy in?
             dims=("spikes",),
         )
         waveforms = self.data_source.get_waveforms(self.cluster_id)
-        waveforms = xr.DataArray(waveforms, dims=('spikes', 'samples', 'electrodes'))
+        waveforms = xr.DataArray(waveforms, dims=("spikes", "samples", "electrodes"))
 
-        return xr.Dataset(
-            {'spike_times': spike_times, 'waveforms': waveforms}
-        )
+        return xr.Dataset({"spike_times": spike_times, "waveforms": waveforms})
 
     def assign_to_neuron(self, neuron):
         self.assign_to_data_identity(neuron)
-
-
-

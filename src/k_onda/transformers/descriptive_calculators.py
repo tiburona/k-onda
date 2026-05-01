@@ -12,7 +12,7 @@ from k_onda.central import types, AxisInfo, AxisKind, CoordInfo
 from k_onda.utils import is_unitful, w_units
 
 
-DIM_DEFAULT_UNITS = {'time': 's', 'frequency': 'Hz'}
+DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 
 
 @types.register
@@ -28,10 +28,10 @@ class ReduceDim(Calculator):
         if self.weights is not None:
             data = data.weighted(self.weights, keep_attrs=True)
         return getattr(data, self.method)(dim=self.dim, keep_attrs=True)
-    
+
     def output_schema(self, input_schema):
         return input_schema.without(self.dim)
-    
+
     def resolve_output_class(self, input):
         # If we're operating on a StackedSignal, preserve the stack type.
         # If this calculator has a fixed output class, return that.
@@ -42,24 +42,26 @@ class ReduceDim(Calculator):
 
     def _infer_output_class(self, input):
 
-        if isinstance(input.data_schema, types.Schema) and len(input.data_schema.axes) == 1:
+        if (
+            isinstance(input.data_schema, types.Schema)
+            and len(input.data_schema.axes) == 1
+        ):
             return types.ScalarSignal
         if input.data_schema.is_point_process():
             if not input.data_schema.is_point_process_essential(self.dim):
                 return types.PointProcessSignal
             else:
-                if input.data_schema.has_dim('time'):
+                if input.data_schema.has_dim("time"):
                     return types.TimeSeriesSignal
                 else:
                     return types.Signal
         return super()._infer_output_class(input)
 
-        
 
 @types.register
 class Histogram(Calculator):
-    name = 'histogram'
-    key_mode = 'standalone'
+    name = "histogram"
+    key_mode = "standalone"
 
     def __init__(
         self,
@@ -92,7 +94,7 @@ class Histogram(Calculator):
     @property
     def fixed_output_class(self):
         return types.DistributionSignal
-    
+
     def output_schema(self, input_schema):
         schema = input_schema.without_dim(self.dim)
         # TODO: should I write an metadim_from(dim) method on schema?
@@ -103,38 +105,37 @@ class Histogram(Calculator):
         metadim = axis.metadim if axis else input_schema.value_metadim
         schema = schema.with_added(
             AxisInfo(
-                f'{self.dim}_bins',
+                f"{self.dim}_bins",
                 AxisKind.AXIS,
                 metadim=metadim or self.dim,
                 coords=(
-                    CoordInfo(name=f'{self.dim}_bins', metadim=metadim), 
-                    CoordInfo(name=self.dim, metadim=metadim)
-                    )
+                    CoordInfo(name=f"{self.dim}_bins", metadim=metadim),
+                    CoordInfo(name=self.dim, metadim=metadim),
+                ),
             )
         )
         schema.value_metadim = None
         return schema
-        
+
     def _get_extra_apply_kwargs(self, input):
-        
-        extra_kwargs = {'is_point_process': isinstance(input, types.PointProcessSignal)}
+
+        extra_kwargs = {"is_point_process": isinstance(input, types.PointProcessSignal)}
 
         # TODO: eventually there should be other string range sources and/or
-        # a concept of finding the range from the nearest bound container 
+        # a concept of finding the range from the nearest bound container
         # along dim, but since this is mostly an issue for point process
         # signals and selection of ragged arrays is deferred on purpose,
         # this is a later problem.
-        if self.range_source == 'session':
-            extra_kwargs['hist_range'] = (
-                input.origin.session.start, 
-                input.origin.session.start + input.origin.session.duration
-                )
+        if self.range_source == "session":
+            extra_kwargs["hist_range"] = (
+                input.origin.session.start,
+                input.origin.session.start + input.origin.session.duration,
+            )
 
         return extra_kwargs
 
-
     def _prepare_hist_inputs(self, data, hist_range, data_schema):
-    
+
         if isinstance(data, xr.Dataset):
             key = data_schema.default_variable_for(self.dim)
             data = data[key]
@@ -147,13 +148,13 @@ class Histogram(Calculator):
             lo, hi = self.hist_range(data, dim=dim)
         elif self.hist_range is not None:
             lo, hi = self.hist_range
-        elif self.range_source == 'coords':
+        elif self.range_source == "coords":
             coord = np.asarray(data.coords[dim])
             lo, hi = coord[0], coord[-1]
-        elif self.range_source == 'data':
+        elif self.range_source == "data":
             lo = data.min().item()
             hi = data.max().item()
-        elif self.range_source == 'session':
+        elif self.range_source == "session":
             lo, hi = hist_range
         else:
             raise ValueError(f"Unknown range_source '{self.range_source}'")
@@ -171,14 +172,16 @@ class Histogram(Calculator):
                 if not is_unitful(self.bin_size):
                     lo = lo.magnitude
                     hi = hi.magnitude
-                elif not all([is_unitful(b) for b in (lo, hi)]): 
+                elif not all([is_unitful(b) for b in (lo, hi)]):
                     bin_size = self.bin_size.magnitude
-                else: 
+                else:
                     raise e
-                                               
-                warnings.warn("One of histogram bin_size or your hist_range did not have units."
-                    "Units were stripped to calculate bins.")
-                
+
+                warnings.warn(
+                    "One of histogram bin_size or your hist_range did not have units."
+                    "Units were stripped to calculate bins."
+                )
+
                 bins = ceil((hi - lo) / bin_size)
 
         if callable(self.weights):
@@ -237,17 +240,20 @@ class Histogram(Calculator):
             else:
                 new_dim = f"{self.dim}_bins"
                 new_dims.append(new_dim)
-                
+
                 if self.bin_coord == "left":
                     new_coords[new_dim] = bin_edges[:-1]
                 elif self.bin_coord == "center":
-                    center = lambda i, edges: (edges[i] + edges[i + 1]) / 2
+
+                    def center(i, edges):
+                        return (edges[i] + edges[i + 1]) / 2
+
                     new_coords[new_dim] = [
                         center(i, bin_edges) for i in range(len(bin_edges) - 1)
                     ]
                 else:
                     raise ValueError("Unknown bin coord")
-                
+
         if is_unitful(self.bins):
             units = self.bins[0].u
         elif is_unitful(self.bin_size):
@@ -268,24 +274,24 @@ class Histogram(Calculator):
         result = xr.DataArray(result, dims=new_dims, coords=new_coords, attrs=new_attrs)
         # For instance, even though the new dim is time_bins, make sure 'time' is available
         # as an auxiliary coord for later selection
-        result = result.assign_coords({self.dim: (new_dim, result.coords[new_dim].data)})
+        result = result.assign_coords(
+            {self.dim: (new_dim, result.coords[new_dim].data)}
+        )
         result = result.pint.quantify({new_dim: units, self.dim: units})
 
         result = super()._wrap_result(result)
         return result
 
     def _apply_inner(self, data, *args, **kwargs):
-        hist_range = kwargs.get('hist_range')
-        data_schema = kwargs.get('data_schema')
-
+        hist_range = kwargs.get("hist_range")
+        data_schema = kwargs.get("data_schema")
 
         data, axis, bins, hist_range, weights = self._prepare_hist_inputs(
             data, hist_range, data_schema
-            )
+        )
 
         hist, bin_edges = self.histogram_along_axis(
             data, bins, axis, hist_range, weights, self.density
         )
 
-        return hist, {'axis': axis, 'bin_edges': bin_edges, 'transformed_data': data}
-    
+        return hist, {"axis": axis, "bin_edges": bin_edges, "transformed_data": data}

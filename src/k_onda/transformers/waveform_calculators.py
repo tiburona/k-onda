@@ -4,13 +4,11 @@ import xarray as xr
 import pint
 
 from .core import Calculator
-from k_onda.central import Schema
 
 
 class FWHM(Calculator):
-
-    name = 'fwhm'
-    key_mode = 'append'
+    name = "fwhm"
+    key_mode = "append"
 
     def __init__(
         self,
@@ -34,7 +32,9 @@ class FWHM(Calculator):
             return int(peaks[peak_pos]), float(heights[peak_pos])
 
         values = np.asarray(data)
-        trim = int(getattr(self.permissible_distance, "magnitude", self.permissible_distance))
+        trim = int(
+            getattr(self.permissible_distance, "magnitude", self.permissible_distance)
+        )
         if trim > 0 and values.size > 2 * trim:
             values = values[trim:-trim]
 
@@ -43,7 +43,9 @@ class FWHM(Calculator):
 
         if self.include_valleys:
             valley_idx, valley_height = find_max_peak(-values)
-            if valley_idx is not None and (peak_idx is None or valley_height > peak_height):
+            if valley_idx is not None and (
+                peak_idx is None or valley_height > peak_height
+            ):
                 peak_idx = valley_idx
                 signal_for_width = -values
 
@@ -55,7 +57,6 @@ class FWHM(Calculator):
 
     def _apply_inner(self, data, *args, **kwargs):
 
-
         if data.ndim > 1:
             return xr.apply_ufunc(
                 self.fwhm,
@@ -65,11 +66,10 @@ class FWHM(Calculator):
             )
 
         return self.fwhm(data.values)
-    
+
     def _wrap_result(self, result, *args):
         result = xr.DataArray(result).pint.quantify(self.distance_unit)
         return super()._wrap_result(result)
-    
+
     def output_schema(self, input_schema):
         return input_schema.without(self.dim)
-

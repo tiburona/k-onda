@@ -73,9 +73,11 @@ class Filter(PaddingCalculator):
         axis = data.dims.index(dim)
         result = sosfiltfilt(designed_filter, data, axis=axis)
         return result
-    
+
     def _wrap_result(self, result, data):
-        result = xr.DataArray(result, coords=data.coords, dims=data.dims, attrs=data.attrs)
+        result = xr.DataArray(
+            result, coords=data.coords, dims=data.dims, attrs=data.attrs
+        )
         result = super()._wrap_result(result)
         return result
 
@@ -91,8 +93,10 @@ class MedianFilter(Calculator):
         kernel_size = tuple(self.kernel_sizes.get(dim, 1) for dim in data.dims)
         result = medfilt(data, kernel_size=kernel_size)
         return result
-    
+
     def _wrap_result(self, result, data):
-        result = xr.DataArray(result, coords=data.coords, dims=data.dims, attrs=data.attrs)
+        result = xr.DataArray(
+            result, coords=data.coords, dims=data.dims, attrs=data.attrs
+        )
         result = super()._wrap_result(result)
         return result

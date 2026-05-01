@@ -8,9 +8,8 @@ from k_onda.central import types
 
 
 class Rate(Calculator):
-
-    name = 'rate'
-    key_mode = 'standalone'
+    name = "rate"
+    key_mode = "standalone"
 
     def __init__(self, intervals=None, exclude_initial=None):
         self.intervals = intervals
@@ -26,8 +25,8 @@ class Rate(Calculator):
         from ..signals import BinarySignal
 
         return {
-            'duration': parent.duration,
-            'is_binary': isinstance(parent, BinarySignal)
+            "duration": parent.duration,
+            "is_binary": isinstance(parent, BinarySignal),
         }
 
     def _validate_input(self, input, **kwargs):
@@ -38,18 +37,22 @@ class Rate(Calculator):
 
     def _prepare_rate_inputs(self, data, data_schema, intervals, exclude_initial):
         if isinstance(data_schema, types.DatasetSchema):
-            time_key = data_schema.default_variable_for('time')
+            time_key = data_schema.default_variable_for("time")
             data = data[time_key]
             data_schema = data_schema[time_key]
 
-        concrete_dim = data_schema.concrete_dim_from('time')
+        concrete_dim = data_schema.concrete_dim_from("time")
 
         if not concrete_dim:
-            raise ValueError("Right now Rate only works on time dims and no dim in your DataSchema " \
-            "represents time.")
-      
+            raise ValueError(
+                "Right now Rate only works on time dims and no dim in your DataSchema "
+                "represents time."
+            )
+
         intervals = intervals(data) if callable(intervals) else intervals
-        exclude_initial = exclude_initial(data) if callable(exclude_initial) else exclude_initial
+        exclude_initial = (
+            exclude_initial(data) if callable(exclude_initial) else exclude_initial
+        )
         return data, data_schema, concrete_dim, intervals, exclude_initial
 
     @staticmethod
@@ -68,7 +71,9 @@ class Rate(Calculator):
 
         return int(arr[0]) + np.count_nonzero(arr[1:] & ~arr[:-1])
 
-    def _apply_inner(self, data, duration=None, is_binary=False, data_schema=None, *args, **kwargs):
+    def _apply_inner(
+        self, data, duration=None, is_binary=False, data_schema=None, *args, **kwargs
+    ):
 
         if is_binary:
             if self.intervals is not None or self.exclude_initial is not None:
@@ -77,8 +82,10 @@ class Rate(Calculator):
                 )
             return self._count_binary_events(data) / duration
 
-        selected_data, data_schema, concrete_dim, intervals, exclude_initial = self._prepare_rate_inputs(
-            data, data_schema, self.intervals, self.exclude_initial
+        selected_data, data_schema, concrete_dim, intervals, exclude_initial = (
+            self._prepare_rate_inputs(
+                data, data_schema, self.intervals, self.exclude_initial
+            )
         )
 
         if exclude_initial:
@@ -90,9 +97,12 @@ class Rate(Calculator):
 
         if intervals:
             ureg = pint.application_registry
-            starts = np.searchsorted(selected_data, [interval[0] for interval in intervals])
+            starts = np.searchsorted(
+                selected_data, [interval[0] for interval in intervals]
+            )
             stops = np.searchsorted(
-                selected_data, [interval[1] + 10 ** (-9) * ureg.s for interval in intervals]
+                selected_data,
+                [interval[1] + 10 ** (-9) * ureg.s for interval in intervals],
             )
             num_events = sum(
                 len(selected_data[start:stop]) for start, stop in zip(starts, stops)
@@ -101,9 +111,8 @@ class Rate(Calculator):
             return num_events / duration
 
         return len(selected_data) / duration
-    
+
     def _wrap_result(self, result, *args):
         result = xr.DataArray(result)
         result = super()._wrap_result(result)
         return result
-    

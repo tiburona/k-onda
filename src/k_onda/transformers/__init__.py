@@ -18,7 +18,7 @@ __all__ = [
     "Transform",
     "Transformer",
     "Calculator",
-    "PadidingCalculator",
+    "PaddingCalculator",
     "Shift",
     "Scale",
     "ReduceDim",
@@ -35,10 +35,11 @@ __all__ = [
     "StackSignals",
     "UnstackSignals",
     "Selector",
+    "SelectMixin",
     "Aggregator",
     "feature_registry",
     "ExtractFeatures",
     "KMeans",
     "Slicer",
-    "DimBounds"
+    "DimBounds",
 ]

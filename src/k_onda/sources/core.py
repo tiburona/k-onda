@@ -6,9 +6,12 @@ import uuid
 from k_onda.provenance import AnnotatorMixin
 
 
-
 from k_onda.transformers.transformer_mixins import (
-    CalculateMixin, StackMixin, AggregateMixin, PointProcessMixin)
+    CalculateMixin,
+    StackMixin,
+    AggregateMixin,
+    PointProcessMixin,
+)
 from k_onda.transformers import SelectMixin
 from k_onda.signals import Signal
 from k_onda.mixins import DictDelegator, ConfigSetter
@@ -28,11 +31,12 @@ class DataSource(ConfigSetter):
         self.label = label
         self.file_path = Path(
             self.fill_fields(
-                self.data_loader_config['path'],
+                self.data_loader_config["path"],
                 experiment=self.session.experiment,
-                subject = self.session.subject,
-                session = self.session
-            ))
+                subject=self.session.subject,
+                session=self.session,
+            )
+        )
         self.file_ext = self.data_loader_config.get("file_ext")
         self._raw_data = None
         self.subject = self.session.subject
@@ -78,7 +82,7 @@ class DataComponent(CalculateMixin, SelectMixin):
         else:
             parts.append(str(self.uid)[:8])
         return ":".join(parts)
-    
+
     @property
     def identifiers(self):
         return []
@@ -87,11 +91,11 @@ class DataComponent(CalculateMixin, SelectMixin):
         if self._data is None:
             self._data = self._data_loader()
         return self._data
-    
+
     # subclasses override
     def _data_loader(self):
         pass
-    
+
     @property
     def signal(self):
         return self.to_signal()
@@ -104,9 +108,9 @@ class DataComponent(CalculateMixin, SelectMixin):
             context=context,
             transform=lambda: loader(),
             data_schema=self.data_schema,
-            origin=self
+            origin=self,
         )
-      
+
     def assign_to_data_identity(self, data_identity):
         if data_identity is None:
             if self.data_identity is None:
@@ -119,7 +123,7 @@ class DataComponent(CalculateMixin, SelectMixin):
 @types.register
 class DataIdentity(AnnotatorMixin, SelectMixin):
     name = "identity"
-    _snapshot_fields = ('component_ids',)
+    _snapshot_fields = ("component_ids",)
 
     def __init__(self, data_components=None, config=None):
         self.uid = uuid.uuid4()
@@ -129,25 +133,25 @@ class DataIdentity(AnnotatorMixin, SelectMixin):
         self._init_annotations()
         if data_components is not None:
             self.add_data_components(data_components)
-        
+
     def __deepcopy__(self, memo):
         return self
-        
+
     def __hash__(self):
         return hash(self.uid)
 
     def __eq__(self, other):
         return isinstance(other, DataIdentity) and other.uid == self.uid
-    
+
     # this gets overridden by subclasses
     @property
     def label(self):
         return None
-    
+
     @property
     def component_ids(self):
         return (dc.uid for dc in self.data_components)
-    
+
     def compile(self):
         raise ValueError("You can't call .compile on DataIdentities, only signals.")
 
@@ -167,23 +171,30 @@ class DataIdentity(AnnotatorMixin, SelectMixin):
                 if old_identity is not self:
                     old_identity.remove_data_component(data_component)
             data_component.data_identity = self
-        self.set_annotation('add_data_components', self.component_ids, self)
-        
+        self.set_annotation("add_data_components", self.component_ids, self)
+
     def remove_data_component(self, data_component):
         self.data_components.discard(data_component)
         data_component.data_identity = None
-        self.set_annotation('remove_data_component', data_component.uid, self)
+        self.set_annotation("remove_data_component", data_component.uid, self)
 
 
 class FeatureMixin:
     def extract_features(self, *features, registry=feature_registry, group_by=None):
         from k_onda.transformers import ExtractFeatures
+
         return ExtractFeatures(*features, registry=registry, group_by=group_by)((self,))
 
 
 @types.register
-class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointProcessMixin,
-                 FeatureMixin):
+class Collection(
+    StackMixin,
+    CalculateMixin,
+    SelectMixin,
+    AggregateMixin,
+    PointProcessMixin,
+    FeatureMixin,
+):
     def __init__(self, members, origin=None):
         self.members = members
         self.origin = origin
@@ -203,18 +214,20 @@ class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointP
         if self._signals is None:
             self._signals = self.collect_signals()
         return self._signals
-    
+
     def compile(self, memo=None):
         memo = {} if memo is None else memo
         compiled = Collection([member.compile(memo=memo) for member in self.members])
         compiled._is_compiled = True
         return compiled
-    
+
     def collect_base_components(self):
         if isinstance(self.members[0], DataIdentity):
             components = [c for m in self.members for c in m.data_components]
         elif isinstance(self.members[0], Collection):
-            components = [m for mem in self.members for m in mem.collect_base_components()]
+            components = [
+                m for mem in self.members for m in mem.collect_base_components()
+            ]
         else:
             components = self.members
 
@@ -231,11 +244,12 @@ class Collection(StackMixin, CalculateMixin, SelectMixin, AggregateMixin, PointP
 
     def group_by(self, group_on, strict=True):
         return CollectionMap(self.members, group_on, strict=strict)
-    
+
     def classify(self, label_spec, recipe=None):
         from k_onda.transformers.recipes import classification_registry
+
         if recipe is None and isinstance(self.members[0], types.Neuron):
-            recipe = 'classify_neurons'
+            recipe = "classify_neurons"
         return classification_registry[recipe](self, label_spec)
 
 
@@ -245,7 +259,7 @@ class MapMixin(DictDelegator, FeatureMixin):
 
 @types.register
 class SignalMap(MapMixin):
-    _delegate_attr = 'map'
+    _delegate_attr = "map"
 
     def __init__(self, map):
         self.map = map
@@ -263,16 +277,18 @@ class SignalMap(MapMixin):
 
     def _materialize(self):
         if not self._is_compiled:
-            raise ValueError("You must call .compile() on a signal before accessing"
-            "the .data property.")
+            raise ValueError(
+                "You must call .compile() on a signal before accessing"
+                "the .data property."
+            )
         if self._cache is None:
             self._cache = {k: signal.data for k, signal in self.map.items()}
         return self._cache
-    
+
 
 @types.register
 class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
-    _delegate_attr = 'groups'
+    _delegate_attr = "groups"
 
     def __init__(self, members=None, group_on=None, strict=True, groups=None):
         if groups is None:
@@ -293,7 +309,7 @@ class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
     def map_groups(self, strict=True):
         groups = defaultdict(list)
 
-        if type(self.group_on) == str:
+        if isinstance(self.group_on, str):
             grouping_func = self.build_grouping_func(self.group_on, strict=strict)
         elif callable(self.group_on):
             grouping_func = self.group_on
@@ -310,7 +326,10 @@ class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
         def grouping_func(entity):
             if hasattr(entity, grouping):
                 return getattr(entity, grouping)
-            elif hasattr(entity, 'data_identity') and getattr(entity.data_identity, 'name', None) == grouping:
+            elif (
+                hasattr(entity, "data_identity")
+                and getattr(entity.data_identity, "name", None) == grouping
+            ):
                 return entity.data_identity
 
             try:
@@ -321,16 +340,13 @@ class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
                 return None
 
         return grouping_func
-    
+
     def compile(self):
-        compiled = CollectionMap(groups = {k: v.compile() for k, v in self.items()})
+        compiled = CollectionMap(groups={k: v.compile() for k, v in self.items()})
         compiled._is_compiled = True
         return compiled
 
     def as_collection(self):
-        return Collection([member for collection in self.values() for member in collection])
-    
-
-
-
-
+        return Collection(
+            [member for collection in self.values() for member in collection]
+        )

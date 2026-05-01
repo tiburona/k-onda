@@ -3,7 +3,11 @@ import xarray as xr
 from collections.abc import Iterable
 from copy import deepcopy
 
-from ..transformers.transformer_mixins import CalculateMixin, UnstackMixin, IntersectionMixin
+from ..transformers.transformer_mixins import (
+    CalculateMixin,
+    UnstackMixin,
+    IntersectionMixin,
+)
 from k_onda.transformers import SelectMixin
 from k_onda.graph.traversal import build_generations, list_nodes, new_tree
 from k_onda.central.registry import types
@@ -11,8 +15,6 @@ from k_onda.central.registry import types
 
 @types.register
 class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
-
-
     # strategy is one of: "lazy", "memory", "disk"
     def __init__(
         self,
@@ -34,8 +36,8 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self._data_schema = data_schema
         self.context = context
         self.origin = origin
-        self.start = start or getattr(self.parent, 'start', None)
-        self.duration = duration or getattr(self.parent, 'duration', None)
+        self.start = start or getattr(self.parent, "start", None)
+        self.duration = duration or getattr(self.parent, "duration", None)
         self.source_signal = source_signal
         self._storage_strategy = storage_strategy
         self._cache = None
@@ -46,7 +48,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     @property
     def inputs(self):
         return self._inputs
-    
+
     @inputs.setter
     def inputs(self, value):
         self._inputs = value
@@ -55,7 +57,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     @property
     def data(self):
         return self._materialize()
-    
+
     @property
     def data_schema(self):
         if self._data_schema is None:
@@ -63,11 +65,11 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
                 self.inputs[0].data_schema, key_spec=self.transform.key_spec
             )
         return self._data_schema
-    
+
     @property
     def parent(self):
         return self.inputs[0] if len(self.inputs) == 1 else None
-        
+
     @property
     def origin(self):
         if hasattr(self, "_origin") and self._origin is not None:
@@ -81,17 +83,19 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
     @property
     def is_source(self):
-        return not getattr(self, 'inputs', None)
-    
+        return not getattr(self, "inputs", None)
+
     @property
     def generations(self):
         return build_generations(self)
-    
+
     @property
     def transform_history(self):
-        func = lambda node, _: getattr(node, 'transformer', None)
+        def func(node, _):
+            return getattr(node, "transformer", None)
+
         return build_generations(self, func)
-    
+
     def compile(self, memo=None):
         memo = {} if memo is None else memo
         leaf = new_tree(self, memo=memo)
@@ -105,16 +109,16 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
     def __add__(self, other):
         return self.add(other)
-    
+
     def __sub__(self, other):
         return self.subtract(other)
-    
+
     def __mul__(self, other):
         return self.multiply_by(other)
-    
+
     def __truediv__(self, other):
         return self.divide_by(other)
-    
+
     def __deepcopy__(self, memo):
         cls = type(self)
         copied = cls.__new__(cls)
@@ -138,20 +142,21 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
     def _materialize(self):
         if not self._is_compiled:
-            raise ValueError("You must call .compile() on a signal before accessing"
-            "the .data property.")
+            raise ValueError(
+                "You must call .compile() on a signal before accessing"
+                "the .data property."
+            )
         if self._cache is None:
             input_data = [input.data for input in self.inputs]
             self._cache = self.transform(*input_data)
         return self._cache
 
-  
     @property
     def endpoints(self):
         return {
-            dim: (self.data.coords[dim][0], self.data.coords[dim][-1]) 
+            dim: (self.data.coords[dim][0], self.data.coords[dim][-1])
             for dim in self.data
-            }
+        }
 
     @property
     def data_identity(self):
@@ -172,11 +177,11 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
             origin = self.origin
 
         return getattr(origin, "data_identity", None)
-    
+
     def output_class_for_selection(self):
         pass
 
-    
+
 @types.register
 class TimeSeriesSignal(Signal):
     dim_defaults = {"time": "s"}
@@ -189,7 +194,7 @@ class TimeSeriesSignal(Signal):
         origin = self.origin
         if isinstance(origin, tuple):
             origin = next((o for o in origin if o is not None), None)
-        return getattr(origin, 'sampling_rate', None)
+        return getattr(origin, "sampling_rate", None)
 
 
 @types.register
@@ -202,16 +207,14 @@ class ScalarSignal(Signal):
     pass
 
 
-
 @types.register
 class DatasetSignal(Signal):
-
     def __init__(self, inputs, transform, **kwargs):
         super().__init__(inputs, transform, **kwargs)
-        
+
     def __getitem__(self, key):
         return self.payload(key)
-    
+
     def payload(self, key):
         def transform(data):
             if not isinstance(data, (xr.Dataset, dict)):
@@ -226,23 +229,18 @@ class DatasetSignal(Signal):
             transform=transform,
             origin=self.origin,
             transformer=None,
-            data_schema=self.data_schema[key]
+            data_schema=self.data_schema[key],
         )
 
 
 @types.register
 class PointProcessSignal(Signal):
-
-    def __init__(
-            self, 
-            inputs, 
-            transform, 
-            *, 
-            sampling_rate = None,
-            **kwargs):
+    def __init__(self, inputs, transform, *, sampling_rate=None, **kwargs):
         super().__init__(inputs, transform, **kwargs)
-    
-        self.sampling_rate = sampling_rate or getattr(self.parent, 'sampling_rate', None)
+
+        self.sampling_rate = sampling_rate or getattr(
+            self.parent, "sampling_rate", None
+        )
 
     def to_binary(self):
         if self.sampling_rate is None:
@@ -269,11 +267,22 @@ class BinarySignal(Signal):
     # stored as boolean array at some sampling rate
     # supports & | ~
 
-    def __init__(self, inputs, transform, data_schema, *, sampling_rate=None, intervals=None, **kwargs):
+    def __init__(
+        self,
+        inputs,
+        transform,
+        data_schema,
+        *,
+        sampling_rate=None,
+        intervals=None,
+        **kwargs,
+    ):
         super().__init__(inputs, transform, data_schema, **kwargs)
-        
+
         self.intervals = intervals
-        self.sampling_rate = sampling_rate or getattr(self.parent, "sampling_rate", None)
+        self.sampling_rate = sampling_rate or getattr(
+            self.parent, "sampling_rate", None
+        )
 
     def __and__(self, other):
         return self.intersection(other)
@@ -289,7 +298,10 @@ class BinarySignal(Signal):
         return self._materialize()
 
     def _bool_train_from_intervals(self):
-        length = self.duration or (self.endpoints[1] - self.endpoints[0]) / self.sampling_rate
+        length = (
+            self.duration
+            or (self.endpoints[1] - self.endpoints[0]) / self.sampling_rate
+        )
         arr = np.full(length, False)
 
         for start, end in self.intervals:
@@ -306,13 +318,14 @@ class ValidityMask(BinarySignal):
 @types.register
 class SignalStack(CalculateMixin, UnstackMixin):
     def __init__(
-            self, 
-            data_schema,
-            collection=None, 
-            inputs=None, 
-            transform=None, 
-            transformer=None,
-            signal_class=None):
+        self,
+        data_schema,
+        collection=None,
+        inputs=None,
+        transform=None,
+        transformer=None,
+        signal_class=None,
+    ):
 
         if collection is not None:
             self.collection = collection
@@ -323,7 +336,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
             self.signals = inputs[0].collection.signals
             self.inputs = inputs
         else:
-            raise ValueError(f"collection or inputs must be provided for SignalStack")
+            raise ValueError("collection or inputs must be provided for SignalStack")
         self._data_schema = data_schema
         self.transform = transform
         self.transformer = transformer
@@ -335,31 +348,35 @@ class SignalStack(CalculateMixin, UnstackMixin):
     def compile(self):
         # TODO: What this should eventually do is find the constituent signals, call compile on them
         # and rewrite the graph.
-        raise ValueError("SignalStack cannot currently be compiled as a terminal node. " \
-            "Compile a downstream signal or unstack before materialization.")
-    
+        raise ValueError(
+            "SignalStack cannot currently be compiled as a terminal node. "
+            "Compile a downstream signal or unstack before materialization."
+        )
+
     def _materialize(self):
         if not self._is_compiled:
-            raise ValueError("SignalStack cannot currently be compiled as a terminal node. " \
-            "Compile a downstream signal or unstack before materialization.")
-       
+            raise ValueError(
+                "SignalStack cannot currently be compiled as a terminal node. "
+                "Compile a downstream signal or unstack before materialization."
+            )
+
         if self._cache is None:
             if type(self.parent).__name__ == "Collection":
                 self._cache = self.transform(self.parent.signals)
             else:
                 self._cache = self.transform(self.parent.data)
         return self._cache
-    
+
     @property
     def parent(self):
-        if len(self.inputs) == 1 and getattr(self.inputs[0], 'is_stack', False):
+        if len(self.inputs) == 1 and getattr(self.inputs[0], "is_stack", False):
             return self.inputs[0]
         return self.collection
-        
+
     @property
     def data(self):
         return self._materialize()
-    
+
     @property
     def data_schema(self):
         return self._data_schema
@@ -371,80 +388,64 @@ class SignalStack(CalculateMixin, UnstackMixin):
 
 @types.register
 class AggregatedSignal(Signal):
-
     def _materialize(self):
         if not self._is_compiled:
-            raise ValueError("You must call .compile() on an aggregated signal before accessing"
-            "the .data property.")
+            raise ValueError(
+                "You must call .compile() on an aggregated signal before accessing"
+                "the .data property."
+            )
         if self._cache is None:
-            if hasattr(self.parent, 'signals'): # parent is a Collection
+            if hasattr(self.parent, "signals"):  # parent is a Collection
                 self._cache = self.transform(self.parent.signals)
             else:
                 self._cache = self.transform(self.inputs)
 
         return self._cache
-    
+
 
 @types.register
 class IndexedSignal(Signal):
-
-    def __init__(
-            self, 
-            inputs, 
-            transform, 
-            **kwargs):
+    def __init__(self, inputs, transform, **kwargs):
         super().__init__(inputs, transform, **kwargs)
 
     def _materialize(self):
         if not self._is_compiled:
-            raise ValueError("You must call .compile() on a signal before accessing"
-            "the .data property.")
+            raise ValueError(
+                "You must call .compile() on a signal before accessing"
+                "the .data property."
+            )
         if self._cache is None:
-
             if all(isinstance(inp, Signal) for inp in self.inputs):
                 input_data = [input.data for input in self.inputs]
                 self._cache = self.transform(*input_data)
             else:
                 self._cache = self.transform()
         return self._cache
-    
+
     def kmeans(self, n_clusters=8, **kwargs):
         from k_onda.transformers import KMeans
+
         return KMeans(n_clusters=n_clusters, **kwargs)(self)
-    
+
     def classify(self, label_name, label_spec=None, label_func=None):
         from k_onda.sinks import Classify
+
         node = self.compile()
         chain = []
         while isinstance(node, IndexedSignal):
             chain.append(node)
             node = node.inputs[0] if node.inputs else None
 
-        return Classify(label_name, label_spec=label_spec, label_func=label_func)(*chain)
-        
+        return Classify(label_name, label_spec=label_spec, label_func=label_func)(
+            *chain
+        )
+
 
 @types.register
 class SelectorSignal(Signal):
-
-
-    def __init__(
-            self, 
-            inputs, 
-            transform, 
-            **kwargs):
+    def __init__(self, inputs, transform, **kwargs):
         super().__init__(inputs, transform, **kwargs)
-    
+
     @property
     def output_class(self):
         return getattr(self.inputs[0], "output_class", type(self.inputs[0]))
-    
-  
-    
-    
-    
-
-    
-
-
-
-   

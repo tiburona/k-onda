@@ -1,112 +1,122 @@
-
-from k_onda.central import types
-
-
 class CalculateMixin:
-
     def add(self, other, key=None, key_output_mode=None):
         return self.shift(other, key=key, key_output_mode=key_output_mode)
-    
+
     def substract(self, other, key=None, key_output_mode=None):
         return self.shift(-other, key=key, key_output_mode=key_output_mode)
-    
+
     def multiply_by(self, other, key=None, key_output_mode=None):
         return self.scale(other, key=key, key_output_mode=key_output_mode)
-    
+
     def divide_by(self, other, key=None, key_output_mode=None):
-        return self.scale(1/other, key=key, key_output_mode=key_output_mode)
-    
+        return self.scale(1 / other, key=key, key_output_mode=key_output_mode)
+
     def scale(self, factor, key=None, key_output_mode=None):
         from . import Scale
+
         return Scale(factor)(self, key=key, key_output_mode=key_output_mode)
 
     def shift(self, offset, key=None, key_output_mode=None):
         from . import Shift
+
         return Shift(offset)(self, key=key, key_output_mode=key_output_mode)
 
     def reduce(self, dim, method="mean", key=None, key_output_mode=None):
         from . import ReduceDim
+
         return ReduceDim(dim, method)(self, key=key, key_output_mode=key_output_mode)
 
     def normalize(self, method="rms", dim=None, key=None, key_output_mode=None):
         from . import Normalize
+
         return Normalize(method, dim)(self, key=key, key_output_mode=key_output_mode)
 
-    def median_filter(self, kernel_sizes, key=None, key_output_mode=None, ):
+    def median_filter(
+        self,
+        kernel_sizes,
+        key=None,
+        key_output_mode=None,
+    ):
         from . import MedianFilter
-        return MedianFilter(kernel_sizes)(self, key=key, key_output_mode=key_output_mode)
+
+        return MedianFilter(kernel_sizes)(
+            self, key=key, key_output_mode=key_output_mode
+        )
 
     def filter(self, config, key=None, key_output_mode=None):
         from . import Filter
+
         return Filter(config)(self, key=key, key_output_mode=key_output_mode)
 
     def spectrogram(self, config, key=None, key_output_mode=None):
         from . import Spectrogram
+
         return Spectrogram(config)(self, key=key, key_output_mode=key_output_mode)
-    
+
     def threshold(self, comparison, threshold, key=None, key_output_mode=None):
         from . import Threshold
-        return Threshold(comparison, threshold)(self, key=key, key_output_mode=key_output_mode)
+
+        return Threshold(comparison, threshold)(
+            self, key=key, key_output_mode=key_output_mode
+        )
 
     def apply_mask(self, mask, key=None, key_output_mode=None):
         from . import ApplyMask
+
         return ApplyMask(mask)(self, key=key, key_output_mode=key_output_mode)
-    
+
     def fwhm(self, config=None, key=None, key_output_mode=None):
         from . import FWHM
+
         if config is None:
             config = {}
         return FWHM(**config)(self, key=key, key_output_mode=key_output_mode)
-    
+
     # TODO: is it problematic that these config dictionaries do not make for inspectable
-    # signatures?  Probably.  
+    # signatures?  Probably.
     def count(self, config=None, key=None, key_output_mode=None, **kwargs):
         from . import Histogram
+
         config = config or {} | kwargs
-        if config.get('bins') is None and config.get('bin_size') is None:
-            config['bins'] = 10
+        if config.get("bins") is None and config.get("bin_size") is None:
+            config["bins"] = 10
         return Histogram(**config)(self, key=key, key_output_mode=key_output_mode)
 
 
 class IntersectionMixin:
-
     def intersection(self, other, tolerance_decimals=9):
         from . import Intersection
+
         return Intersection(tolerance_decimals)(self, other)
-    
+
 
 class PointProcessMixin:
-    
-    def rate(self, intervals=None, exclude_initial=None, key=None, key_output_mode=None):
+    def rate(
+        self, intervals=None, exclude_initial=None, key=None, key_output_mode=None
+    ):
         from . import Rate
-        return Rate(intervals=intervals, exclude_initial=exclude_initial)(self, key=key, key_output_mode=key_output_mode)
-    
+
+        return Rate(intervals=intervals, exclude_initial=exclude_initial)(
+            self, key=key, key_output_mode=key_output_mode
+        )
+
 
 class StackMixin:
     def stack_signals(self, dim=None):
         from . import StackSignals
+
         return StackSignals(dim=dim)(self)
 
 
 class UnstackMixin:
     def unstack_signals(self, dim=None):
         from . import UnstackSignals
+
         return UnstackSignals(dim=dim)(self)
-    
+
 
 class AggregateMixin:
-    def aggregate(self, method='mean'):
+    def aggregate(self, method="mean"):
         from . import Aggregator
+
         return Aggregator(method=method)(self)
-    
-
-
-
-        
-
-    
-
-
-    
-
-

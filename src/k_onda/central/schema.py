@@ -20,10 +20,10 @@ class CoordInfo:
 
 @dataclass(frozen=True)
 class AxisInfo:
-    name: str                                   # concrete dim or variable name
-    kind: AxisKind                              # structural: how the machinery treats it
-    metadim: str | None = None                  # semantic: what physical quantity it represents
-    coords: tuple[CoordInfo, ...] = ()          # all the coords available on the axis 
+    name: str  # concrete dim or variable name
+    kind: AxisKind  # structural: how the machinery treats it
+    metadim: str | None = None  # semantic: what physical quantity it represents
+    coords: tuple[CoordInfo, ...] = ()  # all the coords available on the axis
 
 
 @types.register
@@ -34,32 +34,32 @@ class Schema:
 
     def has_axis_kind(self, kind) -> bool:
         return any(ax.kind == kind for ax in self.axes)
-    
+
     def has_name(self, name) -> bool:
         return any(ax.name == name for ax in self.axes)
-    
+
     def has_dim(self, dim) -> bool:
         return self.has_name(dim) or self.has_metadim(dim)
-    
+
     def has_metadim(self, metadim) -> bool:
         return any(ax.metadim == metadim for ax in self.axes)
-    
+
     def has_coord(self, coord, allow_metadim_match=False) -> bool:
         for ax in self.axes:
             for c in ax.coords:
                 if c.name == coord or (allow_metadim_match and c.metadim == coord):
                     return True
         return False
-    
+
     def is_selectable(self, name) -> bool:
         return self.has_name(name) or self.has_metadim(name) or self.has_coord(name)
-               
+
     def axes_by_metadim(self, metadim) -> list[AxisInfo]:
         return [ax for ax in self.axes if ax.metadim == metadim]
-    
+
     def axis_by_name(self, name) -> AxisInfo | None:
         return next((ax for ax in self.axes if ax.name == name), None)
-    
+
     def axis_by_coord_name(self, coord_name):
         for ax in self.axes:
             if ax.name == coord_name:
@@ -68,51 +68,52 @@ class Schema:
                 if c.name == coord_name or c.metadim == coord_name:
                     return ax
         return None
-    
+
     def axes_of_kind(self, kind) -> list[AxisInfo]:
         return [ax for ax in self.axes if ax.kind == kind]
-    
+
     def coord_by_name(self, name) -> CoordInfo:
         for ax in self.axes:
             for coord in ax.coords:
                 if coord.name == name:
                     return coord
-                
+
     def without(self, name) -> Schema:
         new_schema = copy(self)
         new_schema.axes = [ax for ax in self.axes if ax.name != name]
         return new_schema
-    
+
     def without_dim(self, dim) -> Schema:
         new_schema = copy(self)
-        new_schema.axes = [ax for ax in self.axes 
-                           if ax is not self.ax_with_concrete_dim(dim)] 
+        new_schema.axes = [
+            ax for ax in self.axes if ax is not self.ax_with_concrete_dim(dim)
+        ]
         return new_schema
-        
+
     def with_added(self, axis) -> Schema:
         new_schema = copy(self)
         new_schema.axes.append(axis)
         return new_schema
-    
+
     @property
     def dim_names(self) -> list[str]:
         return [ax.name for ax in self.axes]
-    
+
     @property
     def metadims(self) -> list[str]:
         return [ax.metadim for ax in self.axes if ax.metadim is not None]
-    
+
     @property
     def coord_names(self) -> list[str]:
         return [c.name for ax in self.axes for c in ax.coords]
-    
+
     @property
     def selectable(self):
         return set(self.dim_names) | set(self.metadims) | set(self.coord_names)
-    
+
     def is_point_process(self) -> bool:
         return any(ax.kind == AxisKind.POINT_PROCESS_INDEX for ax in self.axes)
-    
+
     def is_point_process_essential(self, dim) -> bool:
         for ax in self.axes:
             if ax.kind == AxisKind.POINT_PROCESS_INDEX:
@@ -121,7 +122,7 @@ class Schema:
         if self.value_metadim == dim:
             return True
         return False
-    
+
     def ax_with_concrete_dim(self, dim) -> AxisInfo:
         # 1. exact dim match
         if self.has_name(dim):
@@ -136,30 +137,30 @@ class Schema:
             return self.axes_of_kind(AxisKind.POINT_PROCESS_INDEX)[0]
         else:
             return None
-    
+
     def concrete_dim_from(self, dim) -> str:
-       axis = self.ax_with_concrete_dim(dim)
-       return axis if axis is None else axis.name
+        axis = self.ax_with_concrete_dim(dim)
+        return axis if axis is None else axis.name
 
     def axis_position_from(self, name) -> int | None:
         for i, ax in enumerate(self.axes):
             if ax.name == name:
                 return i
         return None
-    
+
     def position_from(self, axis) -> int | None:
         for i, ax in enumerate(self.axes):
             if ax is axis:
                 return i
         return None
-    
+
     def metadim_from(self, coord_name) -> str | None:
         axis = self.axis_by_coord_name(coord_name)
         return axis if axis is None else axis.metadim
-    
+
     def is_value_metadim(self, dim) -> bool:
         return self.value_metadim == dim
-    
+
     def update_axis_coords(self, ax, coords):
         new_schema = copy(self)
         coords = copy(ax.coords) + coords
@@ -168,7 +169,6 @@ class Schema:
         new_schema = new_schema.with_added(new_ax)
         return new_schema
 
-    
 
 @types.register
 class DatasetSchema(MutableMapping):
@@ -194,33 +194,39 @@ class DatasetSchema(MutableMapping):
     def dim_names(self):
         # union: for Selector, a dim is 'available' here if any key has it
         return set.union(set(), *(s.dim_names for s in self.key_schemas.values()))
-    
+
     @property
     def selectable(self):
         return set.union(*(s.selectable for s in self.key_schemas.values()))
-    
+
     def replace_key(self, key, new_schema):
         return DatasetSchema({**self.key_schemas, key: new_schema})
-    
+
     def add_key(self, key, new_schema):
         if key in self.key_schemas:
             raise ValueError(f"Key '{key}' already exists in DatasetSchema")
         return DatasetSchema({**self.key_schemas, key: new_schema})
-    
+
     def _variables_with_axis_name(self, name):
-        return [vname for vname, s in self.key_schemas.items()
-                if any(ax.name == name for ax in s.axes)]
-    
+        return [
+            vname
+            for vname, s in self.key_schemas.items()
+            if any(ax.name == name for ax in s.axes)
+        ]
+
     def _variables_with_metadim(self, metadim):
-        return [vname for vname, s in self.key_schemas.items()
-                if s.value_metadim == metadim
-                or any(ax.metadim == metadim for ax in s.axes)]
-    
+        return [
+            vname
+            for vname, s in self.key_schemas.items()
+            if s.value_metadim == metadim or any(ax.metadim == metadim for ax in s.axes)
+        ]
+
     def default_variable_for(self, dim):
-        candidates = (self._variables_with_axis_name(dim) or
-                      self._variables_with_metadim(dim))
+        candidates = self._variables_with_axis_name(
+            dim
+        ) or self._variables_with_metadim(dim)
         return candidates[0] if candidates else None
-    
+
     def is_point_process(self, require_all=True):
         if not require_all:
             return any(s.is_point_process() for s in self.key_schemas.values())
@@ -250,20 +256,17 @@ class DatasetSchema(MutableMapping):
             if schema.is_selectable(dim):
                 return True
         return False
-    
+
     def concrete_dim_from(self, dim):
         for s in self.values():
             ax = s.ax_with_concrete_dim(dim)
             if ax is not None:
                 return ax.name
         return None
-    
+
     def metadim_from(self, dim):
         for s in self.values():
             metadim = s.metadim_from(dim)
             if metadim is not None:
                 return metadim
         return None
-
-
-        

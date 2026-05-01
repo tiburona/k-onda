@@ -8,16 +8,15 @@ class TypeRegistry:
     def register(self, cls):
         self._classes[cls.__name__] = cls
         return cls
-    
+
     def __getattr__(self, name):
         try:
             return self._classes[name]
         except KeyError:
             raise AttributeError(f"No signal class '{name}' registered")
-        
-    
-types = TypeRegistry()
 
+
+types = TypeRegistry()
 
 
 @runtime_checkable

@@ -5,8 +5,7 @@ import numpy as np
 
 from k_onda.central import types
 
-DIM_DEFAULT_UNITS = {'time': 's', 'frequency': 'Hz'}
-
+DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 
 
 def is_unitful(value):
@@ -20,8 +19,9 @@ def is_unitful(value):
         elif all([not isinstance(v, pint.Quantity) for v in value]):
             return False
         else:
-            raise ValueError("Array with some unitful and some plain values " \
-            "passed to is_unitful")
+            raise ValueError(
+                "Array with some unitful and some plain values passed to is_unitful"
+            )
     return False
 
 

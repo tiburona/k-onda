@@ -14,7 +14,7 @@ def is_uniformly_spaced(arr, tol=1e-5):
 
     # Calculate differences between consecutive elements
     diffs = np.diff(arr)
-    
+
     # Check if all differences are close to the first difference
     # np.allclose handles potential floating-point errors
     return np.allclose(diffs, diffs[0], atol=tol)
@@ -26,12 +26,12 @@ def is_numeric(value):
         return True
     except (ValueError, TypeError):
         return False
-    
+
 
 def np_from_xr(xr_val):
     units = xr_val.pint.units
     if units is not None:
         arr = np.asarray(xr_val.pint.magnitude)
     else:
-        arr = np.asarray(xr_val)  
+        arr = np.asarray(xr_val)
     return arr, units

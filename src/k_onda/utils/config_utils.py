@@ -1,8 +1,7 @@
 import numpy as np
 import h5py
-import re
-from pathlib import PosixPath
 from copy import deepcopy
+
 
 def group_to_dict(group):
     result = {}

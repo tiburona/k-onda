@@ -12,6 +12,16 @@ If a request seems architecturally wrong, conflicts with the README principles, 
 
 The developer writes her own code except for rote boilerplate. Favor explanation, review, and feedback over generating large amounts of novel code. When code generation is appropriate, keep it small and targeted.
 
+## Local test commands
+
+Pytest is installed in the repository virtual environment. When running tests locally, use:
+
+```bash
+.venv/bin/python -m pytest tests
+```
+
+Do not use bare `python -m pytest` or `pytest`; the system interpreter may not have the project dependencies installed. If tests fail after running through `.venv/bin/python`, treat them as real test failures rather than a missing-pytest environment problem.
+
 ## Architecture overview
 
 K-Onda implements a lazy, symbolic data pipeline for electrophysiology analysis. The core idea: pipelines are constructed as graphs of nodes; data is computed only when `.data` is accessed.
@@ -25,7 +35,7 @@ The fundamental pipeline node. Holds `inputs` (upstream signals), a `transform` 
 Callable objects that consume a Signal and return a new Signal. Can operate on a single Signal, a `Collection`, or a `GroupedCollection` — the dispatch is handled internally. `Calculator` adds data validation and a `key_spec` mechanism for operating on named variables inside `xr.Dataset`-backed signals.
 
 **`Schema` / `DatasetSchema`** ([src/k_onda/central.py](src/k_onda/central.py))
-Lightweight dimension metadata that travels with signals through the pipeline without materializing data.
+Dimension metadata that travels with signals through the pipeline without materializing data.
 
 **`Collection` / `GroupedCollection`** ([src/k_onda/sources/](src/k_onda/sources/))
 Containers for multiple signals. Transformers broadcast over them automatically.

@@ -5,9 +5,17 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "k-onda"
 version = "0.1.0"
-description = "Add your description here"
+description = "An extensible electrophysiology analysis package built around symbolic DAG pipelines."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
+authors = [
+    { name = "Katie Surrence" }
+]
+classifiers = [
+    "Private :: Do Not Upload",
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+]
 dependencies = [
     "frozendict>=2.4.7",
     "h5py",
@@ -17,9 +25,26 @@ dependencies = [
     "phylib>=2.7.0",
     "pint",
     "pint-xarray",
-    "pytest>=9.0.2",
     "pyyaml",
     "scikit-learn",
     "scipy",
     "xarray",
 ]
+
+[dependency-groups]
+dev = [
+    "pyright",
+    "pytest>=9.0.2",
+    "ruff",
+]
+
+[project.urls]
+Repository = "https://github.com/tiburona/k-onda"
+
+[tool.ruff]
+exclude = [
+    "src/k_onda/scratch.py",
+    "src/k_onda/workpad.py"
+
+]
+

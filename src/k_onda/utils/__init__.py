@@ -9,6 +9,6 @@ __all__ = [
     "is_uniformly_spaced",
     "is_numeric",
     "np_from_xr",
-    "is_unitful", 
-    "w_units"
+    "is_unitful",
+    "w_units",
 ]

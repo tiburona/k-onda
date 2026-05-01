@@ -7,6 +7,19 @@ from .core import (
     LocusSet,
     MarkerSet,
     IntervalSet,
-    EpochSet, 
-    EventSet
+    EpochSet,
+    EventSet,
 )
+
+__all__ = [
+    "Marker",
+    "Event",
+    "Interval",
+    "Epoch",
+    "FrequencyBand",
+    "LocusSet",
+    "MarkerSet",
+    "IntervalSet",
+    "EpochSet",
+    "EventSet",
+]

@@ -10,8 +10,8 @@ from .core import (
     ValidityMask,
     AggregatedSignal,
     DatasetSignal,
-    IndexedSignal, 
-    SelectorSignal
+    IndexedSignal,
+    SelectorSignal,
 )
 
 from ..central.registry import types
@@ -28,7 +28,7 @@ __all__ = [
     "SignalStack",
     "AggregatedSignal",
     "DatasetSignal",
-    "IndexedSignal", 
+    "IndexedSignal",
     "SelectorSignal",
-    "types"
+    "types",
 ]

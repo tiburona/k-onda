@@ -7,7 +7,6 @@ from .central import operations
 from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds
 
 
-
 __all__ = [
     "types",
     "SignalLike",
@@ -20,6 +19,5 @@ __all__ = [
     "DimBounds",
     "AxisInfo",
     "AxisKind",
-    "CoordInfo"
-    
+    "CoordInfo",
 ]

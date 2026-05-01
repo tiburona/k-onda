@@ -5,10 +5,8 @@ import numpy as np
 from .core import Calculator, Transform, KeySpec
 
 
-
 class Threshold(Calculator):
     name = "threshold"
-    
 
     def __init__(self, comparison, threshold):
         self.threshold = threshold
@@ -23,6 +21,7 @@ class Threshold(Calculator):
     @property
     def fixed_output_class(self):
         from ..signals import ValidityMask
+
         return ValidityMask
 
     def _apply_inner(self, data):
@@ -79,15 +78,15 @@ class BinaryCalculatorMixin:
     def validate_sig_types(self, signals):
 
         from ..signals import BinarySignal
-        
+
         for signal in signals:
             if not isinstance(signal, BinarySignal):
                 raise TypeError(f"{signal} is not of type BinarySignal.")
 
 
 # TODO: this and ApplyMasks __call__'s need to be evaluated for how they're
-# working with keys, how they apply to stacks, and in general to be brought up 
-# to date with the code base.  However given I might be refactoring key spec 
+# working with keys, how they apply to stacks, and in general to be brought up
+# to date with the code base.  However given I might be refactoring key spec
 # related stuff soon why don't I wait till I've done that.
 class Intersection(Calculator, BinaryCalculatorMixin):
     name = "intersection"
@@ -106,13 +105,13 @@ class Intersection(Calculator, BinaryCalculatorMixin):
 
         # TODO: actually make this transformer actually key aware
         output_schema = self.make_output_schema(a.data_schema, key_spec=key_spec)
-        
+
         return output_signal_class(
             inputs=(a, b),
             transform=transform,
             data_schema=output_schema,
             origin=(a.origin, b.origin),
-            transformer=self
+            transformer=self,
         )
 
     def _apply_inner(self, a_data, b):
@@ -143,7 +142,7 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
             transform=transform,
             data_schema=output_schema,
             origin=(input.origin, mask.origin),
-            transformer=self
+            transformer=self,
         )
 
     def _apply_inner(self, data, mask):

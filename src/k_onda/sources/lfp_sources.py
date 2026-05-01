@@ -47,26 +47,26 @@ class LFPChannel(DataComponent):
         data = self.data_source.get_channel(self.channel_idx)
         da = make_time_series(data, self.sampling_rate)
         return da
-    
+
     def to_signal(self):
         signal = super().to_signal()
         signal.sampling_rate = self.sampling_rate
         return signal
-    
+
     @property
     def data_schema(self):
-        return Schema('time')
-    
+        return Schema("time")
+
     @property
     def identifiers(self):
         ids = [self.channel_idx]
-        row_to_region = self.data_source.data_loader_config.get('row_to_region')
+        row_to_region = self.data_source.data_loader_config.get("row_to_region")
         if row_to_region:
             ids.append(row_to_region[self.channel_idx])
 
 
 class LFPBrainRegion(DataIdentity):
-    name = 'lfp_brain_region'
+    name = "lfp_brain_region"
 
     def __init__(self, data_components):
         super().__init__(data_components)
@@ -75,4 +75,3 @@ class LFPBrainRegion(DataIdentity):
     @property
     def label(self):
         return self._label
-        
