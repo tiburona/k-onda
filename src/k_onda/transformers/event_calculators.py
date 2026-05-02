@@ -4,7 +4,7 @@ import xarray as xr
 import pint
 from .core import Calculator
 
-from k_onda.central import types
+from k_onda.central import type_registry
 
 
 class Rate(Calculator):
@@ -36,7 +36,7 @@ class Rate(Calculator):
             raise ValueError("Rate can only operate on EventSignal or BinarySignal.")
 
     def _prepare_rate_inputs(self, data, data_schema, intervals, exclude_initial):
-        if isinstance(data_schema, types.DatasetSchema):
+        if isinstance(data_schema, type_registry.DatasetSchema):
             time_key = data_schema.default_variable_for("time")
             data = data[time_key]
             data_schema = data_schema[time_key]

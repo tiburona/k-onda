@@ -44,7 +44,7 @@ class FWHM(Calculator):
         if self.include_valleys:
             valley_idx, valley_height = find_max_peak(-values)
             if valley_idx is not None and (
-                peak_idx is None or valley_height > peak_height
+                peak_idx is None or valley_height > peak_height  # pyright: ignore[reportOperatorIssue]
             ):
                 peak_idx = valley_idx
                 signal_for_width = -values

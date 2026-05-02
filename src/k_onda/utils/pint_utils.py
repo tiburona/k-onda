@@ -3,13 +3,13 @@ from collections.abc import Iterable
 import pint
 import numpy as np
 
-from k_onda.central import types
+from k_onda.central import type_registry
 
 DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 
 
 def is_unitful(value):
-    if isinstance(value, (types.Locus, types.LocusSet)):
+    if isinstance(value, (type_registry.Locus, type_registry.LocusSet)):
         return True
     if isinstance(value, pint.Quantity):
         return True

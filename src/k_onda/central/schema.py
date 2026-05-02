@@ -1,6 +1,6 @@
 from __future__ import annotations
 from collections.abc import MutableMapping
-from .registry import types
+from .registry import type_registry
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from copy import copy
@@ -26,7 +26,7 @@ class AxisInfo:
     coords: tuple[CoordInfo, ...] = ()  # all the coords available on the axis
 
 
-@types.register
+@type_registry.register
 @dataclass
 class Schema:
     axes: list[AxisInfo] = field(default_factory=list)
@@ -170,7 +170,7 @@ class Schema:
         return new_schema
 
 
-@types.register
+@type_registry.register
 class DatasetSchema(MutableMapping):
     def __init__(self, key_schemas):
         self.key_schemas = key_schemas  # dict[str, Schema]

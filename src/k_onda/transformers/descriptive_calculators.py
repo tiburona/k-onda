@@ -8,14 +8,14 @@ import numpy as np
 import xarray as xr
 
 from .core import Calculator
-from k_onda.central import types, AxisInfo, AxisKind, CoordInfo
+from k_onda.central import type_registry, AxisInfo, AxisKind, CoordInfo
 from k_onda.utils import is_unitful, w_units
 
 
 DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 
 
-@types.register
+@type_registry.register
 class ReduceDim(Calculator):
     name = "reduce_dim"
 
@@ -43,22 +43,22 @@ class ReduceDim(Calculator):
     def _infer_output_class(self, input):
 
         if (
-            isinstance(input.data_schema, types.Schema)
+            isinstance(input.data_schema, type_registry.Schema)
             and len(input.data_schema.axes) == 1
         ):
-            return types.ScalarSignal
+            return type_registry.ScalarSignal
         if input.data_schema.is_point_process():
             if not input.data_schema.is_point_process_essential(self.dim):
-                return types.PointProcessSignal
+                return type_registry.PointProcessSignal
             else:
                 if input.data_schema.has_dim("time"):
-                    return types.TimeSeriesSignal
+                    return type_registry.TimeSeriesSignal
                 else:
-                    return types.Signal
+                    return type_registry.Signal
         return super()._infer_output_class(input)
 
 
-@types.register
+@type_registry.register
 class Histogram(Calculator):
     name = "histogram"
     key_mode = "standalone"
@@ -93,7 +93,7 @@ class Histogram(Calculator):
 
     @property
     def fixed_output_class(self):
-        return types.DistributionSignal
+        return type_registry.DistributionSignal
 
     def output_schema(self, input_schema):
         schema = input_schema.without_dim(self.dim)
@@ -119,7 +119,7 @@ class Histogram(Calculator):
 
     def _get_extra_apply_kwargs(self, input):
 
-        extra_kwargs = {"is_point_process": isinstance(input, types.PointProcessSignal)}
+        extra_kwargs = {"is_point_process": isinstance(input, type_registry.PointProcessSignal)}
 
         # TODO: eventually there should be other string range sources and/or
         # a concept of finding the range from the nearest bound container

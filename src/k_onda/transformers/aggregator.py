@@ -1,7 +1,7 @@
 import xarray as xr
 
 from .core import Transform
-from k_onda.central import types
+from k_onda.central import type_registry
 
 
 class Aggregator:
@@ -11,12 +11,12 @@ class Aggregator:
 
     def __call__(self, input):
 
-        if isinstance(input, types.CollectionMap):
+        if isinstance(input, type_registry.CollectionMap):
             if self.group_by is not None:
                 raise ValueError("input of type CollectionMap is already grouped.")
             return self._call_on_collection_map(input)
 
-        elif isinstance(input, types.Collection):
+        elif isinstance(input, type_registry.Collection):
             if self.group_by is not None:
                 input = input.group_by(self.group_by)
                 return self._call_on_collection_map(input)
@@ -32,9 +32,9 @@ class Aggregator:
 
         transform = self._get_transform()
 
-        return types.SignalMap(
+        return type_registry.SignalMap(
             map={
-                k: types.AggregatedSignal(
+                k: type_registry.AggregatedSignal(
                     inputs=collection.signals,
                     data_schema=collection.signals[0].data_schema,
                     transformer=self,
@@ -49,7 +49,7 @@ class Aggregator:
         transform = self._get_transform()
         # need to figure out why transform is passed signal, not data
 
-        return types.AggregatedSignal(
+        return type_registry.AggregatedSignal(
             inputs=collection.signals,
             transformer=self,
             transform=transform,

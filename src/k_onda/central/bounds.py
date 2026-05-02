@@ -9,11 +9,11 @@ DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 
 class DimPair:
     def __init__(self, pair=None, units=None):
-        if units is None and any([bound is None for bound in pair]):
+        if units is None and pair is None:
             raise ValueError("You must define either bounds or units")
         self.units = units
         if pair is None:
-            self.pair = [0 * units, 0 * units]
+            self.pair = [0 * units, 0 * units]  # pyright: ignore[reportOperatorIssue]
         else:
             self.pair = pair
 

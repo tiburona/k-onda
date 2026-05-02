@@ -34,8 +34,15 @@ The fundamental pipeline node. Holds `inputs` (upstream signals), a `transform` 
 **`Transformer` / `Calculator`** ([src/k_onda/transformers/core.py](src/k_onda/transformers/core.py))
 Callable objects that consume a Signal and return a new Signal. Can operate on a single Signal, a `Collection`, or a `GroupedCollection` — the dispatch is handled internally. `Calculator` adds data validation and a `key_spec` mechanism for operating on named variables inside `xr.Dataset`-backed signals.
 
-**`Schema` / `DatasetSchema`** ([src/k_onda/central.py](src/k_onda/central.py))
+**`Schema` / `DatasetSchema`** ([src/k_onda/central.py](src/k_onda/central/schema.py))
 Dimension metadata that travels with signals through the pipeline without materializing data.
+
+** `Locus` / `LocusSet` and descendents ** ([src/k_onda/loci/core.py]([src/k_onda/loci/core.py]))
+Metadata used by `select` to locate a portion of the data)
+
+**`Annotation` / `ProvenanceContext`**
+([src/k_onda/provenance/provenance.py](src/k_onda/provenance/provenance.py)) 
+Record of the state of mutable objects (like `Experiment`, `Subject`, and `Session`) when they enter the DAG)
 
 **`Collection` / `GroupedCollection`** ([src/k_onda/sources/](src/k_onda/sources/))
 Containers for multiple signals. Transformers broadcast over them automatically.
@@ -49,13 +56,17 @@ Vectorized form of a Collection — signals stacked along a new dimension for pe
 **`FeatureRegistry` / `ExtractFeatures`** ([src/k_onda/transformers/feature_registry.py](src/k_onda/transformers/feature_registry.py), [src/k_onda/transformers/feature_transformers.py](src/k_onda/transformers/feature_transformers.py))
 `FeatureRegistry` is a named catalog of mini-pipelines (not specific to neurons or any domain). Each registered function takes a Collection and returns an aggregated Signal. `ExtractFeatures` is the Transformer that applies registered functions across a map and assembles the results into an `IndexedSignal`.
 
-**Mixin system** ([src/k_onda/transformers/transformer_mixins.py](src/k_onda/transformers/transformer_mixins.py))
+**Mixin system** ([src/k_onda/transformers/transformer_mixins.py](src/k_onda/transformers/transformer_mixins.py) and [src/k_onda/transformers/selector/select_mixin.py](src/k_onda/transformers/selector/select_mixin.py))
 `CalculateMixin`, `SelectMixin`, `UnstackMixin`, `IntersectionMixin` — compose the fluent API onto Signal and SignalStack.
+
+**Recipes**
+
+([src/k_onda/transformers/recipes/core.py](src/k_onda/transformers/recipes/core.py)) Longer pipelines encoded into a dedicated mixin.
+
 
 ### Data representation
 - `xr.DataArray` and `xr.Dataset` throughout, with `pint` units via `pint_xarray`
-- Unit registry and domain constants in [src/k_onda/central.py](src/k_onda/central.py)
-- Provenance tracked as a generation graph via [src/k_onda/graph/traversal.py](src/k_onda/graph/traversal.py)
+- Provenance tracked as graph via [src/k_onda/graph/traversal.py](src/k_onda/graph/traversal.py)
 
 ### Source modules
 - [src/k_onda/sources/lfp_sources.py](src/k_onda/sources/lfp_sources.py) — LFP signal sources

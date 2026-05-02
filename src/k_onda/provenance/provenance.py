@@ -4,8 +4,9 @@ from frozendict import frozendict
 import time
 
 from k_onda.signals import Signal
+from k_onda.central import type_registry
 
-
+@type_registry.register
 @dataclass
 class ProvenanceContext:
     component: object
@@ -23,7 +24,7 @@ class ProvenanceContext:
     def __post_init__(self):
         self.component_id = self.component.uid
         session = self.component.data_source.session
-        if hasattr(self.component, "data_identity"):
+        if getattr(self.component, "data_identity", None):
             data_identity = self.component.data_identity
             self.data_identity_id = data_identity.uid
             self.data_identity_snapshot = data_identity.snapshot()
@@ -34,6 +35,8 @@ class ProvenanceContext:
         experiment = self.component.data_source.session.experiment
         self.experiment_id = experiment.id
         self.experiment_snapshot = experiment.snapshot()
+        # Component must be dropped so provenance no longer has a live reference
+        # to objects that can mutate (which component does)
         self.component = None
 
 

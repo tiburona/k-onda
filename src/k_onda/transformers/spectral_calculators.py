@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 import pint
 
-from k_onda.central import DimBounds, DimPair, AxisInfo, AxisKind, types
+from k_onda.central import DimBounds, DimPair, AxisInfo, AxisKind, type_registry
 from .core import PaddingCalculator
 from ..utils import scalar
 
@@ -23,7 +23,7 @@ class Spectrogram(PaddingCalculator):
 
     @property
     def fixed_output_class(self):
-        return types.TimeFrequencySignal
+        return type_registry.TimeFrequencySignal
 
     def output_schema(self, input_schema):
         new_axis = AxisInfo(name="frequency", metadim="frequency", kind=AxisKind.AXIS)
@@ -53,7 +53,7 @@ class Spectrogram(PaddingCalculator):
         power = tfr_array_multitaper(data_3d, **config).squeeze()
         return (power, {"fs": fs})
 
-    def _wrap_result(self, result, data, fs):
+    def _wrap_result(self, result, data, fs):  # pyright: ignore[reportIncompatibleMethodOverride]
 
         start = data["time"][0].item().magnitude
         dt = self.config["decim"] / fs
@@ -79,11 +79,13 @@ class Spectrogram(PaddingCalculator):
             coord for coord in data.coords if "time" in data.coords[coord].dims
         }
 
-        time_coords = {
-            coord: ("time", get_time_coords(coord)) for coord in old_time_coords
-        }
-
-        da = da.assign_coords(**time_coords)
+        da = da.assign_coords(
+            {
+                coord: ("time", get_time_coords(coord)) 
+                for coord in old_time_coords
+            }
+        )
+        
         da = da.pint.quantify({"frequency": "Hz", "time": "s"})
 
         # TODO include units here

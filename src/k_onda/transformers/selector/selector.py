@@ -10,7 +10,7 @@ from k_onda.graph import list_nodes, walk_tree, build_consumers_map
 from k_onda.central import (
     Schema,
     DatasetSchema,
-    types,
+    type_registry,
     DimBounds,
     AxisInfo,
     AxisKind,
@@ -35,7 +35,7 @@ from k_onda.central import (
 # The third, Slicer, actually performs select operations on the data array.
 
 
-@types.register
+@type_registry.register
 class Selector(Transformer):
     name = "selector"
 
@@ -56,7 +56,7 @@ class Selector(Transformer):
 
     @property
     def fixed_output_class(self):
-        return types.SelectorSignal
+        return type_registry.SelectorSignal
 
     def _validate_input(self, signal, key_spec=None):
 
@@ -65,7 +65,7 @@ class Selector(Transformer):
                 "Use signal.payload(key).select(...) or signal[key].select"
             )
         if signal.data_schema.is_point_process() and isinstance(
-            self.locus, types.LocusSet
+            self.locus, type_registry.LocusSet
         ):
             raise NotImplementedError(
                 "This operation will result in a ragged array and "
@@ -76,7 +76,7 @@ class Selector(Transformer):
 class SelectionPlanner(Transformer):
     @property
     def fixed_output_class(self):
-        return types.SelectorSignal
+        return type_registry.SelectorSignal
 
     def _call_on_signal(self, signal, key_spec=None):
 
@@ -432,7 +432,7 @@ class Slicer(Calculator):
         # TODO: do I want to add validation of the the window boundaries versus
         # the data boundaries or will the natural error be informative enough?
 
-        if isinstance(data_schema, types.DatasetSchema):
+        if isinstance(data_schema, type_registry.DatasetSchema):
             if data_schema.is_point_process(require_all=True):
                 return self.select_point_process(data, data_schema)
             else:
@@ -606,7 +606,7 @@ class Slicer(Calculator):
 
         for dim in self.selection_bounds:
             if data_schema.is_value_metadim(dim):
-                if isinstance(data_schema, types.DatasetSchema):
+                if isinstance(data_schema, type_registry.DatasetSchema):
                     source = data[data_schema.variable_for_metadim(dim)]
                 else:
                     source = data

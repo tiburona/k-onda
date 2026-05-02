@@ -17,10 +17,10 @@ from k_onda.signals import Signal
 from k_onda.mixins import DictDelegator, ConfigSetter
 from k_onda.transformers import feature_registry
 from k_onda.provenance import ProvenanceContext
-from k_onda.central import types
+from k_onda.central import type_registry, Schema
 
 
-@types.register
+@type_registry.register
 class DataSource(ConfigSetter):
     """A file or resource containing experimental data."""
 
@@ -57,7 +57,7 @@ class DataSource(ConfigSetter):
         return []
 
 
-@types.register
+@type_registry.register
 class DataComponent(CalculateMixin, SelectMixin):
     output_class = Signal
 
@@ -97,6 +97,10 @@ class DataComponent(CalculateMixin, SelectMixin):
         pass
 
     @property
+    def data_schema(self):
+        return Schema()
+
+    @property
     def signal(self):
         return self.to_signal()
 
@@ -120,7 +124,7 @@ class DataComponent(CalculateMixin, SelectMixin):
         data_identity.add_data_components([self])
 
 
-@types.register
+@type_registry.register
 class DataIdentity(AnnotatorMixin, SelectMixin):
     name = "identity"
     _snapshot_fields = ("component_ids",)
@@ -186,7 +190,7 @@ class FeatureMixin:
         return ExtractFeatures(*features, registry=registry, group_by=group_by)((self,))
 
 
-@types.register
+@type_registry.register
 class Collection(
     StackMixin,
     CalculateMixin,
@@ -248,7 +252,7 @@ class Collection(
     def classify(self, label_spec, recipe=None):
         from k_onda.transformers.recipes import classification_registry
 
-        if recipe is None and isinstance(self.members[0], types.Neuron):
+        if recipe is None and isinstance(self.members[0], type_registry.Neuron):
             recipe = "classify_neurons"
         return classification_registry[recipe](self, label_spec)
 
@@ -257,7 +261,7 @@ class MapMixin(DictDelegator, FeatureMixin):
     pass
 
 
-@types.register
+@type_registry.register
 class SignalMap(MapMixin):
     _delegate_attr = "map"
 
@@ -286,7 +290,7 @@ class SignalMap(MapMixin):
         return self._cache
 
 
-@types.register
+@type_registry.register
 class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
     _delegate_attr = "groups"
 

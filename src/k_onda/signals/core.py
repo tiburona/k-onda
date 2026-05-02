@@ -10,10 +10,10 @@ from ..transformers.transformer_mixins import (
 )
 from k_onda.transformers import SelectMixin
 from k_onda.graph.traversal import build_generations, list_nodes, new_tree
-from k_onda.central.registry import types
+from k_onda.central.registry import type_registry
 
 
-@types.register
+@type_registry.register
 class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     # strategy is one of: "lazy", "memory", "disk"
     def __init__(
@@ -182,7 +182,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         pass
 
 
-@types.register
+@type_registry.register
 class TimeSeriesSignal(Signal):
     dim_defaults = {"time": "s"}
 
@@ -197,17 +197,17 @@ class TimeSeriesSignal(Signal):
         return getattr(origin, "sampling_rate", None)
 
 
-@types.register
+@type_registry.register
 class TimeFrequencySignal(TimeSeriesSignal, CalculateMixin, SelectMixin):
     dim_defaults = {"time": "s", "frequency": "Hz"}
 
 
-@types.register
+@type_registry.register
 class ScalarSignal(Signal):
     pass
 
 
-@types.register
+@type_registry.register
 class DatasetSignal(Signal):
     def __init__(self, inputs, transform, **kwargs):
         super().__init__(inputs, transform, **kwargs)
@@ -233,7 +233,7 @@ class DatasetSignal(Signal):
         )
 
 
-@types.register
+@type_registry.register
 class PointProcessSignal(Signal):
     def __init__(self, inputs, transform, *, sampling_rate=None, **kwargs):
         super().__init__(inputs, transform, **kwargs)
@@ -257,12 +257,12 @@ class PointProcessSignal(Signal):
         return None
 
 
-@types.register
+@type_registry.register
 class DistributionSignal(Signal):
     pass
 
 
-@types.register
+@type_registry.register
 class BinarySignal(Signal):
     # stored as boolean array at some sampling rate
     # supports & | ~
@@ -310,12 +310,12 @@ class BinarySignal(Signal):
         return arr
 
 
-@types.register
+@type_registry.register
 class ValidityMask(BinarySignal):
     pass
 
 
-@types.register
+@type_registry.register
 class SignalStack(CalculateMixin, UnstackMixin):
     def __init__(
         self,
@@ -386,7 +386,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
         pass
 
 
-@types.register
+@type_registry.register
 class AggregatedSignal(Signal):
     def _materialize(self):
         if not self._is_compiled:
@@ -403,7 +403,7 @@ class AggregatedSignal(Signal):
         return self._cache
 
 
-@types.register
+@type_registry.register
 class IndexedSignal(Signal):
     def __init__(self, inputs, transform, **kwargs):
         super().__init__(inputs, transform, **kwargs)
@@ -441,7 +441,7 @@ class IndexedSignal(Signal):
         )
 
 
-@types.register
+@type_registry.register
 class SelectorSignal(Signal):
     def __init__(self, inputs, transform, **kwargs):
         super().__init__(inputs, transform, **kwargs)

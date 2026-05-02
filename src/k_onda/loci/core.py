@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from collections import defaultdict
 
 from k_onda.utils import is_unitful
-from k_onda.central import types, SpanDimPair, DimBounds
+from k_onda.central import type_registry, SpanDimPair, DimBounds
 
 
 DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
@@ -14,7 +14,7 @@ DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 # TODO: Construction log
 
 
-@types.register
+@type_registry.register
 class Locus:
     name = "locus"
 
@@ -65,7 +65,7 @@ class Locus:
             return value * self.ureg(self.units)
 
 
-@types.register
+@type_registry.register
 class Marker(Locus):
     name = "marker"
 
@@ -99,7 +99,7 @@ class Marker(Locus):
         return self.to_interval(window)
 
 
-@types.register
+@type_registry.register
 class Event(Marker):
     name = "event"
 
@@ -120,7 +120,7 @@ class Event(Marker):
         self.metadim = "time"
 
 
-@types.register
+@type_registry.register
 class Interval(Locus):
     marker_class = Marker
 
@@ -236,7 +236,7 @@ class Interval(Locus):
         )
 
 
-@types.register
+@type_registry.register
 class Epoch(Interval):
     name = "epoch"
     marker_class = Event
@@ -317,7 +317,7 @@ class Epoch(Interval):
         ]
 
 
-@types.register
+@type_registry.register
 class FrequencyBand(Interval):
     name = "frequency_band"
 
@@ -333,7 +333,7 @@ class FrequencyBand(Interval):
         )
 
 
-@types.register
+@type_registry.register
 class LocusSet(Locus):
     # TODO put set algebra here
 
@@ -385,7 +385,7 @@ class LocusSet(Locus):
         return loci
 
 
-@types.register
+@type_registry.register
 class MarkerSet(LocusSet):
     def __init__(
         self,
@@ -446,7 +446,7 @@ class MarkerSet(LocusSet):
         )
 
 
-@types.register
+@type_registry.register
 class EventSet(MarkerSet):
     def __init__(self, session, events=None, places=None, conditions=None, units="s"):
         super().__init__(
@@ -469,7 +469,7 @@ class EventSet(MarkerSet):
         return super().to_intervals(window)
 
 
-@types.register
+@type_registry.register
 class IntervalSet(LocusSet):
     locus_class = Interval
 
@@ -519,7 +519,7 @@ class IntervalSet(LocusSet):
         ]
 
 
-@types.register
+@type_registry.register
 class EpochSet(IntervalSet):
     locus_class = Epoch
 

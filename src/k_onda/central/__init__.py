@@ -1,4 +1,4 @@
-from .registry import types, SignalLike
+from .registry import type_registry, SignalLike
 
 from .schema import Schema, DatasetSchema, AxisInfo, AxisKind, CoordInfo
 
@@ -8,7 +8,7 @@ from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds
 
 
 __all__ = [
-    "types",
+    "type_registry",
     "SignalLike",
     "Schema",
     "DatasetSchema",

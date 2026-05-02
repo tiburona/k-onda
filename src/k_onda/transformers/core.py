@@ -5,7 +5,7 @@ import numpy as np
 import xarray as xr
 from copy import deepcopy
 
-from k_onda.central import DatasetSchema, types
+from k_onda.central import DatasetSchema, type_registry
 
 
 def resolve_target_data(self, data, key):
@@ -109,13 +109,13 @@ class Transformer:
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
-        if isinstance(input, types.CollectionMap):
+        if isinstance(input, type_registry.CollectionMap):
             return self._call_on_collection_map(input, key_spec)
 
-        if isinstance(input, types.Collection):
+        if isinstance(input, type_registry.Collection):
             return self._call_on_collection(input, key_spec)
 
-        if isinstance(input, types.DataIdentity):
+        if isinstance(input, type_registry.DataIdentity):
             return self._call_on_data_identity(input, key_spec)
 
         return self._call_on_signal(input, key_spec)
@@ -124,7 +124,7 @@ class Transformer:
 
         group_on = getattr(collection_map, "group_on", None)
 
-        return types.CollectionMap(
+        return type_registry.CollectionMap(
             groups={
                 k: self._call_on_collection(v, key_spec)
                 for k, v in collection_map.items()
@@ -133,16 +133,16 @@ class Transformer:
         )
 
     def _call_on_collection(self, collection, key_spec):
-        if isinstance(collection.members[0], types.Signal):
-            return types.Collection(
+        if isinstance(collection.members[0], type_registry.Signal):
+            return type_registry.Collection(
                 [self._call_on_signal(signal, key_spec) for signal in collection]
             )
-        elif isinstance(collection.members[0], types.DataIdentity):
-            return types.Collection(
+        elif isinstance(collection.members[0], type_registry.DataIdentity):
+            return type_registry.Collection(
                 [self._call_on_data_identity(di, key_spec) for di in collection.members]
             )
-        elif isinstance(collection.members[0], types.Collection):
-            return types.Collection(
+        elif isinstance(collection.members[0], type_registry.Collection):
+            return type_registry.Collection(
                 [
                     self._call_on_collection(member, key_spec)
                     for member in collection.members
@@ -152,7 +152,7 @@ class Transformer:
             raise ValueError("What did you put in this collection, bro?")
 
     def _call_on_data_identity(self, data_identity, key_spec):
-        return types.Collection(
+        return type_registry.Collection(
             [
                 self._call_on_signal(component.to_signal(), key_spec)
                 for component in data_identity.data_components
@@ -161,11 +161,11 @@ class Transformer:
 
     def _call_on_signal(self, signal, key_spec):
         self._validate_input(signal, key_spec=key_spec)
-        if isinstance(signal, types.DataComponent):
+        if isinstance(signal, type_registry.DataComponent):
             signal = signal.to_signal()
         inputs = (signal,)
         output_class = self.resolve_output_class(signal)
-        if isinstance(signal.data_schema, types.DatasetSchema):
+        if isinstance(signal.data_schema, type_registry.DatasetSchema):
             key_spec = self.resolve_dataset_defaults(key_spec, signal, output_class)
         transform = self._get_transform(signal, key_spec)
         output_schema = self.make_output_schema(signal.data_schema, key_spec=key_spec)
@@ -243,11 +243,11 @@ class Calculator(Transformer):
 
     def _validate_input(self, input, **kwargs):
         acceptable_types = [
-            types.Signal,
-            types.SignalStack,
-            types.Collection,
-            types.CollectionMap,
-            types.DataIdentity,
+            type_registry.Signal,
+            type_registry.SignalStack,
+            type_registry.Collection,
+            type_registry.CollectionMap,
+            type_registry.DataIdentity,
         ]
         if not any([isinstance(input, typ) for typ in acceptable_types]):
             raise ValueError(f"Calculators can't operate on type {type(input)}")
@@ -260,7 +260,7 @@ class Calculator(Transformer):
 
     def _get_apply_kwargs(self, input, key_spec):
         schema = input.data_schema
-        if key_spec.input_name and isinstance(schema, types.DatasetSchema):
+        if key_spec.input_name and isinstance(schema, type_registry.DatasetSchema):
             schema = schema[key_spec.input_name]
         result = {"key_spec": key_spec, "data_schema": schema}
         result.update(self._get_extra_apply_kwargs(input))

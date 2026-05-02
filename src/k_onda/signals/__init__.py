@@ -14,7 +14,7 @@ from .core import (
     SelectorSignal,
 )
 
-from ..central.registry import types
+from ..central.registry import type_registry
 
 __all__ = [
     "Signal",
@@ -30,5 +30,5 @@ __all__ = [
     "DatasetSignal",
     "IndexedSignal",
     "SelectorSignal",
-    "types",
+    "type_registry",
 ]

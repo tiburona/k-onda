@@ -3,7 +3,7 @@ import numpy as np
 from functools import partial
 
 from .feature_registry import feature_registry
-from k_onda.central import Schema, types, AxisInfo, AxisKind
+from k_onda.central import Schema, type_registry, AxisInfo, AxisKind
 from .core import Transformer, Transform
 from k_onda.utils import np_from_xr
 
@@ -20,7 +20,7 @@ class ExtractFeatures(Transformer):
         input = inputs[0]
         self._validate_input(input)
 
-        if isinstance(input, types.Collection):
+        if isinstance(input, type_registry.Collection):
             input = input.group_by(self.group_by)
 
         rows = [[func(val) for func in self.funcs] for val in input.values()]
@@ -32,7 +32,7 @@ class ExtractFeatures(Transformer):
             n_features=len(self.features),
         )
 
-        return types.IndexedSignal(
+        return type_registry.IndexedSignal(
             inputs=(flat_inputs),
             transform=transform,
             data_schema=Schema(
@@ -48,13 +48,13 @@ class ExtractFeatures(Transformer):
 
     def _validate_input(self, input):
 
-        if isinstance(input, types.Collection) and self.group_by is None:
+        if isinstance(input, type_registry.Collection) and self.group_by is None:
             raise ValueError(
                 "If ExtractFeatures is called on Collection, group_on mustbe defined."
             )
 
         if not isinstance(
-            input, (types.SignalMap, types.CollectionMap, types.Collection)
+            input, (type_registry.SignalMap, type_registry.CollectionMap, type_registry.Collection)
         ):
             raise ValueError(
                 "ExtractFeatures is only defined on SignalMap, CollectionMap,"

@@ -16,7 +16,7 @@ class TypeRegistry:
             raise AttributeError(f"No signal class '{name}' registered")
 
 
-types = TypeRegistry()
+type_registry = TypeRegistry()
 
 
 @runtime_checkable

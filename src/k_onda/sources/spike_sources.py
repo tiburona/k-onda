@@ -7,10 +7,10 @@ import pint
 from ..central import Schema, DatasetSchema, AxisInfo, AxisKind, CoordInfo
 from ..signals import PointProcessSignal
 from .core import DataComponent, DataIdentity, DataSource
-from k_onda.central import types
+from k_onda.central import type_registry
 
 
-@types.register
+@type_registry.register
 class PhyOutput(DataSource):
     def __init__(self, session, data_loader_config, sampling_rate=None):
         super().__init__(session, data_loader_config)
@@ -90,7 +90,7 @@ class PhyOutput(DataSource):
         return self.spike_times[self.get_spike_ids_for_cluster(cluster_idx)]
 
 
-@types.register
+@type_registry.register
 class Neuron(DataIdentity):
     name = "neuron"
     _snapshot_fields = DataIdentity._snapshot_fields + ("neuron_type",)
@@ -112,7 +112,7 @@ class Neuron(DataIdentity):
         return self._label
 
 
-@types.register
+@type_registry.register
 class SpikeCluster(DataComponent):
     output_class = PointProcessSignal
     data_type = xr.Dataset

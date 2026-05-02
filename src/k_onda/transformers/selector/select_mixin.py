@@ -1,6 +1,6 @@
 from dataclasses import dataclass, astuple, asdict
 
-from k_onda.central import types
+from k_onda.central import type_registry
 from k_onda.central import DimBounds, PadDimPair
 from k_onda.utils import w_units
 
@@ -43,33 +43,33 @@ class SelectMixin:
             selection, new_dim, mode, conditions, units, window, metadim, kwargs
         )
 
-        if isinstance(self, types.Signal):
+        if isinstance(self, type_registry.Signal):
             return self.select_on_signal(signal=self, params=params)
 
-        elif isinstance(self, types.Collection):
+        elif isinstance(self, type_registry.Collection):
             return self.select_on_collection(collection=self, params=params)
 
-        elif isinstance(self, types.CollectionMap):
+        elif isinstance(self, type_registry.CollectionMap):
             group_on = getattr(self, "group_on", None)
 
-            return types.CollectionMap(
+            return type_registry.CollectionMap(
                 groups={
                     k: self.select_on_collection(v, params) for k, v in self.items()
                 },
                 group_on=group_on,
             )
 
-        elif isinstance(self, types.DataIdentity):
+        elif isinstance(self, type_registry.DataIdentity):
             return self.select_on_data_identity(data_identity=self, params=params)
 
     def select_on_collection(self, collection, params):
         d = asdict(params)
         extra = d.pop("kwargs") or {}
 
-        return types.Collection([member.select(**d, **extra) for member in collection])
+        return type_registry.Collection([member.select(**d, **extra) for member in collection])
 
     def select_on_data_identity(self, data_identity, params):
-        return types.Collection(
+        return type_registry.Collection(
             [
                 self.select_on_signal(component.to_signal(), params)
                 for component in data_identity.data_components
@@ -94,7 +94,7 @@ class SelectMixin:
                 raise ValueError(f"Unknown value {selection} passed to `select`.")
 
         if new_dim is not None and not isinstance(
-            selection, (types.IntervalSet, types.MarkerSet)
+            selection, (type_registry.IntervalSet, type_registry.MarkerSet)
         ):
             raise ValueError(
                 "You can't create a new_dim unless you're selecting an "
@@ -122,7 +122,7 @@ class SelectMixin:
                 selection.metadim = metadim
 
         if window:
-            if isinstance(selection, (types.Interval, types.IntervalSet)):
+            if isinstance(selection, (type_registry.Interval, type_registry.IntervalSet)):
                 raise ValueError(
                     "It doesn't make sense to define a Window on something that's"
                     "already an Interval or IntervalSet"
@@ -180,7 +180,7 @@ class SelectMixin:
 
         ureg = signal.origin.session.ureg
 
-        cls = types.Interval if isinstance(dim_bounds, dict) else types.IntervalSet
+        cls = type_registry.Interval if isinstance(dim_bounds, dict) else type_registry.IntervalSet
 
         return cls(
             dim, span, ureg=ureg, units=units, metadim=metadim, conditions=conditions

@@ -1,12 +1,12 @@
-from k_onda.central import types
+from k_onda.central import type_registry
 
 
 def classify_neurons(neuron_collection, label_spec):
-    if not isinstance(neuron_collection, types.Collection):
+    if not isinstance(neuron_collection, type_registry.Collection):
         raise ValueError("`neuron_collection` must be a Collection")
     if not len(neuron_collection):
         raise ValueError("No neurons to classify!")
-    if not all([isinstance(neuron, types.Neuron) for neuron in neuron_collection]):
+    if not all([isinstance(neuron, type_registry.Neuron) for neuron in neuron_collection]):
         raise ValueError("There's a non-neuron in `neuron_collection`.")
 
     classified_neurons = (
