@@ -3,8 +3,7 @@ import pytest
 from k_onda.sources import DataComponent
 from k_onda.central import type_registry
 
-from tests.fakes import make_lineage, FakeDataComponent
-
+from tests.fakes import make_lineage
 
 
 experiment, subject, session, data_source, data_identity, _ = make_lineage()

@@ -270,8 +270,12 @@ class Experiment(AnnotatorMixin, ConfigSetter):
                 self.create_subject(subject_key, config)
 
     def create_subject(self, subject_id, subject_config=None):
-        if subject_config is None:
-            subject_config = {}
+        config = {}
+        if 'inherits' in subject_config:
+            config_key = subject_config['inherits']
+            config_source = self.subjects_config
+            config = self.resolve_inheritance(config_key, config_source)
+        subject_config = config | (subject_config or {})
         subject_sessions = subject_config.get("sessions", [])
         subject = Subject(subject_id)
         self.subject_conditions[subject_id] = subject_config.get("conditions", {})

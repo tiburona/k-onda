@@ -2,6 +2,8 @@ from collections import defaultdict
 from operator import attrgetter
 from pathlib import Path
 import uuid
+import numpy as np
+from scipy.io import netcdf
 
 from k_onda.provenance import AnnotatorMixin
 
@@ -39,6 +41,7 @@ class DataSource(ConfigSetter):
         )
         self.file_ext = self.data_loader_config.get("file_ext")
         self._raw_data = None
+        self._components = []
         self.subject = self.session.subject
 
     @property
@@ -55,6 +58,33 @@ class DataSource(ConfigSetter):
     @property
     def identifiers(self):
         return []
+    
+
+class GenericSource(DataSource):
+
+    def load_npy_file(self, filename):
+        return np.load(filename)
+    
+    def load_keyed_dataset(self, load_func, filename):
+        keys = self.data_loader_config["keys"]
+        reader = load_func(filename)
+        return [reader[key] for key in keys]
+
+    def load_npz_file(self, filename):
+        return self.load_keyed_dataset(lambda f: np.load(f), filename)
+    
+    def load_netcdf_file(self, filename):
+        return self.load_keyed_dataset(lambda f: netcdf.NeCDFFile(f, "r"), filename)
+    
+    def load_data(self):
+    
+        ext = Path(self.file_path).suffix
+        if ext == ".npy":
+            return self.load_npy_file(self.file_path)
+        if ext == ".npz":
+            return self.load_npz_file(self.file_path)
+        if ext in [".nc", ".netcdf"]:
+            return self.load_netcdf_file(self.file_path)
 
 
 @type_registry.register

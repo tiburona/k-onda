@@ -10,6 +10,7 @@ from .core import (
 from .spike_sources import (
     Neuron,
     PhyOutput,
+    SpikeSource,
     SpikeCluster,
 )
 
@@ -26,6 +27,7 @@ __all__ = [
     "PhyOutput",
     "Neuron",
     "SpikeCluster",
+    "SpikeSource"
 ]
 
 

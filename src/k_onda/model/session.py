@@ -11,9 +11,14 @@ from k_onda.utils import group_to_dict
 from k_onda.loci import Epoch, EpochSet, EventSet
 
 
-from k_onda.sources import LFPRecording, PhyOutput, Neuron, LFPBrainRegion
+from k_onda.sources import LFPRecording, PhyOutput, Neuron, LFPBrainRegion, SpikeSource
 
-data_source_registry = {"lfp": {"class": LFPRecording}, "phy": {"class": PhyOutput}}
+data_source_registry = {
+    "lfp": {"class": LFPRecording}, 
+    "phy": {"class": PhyOutput},
+    "spike": {"class": SpikeSource},
+    "npy": {}
+    }
 
 
 @dataclass(frozen=True)
@@ -332,18 +337,35 @@ class Session(NEVMixin, ConfigSetter):
         )
 
     def get_start_and_duration(self):
-        start_sample = self.time_base.start_sample
-        start_sec = (start_sample * self.ureg.raw_sample).to("s")
-        self._start = start_sec
 
-        duration_sec = self.time_base.duration_sec
-        if duration_sec is not None:
-            self._duration = duration_sec * self.ureg.s
-        else:
-            duration_sample = self.time_base.duration_sample
-            if duration_sample:
-                duration_sample *= self.ureg.raw_sample
-                self._duration = duration_sample.to("s")
+        if "start" in self.config:
+            self._start = self.config["start"] * self.ureg.s
+        
+        if "duration" in self.config:
+            self._duration = self.config["duration"] * self.ureg.s
+
+        if self._start is not None and self._duration is not None:
+            return
+
+        if self.time_base:
+            start_sample = self.time_base.start_sample
+            start_sec = self.time_base.start_sec
+            if start_sec is not None:
+                self._start = start_sec * self.ureg.s
+            else:
+                start_sec = (start_sample * self.ureg.raw_sample).to("s")
+                self._start = start_sec
+
+            duration_sec = self.time_base.duration_sec
+            if duration_sec is not None:
+                self._duration = duration_sec * self.ureg.s
+            else:
+                duration_sample = self.time_base.duration_sample
+                if duration_sample:
+                    duration_sample *= self.ureg.raw_sample
+                    self._duration = duration_sample.to("s")
+
+        
 
     def create_events(self):
         if self.config.get("events"):

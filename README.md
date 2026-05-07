@@ -1,5 +1,19 @@
 K-Onda is a Python application for analyzing electrophysiology experiments. It will serve two audiences: researchers who are comfortable programming in Python and researchers who are looking for a higher-level application that still provides them with the transparency and control of custom scripts. It aims to develop into an application that can unify disparate stages of data analysis into a workflow that will create a provenance record as a byproduct of using it.
 
+## Quickstart
+
+K-Onda is currently pre-alpha. The best way to try it is to install the development environment and run the test suite:
+
+```bash
+git clone https://github.com/tiburona/k-onda.git
+cd k-onda
+uv sync
+.venv/bin/python -m pytest tests
+```
+
+
+## Design Constitution
+
 The original version of K-Onda, now largely deprecated, grew organically out of our lab's analysis needs.  As the project grew, the shortcomings of the underlying data model became clear. This new version, currently in its earliest development stages, starts from scratch.
 
 It operates under the following principles (all of which were sometimes violated by the legacy project):
@@ -15,9 +29,11 @@ It operates under the following principles (all of which were sometimes violated
 9. Plotting, tabular export, and statistical analysis all derive from a single canonical data representation, preventing divergence.
 10. Where feasible, K-Onda looks for data representations that are general, and can extend beyond any particular data format or collection strategy.  It will provide a foundation that can extend even beyond electrophysiology, to other kinds of data in the biological and social sciences.
 
+## Directions
+
 The original project included a declarative plotting specification that let users compose complex multipanel, multilayer figures. The new version will reimplement and extend this functionality. For more on planned features, see the [roadmap](plans/Roadmap.md).  
 
 
-Statement on the use of generative AI in this project:
+## Statement on the use of generative AI:
 
 K-Onda is currently the work of a solo developer.  She finds her robot overlords very useful for ideas, feedback, planning, code review, and rubber ducking.  However, it is also her experience that in order to maintain deep, elaborated engagement with the internals of her own project, for anything more complicated than very rote boilerplate, she must write the code herself. 

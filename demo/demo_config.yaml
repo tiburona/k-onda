@@ -1,0 +1,57 @@
+top_level_config:
+  root: demo/data
+  units_to_set:
+    raw_sample: [0.00003333333333333333, s, rs]
+    lfp_sample: [0.002, s, ls]
+
+subjects_config:
+  _base:
+    sessions:
+      - session_1
+
+  animal_1:
+    inherits: _base
+
+  animal_2:
+    inherits: _base
+
+  animal_3:
+    inherits: _base
+
+sessions_config:
+  session_1:
+    label: session_1
+    start: 0
+    duration: 30
+    data_sources:
+      - lfp
+      - spikes
+
+data_sources_config:
+  lfp:
+    registry_key: lfp
+    label: lfp
+    path: "{experiment.root}/{subject.id}_lfp.npy"
+    file_ext: npy
+    sampling_rate: 500
+    row_to_region:
+      0: bla
+
+  spikes:
+    registry_key: spike
+    label: spikes
+    path: "{experiment.root}/{subject.id}_spikes.npz"
+    file_ext: npz
+    sampling_rate: 30000
+
+data_identity_config:
+  neuron:
+    source: spike
+    match: null
+
+  lfp_brain_region:
+    source: lfp
+    match: region
+
+epochs_config: {}
+events_config: {}

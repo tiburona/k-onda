@@ -4,6 +4,8 @@ from .schema import Schema, DatasetSchema, AxisInfo, AxisKind, CoordInfo
 
 from .central import operations
 
+from .dataarray_factories import make_time_series
+
 from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds
 
 
@@ -20,4 +22,5 @@ __all__ = [
     "AxisInfo",
     "AxisKind",
     "CoordInfo",
+    "make_time_series"
 ]

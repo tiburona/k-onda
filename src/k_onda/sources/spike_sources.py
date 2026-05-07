@@ -6,8 +6,90 @@ import pint
 
 from ..central import Schema, DatasetSchema, AxisInfo, AxisKind, CoordInfo
 from ..signals import PointProcessSignal
-from .core import DataComponent, DataIdentity, DataSource
+from .core import DataComponent, DataIdentity, DataSource, GenericSource
 from k_onda.central import type_registry
+
+
+@type_registry.register
+class SpikeSource(GenericSource):
+
+    def __init__(self, session, data_loader_config, sampling_rate=None):
+        super().__init__(session, data_loader_config)
+        self._sampling_rate = sampling_rate
+        self._spike_clusters = None
+        self._cluster_ids = None
+        self._raw_data = None
+        self._spike_times = None
+        self._waveforms = None
+        self._waveforms_by_cluster = {}
+        self._spike_times_by_cluster = {}
+        self._sampling_rate = sampling_rate or data_loader_config.get('sampling_rate')
+        # TODO should I eventually try to unify the helpers/properties of PhyOutput
+        # and Generic Spike Source?
+
+    @property
+    def sampling_rate(self):
+        if self._sampling_rate is None:
+            pass
+        return self._sampling_rate
+    
+    @property
+    def raw_data(self):
+        if self._raw_data is None:
+            self._raw_data = self.load_data()
+        return self._raw_data
+    
+    @property
+    def spike_clusters(self):
+        if self._spike_clusters is None:
+            self._spike_clusters = self.raw_data[0]
+        return self._spike_clusters
+    
+    @property
+    def cluster_ids(self):
+        if self._cluster_ids is None:
+            self._cluster_ids = np.unique(self.spike_clusters)
+        return self._cluster_ids
+        
+    @property
+    def spike_times(self):
+        if self._spike_times is None:
+            self._spike_times = self.raw_data[1]
+        return self._spike_times
+    
+    @property
+    def waveforms(self):
+        if self._waveforms is None:
+            self._waveforms = self.raw_data[2]
+        return self._waveforms
+
+    @property
+    def components(self):
+        if not self._components:
+            has_electrode_dim = self.data_loader_config.get('has_electrode_dim', False)
+            for idx in self.cluster_ids:
+                cluster = SpikeCluster(self, idx, has_electrode_dim=has_electrode_dim)
+                self._components.append(cluster)
+        return self._components
+    
+    def load_keyed_dataset(self, load_func, filename):
+        keys = ("clusters", "spike_times", "waveforms")
+        reader = load_func(filename)
+        return list(reader[key] for key in keys)
+    
+    def spike_ids_for_cluster(self, cluster_idx):
+        spike_ids = np.where(self.spike_clusters == cluster_idx)[0]
+        return spike_ids.tolist()
+    
+    def spike_times_from_cluster(self, cluster_idx):
+        return self.spike_times[self.spike_ids_for_cluster(cluster_idx)]
+    
+    def waveforms_from_cluster(self, cluster_idx):
+        return self.waveforms[self.spike_ids_for_cluster(cluster_idx)]
+    
+
+
+         
 
 
 @type_registry.register
@@ -34,7 +116,6 @@ class PhyOutput(DataSource):
     def phy_model(self):
         if self._phy_model is None:
             from phylib.io.model import load_model
-
             self._phy_model = load_model(self.file_path / "params.py")
             self._phy_model.n_samples_waveforms = 200
         return self._phy_model
@@ -70,24 +151,24 @@ class PhyOutput(DataSource):
             }
             return cluster_groups
 
-    def get_waveforms(self, cluster_idx):
+    def waveforms_from_cluster(self, cluster_idx):
         electrodes = [self.phy_model.clusters_channels[cluster_idx]]
         channels_used = self.phy_model.get_cluster_channels(cluster_idx)
         indices = np.where(np.isin(channels_used, electrodes))[0]
         waveforms = self.phy_model.get_cluster_spike_waveforms(cluster_idx)
         selected_waveforms = waveforms[:, :, indices]
         return selected_waveforms
-
-    def get_spike_ids_for_cluster(self, cluster_id):
-        spike_ids = np.where(self.spike_clusters == cluster_id)[0]
-        return spike_ids.tolist()
-
+    
     def get_features(self, cluster_id, electrodes):
-        cluster_spike_ids = self.get_spike_ids_for_cluster(cluster_id)
+        cluster_spike_ids = self.spike_ids_for_cluster(cluster_id)
         return self.model.get_features(cluster_spike_ids, electrodes)
 
-    def get_spike_times_for_cluster(self, cluster_idx):
-        return self.spike_times[self.get_spike_ids_for_cluster(cluster_idx)]
+    def spike_ids_for_cluster(self, cluster_idx):
+        spike_ids = np.where(self.spike_clusters == cluster_idx)[0]
+        return spike_ids.tolist()
+
+    def spike_times_from_cluster(self, cluster_idx):
+        return self.spike_times[self.spike_ids_for_cluster(cluster_idx)]
 
 
 @type_registry.register
@@ -117,12 +198,14 @@ class SpikeCluster(DataComponent):
     output_class = PointProcessSignal
     data_type = xr.Dataset
 
-    def __init__(self, data_source, cluster_id, neuron=None):
+    def __init__(self, data_source, cluster_id, neuron=None, has_electrode_dim=True):
         super().__init__(data_source)
         self.cluster_id = cluster_id
         self.component_id = self.data_source
+        self.has_electrode_dim = has_electrode_dim
         if neuron is not None:
             self.assign_to_neuron(neuron)
+
 
     @property
     def identifiers(self):
@@ -140,8 +223,8 @@ class SpikeCluster(DataComponent):
             ],
             value_metadim="time",
         )
-        waveforms_schema = Schema(
-            axes=[
+
+        axes=[
                 AxisInfo(
                     "spikes",
                     AxisKind.POINT_PROCESS_INDEX,
@@ -149,10 +232,13 @@ class SpikeCluster(DataComponent):
                     coords=(CoordInfo(name="spike"),),
                 ),
                 AxisInfo("samples", AxisKind.AXIS, metadim="time"),
-                AxisInfo("electrodes", AxisKind.AXIS, metadim=None),
-            ],
-            value_metadim="voltage",
-        )
+            ]
+        
+        if self.has_electrode_dim:
+            axes.append(AxisInfo("electrodes", AxisKind.AXIS, metadim=None))
+        
+        waveforms_schema = Schema(axes=axes, value_metadim="voltage")
+
         return DatasetSchema(
             {"spike_times": spike_times_schema, "waveforms": waveforms_schema}
         )
@@ -167,14 +253,18 @@ class SpikeCluster(DataComponent):
         return signal
 
     def data_loader(self):
-        spike_times = self.data_source.get_spike_times_for_cluster(self.cluster_id)
+        spike_times = self.data_source.spike_times_from_cluster(self.cluster_id)
         spike_times = xr.DataArray(
             spike_times
             * pint.application_registry.s,  # TODO is this the actual unit they come from phy in?
             dims=("spikes",),
         )
-        waveforms = self.data_source.get_waveforms(self.cluster_id)
-        waveforms = xr.DataArray(waveforms, dims=("spikes", "samples", "electrodes"))
+        waveforms = self.data_source.waveforms_from_cluster(self.cluster_id)
+        waveform_dims = ("spikes", "samples")
+        if self.has_electrode_dim:
+            waveform_dims += ("electrodes",)
+
+        waveforms = xr.DataArray(waveforms, dims=waveform_dims)
 
         return xr.Dataset({"spike_times": spike_times, "waveforms": waveforms})
 
