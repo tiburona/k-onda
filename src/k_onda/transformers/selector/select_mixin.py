@@ -120,6 +120,9 @@ class SelectMixin:
                 )
             elif metadim and not selection.metadim:
                 selection.metadim = metadim
+        
+        if conditions:
+            selection = self.filter_selection_by_conditions(selection, conditions)
 
         if window:
             if isinstance(selection, (type_registry.Interval, type_registry.IntervalSet)):

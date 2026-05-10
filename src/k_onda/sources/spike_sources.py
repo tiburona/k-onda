@@ -86,10 +86,6 @@ class SpikeSource(GenericSource):
     
     def waveforms_from_cluster(self, cluster_idx):
         return self.waveforms[self.spike_ids_for_cluster(cluster_idx)]
-    
-
-
-         
 
 
 @type_registry.register
@@ -176,14 +172,14 @@ class Neuron(DataIdentity):
     name = "neuron"
     _snapshot_fields = DataIdentity._snapshot_fields + ("neuron_type",)
 
-    def __init__(self, data_components, config):
-        super().__init__(data_components)
+    def __init__(self, data_components, config, subject=None):
+        super().__init__(data_components, subject=subject)
         self.neuron_type = None
         self._label = self.generate_label()
 
     def generate_label(self):
-        preexisting_neurons = self.subject.data_identities["neurons"]
-        integer_ids = [int(neuron.label[7:]) for neuron in preexisting_neurons]
+        preexisting_neurons = self.subject.data_identities["neuron"]
+        integer_ids = [int(neuron.label[6:]) for neuron in preexisting_neurons]
         integer_id = 0 if not len(integer_ids) else max(integer_ids) + 1
         label = f"neuron{integer_id}"
         return label

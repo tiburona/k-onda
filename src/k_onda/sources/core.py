@@ -159,14 +159,15 @@ class DataIdentity(AnnotatorMixin, SelectMixin):
     name = "identity"
     _snapshot_fields = ("component_ids",)
 
-    def __init__(self, data_components=None, config=None):
+    def __init__(self, data_components=None, config=None, subject=None):
         self.uid = uuid.uuid4()
         self.config = config
         self.data_components = set()
-        self.subject = None
         self._init_annotations()
+        self.subject = subject
         if data_components is not None:
             self.add_data_components(data_components)
+            
 
     def __deepcopy__(self, memo):
         return self
@@ -191,10 +192,7 @@ class DataIdentity(AnnotatorMixin, SelectMixin):
 
     def add_data_components(self, data_components):
         for i, data_component in enumerate(data_components):
-            if i == 0:
-                if self.subject is None:
-                    self.subject = data_component.subject
-                    self.subject.data_identities[self.name].append(self)
+                    
             if data_component.subject is not self.subject:
                 raise ValueError(
                     "data components on the same data identity must share a subject."

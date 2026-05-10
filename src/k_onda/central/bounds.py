@@ -1,5 +1,6 @@
 from copy import deepcopy
 import pint
+from pprint import pformat
 
 from k_onda.mixins import DictDelegator
 
@@ -18,7 +19,7 @@ class DimPair:
             self.pair = pair
 
     def __repr__(self):
-        return f"{self[0]}, {self[1]}"
+        return f"{type(self).__name__} {self[0]}, {self[1]}"
 
     def __iter__(self):
         return iter(self.pair)
@@ -64,7 +65,7 @@ class DimBounds(DictDelegator):
         self._metadim_of = metadim_of
 
     def __repr__(self):
-        return self._dim_bounds
+        return f"{type(self).__name__}({pformat(self._dim_bounds, sort_dicts=False)})"
 
     def __missing__(self, dim):
 

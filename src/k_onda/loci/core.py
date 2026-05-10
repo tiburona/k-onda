@@ -18,13 +18,14 @@ DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 class Locus:
     name = "locus"
 
-    def __init__(self, dim, units=None, ureg=None, conditions=None, metadim=None):
+    def __init__(self, dim, units=None, ureg=None, conditions=None, metadim=None, kind=None):
         self.dim = dim
         self.units = units
         self.ureg = ureg
         self.conditions = conditions or {}
         self.validate_conditions()
         self.metadim = metadim
+        self.kind = kind
 
     def validate_conditions(self):
         # TODO when I actually have docs the messages should be replaced with a nice link to the docs.
@@ -63,6 +64,16 @@ class Locus:
             return [v * self.ureg(self.units) for v in value]
         else:
             return value * self.ureg(self.units)
+        
+    def conditions_are_met(self, conditions, strict=True):
+        for key, value in conditions.items():
+            if strict:
+                if self.conditions.get(key) != value:
+                    return False
+            else:
+                if key in self.conditions and value != self.conditions[key]:
+                    return False
+        return True
 
 
 @type_registry.register
@@ -78,8 +89,9 @@ class Marker(Locus):
         units=None,
         ureg=None,
         conditions=None,
+        kind=None
     ):
-        super().__init__(dim, units=units, ureg=ureg, conditions=conditions)
+        super().__init__(dim, units=units, ureg=ureg, conditions=conditions, kind=kind)
         self.value = self.w_units(value)
         self.index = index
         self.parent_interval = parent_interval
@@ -93,6 +105,7 @@ class Marker(Locus):
             ureg=self.ureg,
             index=self.index,
             conditions=self.conditions,
+            kind=self.kind
         )
 
     def to_intervals(self, window):
@@ -104,7 +117,7 @@ class Event(Marker):
     name = "event"
 
     def __init__(
-        self, session, value, index=None, epoch=None, units="s", conditions=None
+        self, session, value, index=None, epoch=None, units="s", conditions=None, kind=None
     ):
         super().__init__(
             "time",
@@ -114,6 +127,7 @@ class Event(Marker):
             units,
             ureg=session.experiment.ureg,
             conditions=conditions,
+            kind=kind
         )
         self.session = session
         self.parent_epoch = epoch
@@ -136,6 +150,7 @@ class Interval(Locus):
         conditions=None,
         metadim=None,
         label=None,
+        kind=None
     ):
         super().__init__(dim, units=units, ureg=ureg, conditions=conditions)
 
@@ -148,6 +163,7 @@ class Interval(Locus):
         self.anchor = anchor
         self.index = index
         self.label = label
+        self.kind = kind
         self.extent = self.span[1] - self.span[0]
         self.metadim = self.get_metadim(metadim)
 
@@ -206,6 +222,8 @@ class Interval(Locus):
             places = np.arange(count) * (extent) / count + lo
         elif spacing is not None:
             places = np.arange(lo, hi, spacing)
+            eps = np.finfo(float).eps * max(abs(lo), abs(hi), abs(spacing), 1)
+            places = places[places < hi - eps] 
         elif offsets is not None:
             places = [offset + lo for offset in offsets]
         elif positions is not None:
@@ -250,9 +268,10 @@ class Epoch(Interval):
         parent_epoch=None,
         index=None,
         conditions=None,
-        epoch_type=None,
         config=None,
         label=None,
+        kind=None,
+        key=None
     ):
         super().__init__(
             "time",
@@ -263,27 +282,26 @@ class Epoch(Interval):
             ureg=session.experiment.ureg,
             conditions=conditions,
             metadim="time",
-            label=config.get("label") or label,
+            label=label or config.get("label"),
+            kind=kind or config.get("epoch_kind")
         )
         self.session = session
         self.duration = self.w_units(duration)
         self.onset = self.w_units(onset)
-        # epoch_type isn't the condition, but the key that allows you to identify
-        # the epoch in the epoch config
-        self.epoch_type = epoch_type
-        self.config = config
+        self.config = config or {}
         self.parent_epoch = self.parent_interval
+        self.epoch_key = key
         self._events = defaultdict(list)
 
     @property
     def events(self):
         if not self._events:
-            event_types = self.config.get("events", [])
-            for event_type in event_types:
+            event_keys = self.config.get("events", [])
+            for event_type in event_keys:
                 config = self.session.experiment.events_config.get(event_type)
                 if config is None:
                     raise ValueError(
-                        f"Events not configured for epoch of type {self.epoch_type} \
+                        f"Events not configured for epoch of key {self.epoch_key} \
                         and events of type {event_type}"
                     )
                 for key, val in config.items():
@@ -337,17 +355,21 @@ class FrequencyBand(Interval):
 class LocusSet(Locus):
     # TODO put set algebra here
 
-    def __init__(self, loci, conditions=None, metadim=None):
+    def __init__(self, loci, conditions=None, metadim=None, kind=None):
         self.conditions = conditions or {}
         self._loci = loci
         self.validate(loci)
         self.metadim = metadim
+        self.kind=kind
 
     def __iter__(self):
         return iter(self.loci)
 
     def __len__(self):
         return len(self.loci)
+    
+    def __getitem__(self, idx):
+        return self.loci[idx]
 
     @property
     def loci(self):
@@ -377,12 +399,20 @@ class LocusSet(Locus):
         if conditions is None:
             conditions = {}
         conditions.update(kwargs)
-        loci = [locus for locus in self.loci if self.conditions_are_met(conditions)]
+        loci = [locus for locus in self.loci if locus.conditions_are_met(conditions)]
         if not len(loci):
             raise ValueError(
                 f"Selection of {conditions} resulted in a length 0 {self.__class__.__name__}"
             )
-        return loci
+        return self.filtered(loci)
+    
+    def filtered(self, loci):
+        return type(self)(
+            loci=loci,
+            conditions=self.conditions,
+            metadim=self.metadim,
+            kind=self.kind
+        )
 
 
 @type_registry.register
@@ -396,6 +426,7 @@ class MarkerSet(LocusSet):
         units=None,
         ureg=None,
         metadim=None,
+        kind=None
     ):
         if places is None and markers is None:
             raise ValueError("One of places or markers must not be None")
@@ -411,7 +442,8 @@ class MarkerSet(LocusSet):
         self.conditions = conditions or {}
         self.units = units
         self.ureg = ureg
-        self.metadim = None
+        self.metadim = metadim
+        self.kind = kind
 
     @property
     def markers(self):
@@ -444,11 +476,22 @@ class MarkerSet(LocusSet):
             conditions=self.conditions,
             metadim=self.metadim,
         )
+    
+    def filtered(self, loci):
+        return type(self)(
+            markers=loci,
+            dim=self.dim,
+            conditions=self.conditions,
+            units=self.units,
+            ureg=self.ureg,
+            metadim=self.metadim,
+            kind=self.kind
+        )
 
 
 @type_registry.register
 class EventSet(MarkerSet):
-    def __init__(self, session, events=None, places=None, conditions=None, units="s"):
+    def __init__(self, session, events=None, places=None, conditions=None, units="s", kind=None):
         super().__init__(
             markers=events,
             places=places,
@@ -459,6 +502,7 @@ class EventSet(MarkerSet):
         )
         self.session = session
         self.metadim = "time"
+        self.kind = kind
 
     @property
     def events(self):
@@ -467,6 +511,15 @@ class EventSet(MarkerSet):
     @property
     def to_epoch_set(self, window):
         return super().to_intervals(window)
+    
+    def filtered(self, loci):
+        return type(self)(
+           self.session,
+           events=loci,
+           conditions=self.conditions,
+           units=self.units,
+           kind=self.kind
+        )
 
 
 @type_registry.register
@@ -482,6 +535,7 @@ class IntervalSet(LocusSet):
         units=None,
         conditions=None,
         metadim=None,
+        kind=None
     ):
         if spans is None and intervals is None:
             raise ValueError("One of intervals or spans must not be None")
@@ -492,7 +546,8 @@ class IntervalSet(LocusSet):
         self.units = units
         self.metadim = metadim
         self.conditions = conditions or {}
-
+        self.kind = kind
+        
         if intervals is None:
             self.intervals_from_spans()
 
@@ -514,16 +569,28 @@ class IntervalSet(LocusSet):
                 ureg=self.ureg,
                 conditions=self.conditions,
                 metadim=self.metadim,
+                kind=self.kind
             )
             for i, span in enumerate(self.spans)
         ]
+
+    def filtered(self, loci):
+        return type(self)(
+            self.dim,
+            intervals=loci,
+            ureg=self.ureg,
+            units=self.units,
+            conditions=self.conditions,
+            metadim=self.metadim,
+            kind=self.kind
+        )
 
 
 @type_registry.register
 class EpochSet(IntervalSet):
     locus_class = Epoch
 
-    def __init__(self, session, spans=None, epochs=None, conditions=None, units="s"):
+    def __init__(self, session, spans=None, epochs=None, conditions=None, units="s", kind=None):
         self.session = session
         super().__init__(
             "time",
@@ -533,7 +600,13 @@ class EpochSet(IntervalSet):
             units=units,
             ureg=session.experiment.ureg,
             metadim="time",
+            kind=kind
         )
+
+    def attrs_to_copy(self):
+        attrs = super().attrs_to_copy()
+        attrs.extend(["session"])
+        return attrs
 
     @property
     def epochs(self):
@@ -548,6 +621,7 @@ class EpochSet(IntervalSet):
                 units=self.units,
                 index=i,
                 conditions=self.conditions,
+                kind=self.kind
             )
             for i, span in enumerate(self.spans)
         ]
@@ -559,3 +633,14 @@ class EpochSet(IntervalSet):
         super().validate(epochs)
         if not all([isinstance(epoch, Epoch) for epoch in epochs]):
             raise ValueError("All members of an EpochSet must be of type Epoch.")
+    
+    def filtered(self, loci):
+        return type(self)(
+            self.session,
+            epochs=loci,
+            conditions=self.conditions,
+            units=self.units,
+            kind=self.kind
+        )
+
+       

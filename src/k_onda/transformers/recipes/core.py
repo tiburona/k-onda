@@ -8,10 +8,16 @@ def classify_neurons(neuron_collection, label_spec):
         raise ValueError("No neurons to classify!")
     if not all([isinstance(neuron, type_registry.Neuron) for neuron in neuron_collection]):
         raise ValueError("There's a non-neuron in `neuron_collection`.")
+    
+    stacked_signals = neuron_collection.stack_signals(dim="spikes")
+
+    if stacked_signals.data_schema.has_dim("electrodes"):
+        stacked_signals = stacked_signals.reduce(key="waveforms", dim="electrodes", method="mean")
+
+
 
     classified_neurons = (
-        neuron_collection.stack_signals(dim="spikes")
-        .reduce(key="waveforms", dim="electrodes", method="mean")
+        stacked_signals
         .median_filter(key="waveforms", kernel_sizes={"samples": 5})
         .unstack_signals()
         .extract_features("fwhm", "firing_rate", group_by="neuron")

@@ -16,17 +16,20 @@ class StackSignals(Transformer):
 
     def output_schema(self, *input_schemas):
         stacking_dim = self.dim or "members"
+        axis = AxisInfo(name=stacking_dim, kind=AxisKind.AXIS)
         # TODO: is there a functional reason to introduce another kind of AxisKind for
         # the stacking dim?
-        axis = AxisInfo(name=stacking_dim, kind=AxisKind.AXIS)
+        def stack_schema(schema):
+            return schema.with_axis(axis)
+       
         if isinstance(input_schemas[0], DatasetSchema):
             return DatasetSchema(
                 {
-                    key: schema.with_added(axis)
+                    key: stack_schema(schema)
                     for key, schema in input_schemas[0].items()
                 }
             )
-        return input_schemas[0].with_added(axis)
+        return stack_schema(input_schemas[0])
 
     def __call__(self, collection):
         from ..signals import SignalStack

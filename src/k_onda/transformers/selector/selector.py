@@ -455,6 +455,9 @@ class Slicer(Calculator):
 
     def select_continuous(self, data, data_schema):
 
+        if self.new_dim == 'pip':
+            a = 'foo'
+
         original_dim = data_schema.concrete_dim_from(self.locus.dim)
 
         selection_bounds = self.selection_bounds.to_array_of_dicts()
@@ -471,10 +474,19 @@ class Slicer(Calculator):
                 ],
             )
             sliced = data.where(mask, drop=True)
+
+            if any(size == 0 for size in sliced.sizes.values()):
+                continue
+
             for d in list(sliced.dims):
                 if d != original_dim and sliced.sizes[d] == 1:
                     sliced = sliced.squeeze(d)
             selected.append(sliced)
+
+        if not selected:
+            raise ValueError(
+                "Selection produced no data in the current `selection_bounds`."
+            )
 
         if self.new_dim:
             selected = self.attach_continuous_relative_coords(selected)
@@ -582,6 +594,7 @@ class Slicer(Calculator):
                 )
 
         if self.multi_select:
+
             selected_data = xr.concat(
                 data,
                 dim=self.new_dim or "intervals",
@@ -596,6 +609,7 @@ class Slicer(Calculator):
                     )
                 }
             )
+
         else:
             selected_data = data[0]
         return selected_data
@@ -680,4 +694,24 @@ class CoordTranslator(Calculator):
             if data_schema.coord_by_name(name).is_relative
         }
 
-        return data.assign_coords(updated) if updated else data
+        if not updated:
+            return data
+        
+        coord_units = {
+            name: data.coords[name].pint.units
+            for name in updated
+            if data.coords[name].pint.units is not None
+        }
+
+        result = data.assign_coords(updated) if updated else data
+
+        stripped = {
+            name: units 
+            for name, units in coord_units.items()
+            if result.coords[name].pint.units is None
+        }
+
+        if stripped:
+            result = result.pint.quantify(stripped)
+
+        return result

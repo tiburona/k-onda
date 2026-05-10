@@ -89,10 +89,23 @@ class Schema:
             ax for ax in self.axes if ax is not self.ax_with_concrete_dim(dim)
         ]
         return new_schema
+    
+    def with_axis(self, axis, *, if_exists="keep"):
+        if self.has_name(axis.name):
+            if if_exists == "keep":
+                return self.copy()
+            if if_exists == "error":
+                raise ValueError(f"Axis {axis.name!r} aslready exists")
+        return self.with_added(axis)
 
     def with_added(self, axis) -> Schema:
         new_schema = copy(self)
-        new_schema.axes.append(axis)
+        new_schema.axes = [*self.axes, axis]
+        return new_schema
+    
+    def copy(self) -> Schema:
+        new_schema = copy(self)
+        new_schema.axes = list(self.axes)
         return new_schema
 
     @property
@@ -198,6 +211,9 @@ class DatasetSchema(MutableMapping):
     @property
     def selectable(self):
         return set.union(*(s.selectable for s in self.key_schemas.values()))
+    
+    def has_dim(self, dim):
+        return any([key_schema.has_dim(dim) for key_schema in self.key_schemas.values()])
 
     def replace_key(self, key, new_schema):
         return DatasetSchema({**self.key_schemas, key: new_schema})

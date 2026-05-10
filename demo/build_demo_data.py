@@ -2,7 +2,8 @@ import numpy as np
 from scipy.signal import butter, sosfiltfilt
 from random import random
 import math
-import heapq
+
+from k_onda.model import Experiment
 
 rng = np.random.default_rng(42)
 
@@ -29,7 +30,7 @@ def raised_cosine_window(t, start, stop, ramp):
 def generate_animal_lfp(animal):
 
     fs = 500
-    duration = 30
+    duration = 60
     t = np.arange(0, duration, 1 / fs)
     n = len(t)
 
@@ -53,7 +54,8 @@ def random_spikes(rate, start, stop):
     while time < stop:
         time_to_next = -math.log(1.0 - random()) / rate
         time += time_to_next
-        spikes.append(time)
+        if time < stop:
+            spikes.append(time)
     return spikes
 
 
@@ -127,7 +129,7 @@ def generate_animal_neurons(animal):
 
     for i in range(n_PNs):
         rate = PN_rate + rng.normal(0, PN_rate/5)
-        spikes = random_spikes(rate, 0, 30)
+        spikes = random_spikes(rate, 0, 60)
         waveforms = random_waveforms(
             trough_amp=100, 
             trough_sigma=fwhm_to_sigma(PN_fwhm), 
@@ -145,7 +147,7 @@ def generate_animal_neurons(animal):
       
     for i in range(n_INs):
         rate = IN_rate + rng.normal(0, IN_rate/5)
-        spikes = random_spikes(rate, 0, 30)
+        spikes = random_spikes(rate, 0, 60)
         waveforms = random_waveforms(
             trough_amp=100, 
             trough_sigma=fwhm_to_sigma(IN_fwhm), 
@@ -177,6 +179,12 @@ animals = ["animal_1", "animal_2", "animal_3", "animal_4", "animal_5", "animal_6
 for animal in animals:
     generate_animal_neurons(animal)
     generate_animal_lfp(animal)
+
+
+experiment = Experiment.from_config(
+    "demo", 
+    global_config="/Users/katie/likhtik/k-onda/demo/demo_config.yaml").initialize()
+
 
 
 

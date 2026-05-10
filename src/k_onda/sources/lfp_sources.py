@@ -86,8 +86,8 @@ class LFPChannel(DataComponent):
 class LFPBrainRegion(DataIdentity):
     name = "lfp_brain_region"
 
-    def __init__(self, data_components, config):
-        super().__init__(data_components)
+    def __init__(self, data_components, config, subject=None):
+        super().__init__(data_components, subject=subject)
         self._label = data_components[0].region
 
     @property

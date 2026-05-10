@@ -26,6 +26,7 @@ class TimeBase:
     fs_hz: float
     start_sample: int = 0
     start_datetime: datetime | None = None
+    start_sec: float | None = None
     duration_sample: int | None = None
     duration_sec: float | None = None
 
@@ -125,8 +126,9 @@ class Session(NEVMixin, ConfigSetter):
         parts = [self.experiment.id, self.subject.id]
         if self.label:
             parts.append(self.label)
-        if self.time_base.start_datetime:
-            parts.append(str(self.time_base.start_datetime))
+        if self._time_base:
+            if self.time_base.start_datetime:
+                parts.append(str(self.time_base.start_datetime))
         else:
             parts.append(str(self.uid)[:8])
         return ":".join(parts)
@@ -197,8 +199,6 @@ class Session(NEVMixin, ConfigSetter):
         if not identity_config:
             raise ValueError("neurons were not configured for this experiment")
 
-        # TODO: I need to figure this out.  identity_config['source'] is 'phy'
-        # but self.data_sources is keyed by spike
         registry_key = identity_config["source"]
         data_sources = [
             ds
@@ -225,7 +225,7 @@ class Session(NEVMixin, ConfigSetter):
                     if getattr(comp, match_key) == getattr(di, match_key)
                 ]
                 matched_components.extend(match_comps)
-                di.add_components(matched_components)
+                di.add_data_components(matched_components)
 
             for component in set(components) - set(matched_components):
                 self.create_identity(
@@ -233,7 +233,7 @@ class Session(NEVMixin, ConfigSetter):
                 )
 
     def create_identity(self, identity_class, identity_string, components, config):
-        identity = identity_class(components, config=config)
+        identity = identity_class(components, config=config, subject=self.subject)
         self.subject.data_identities[identity_string].append(identity)
 
     def initialize_data_sources(self, data_sources_config=None):
@@ -262,22 +262,77 @@ class Session(NEVMixin, ConfigSetter):
             self._time_base = self.get_nev_time_base(nev_data)
             self._onsets = self.get_nev_onsets(nev_data)
 
-        else:
-            raise NotImplementedError("Need to add more metadata types")
-        # other kinds of metadata will follow
+            return
+        
+        metadata_config = self.config.get("metadata", {})
+
+        if metadata_config.get("loader", "config") == "config":
+            self._time_base = TimeBase(
+                fs_hz=None,
+                start_sec=self.config.get("start", 0),
+                duration_sec=self.config.get("duration")
+            )
+            self._onsets = defaultdict(list)
+            return
+        
+        raise ValueError("Unknown metadata loader")
 
     def create_epochs(self, epochs_config=None):
         epochs_config = self.resolve_config(
             epochs_config, self.experiment.epochs_config
         )
-        for key, config in epochs_config.items():
+        
+        absolute_configs = {
+            key: config for key, config in epochs_config.items() 
+            if not config.get("relative_to")
+        }
+
+        relative_configs = {
+            key: config for key, config in epochs_config.items() 
+            if config.get("relative_to")
+        }
+
+        for key, config in absolute_configs.items():
             conditions = config.get("conditions", {})
             if "from_nev" in config:
                 self.nev_epoch_config(key, config, conditions)
-            elif "relative_to" in config:
-                self.relative_epoch_config(key, config, conditions)
+            else:
+                self.epoch_config(key, config, conditions)
+           
+        for key, config in relative_configs.items():
+            conditions = config.get("conditions", {})
+            self.relative_epoch_config(key, config, conditions)
 
-    def nev_epoch_config(self, epoch_type, epoch_config, conditions):
+    def epoch_config(self, epoch_key, epoch_config, conditions):
+
+        onsets_list = epoch_config.get("onsets") 
+        if not onsets_list:
+            raise ValueError("Onsets were not configured")
+        
+        onsets = []
+        for onset in onsets_list:
+            onsets.append(Onset(in_secs=onset * self.ureg.s))
+        
+        duration = epoch_config.get("duration")
+        if not duration:
+            raise ValueError("Duration was not configured")
+        duration = duration * self.ureg("second")
+
+        self._epoch_sets[epoch_key].extend(
+            [
+                Epoch(
+                    self,
+                    onset.in_secs,
+                    duration,
+                    conditions=conditions,
+                    config=epoch_config,
+                    key=epoch_key
+                )
+                for onset in onsets
+            ]
+        )
+
+    def nev_epoch_config(self, epoch_key, epoch_config, conditions):
         code = epoch_config["code"]
         onsets = self.onsets.get(code)
         if not onsets:
@@ -297,7 +352,7 @@ class Session(NEVMixin, ConfigSetter):
                 onset.in_secs = onset.in_samples.to("s")
 
         duration = epoch_config["duration"] * self.ureg("second")
-        self._epoch_sets[epoch_type].extend(
+        self._epoch_sets[epoch_key].extend(
             [
                 Epoch(
                     self,
@@ -305,12 +360,13 @@ class Session(NEVMixin, ConfigSetter):
                     duration,
                     conditions=conditions,
                     config=epoch_config,
+                    key=epoch_key
                 )
                 for onset in unitful_onsets
             ]
         )
 
-    def relative_epoch_config(self, epoch_type, epoch_config, conditions):
+    def relative_epoch_config(self, epoch_key, epoch_config, conditions):
         relative_to = epoch_config["relative_to"]
         baseline_ind = None
         bracket_matches = re.findall(r"\[([^\]]*)\]", relative_to)
@@ -318,19 +374,27 @@ class Session(NEVMixin, ConfigSetter):
             baseline_ind = int(bracket_matches[0])
             relative_to = relative_to[: relative_to.index("[")]
 
-        target_epochs = self._epoch_sets[relative_to]
+        target_epochs = [
+            epoch 
+            for epoch_set in self._epoch_sets.values()
+            for epoch in epoch_set 
+            if epoch.kind == relative_to
+            ]
+        if len(target_epochs) == 0:
+            raise ValueError(f"No target epochs of kind {relative_to} were found.")
         shift = epoch_config["shift"] * self.experiment.ureg("s")
         duration = epoch_config["duration"] * self.experiment.ureg("s")
         if baseline_ind is not None:
             target_epochs = [target_epochs[baseline_ind]]
-        self._epoch_sets[epoch_type].extend(
+        self._epoch_sets[epoch_key].extend(
             [
                 Epoch(
                     self,
-                    epoch.onset - shift,
+                    epoch.onset + shift,
                     duration,
                     conditions=conditions,
                     config=epoch_config,
+                    key=epoch_key
                 )
                 for epoch in target_epochs
             ]
@@ -372,6 +436,6 @@ class Session(NEVMixin, ConfigSetter):
             # this is where events that had some definition independent of epochs would live
             pass
         else:
-            for epoch_type, epoch_set in self._epoch_sets.items():
+            for epoch_key, epoch_set in self._epoch_sets.items():
                 for epoch in epoch_set:
-                    self._event_sets[epoch_type].extend(epoch.events)
+                    self._event_sets[epoch_key].extend(epoch.events)

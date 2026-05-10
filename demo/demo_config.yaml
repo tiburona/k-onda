@@ -9,23 +9,25 @@ subjects_config:
     sessions:
       - session_1
 
-  animal_1:
+  control:
     inherits: _base
+    members: [animal_1, animal_2, animal_3]
 
-  animal_2:
+  drug:
     inherits: _base
-
-  animal_3:
-    inherits: _base
+    members: [animal_4, animal_5, animal_6]
 
 sessions_config:
   session_1:
     label: session_1
     start: 0
-    duration: 30
+    duration: 60
     data_sources:
       - lfp
       - spikes
+    epochs:
+      - tone
+      - pretone
 
 data_sources_config:
   lfp:
@@ -53,5 +55,27 @@ data_identity_config:
     source: lfp
     match: region
 
-epochs_config: {}
-events_config: {}
+epochs_config:
+  tone: 
+    epoch_kind: tone
+    events: [pip]
+    onsets: [10, 20, 30, 40, 50]
+    duration: 5
+    units: s
+    conditions:
+      stimulus: tone
+
+
+  pretone:
+    relative_to: tone
+    epoch_kind: pretone
+    shift: -5
+    duration: 5
+    units: s
+    conditions:
+      stimulus: pretone
+
+
+events_config:
+  pip:
+    spacing: 1
