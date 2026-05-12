@@ -5,10 +5,10 @@ from scipy.signal import iirnotch, medfilt, sosfilt, sosfiltfilt, tf2sos
 import xarray as xr
 import pint
 
-from ..central import DimBounds, DimPair
+from k_onda.central import DimBounds, DimPair
 from .core import Calculator, PaddingCalculator
 
-from ..utils import scalar
+from  k_onda.utils import scalar, is_unitful
 
 
 class Filter(PaddingCalculator):
@@ -23,6 +23,8 @@ class Filter(PaddingCalculator):
         return {"designed_filter": designed_filter}
 
     def design_filter(self, parent_signal):
+        if not is_unitful(parent_signal.sampling_rate):
+            raise ValueError("A sampling rate must have units.")
         fs = scalar(parent_signal.sampling_rate)
         # TODO: add in other kinds of filters.
         return self._design_sos(fs=fs, **self.config)
@@ -64,13 +66,25 @@ class Filter(PaddingCalculator):
 
         return DimBounds({"time": DimPair([pad_seconds, pad_seconds])})
 
-    def _apply_inner(self, data, designed_filter, *args, **kwargs):
-        dim = self.dim
-        if dim != "time":
+    def _apply_inner(self, data, designed_filter, data_schema=None, *args, **kwargs):
+        concrete_dim = (
+            data_schema.concrete_dim_from(self.dim)
+            if data_schema is not None
+            else self.dim
+        )
+
+        if self.dim != "time":
             raise NotImplementedError(
                 "You can currently only filter along the time dimension."
             )
-        axis = data.dims.index(dim)
+
+        if concrete_dim not in data.dims:
+            raise ValueError(
+                f"Filter expected a {self.dim} axis, resolved to {concrete_dim}"
+                f"but data dims are {data.dims}"
+            )
+        
+        axis = data.get_axis_num(concrete_dim)
         result = sosfiltfilt(designed_filter, data, axis=axis)
         return result
 

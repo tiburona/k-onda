@@ -1,5 +1,5 @@
 from .magnitude_calculators import Normalize, Scale, Shift
-from .core import Calculator, PaddingCalculator, Transform, Transformer, with_key_access
+from .core import Calculator, PaddingCalculator, Transform, Transformer
 from .data_shape_transformers import StackSignals, UnstackSignals
 from .descriptive_calculators import Histogram, ReduceDim
 from .event_calculators import Rate
@@ -14,7 +14,6 @@ from .feature_transformers import ExtractFeatures
 from .classifier_calculators import KMeans
 
 __all__ = [
-    "with_key_access",
     "Transform",
     "Transformer",
     "Calculator",

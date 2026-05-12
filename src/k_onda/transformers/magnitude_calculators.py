@@ -10,7 +10,7 @@ class Shift(Calculator):
     def __init__(self, shift):
         self.shift = shift
 
-    def _apply_inner(self, data):
+    def _apply_inner(self, data, *args, **kwargs):
         try:
             result = data + self.shift.data
         except AttributeError:
@@ -24,7 +24,7 @@ class Scale(Calculator):
     def __init__(self, factor):
         self.factor = factor
 
-    def _apply_inner(self, data):
+    def _apply_inner(self, data, *args, **kwargs):
         try:
             result = data * self.factor.data
         except AttributeError:

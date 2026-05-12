@@ -177,7 +177,7 @@ class Experiment(AnnotatorMixin, ConfigSetter):
 
     @property
     def all_lfp_brain_regions(self):
-        pass
+        return Collection([br for s in self.subjects for br in s.lfp_brain_regions])
 
     @property
     def subject_ids(self):

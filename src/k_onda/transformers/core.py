@@ -8,76 +8,6 @@ from copy import deepcopy
 from k_onda.central import DatasetSchema, type_registry
 
 
-def resolve_target_data(self, data, key):
-    if key is None:
-        return data
-
-    if not isinstance(data, xr.Dataset):
-        raise ValueError(
-            f"{type(self).__name__} received key='{key}' but input is not a dataset."
-        )
-    if key not in data:
-        raise KeyError(f"{key} was not found in dataset variables: {list(data.keys())}")
-    return data[key]
-
-
-def merge_keys(self, data, result, key_spec):
-
-    output_mode = key_spec.output_mode
-
-    if not isinstance(data, xr.Dataset):
-        if output_mode is None:
-            return result
-        else:
-            raise ValueError("`key_mode` provided when data is not xr.Dataset")
-
-    if output_mode is None:
-        output_mode = self.key_mode
-
-    if output_mode == "standalone":
-        return result
-
-    if output_mode == "replace":
-        merged = data.copy()
-        merged[key_spec.input_name] = result
-        return merged
-
-    if output_mode == "append":
-        if self.name in data:
-            raise ValueError(
-                f"output_mode is 'append' and key {self.name} exists in data."
-            )
-        merged = data.copy()
-
-        merged[self.name] = result
-        return merged
-
-    raise ValueError("Unknown key mode")
-
-
-# TODO: I am really questioning the wisdom of this decorator.  The whole point
-# of the Calculator core is to act as a template.  This is just fragmenting the
-# template.  Reintegrate this at some point.
-def with_key_access(func):
-    @wraps(func)
-    def wrapper(self, data, *args, key_spec=None, **kwargs):
-
-        if key_spec is None:
-            return func(self, data, *args, **kwargs)
-
-        key = key_spec.input_name
-
-        subset_data = resolve_target_data(self, data, key)
-
-        result = func(self, subset_data, *args, **kwargs)
-
-        merged_result = merge_keys(self, data, result, key_spec)
-
-        return merged_result
-
-    return wrapper
-
-
 class Transform:
     """A transform function with optional metadata."""
 
@@ -92,11 +22,6 @@ class Transform:
         if not data:
             return self.fn()
         return self.fn(*data)
-
-
-@dataclass
-class Policies:
-    pass
 
 
 KeySpec = namedtuple("KeySpec", "input_name output_mode", defaults=[None, "replace"])
@@ -163,20 +88,41 @@ class Transformer:
         self._validate_input(signal, key_spec=key_spec)
         if isinstance(signal, type_registry.DataComponent):
             signal = signal.to_signal()
-        inputs = (signal,)
         output_class = self.resolve_output_class(signal)
         if isinstance(signal.data_schema, type_registry.DatasetSchema):
             key_spec = self.resolve_dataset_defaults(key_spec, signal, output_class)
-        transform = self._get_transform(signal, key_spec)
-        output_schema = self.make_output_schema(signal.data_schema, key_spec=key_spec)
-
-        output_signal = output_class(
-            inputs=inputs,
-            transform=transform,
+    
+        return output_class(
+            inputs=(signal,),
             transformer=self,
-            data_schema=output_schema,
+            key_spec=key_spec,
+            data_schema=None,
+            transform=None
         )
-        return output_signal
+
+    def _get_apply_kwargs(self, *inputs, key_spec=None):
+        return {}
+    
+    def _get_transform_kwargs(self, *inputs, apply_kwargs=None):
+            return {}
+    
+    def build_transform_for(self, output_signal):
+        return self._get_transform(
+            *output_signal.inputs,
+            key_spec=output_signal.key_spec,
+            apply_kwargs=output_signal.apply_kwargs
+        )
+
+    def _get_transform(self, *inputs, key_spec=None, apply_kwargs=None):
+        if apply_kwargs is None:
+            apply_kwargs = self._get_apply_kwargs(*inputs, key_spec=key_spec)
+
+        transform_kwargs = self._get_transform_kwargs(
+            *inputs,
+            apply_kwargs=apply_kwargs
+        )
+
+        return Transform(partial(self._apply, **apply_kwargs), **transform_kwargs)
 
     def resolve_dataset_defaults(self, key_spec, signal, output_class):
         input_name = key_spec.input_name
@@ -208,30 +154,83 @@ class Transformer:
         """Compute the output schema."""
 
         input_schema = input_schemas[0]
-        key = key_spec.input_name
-        output_mode = key_spec.output_mode or getattr(self, "key_mode", "replace")
+        key = key_spec.input_name if key_spec is not None else None
+        output_mode = (
+            key_spec.output_mode
+            if key_spec is not None and key_spec.output_mode is not None
+            else getattr(self, "key_mode", "replace")
+        )
 
         if isinstance(input_schema, DatasetSchema) and key is not None:
             key_schema = input_schema[key]
             new_key_schema = self.output_schema(key_schema)
             if output_mode == "standalone":
                 return new_key_schema
-            elif output_mode == "replace":
+            # TODO does replace_key remove the original key?  Check that names here aren't misleading.
+            elif output_mode == "rename":  
                 return input_schema.replace_key(self.name, new_key_schema)
+            elif output_mode == "replace":
+                return input_schema.replace_key(key_spec.input_name, new_key_schema)
             elif output_mode == "append":
                 return input_schema.add_key(self.name, new_key_schema)
 
         else:
             # Plain Schema input
-            return self.output_schema(input_schema)
+            return self.output_schema(*input_schemas)
 
     # this gets overridden
     def output_schema(self, input_schema):
         return input_schema
+    
+    def resolve_target_data(self, data, key):
+        if key is None:
+            return data
 
+        if not isinstance(data, xr.Dataset):
+            raise ValueError(
+                f"{type(self).__name__} received key='{key}' but input is not a dataset."
+            )
+        if key not in data:
+            raise KeyError(f"{key} was not found in dataset variables: {list(data.keys())}")
+        return data[key]
+    
+    def merge_keys(self, data, result, key_spec):
 
-class CalculatorPolicies(Policies):
-    pass
+        output_mode = key_spec.output_mode
+
+        if not isinstance(data, xr.Dataset):
+            if output_mode is None:
+                return result
+            else:
+                raise ValueError("`key_mode` provided when data is not xr.Dataset")
+
+        if output_mode is None:
+            output_mode = self.key_mode
+
+        if output_mode == "standalone":
+            return result
+
+        if output_mode == "replace":
+            merged = data.copy()
+            merged[key_spec.input_name] = result
+            return merged
+        
+        if output_mode == "rename":
+            merged = data.copy()
+            merged[self.name] = result
+            return merged
+
+        if output_mode == "append":
+            if self.name in data:
+                raise ValueError(
+                    f"output_mode is 'append' and key {self.name} exists in data."
+                )
+            merged = data.copy()
+
+            merged[self.name] = result
+            return merged
+
+        raise ValueError("Unknown key mode")
 
 
 class Calculator(Transformer):
@@ -251,17 +250,17 @@ class Calculator(Transformer):
         ]
         if not any([isinstance(input, typ) for typ in acceptable_types]):
             raise ValueError(f"Calculators can't operate on type {type(input)}")
-
-    def _get_transform(self, input, key_spec):
-
-        apply_kwargs = self._get_apply_kwargs(input, key_spec)
-        transform_kwargs = self._get_transform_kwargs(input, apply_kwargs)
-        return Transform(partial(self._apply, **apply_kwargs), **transform_kwargs)
-
+    
     def _get_apply_kwargs(self, input, key_spec):
         schema = input.data_schema
-        if key_spec.input_name and isinstance(schema, type_registry.DatasetSchema):
+         
+        if (
+            key_spec and 
+            key_spec.input_name and 
+            isinstance(schema, type_registry.DatasetSchema)
+            ):
             schema = schema[key_spec.input_name]
+
         result = {"key_spec": key_spec, "data_schema": schema}
         result.update(self._get_extra_apply_kwargs(input))
         return result
@@ -286,15 +285,27 @@ class Calculator(Transformer):
     def _get_extra_transform_kwargs(self, input, apply_kwargs):
         return deepcopy(apply_kwargs)
 
-    @with_key_access
-    def _apply(self, data, *args, **kwargs):
-        self._validate_data(data, **kwargs)
-        result = self._apply_inner(data, *args, **kwargs)
+    def _apply(self, data, *args, key_spec=None, **kwargs):
+       
+        if key_spec is not None and key_spec.input_name is not None:
+            data_for_apply = self.resolve_target_data(data, key_spec.input_name)
+        else:
+            data_for_apply = data
+
+        self._validate_data(data_for_apply, **kwargs)
+
+        result = self._apply_inner(data_for_apply, *args, **kwargs)
+
         if isinstance(result, tuple):
             result, wrap_kwargs = result
         else:
             wrap_kwargs = {}
-        result = self._wrap_result(result, data, **wrap_kwargs)
+
+        result = self._wrap_result(result, data_for_apply, **wrap_kwargs)
+        
+        if key_spec is not None and key_spec.input_name is not None:
+            result = self.merge_keys(data, result, key_spec)
+
         return result
 
     def _validate_data(self, data, **kwargs):

@@ -156,9 +156,9 @@ class SelectMixin:
         elif selection:
             conditions = kwargs
         else:
-            dim_bounds = {k: v for k, v in kwargs.items if self.is_inferrably_a_dim(k)}
+            dim_bounds = {k: v for k, v in kwargs.items() if self.is_inferrably_a_dim(k)}
             conditions = {
-                k: v for k, v in kwargs.items if not self.is_inferrably_a_dim(k)
+                k: v for k, v in kwargs.items() if not self.is_inferrably_a_dim(k)
             }
 
         return dim_bounds, conditions

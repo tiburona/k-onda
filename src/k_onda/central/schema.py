@@ -102,7 +102,21 @@ class Schema:
         new_schema = copy(self)
         new_schema.axes = [*self.axes, axis]
         return new_schema
-    
+
+    def rename_axis(self, old_name, name):
+        new_schema = self.copy()
+        old_axis = self.axis_by_name(old_name)
+        new_axis = AxisInfo(
+            name=name, 
+            kind=old_axis.kind, 
+            metadim=old_axis.metadim,
+            coords=old_axis.coords
+            )
+        for i, axis in enumerate(new_schema.axes):
+            if axis.name == old_name:
+                new_schema.axes[i] = new_axis
+        return new_schema
+
     def copy(self) -> Schema:
         new_schema = copy(self)
         new_schema.axes = list(self.axes)

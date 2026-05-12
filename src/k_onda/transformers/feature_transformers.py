@@ -1,10 +1,9 @@
 import xarray as xr
 import numpy as np
-from functools import partial
 
 from .feature_registry import feature_registry
 from k_onda.central import Schema, type_registry, AxisInfo, AxisKind
-from .core import Transformer, Transform
+from .core import Transformer
 from k_onda.utils import np_from_xr
 
 
@@ -26,25 +25,29 @@ class ExtractFeatures(Transformer):
         rows = [[func(val) for func in self.funcs] for val in input.values()]
         flat_inputs = tuple(sig for row in rows for sig in row)
 
-        transform = self._get_transform(
-            list(input.keys()),
-            n_rows=len(rows),
-            n_features=len(self.features),
-        )
-
         return type_registry.IndexedSignal(
-            inputs=(flat_inputs),
-            transform=transform,
-            data_schema=Schema(
-                axes=[
-                    AxisInfo(name="index", kind=AxisKind.AXIS),
-                    AxisInfo(name="feature", kind=AxisKind.AXIS),
-                ]
-            ),
+            inputs=flat_inputs,
+            transform=None,
+            transformer=self,
+            data_schema=None,
+            apply_kwargs=self._make_apply_kwargs(input, rows)
+            
         )
+    
+    def make_output_schema(self, *input_schemas, key_spec):
+        return Schema(
+            axes=[
+                AxisInfo(name="index", kind=AxisKind.AXIS),
+                AxisInfo(name="feature", kind=AxisKind.AXIS),
+            ]
+            )
 
-    def _get_transform(self, keys, n_rows, n_features):
-        return Transform(partial(self._apply, keys, n_rows, n_features))
+    def _make_apply_kwargs(self, input, rows):
+        return {
+            "keys": list(input.keys()),
+            "n_rows": len(rows),
+            "n_features": len(self.features),
+        }
 
     def _validate_input(self, input):
 
@@ -61,7 +64,7 @@ class ExtractFeatures(Transformer):
                 "and Collection."
             )
 
-    def _apply(self, keys, n_rows, n_features, *feature_data):
+    def _apply(self, *feature_data, keys, n_rows, n_features):
 
         feature_units = {}
         values = []

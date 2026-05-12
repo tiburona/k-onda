@@ -95,28 +95,31 @@ class Intersection(Calculator, BinaryCalculatorMixin):
         self.tolerance = 10 ** (-tolerance_decimals)
 
     def __call__(self, a, b, key=None, key_output_mode=None):
+
+        if key is not None or key_output_mode is not None:
+            raise NotImplementedError("Key access is not yet implemented for Intersection")
+
+        key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
+
         self.validate_sig_types([a, b])
 
         output_signal_class = self.resolve_output_class(a)
 
-        transform = Transform(partial(self._apply, b=b))
-
-        key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
-
-        # TODO: actually make this transformer actually key aware
-        output_schema = self.make_output_schema(a.data_schema, key_spec=key_spec)
-
         return output_signal_class(
             inputs=(a, b),
-            transform=transform,
-            data_schema=output_schema,
+            transform=None,
+            data_schema=None,
+            key_spec=key_spec,
             origin=(a.origin, b.origin),
             transformer=self,
         )
 
-    def _apply_inner(self, a_data, b):
-        a_overlap, b_overlap = self.get_and_validate_sig_overlap(a_data, b.data)
+    def _apply_inner(self, a_data, b_data):
+        a_overlap, b_overlap = self.get_and_validate_sig_overlap(a_data, b_data)
         return a_overlap.data & b_overlap.data
+    
+    def _get_transform(self, *args, **kwargs):
+        return Transform(self._apply)
 
 
 class ApplyMask(Calculator, BinaryCalculatorMixin):
@@ -127,26 +130,44 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
 
     # TODO: all these calls need to be verified to work with SignalStack.
     def __call__(self, input, mask=None, key=None, key_output_mode=None):
+        
+        
+        if key is not None or key_output_mode is not None:
+            raise NotImplementedError("Key access is not yet implemented for ApplyMask")
+
+        key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
+
         mask = mask or self.mask
         if mask is None:
             raise ValueError("mask must be provided at init or call time")
         self.validate_sig_types([mask])
-        output_signal_class = self.resolve_output_class(input)
-        key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
-        output_schema = self.make_output_schema(input, key_spec=key_spec)
+        output_class = self.resolve_output_class(input)
 
-        transform = Transform(partial(self._apply, mask=mask))
-
-        return output_signal_class(
-            inputs=(input,),
-            transform=transform,
-            data_schema=output_schema,
-            origin=(input.origin, mask.origin),
+        return output_class(
+            inputs=(input, mask),
             transformer=self,
+            transform=None,
+            data_schema=None,
+            key_spec=key_spec,
+            origin=(input.origin, mask.origin)
         )
+    
+    def _get_transform(self, *args, **kwargs):
+        return Transform(self._apply)
 
-    def _apply_inner(self, data, mask):
+    def _apply(self, sig_data, mask_data, *args, **kwargs):
+        if kwargs.get("key_spec") is not None:
+            raise NotImplementedError("ApplyMask can't extract a keyed result from a Dataset" \
+            "Signal yet")
+        
+        result = self._apply_inner(sig_data, mask_data)
+        result = self._wrap_result(result, sig_data)
+
+        return result
+
+
+    def _apply_inner(self, sig_data, mask_data):
         # Verify xarray alignment behavior - should give masked overlap + NaN outside.
-        _, mask_overlap = self.get_and_validate_sig_overlap(data, mask.data)
-        result = data.where(mask_overlap, other=np.nan)
+        _, mask_overlap = self.get_and_validate_sig_overlap(sig_data, mask_data)
+        result = sig_data.where(mask_overlap, other=np.nan)
         return result

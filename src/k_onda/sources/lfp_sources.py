@@ -1,7 +1,10 @@
+import pint
+
 from k_onda.central import make_time_series, Schema
 from  k_onda.signals import TimeSeriesSignal
 from .core import DataComponent, DataIdentity, GenericSource
-from k_onda.central import Schema
+from k_onda.central import Schema, AxisInfo, AxisKind
+from k_onda.utils import is_unitful
 
 
 class LFPRecording(GenericSource):
@@ -9,6 +12,9 @@ class LFPRecording(GenericSource):
         # In some cases you can get the sampling rate from the recording, probably
         super().__init__(session, data_loader_config)
         self.sampling_rate = sampling_rate or data_loader_config.get('sampling_rate')
+        if not is_unitful(self.sampling_rate):
+            ureg = pint.get_application_registry()
+            self.sampling_rate = self.sampling_rate * ureg.hertz
 
     @property
     def raw_data(self):
@@ -66,7 +72,9 @@ class LFPChannel(DataComponent):
 
     @property
     def data_schema(self):
-        return Schema("time")
+        return Schema(
+            axes=[AxisInfo("time", kind=AxisKind.AXIS, metadim="time")],
+            value_metadim='V')
     
     @property
     def region(self):

@@ -79,3 +79,20 @@ def new_tree(leaf, memo=None):
                     queue2.append(node_2.inputs[i])
 
     return new_leaf
+
+
+def rebuild_tree(leaf, rebuild_node, memo=None):
+    memo = {} if memo is None else memo
+
+    if id(leaf) in memo:
+        return memo[id(leaf)]
+    
+    rebuilt_inputs = tuple(rebuild_tree(inp, rebuild_node, memo) for inp in leaf.inputs)
+
+    rebuilt = leaf if leaf.is_source else leaf.rebuild_with_inputs(rebuilt_inputs)
+
+    if rebuild_node is not None:
+        rebuilt = rebuild_node(original=leaf, rebuilt=rebuilt)
+
+    memo[id(leaf)] = rebuilt
+    return rebuilt

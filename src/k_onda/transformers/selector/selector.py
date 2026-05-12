@@ -3,10 +3,11 @@ from functools import reduce
 import xarray as xr
 from operator import and_
 import numpy as np
+from collections import defaultdict
 
 from k_onda.loci import IntervalSet
 from ..core import Transformer, Transform, Calculator
-from k_onda.graph import list_nodes, walk_tree, build_consumers_map
+from k_onda.graph import list_nodes, walk_tree, rebuild_tree
 from k_onda.central import (
     Schema,
     DatasetSchema,
@@ -51,7 +52,7 @@ class Selector(Transformer):
             output.conditions.update(self.locus.conditions)
         return output
 
-    def _get_transform(self, signal, key_spec):
+    def _get_transform(self, *inputs, key_spec=None, **kwargs):
         return Transform(fn=lambda x: x, padlen=self.window, key_spec=key_spec)
 
     @property
@@ -85,7 +86,7 @@ class SelectionPlanner(Transformer):
         if len(selector_nodes):
             padlen_accumulators = self._accumulate_padlen(signal, all_nodes)
             lower_bound_offsets = self._lower_bound_correction(selector_nodes)
-            leaf = self._place_slicers(
+            leaf = self._build_slice_plan(
                 all_nodes, selector_nodes, padlen_accumulators, lower_bound_offsets
             )
         return leaf
@@ -142,8 +143,8 @@ class SelectionPlanner(Transformer):
                     continue
                 offsets[metadim] = selector_node.transformer.window[metadim][0]
         return offsets
-
-    def _place_slicers(
+    
+    def _build_slice_plan(
         self, all_nodes, selector_signals, padlen_accumulators, lower_bound_offsets
     ):
 
@@ -159,85 +160,74 @@ class SelectionPlanner(Transformer):
         pushdown_selector_nodes.reverse()
         local_selector_nodes.reverse()
 
-        leaf = all_nodes[0]
-        node_index = {id(node): i for i, node in enumerate(all_nodes)}
-        consumers_map = build_consumers_map(leaf)
+        slicer_plan = defaultdict(list)
 
+        leaf = all_nodes[0]
+
+        node_index = {id(node): i for i, node in enumerate(all_nodes)}
+       
         if len(pushdown_selector_nodes):
-            leaf = self._place_pushdown_slicers(
-                leaf,
-                pushdown_selector_nodes,
-                padlen_accumulators,
-                node_index,
-                consumers_map,
+            self._make_pushdown_slicers(
+                pushdown_selector_nodes, padlen_accumulators, node_index, slicer_plan
             )
 
         if len(local_selector_nodes):
-            leaf = self._place_local_slicers(
-                leaf,
-                local_selector_nodes,
-                padlen_accumulators,
-                node_index,
-                consumers_map,
+            self._make_local_slicers(
+                local_selector_nodes, padlen_accumulators, node_index, slicer_plan 
             )
 
-        return self._place_trim_slicers(
-            leaf, pushdown_selector_nodes, lower_bound_offsets
-        )
+        self._make_trim_slicers(leaf, pushdown_selector_nodes, slicer_plan)
 
-    def _place_local_slicers(
-        self, leaf, local_selector_nodes, padlen_accumulators, node_index, consumers_map
+        leaf = self._rebuild_tree(leaf, slicer_plan)
+
+        for metadim, offset in lower_bound_offsets.items():
+            leaf = CoordTranslator(metadim=metadim, offset=offset)(leaf)
+
+        return leaf
+
+    def _make_local_slicers(
+        self, local_selector_nodes, padlen_accumulators, node_index, slicer_plan
     ):
 
         for ls_node in local_selector_nodes:
             padlen = padlen_accumulators[node_index[id(ls_node)]]
             dim_bounds = deepcopy(ls_node.transformer.locus.dim_bounds)
             dim_bounds += padlen
-            slicer_signal = self._place_slicer(
-                ls_node, ls_node, dim_bounds, consumers=consumers_map[id(ls_node)]
-            )
-            leaf = slicer_signal
+            self._make_slicer(ls_node, ls_node, dim_bounds, slicer_plan)
 
-        return leaf
-
-    def _place_pushdown_slicers(
+    def _make_pushdown_slicers(
         self,
-        leaf,
         pushdown_selector_nodes,
         padlen_accumulators,
         node_index,
-        consumers_map,
+        slicer_plan
     ):
         # for each pushdown selector, walk the graph from the selector node
         # carrying the set of dims still looking for placement
 
         for ps_node in pushdown_selector_nodes:
-            selector_ancestors = {id(node) for node in list_nodes(ps_node)}
 
-            def _check_and_place(node, last_node, value):
-                return self._check_and_place(
+            def _check_and_make(node, last_node, value):
+                return self._check_and_make(
                     node,
                     last_node,
                     value,
                     ps_node,
                     padlen_accumulators,
                     node_index,
-                    selector_ancestors,
-                    consumers_map,
+                    slicer_plan,
                 )
 
             live_dims = set(ps_node.transformer.locus.dim_bounds)
 
             for _, live_dims, _ in walk_tree(
                 ps_node,
-                func=_check_and_place,  # signature: (node, downstream, live_dims)
+                func=_check_and_make,  # signature: (node, downstream, live_dims)
                 starting_val=live_dims,
             ):
                 pass
 
-        return leaf
-
-    def _check_and_place(
+    def _check_and_make(
         self,
         node,
         _,
@@ -245,8 +235,7 @@ class SelectionPlanner(Transformer):
         ps_node,
         padlen_accumulators,
         node_index,
-        selector_ancestors,
-        consumers_map,
+        slicer_plan,
     ):
 
         selectable_dims = node.data_schema.selectable
@@ -261,70 +250,64 @@ class SelectionPlanner(Transformer):
                 continue
             elif not node.is_source and dim_in_inputs(node, dim):
                 continue
-            elif live_dims and not node.is_source:
+            elif live_dims:
                 padlen = padlen_accumulators[node_index[id(node)]]
                 dim_bounds = deepcopy(ps_node.transformer.locus.dim_bounds)
                 dim_bounds += padlen
 
-                self._place_slicer(
-                    node,
-                    ps_node,
-                    dim_bounds,
-                    selector_ancestors=selector_ancestors,
-                    consumers=consumers_map[id(node)],
-                    check_ancestors=True,
-                )
+                self._make_slicer(node, ps_node, dim_bounds, slicer_plan)
 
                 live_dims.remove(dim)
-            elif live_dims and node.is_source:
-                raise ValueError(f"dims {live_dims} were not found.")
             else:
                 break
 
         return live_dims
 
-    def _place_trim_slicers(self, leaf, pushdown_selector_nodes, lower_bound_offsets):
+    def _make_trim_slicers(self, leaf, pushdown_selector_nodes, slicer_plan):
         # For every pushdown selector place a slicer with the selector's original
         # bounds
         for ps_node in pushdown_selector_nodes:
-            slicer_signal = self._place_slicer(
-                leaf, ps_node, ps_node.transformer.locus.dim_bounds, is_trim=True
+            self._make_slicer(
+                leaf, ps_node, ps_node.transformer.locus.dim_bounds, slicer_plan, is_trim=True
             )
-            leaf = slicer_signal
-
-        for metadim, offset in lower_bound_offsets.items():
-            leaf = CoordTranslator(metadim=metadim, offset=offset)(leaf)
-
-        return leaf
-
-    def _place_slicer(
+        
+    def _make_slicer(
         self,
         node,
         selector_signal,
         selection_bounds,
-        selector_ancestors=None,
-        consumers=None,
-        check_ancestors=False,
+        slicer_plan,
         is_trim=False,
     ):
         selector = selector_signal.transformer
         new_dim = selector.new_dim if not is_trim else None
         window = selector.window if not is_trim else None
-        slicer_signal = Slicer(
+        slicer = Slicer(
             selection_bounds,
             selector.mode,
             selector.locus,
             new_dim,
             window,
             is_trim=is_trim,
-        )(node)
-        slicer_signal._selection_planned = True
-        for consumer in consumers or []:
-            if not check_ancestors or id(consumer) in selector_ancestors:
-                consumer.inputs = [
-                    slicer_signal if inp is node else inp for inp in consumer.inputs
-                ]
-        return slicer_signal
+        )
+
+        slicer_plan[id(node)].append(slicer)
+    
+        return slicer
+    
+    def _rebuild_tree(self, leaf, slicer_plan):
+
+        def insert_slicers(original, rebuilt):
+            slicers = slicer_plan.get(id(original))
+            if not slicers:
+                return rebuilt
+            for slicer in slicers:
+                rebuilt = slicer(rebuilt)
+            return rebuilt
+        
+        new_leaf = rebuild_tree(leaf, rebuild_node=insert_slicers)
+
+        return new_leaf
 
 
 class Slicer(Calculator):
@@ -372,11 +355,13 @@ class Slicer(Calculator):
             # add the new dim
             new_axis = AxisInfo(
                 name=self.new_dim,
-                metadim=metadim,
                 kind=AxisKind.AXIS,
-                coords=(CoordInfo(name=self.new_dim, metadim=metadim),),
+                coords=(CoordInfo(name=self.new_dim),)
             )
             arr_schema = arr_schema.with_added(new_axis)
+            arr_schema = arr_schema.rename_axis(
+                arr_schema.concrete_dim_from(self.locus.dim), self._new_dim_coord()
+                )
 
             return arr_schema
 
@@ -424,7 +409,7 @@ class Slicer(Calculator):
             if not signal.data_schema.is_selectable(dim):
                 raise ValueError(f"Signal data can not be selected on dimension {dim}.")
 
-    def _get_apply_kwargs(self, input, *args):
+    def _get_apply_kwargs(self, input, **kwargs):
 
         return {"data_schema": getattr(input, "data_schema")}
 
@@ -454,9 +439,6 @@ class Slicer(Calculator):
                 return self.select_continuous(data, data_schema)
 
     def select_continuous(self, data, data_schema):
-
-        if self.new_dim == 'pip':
-            a = 'foo'
 
         original_dim = data_schema.concrete_dim_from(self.locus.dim)
 
@@ -682,7 +664,7 @@ class CoordTranslator(Calculator):
 
         return output_signal
 
-    def _get_apply_kwargs(self, input, *args):
+    def _get_apply_kwargs(self, input, **kwargs):
         return {"data_schema": getattr(input, "data_schema")}
 
     def _apply(self, data, *, data_schema=None, **_):

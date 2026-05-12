@@ -2,8 +2,8 @@ from copy import deepcopy
 from functools import partial
 import xarray as xr
 
-from .core import Transformer, Transform
-from k_onda.central import DatasetSchema, AxisInfo, AxisKind
+from .core import Transformer, Transform, KeySpec
+from k_onda.central import DatasetSchema, AxisInfo, AxisKind, type_registry
 
 
 class StackSignals(Transformer):
@@ -31,66 +31,74 @@ class StackSignals(Transformer):
             )
         return stack_schema(input_schemas[0])
 
-    def __call__(self, collection):
-        from ..signals import SignalStack
+    def __call__(self, collection, key=None, key_output_mode=None):
+        
+        if key is not None or key_output_mode is not None:
+            raise NotImplementedError("Key access is not yet implemented for SignalStack")
+
+        key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
         input_schemas = [s.data_schema for s in collection.signals]
         output_schema = self.output_schema(*input_schemas)
         transform = self._get_transform()
-        return SignalStack(
-            output_schema, collection=collection, transform=transform, transformer=self
-        )
+        return type_registry.SignalStack(
+            collection, 
+            data_schema=output_schema, 
+            transform=transform, 
+            key_spec=key_spec,
+            transformer=self
+            )
 
-    def _get_transform(self):
+    def _get_transform(self, *args, **kwargs):
         return Transform(self._apply)
 
-    def _gather_datasets(self, signals):
-        keys = signals[0].data.keys()
-        data = {}
+    def _gather_datasets(self, data):
+        keys = data[0].keys()
+        gathered_data = {}
         boundaries = [0]
 
         for i, key in enumerate(keys):
             arrays = []
-            for signal in signals:
-                arr = signal.data[key]
+            for dataset in data:
+                arr = dataset[key]
                 arrays.append(arr)
                 increment = arr.sizes[self.dim] if self.dim else 1
                 if i == 0:
                     boundaries.append(boundaries[-1] + increment)
 
-            data[key] = xr.concat(
+            gathered_data[key] = xr.concat(
                 arrays, dim=self.dim or "members", combine_attrs="no_conflicts"
             )
 
-        dataset = xr.Dataset(data)
+        dataset = xr.Dataset(gathered_data)
         dataset.attrs["boundaries"] = boundaries
         dataset.attrs["stack_dim"] = self.dim
 
         return dataset
 
-    def _gather_arrays(self, signals):
+    def _gather_arrays(self, data):
         arrays = []
         boundaries = [0]
 
-        for signal in signals:
-            arr = signal.data
+        for arr in data:
             arrays.append(arr)
             increment = arr.sizes[self.dim] if self.dim else 1
             boundaries.append(boundaries[-1] + increment)
 
-        data = xr.concat(
+        gathered_data = xr.concat(
             arrays, dim=self.dim or "members", combine_attrs="no_conflicts"
         )
 
-        data.attrs["boundaries"] = boundaries
-        data.attrs["stack_dim"] = self.dim
+        gathered_data.attrs["boundaries"] = boundaries
+        gathered_data.attrs["stack_dim"] = self.dim
 
-        return data
+        return gathered_data
 
-    def _apply(self, signals):
-        if isinstance(signals[0].data, xr.Dataset):
-            return self._gather_datasets(signals)
-        return self._gather_arrays(signals)
+    def _apply(self, *data, **kwargs):
+        
+        if isinstance(data[0], xr.Dataset):
+            return self._gather_datasets(data)
+        return self._gather_arrays(data)
 
 
 class UnstackSignals(Transformer):
@@ -122,21 +130,25 @@ class UnstackSignals(Transformer):
             signal_class = (
                 signal_stack.transform.signal_class or signal_stack.signal_class
             )
-            transform = self._get_transform(i)
+        
             origin = signal_stack.signals[i].origin
             signal = signal_class(
                 inputs=[signal_stack],
-                transform=transform,
                 data_schema=output_schema,
                 origin=origin,
                 transformer=self,
                 source_signal=signal_stack.signals[i],
                 start=signal_stack.signals[i].start,
                 duration=signal_stack.signals[i].duration,
+                context=signal_stack.signals[i].context,
+                last_stack_index=i
             )
             signals.append(signal)
 
         return self.resolve_output_class()(signals)
+    
+    def build_transform_for(self, signal):
+        return self._get_transform(signal.last_stack_index)
 
     def _get_transform(self, idx):
         apply_kwargs = self._get_apply_kwargs(idx)
