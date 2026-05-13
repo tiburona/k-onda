@@ -280,7 +280,7 @@ class SelectionPlanner(Transformer):
         is_trim=False,
     ):
         selector = selector_signal.transformer
-        new_dim = selector.new_dim if not is_trim else None
+        new_dim = selector.new_dim
         window = selector.window if not is_trim else None
         slicer = Slicer(
             selection_bounds,
@@ -470,7 +470,7 @@ class Slicer(Calculator):
                 "Selection produced no data in the current `selection_bounds`."
             )
 
-        if self.new_dim:
+        if self.new_dim and not self.is_trim:
             selected = self.attach_continuous_relative_coords(selected)
             selected = self.swap_coords(selected)
 

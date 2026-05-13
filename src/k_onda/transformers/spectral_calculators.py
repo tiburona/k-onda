@@ -45,50 +45,87 @@ class Spectrogram(PaddingCalculator):
     def _get_extra_apply_kwargs(self, parent):
         return {"fs": scalar(parent.sampling_rate)}
 
-    def _apply_inner(self, data, fs):
+    def _apply_inner(self, data, fs, data_schema=None, **kwargs):
         config = deepcopy(self.config)
         config["sfreq"] = fs
+        
+        time_dim = data_schema.concrete_dim_from("time")
+        leading_dims = [d for d in data.dims if d != time_dim]
+        data.transpose(*leading_dims, time_dim)
         data_np = np.asarray(data)
-        data_3d = data_np[np.newaxis, np.newaxis, :]
+        if data_np.ndim == 1:
+            data_3d = data_np[np.newaxis, np.newaxis, :]
+        elif data_np.ndim == 2:
+            data_3d = data_np[:, np.newaxis, :]
+        elif data_np.ndim == 3:
+            data_3d = data_np
+        else:
+            raise ValueError("tfr_array_multitaper can not run on data with more than 3 dims.")
+       
         power = tfr_array_multitaper(data_3d, **config).squeeze()
-        return (power, {"fs": fs})
+        return (power, {"fs": fs, "data_schema": data_schema})
 
-    def _wrap_result(self, result, data, fs):  # pyright: ignore[reportIncompatibleMethodOverride]
+    def _wrap_result(self, result, data, fs, data_schema): 
+        concrete_time_dim = data_schema.concrete_dim_from("time")
+        spectrogram_dims = ("frequency", concrete_time_dim)
+        other_dims = data.dims[:-1]
+        result_dims = other_dims + spectrogram_dims
 
-        start = data["time"][0].item().magnitude
+        # preceding dim coords, if any (epoch or channel)
+        result_dim_coords = {
+            k: data.coords[k] for k in other_dims
+        }
+
+        # freequency coord
+        result_dim_coords["frequency"] = self.config["freqs"]
+        
+        # concrete time dim coord
         dt = self.config["decim"] / fs
-        freqs = self.config["freqs"]
-        time = (np.arange(result.shape[1]) * dt) + start
-
-        def get_time_coords(coord):
-            return (np.arange(result.shape[1]) * dt) + scalar(
-                data.coords[coord][0].pint.to("s")
-            )
+        start = data.coords[concrete_time_dim].isel({concrete_time_dim: 0}).values
+        concrete_time_dim_coord = np.arange(result.shape[-1]) * dt + start
+        result_dim_coords[concrete_time_dim] = concrete_time_dim_coord
 
         da = xr.DataArray(
             result,
-            dims=("frequency", "time"),
-            coords={"frequency": freqs, "time": time},
+            dims=result_dims,
+            coords=result_dim_coords
         )
+
+        # auxiliary time coords
+        def get_time_coords(coord):
+            time_coord_base = np.arange(result.shape[-1]) * dt
+            is_relative = data_schema.coord_by_name(coord).is_relative
+            
+            if is_relative:
+                time_dim_coord = time_coord_base 
+                start = data.coords[coord].isel({concrete_time_dim:0}).values
+            else:
+                leading_shape = data.shape[:-1]
+                time_dim_coord = np.broadcast_to(
+                    time_coord_base, 
+                    (*leading_shape, time_coord_base.size)
+                    ).copy()
+                start = data.coords[coord].isel({concrete_time_dim:0}).values[..., np.newaxis]
+                
+            time_dim_coord += start
+            time_dim_coord = pint.Quantity(time_dim_coord, 's')
+
+            if is_relative:
+                return ((concrete_time_dim,), time_dim_coord)
+            else:
+                return (data.dims[:-1] + (concrete_time_dim,), time_dim_coord)
+    
+        all_time_coords = {
+            k: get_time_coords(k) 
+            for k, v in data.coords.items() 
+            if concrete_time_dim in v.dims
+            }
+        
+        da = da.assign_coords(all_time_coords)
 
         da.attrs = data.attrs
-
-        # TODO: do I want to get spectrograms units?
-
-        old_time_coords = {
-            coord for coord in data.coords if "time" in data.coords[coord].dims
-        }
-
-        da = da.assign_coords(
-            {
-                coord: ("time", get_time_coords(coord)) 
-                for coord in old_time_coords
-            }
-        )
         
-        da = da.pint.quantify({"frequency": "Hz", "time": "s"})
-
-        # TODO include units here
+        da = da.pint.quantify({"frequency": "Hz", concrete_time_dim: "s"})
 
         result = super()._wrap_result(da)
         return result

@@ -25,6 +25,17 @@ class AxisInfo:
     metadim: str | None = None  # semantic: what physical quantity it represents
     coords: tuple[CoordInfo, ...] = ()  # all the coords available on the axis
 
+    def __post_init__(self):
+        coords = tuple(self.coords)
+
+        if not any(c.name == self.name for c in coords):
+            coords = (
+                CoordInfo(name=self.name, metadim=self.metadim),
+                *coords,
+            )
+
+        object.__setattr__(self, "coords", coords)
+
 
 @type_registry.register
 @dataclass
@@ -135,8 +146,12 @@ class Schema:
         return [c.name for ax in self.axes for c in ax.coords]
 
     @property
-    def selectable(self):
+    def selectable(self) -> set[str]:
         return set(self.dim_names) | set(self.metadims) | set(self.coord_names)
+    
+    def coord_names_by_dim(self, dim) -> list[str]:
+        axis = self.ax_by_name(dim)
+        return [coord.name for coord in axis.coords]
 
     def is_point_process(self) -> bool:
         return any(ax.kind == AxisKind.POINT_PROCESS_INDEX for ax in self.axes)
