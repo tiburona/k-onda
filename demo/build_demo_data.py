@@ -2,8 +2,16 @@ import numpy as np
 from scipy.signal import butter, sosfiltfilt
 from random import random
 import math
+import os
+from pathlib import Path
 
 from k_onda.model import Experiment
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+os.chdir(REPO_ROOT)
+
+DATA_DIR = REPO_ROOT / "demo" / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 rng = np.random.default_rng(42)
 
@@ -45,7 +53,7 @@ def generate_animal_lfp(animal):
 
     lfp = (broadband + theta_amp * theta)[:, None]
 
-    np.save(f"demo/data/{animal}_lfp.npy", lfp)
+    np.save(DATA_DIR / f"{animal}_lfp.npy", lfp)
    
 
 def random_spikes(rate, start, stop):
@@ -167,12 +175,14 @@ def generate_animal_neurons(animal):
     waveforms = np.concatenate(PN_waveforms + IN_waveforms)
           
     np.savez_compressed(
-        f"demo/data/{animal}_spikes.npz", 
+        DATA_DIR / f"{animal}_spikes.npz", 
         clusters=clusters, 
         spike_times=spike_times, 
         waveforms=waveforms
         )
 
+
+os.makedirs("demo/data", exist_ok=True)
 
 animals = ["animal_1", "animal_2", "animal_3", "animal_4", "animal_5", "animal_6"]
 
@@ -183,7 +193,7 @@ for animal in animals:
 
 experiment = Experiment.from_config(
     "demo", 
-    global_config="/Users/katie/likhtik/k-onda/demo/demo_config.yaml").initialize()
+    global_config="demo/demo_config.yaml").initialize()
 
 
 

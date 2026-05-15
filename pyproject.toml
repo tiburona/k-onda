@@ -31,10 +31,18 @@ dependencies = [
     "xarray",
 ]
 
+[project.optional-dependencies]
+demo = [
+    "ipykernel",
+    "jupyterlab",
+    "nbconvert",
+    "pandas",
+]
+
+
 [dependency-groups]
 dev = [
     "ipykernel>=7.2.0",
-    "pyright",
     "pytest>=9.0.2",
     "ruff",
 ]

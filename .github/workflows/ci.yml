@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install package and development dependencies
+        run: uv sync --locked --group dev
+
+      - name: Check source syntax
+        run: uv run --locked python -m compileall -q src
+
+      - name: Run tests if present
+        run: |
+          if [ -d tests ] && find tests -type f \( -name 'test_*.py' -o -name '*_test.py' \) | grep -q .; then
+            uv run --locked pytest tests
+          else
+            echo "No test files found; skipping pytest."
+          fi
+
+  notebooks-clean:
+    name: Notebook outputs stripped
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install nbstripout==0.9.1
+      - run: nbstripout --verify demo/k_onda_demo.ipynb
+
+  binder-demo:
+    name: Binder demo notebook
+    needs: notebooks-clean
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install repo2docker
+        run: python -m pip install jupyter-repo2docker
+
+      - name: Build Binder image
+        run: jupyter-repo2docker --no-run --image-name k-onda-binder .
+
+      - name: Execute demo notebook inside Binder image
+        run: |
+          docker run --rm --entrypoint bash k-onda-binder -lc '
+            cd /home/jovyan &&
+            jupyter nbconvert \
+              --to notebook \
+              --execute demo/k_onda_demo.ipynb \
+              --ExecutePreprocessor.timeout=900 \
+              --output-dir /tmp'
+
