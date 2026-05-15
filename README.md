@@ -11,7 +11,7 @@ uv sync
 .venv/bin/python -m pytest tests
 ```
 
-or to run the demo on [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/tiburona/k-onda/main?filepath=demo/k_onda_demo.ipynb).
+or to run the demo: [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/tiburona/k-onda/main?filepath=demo/k_onda_demo.ipynb).
 
 
 
