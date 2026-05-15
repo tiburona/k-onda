@@ -104,10 +104,10 @@ jobs:
       - name: Check Binder requirements
         run: |
           uv export \
-            -- format requirements.txt \
-            -- extra demo \
-            -- no-dev \
-            -- no-hashes \
+            --format requirements.txt \
+            --extra demo \
+            --no-dev \
+            --no-hashes \
             --frozen \
             --output-file /tmp/requirements.txt
           diff -u requirements.txt /tmp/requirements.txt
