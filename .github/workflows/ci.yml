@@ -108,6 +108,7 @@ jobs:
             --extra demo \
             --no-dev \
             --no-hashes \
+            --no-header \
             --frozen \
             --output-file /tmp/requirements.txt
           diff -u requirements.txt /tmp/requirements.txt

@@ -4,5 +4,6 @@ binder-requirements:
 		--extra demo \
 		--no-dev \
 		--no-hashes \
+		--no-header \
 		--frozen \
 		--output-file requirements.txt
