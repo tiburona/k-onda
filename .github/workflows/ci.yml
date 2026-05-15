@@ -79,7 +79,7 @@ jobs:
       - name: Execute demo notebook inside Binder image
         run: |
           docker run --rm --entrypoint bash k-onda-binder -lc '
-            cd /home/jovyan &&
+            cd $HOME &&
             jupyter nbconvert \
               --to notebook \
               --execute demo/k_onda_demo.ipynb \
