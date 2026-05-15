@@ -60,7 +60,7 @@ def random_spikes(rate, start, stop):
     spikes = []
     time = start
     while time < stop:
-        time_to_next = -math.log(1.0 - random()) / rate
+        time_to_next = -math.log(1.0 - rng.random()) / rate
         time += time_to_next
         if time < stop:
             spikes.append(time)
