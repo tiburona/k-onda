@@ -61,7 +61,7 @@ jobs:
 
   binder-demo:
     name: Binder demo notebook
-    needs: notebooks-clean
+    needs: [notebooks-clean, binder-requirements]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -85,4 +85,31 @@ jobs:
               --execute demo/k_onda_demo.ipynb \
               --ExecutePreprocessor.timeout=900 \
               --output-dir /tmp'
+
+  binder-requirements:
+    name: Binder requirements in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Check Binder requirements
+        run: |
+          uv export \
+            -- format requirements.txt \
+            -- extra demo \
+            -- no-dev \
+            -- no-hashes \
+            --frozen \
+            --output-file /tmp/requirements.txt
+          diff -u requirements.txt /tmp/requirements.txt
+
 
