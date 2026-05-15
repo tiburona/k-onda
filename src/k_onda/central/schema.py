@@ -210,7 +210,13 @@ class Schema:
         new_schema = new_schema.without(ax.name)
         new_schema = new_schema.with_added(new_ax)
         return new_schema
+    
+    def get_common_metadim(self, our_coord, other_schema, other_coord):
+        metadim = self.metadim_from(our_coord)
+        return metadim if metadim == other_schema.metadim_from(other_coord) else None
+            
 
+        
 
 @type_registry.register
 class DatasetSchema(MutableMapping):
@@ -315,3 +321,7 @@ class DatasetSchema(MutableMapping):
             if metadim is not None:
                 return metadim
         return None
+
+    def get_common_metadim(self, our_coord, other_schema, other_coord):
+        metadim = self.metadim_from(our_coord)
+        return metadim if metadim == other_schema.metadim_from(other_coord) else None

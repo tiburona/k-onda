@@ -176,7 +176,7 @@ class SelectionPlanner(Transformer):
                 local_selector_nodes, padlen_accumulators, node_index, slicer_plan 
             )
 
-        self._make_trim_slicers(leaf, pushdown_selector_nodes, slicer_plan)
+        self._make_trim_slicers(leaf, pushdown_selector_nodes, local_selector_nodes, slicer_plan)
 
         leaf = self._rebuild_tree(leaf, slicer_plan)
 
@@ -263,12 +263,44 @@ class SelectionPlanner(Transformer):
 
         return live_dims
 
-    def _make_trim_slicers(self, leaf, pushdown_selector_nodes, slicer_plan):
+    def _make_trim_slicers(
+            self, 
+            leaf, 
+            pushdown_selector_nodes, 
+            local_selector_nodes, 
+            slicer_plan
+            ):
         # For every pushdown selector place a slicer with the selector's original
         # bounds
+
+        window_nodes = [
+            node for node in pushdown_selector_nodes + local_selector_nodes
+            if node.transformer.window is not None
+            ]
+        
         for ps_node in pushdown_selector_nodes:
+            trim_bounds = ps_node.transformer.locus.dim_bounds
+            for window_node in window_nodes:
+                # Detect if the two nodes are attempting to select on different coords
+                # on the same dim, where one has a window and one is a pushdown node.  
+                # That is a tricky situation we can't yet handle.
+                if ps_node.transformer.locus.dim != window_node.transformer.locus.dim:
+                    common_metadim = ps_node.data_schema.get_common_metadim(
+                        ps_node.transformer.locus.dim, 
+                        window_node.data_schema, 
+                        window_node.transformer.locus.dim
+                        )
+                    if common_metadim:
+                        raise NotImplementedError(
+                            f"You can't yet select on two coords over dim {common_metadim}" 
+                            " if they're not the same coord.")
+                # Make sure we don't trim more narrowly than the window.
+                else:
+                    trim_bounds = deepcopy(trim_bounds)
+                    trim_bounds.cover(window_node.transformer.locus.dim_bounds)
+
             self._make_slicer(
-                leaf, ps_node, ps_node.transformer.locus.dim_bounds, slicer_plan, is_trim=True
+                leaf, ps_node, trim_bounds, slicer_plan, is_trim=True
             )
         
     def _make_slicer(

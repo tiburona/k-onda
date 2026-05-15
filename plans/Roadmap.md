@@ -57,7 +57,7 @@ Make K-Onda a reliable and user-friendly electrophysiology tool for our lab and 
 - Only letting selectors select one dim was a deliberate regression/simplification, but multiple dim 
   support should be added.
 - Right now `where` (a method on the `SelectMixin`) only tests for equality of conditions. Expand to: negation, multi-value, ranges on numeric conditions (intensity > 60), and boolean combinations. 
-- Develop an ergonomic API for "this event should be normalized relative to its own baseline window."
+- Develop an API for "this event should be normalized relative to its own baseline window."
 - Figure out how to handle ragged epochs.
 
 ---

@@ -1,6 +1,7 @@
 from copy import deepcopy
 import pint
 from pprint import pformat
+import itertools
 
 from k_onda.mixins import DictDelegator
 
@@ -14,7 +15,7 @@ class DimPair:
             raise ValueError("You must define either bounds or units")
         self.units = units
         if pair is None:
-            self.pair = [0 * units, 0 * units]  # pyright: ignore[reportOperatorIssue]
+            self.pair = [0 * units, 0 * units]  
         else:
             self.pair = pair
 
@@ -43,7 +44,15 @@ class DimPair:
                     "Don't add two SpanDimPairs; this operation is for widening bounds."
                 )
             )
-
+        
+    def cover(self, other, strict=True):
+        if strict and not self.overlaps(other):
+            return self
+        return type(self)(pair=(min(self[0], other[0]), max(self[1], other[1])))
+    
+    def overlaps(self, other):
+        return self[0] <= other[1] and other[0] <= self[1]
+    
 
 class SpanDimPair(DimPair):
     pass
@@ -106,21 +115,43 @@ class DimBounds(DictDelegator):
                 self[my_dim] += other[their_dim]
             else:
                 other_dim = deepcopy(other[their_dim])
-                for bounds in other_dim:
-                    bounds += self[my_dim]
+                for pair in other_dim:
+                    pair += self[my_dim]
                 self[my_dim] = other_dim
 
         else:
             if isinstance(other[their_dim], DimPair):
-                for bounds in self[my_dim]:
-                    bounds += other[their_dim]
+                for pair in self[my_dim]:
+                    pair += other[their_dim]
             else:
-                if len(self[my_dim]) == len(other[their_dim]):
-                    for i, bounds in enumerate(self[my_dim]):
-                        bounds += other[their_dim][i]
-                else:
+                if len(self[my_dim]) != len(other[their_dim]):
                     raise ValueError(f"{self} and {other} have incompatible dimensions")
-
+                for i, pair in enumerate(self[my_dim]):
+                    pair += other[their_dim][i]
+               
+                    
+    def _per_dim_cover(self, other, my_dim, their_dim):
+        
+        my_pairs = self[my_dim]
+        if isinstance(self[my_dim], DimPair):
+            my_pairs = [self[my_dim]]
+        
+        their_pairs = other[their_dim]
+        if isinstance(other[their_dim], DimPair):
+            their_pairs = [other[their_dim]]
+            
+        for i, mine in enumerate(my_pairs):
+            current = mine
+            for theirs in their_pairs:
+                if current.overlaps(theirs):
+                    current = current.cover(theirs)
+            if isinstance(self[my_dim], DimPair):
+                self[my_dim] = current
+            else:
+                self[my_dim][i] = current
+        
+        
+                    
     def plus(self, other, inclusive=True, strict=False):
         for their_dim in other:
             did_match = False
@@ -131,6 +162,13 @@ class DimBounds(DictDelegator):
             if not did_match:
                 if inclusive:
                     self[their_dim] = other[their_dim]
+        return self
+    
+    def cover(self, other):
+        for their_dim in other:
+            for my_dim in self:
+                if self.are_equivalent(my_dim, their_dim, strict=True):
+                    self._per_dim_cover(other, my_dim, their_dim)
         return self
 
     def merge(self, other):
