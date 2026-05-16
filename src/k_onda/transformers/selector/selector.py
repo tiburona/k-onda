@@ -18,10 +18,6 @@ from k_onda.central import (
     CoordInfo,
 )
 
-
-# TODO: Selector was working for multiple dims, but work on Interval selection
-# has resulted in regression.  To think about later: support for ragged arrays.
-
 # Why it requires three different classes to accomplish selection:
 # The first, Selector, marks the user's intention to select with whatever
 # configuration they chose.
@@ -84,7 +80,7 @@ class SelectionPlanner(Transformer):
         all_nodes, selector_nodes = self._gather_selectors(signal)
         leaf = signal
         if len(selector_nodes):
-            padlen_accumulators = self._accumulate_padlen(signal, all_nodes)
+            padlen_accumulators = self._accumulate_padlen(all_nodes)
             lower_bound_offsets = self._lower_bound_correction(selector_nodes)
             leaf = self._build_slice_plan(
                 all_nodes, selector_nodes, padlen_accumulators, lower_bound_offsets
@@ -102,14 +98,7 @@ class SelectionPlanner(Transformer):
         ]
         return all_nodes, selector_nodes
 
-    # TODO: I'm not sure that signal as the source of the metadim_of callable
-    # makes sense forever, at least in Schema's current state.
-    # It's possible to have a pushdown selector that destroys dims downstream
-    # that are selectable upstream.  This needs more thought, but I need to check
-    # that a data schema can do metadim translation on all the dims a signal's
-    # ancestors had.  Deferred for now.
-
-    def _accumulate_padlen(self, signal, all_nodes):
+    def _accumulate_padlen(self, all_nodes):
         # Imagine 5 (pseudocode) nodes, listed downstream->upstream
         # [select_event(window=w), select_epoch, filter, scale, source]
 
@@ -122,8 +111,7 @@ class SelectionPlanner(Transformer):
         # stays downstream of filter, it doesn't need to pad.
 
         padlen_accumulators = [
-            DimBounds(metadim_of=signal.data_schema.metadim_from)
-            for _ in range(len(all_nodes))
+            DimBounds(metadim_of=node.data_schema.metadim_from) for node in all_nodes
         ]
 
         for i, node in enumerate(all_nodes):
@@ -361,10 +349,6 @@ class Slicer(Calculator):
         if not self.new_dim or self.is_trim:
             return data_schema
 
-        # TODO is this reflecting the actual order of the dims in the xarray data array?
-        # I think it's not, and I have code above that assumes the append is in this order
-        # I need to check this, and maybe have an index property that's the reverse
-        # of when the axes appear in the list self.axes
         def update_schema(arr_schema):
 
             metadim = arr_schema.metadim_from(self.locus.dim)
@@ -420,8 +404,6 @@ class Slicer(Calculator):
             None,
         )
 
-        # TODO: Check the order that dims are added to the schema.  This is only
-        # gonna work right if epoch, pip, etc. get added later
         if time_dim:
             start, duration = list(
                 zip(
@@ -463,7 +445,6 @@ class Slicer(Calculator):
                     raise NotImplementedError(
                         "Selection over a continuous dataset is not yet implemented."
                     )
-                    # self.select_continuous(data, data_schema)
         else:
             if data_schema.is_point_process():
                 return self.select_point_process(data, data_schema)

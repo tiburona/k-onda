@@ -131,7 +131,6 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
     # TODO: all these calls need to be verified to work with SignalStack.
     def __call__(self, input, mask=None, key=None, key_output_mode=None):
         
-        
         if key is not None or key_output_mode is not None:
             raise NotImplementedError("Key access is not yet implemented for ApplyMask")
 
@@ -164,7 +163,6 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
         result = self._wrap_result(result, sig_data)
 
         return result
-
 
     def _apply_inner(self, sig_data, mask_data):
         # Verify xarray alignment behavior - should give masked overlap + NaN outside.

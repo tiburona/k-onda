@@ -181,7 +181,6 @@ class Interval(Locus):
             else:
                 raise ValueError("Metadim was not provided and cannot be inferred.")
 
-    # TODO: it should probably also be an option to pass 'absolute'
     def generate_markers(
         self,
         spacing=None,
@@ -205,7 +204,6 @@ class Interval(Locus):
                 "You must pass one and only one of `spacing`, `offsets`, `count`, "
                 "`positions`, `linspace` to generate_markers"
             )
-        # TODO: don't think this is right for the plural ones, offsets and positions
         lo, hi, extent, spacing, offsets, count, positions, linspace = [
             q.magnitude if q is not None else None
             for q in [

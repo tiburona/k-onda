@@ -26,7 +26,6 @@ class Filter(PaddingCalculator):
         if not is_unitful(parent_signal.sampling_rate):
             raise ValueError("A sampling rate must have units.")
         fs = scalar(parent_signal.sampling_rate)
-        # TODO: add in other kinds of filters.
         return self._design_sos(fs=fs, **self.config)
 
     @staticmethod

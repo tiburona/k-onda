@@ -1,7 +1,6 @@
 from copy import deepcopy
 import pint
 from pprint import pformat
-import itertools
 
 from k_onda.mixins import DictDelegator
 
@@ -10,6 +9,9 @@ DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 
 
 class DimPair:
+    """A pair of values on a dimension, e.g. the start and end of a selection locus, or
+    left edge and right edge padding."""
+
     def __init__(self, pair=None, units=None):
         if units is None and pair is None:
             raise ValueError("You must define either bounds or units")
@@ -63,6 +65,9 @@ class PadDimPair(DimPair):
 
 
 class DimBounds(DictDelegator):
+    """A map of dim names to dim pairs, allowing operations between DimBounds 
+    over multiple dim pairs if the pairs are on compatible dims."""
+
     _delegate_attr = "_dim_bounds"
 
     def __init__(
@@ -85,10 +90,6 @@ class DimBounds(DictDelegator):
             return default
         else:
             raise KeyError(f"dim {dim} not in DimBounds")
-
-    def __and__(self, other):
-        # todo, define this
-        pass
 
     def __add__(self, other):
         self_copy = deepcopy(self)
@@ -128,8 +129,7 @@ class DimBounds(DictDelegator):
                     raise ValueError(f"{self} and {other} have incompatible dimensions")
                 for i, pair in enumerate(self[my_dim]):
                     pair += other[their_dim][i]
-               
-                    
+                        
     def _per_dim_cover(self, other, my_dim, their_dim):
         
         my_pairs = self[my_dim]
@@ -149,8 +149,6 @@ class DimBounds(DictDelegator):
                 self[my_dim] = current
             else:
                 self[my_dim][i] = current
-        
-        
                     
     def plus(self, other, inclusive=True, strict=False):
         for their_dim in other:

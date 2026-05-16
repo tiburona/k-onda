@@ -41,8 +41,6 @@ class Onset:
 
 
 class NEVMixin:
-    # todo: for now we're loading NEV file from converted matfile; need to also be
-    # able to load directly of course
 
     def load_nev(self, nev_path, mat=True):
 

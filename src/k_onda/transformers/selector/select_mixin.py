@@ -36,9 +36,6 @@ class SelectMixin:
         # its own dispatch because, in the case where a string like 'epochs' is passed as the
         # selection, the resolution of the string into a Locus/LocusSet (like EpochSet) will be different
 
-        # TODO: I also have a class SignalMap?  is that currently being used?  Need to be added to type
-        # dispatch here and in transformers
-
         params = SelectParams(
             selection, new_dim, mode, conditions, units, window, metadim, kwargs
         )

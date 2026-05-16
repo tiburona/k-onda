@@ -97,12 +97,7 @@ class Histogram(Calculator):
 
     def output_schema(self, input_schema):
         schema = input_schema.without_dim(self.dim)
-        # TODO: should I write an metadim_from(dim) method on schema?
-        # I'm not even really sure if metadim is exactly what I want here
-        # This is okay for this limited use case but I need to think about the
-        # general one.
-        axis = input_schema.axis_by_name(self.dim)
-        metadim = axis.metadim if axis else input_schema.value_metadim
+        metadim = input_schema.metadim_from(self.dim) or input_schema.value_metadim
         schema = schema.with_added(
             AxisInfo(
                 f"{self.dim}_bins",
@@ -121,11 +116,6 @@ class Histogram(Calculator):
 
         extra_kwargs = {"is_point_process": isinstance(input, type_registry.PointProcessSignal)}
 
-        # TODO: eventually there should be other string range sources and/or
-        # a concept of finding the range from the nearest bound container
-        # along dim, but since this is mostly an issue for point process
-        # signals and selection of ragged arrays is deferred on purpose,
-        # this is a later problem.
         if self.range_source == "session":
             extra_kwargs["hist_range"] = (
                 input.origin.session.start,
@@ -226,7 +216,6 @@ class Histogram(Calculator):
                 weights=weights if not slice_weights else weights[idx],
                 density=density,
             )
-        # TODO should I assign units here like of 1/the bin dimension unit?
         result = np.moveaxis(result, -1, axis)
         return result, bin_edges
 

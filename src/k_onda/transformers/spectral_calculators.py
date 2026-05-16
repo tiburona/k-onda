@@ -9,12 +9,6 @@ from .core import PaddingCalculator
 from ..utils import scalar
 
 
-# TODO: Right now this calculator has a baked in assumption that we are computing
-# a spectrogram on time.  That's the most common case, but there could be others
-# and it would be nice to generalize it for consistency with the generalization
-# of other calculators.
-
-
 class Spectrogram(PaddingCalculator):
     name = "spectrogram"
 
@@ -34,7 +28,6 @@ class Spectrogram(PaddingCalculator):
         freqs = self.config["freqs"]
         f_min = freqs[0]
         if isinstance(n_cycles, np.ndarray):
-            # TODO: it would be safer here to test for iterables explicitly.
             pad_needed = np.max(n_cycles / freqs) / 2
         else:
             pad_needed = n_cycles / (2 * f_min)

@@ -9,7 +9,7 @@ from ..transformers.transformer_mixins import (
     IntersectionMixin,
 )
 from k_onda.transformers import SelectMixin
-from k_onda.graph.traversal import build_generations, list_nodes, new_tree
+from k_onda.graph.traversal import build_generations, list_nodes, new_tree, rebuild_tree
 from k_onda.central.registry import type_registry
 
 
@@ -119,7 +119,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
     def compile(self, memo=None):
         memo = {} if memo is None else memo
-        leaf = new_tree(self, memo=memo)
+        leaf = rebuild_tree(self, None, memo=memo)
         plan = leaf.plan_on_signal()
         for node in list_nodes(plan):
             node._is_compiled = True
@@ -213,13 +213,6 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
 
     @property
     def data_identity(self):
-        # TODO: architectural debt. Threading data_identity through the origin
-        # chain means deepcopying any signal drags the entire entity graph along,
-        # causing hash failures on partially-constructed DataIdentity objects
-        # (deepcopy uses __new__, not __init__). Short-term fix: add __deepcopy__
-        # to DataIdentity to return self. Long-term fix: store data_identity_id
-        # (uid) on the root signal and resolve it via a registry, so signals can
-        # still belong to a DataIdentity without holding a live reference.
         if type(self.origin) in [tuple, list]:
             origin = None
             for entity in self.origin:
@@ -361,12 +354,10 @@ class BinarySignal(Signal):
         return arr
 
 
-
-
-
 @type_registry.register
 class ValidityMask(BinarySignal):
     pass
+
 
 @type_registry.register
 class SignalStack(CalculateMixin, UnstackMixin):
@@ -405,11 +396,11 @@ class SignalStack(CalculateMixin, UnstackMixin):
         self._cache = None
         self.signal_class = signal_class or type(self.signals[0])
         self.is_stack = True
+        self.is_source = False
         self._is_compiled = False
         self.key_spec = key_spec
         self.apply_kwargs = apply_kwargs
-
-   
+        
 
     @property
     def transform(self):
@@ -454,8 +445,6 @@ class SignalStack(CalculateMixin, UnstackMixin):
             return self.inputs[0]
         else:
             return self.collection
-       
-        
 
     @property
     def data(self):
@@ -475,36 +464,12 @@ class SignalStack(CalculateMixin, UnstackMixin):
 
 
 @type_registry.register
-class CollectionInputSignal(Signal):
-    def __init__(self, inputs, **kwargs):
-        if isinstance(inputs, type_registry.Collection):
-            self.collection = inputs
-            inputs = tuple(inputs.signals)
-        else:
-            self.collection = None
-
-        super().__init__(inputs, **kwargs)
-
-    def _materialize(self):
-        if not self._is_compiled:
-            raise ValueError(
-                "You must call .compile() on a signal before accessing"
-                "the .data property."
-            )
-        if self._cache is None:
-            input_data = [inp.data for inp in self.inputs]
-            self._cache = self.transform(*input_data)
-        return self._cache
-
-
-
-@type_registry.register
-class AggregatedSignal(CollectionInputSignal):
+class AggregatedSignal(Signal):
     pass
 
 
 @type_registry.register
-class IndexedSignal(CollectionInputSignal):
+class IndexedSignal(Signal):
 
     def kmeans(self, n_clusters=8, **kwargs):
         from k_onda.transformers import KMeans
