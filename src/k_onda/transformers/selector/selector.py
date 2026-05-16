@@ -428,8 +428,6 @@ class Slicer(Calculator):
         return {"data_schema": getattr(input, "data_schema")}
 
     def _apply(self, data, data_schema=None):
-        # TODO: do I want to add validation of the the window boundaries versus
-        # the data boundaries or will the natural error be informative enough?
 
         if isinstance(data_schema, type_registry.DatasetSchema):
             if data_schema.is_point_process(require_all=True):

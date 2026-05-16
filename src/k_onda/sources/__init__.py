@@ -30,9 +30,3 @@ __all__ = [
     "SpikeSource"
 ]
 
-
-class DataIdentityView:
-    def __init__(self, data_identity, subject):
-        self.data_identity = data_identity
-        self.subject = subject
-        self.attributes = {}

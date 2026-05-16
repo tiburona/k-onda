@@ -267,9 +267,6 @@ class DatasetSignal(Signal):
                 raise TypeError("`data` must be a dictionary or xarray Dataset")
             return data[key]
 
-        # TODO: I'm not sure that payload should be the same type for the DatasetSingals
-        # For PointProcessSignal, yes.  Need to think about this.
-
         return type(self)(
             inputs=(self,),
             transform=transform,
@@ -290,7 +287,7 @@ class PointProcessSignal(Signal):
 
     def to_binary(self):
         if self.sampling_rate is None:
-            raise ValueError("can't expand signal to binary without sampling_rate")
+            raise ValueError("Can't expand signal to binary without sampling_rate")
         return BinarySignal((self,), sampling_rate=self.sampling_rate)
 
     @property
@@ -420,8 +417,6 @@ class SignalStack(CalculateMixin, UnstackMixin):
             )
 
     def compile(self):
-        # TODO: What this should eventually do is find the constituent signals, call compile on them
-        # and rewrite the graph.
         raise NotImplementedError(
             "SignalStack cannot currently be compiled as a terminal node. "
             "Compile a downstream signal or unstack before materialization."

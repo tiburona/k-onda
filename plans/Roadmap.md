@@ -5,7 +5,8 @@
 - Pipelines to preprocess LFP data and compute a spectrogram from a single epoch established immutable `Signal`/pure-at-execution `Transformer` architecture.
 - `Caclulator`s include (not exhaustive): `ReduceDims`, `Histogram`, `FWHM`, `Spectrogram`, `Filter`, `KMeans`, `Normalize`, `Rate`
 - Every signal has DAG-based provenance. 
-- Data `Schema`s propogate information about the signal forward.  
+- Data `Schema`s propogate information about the signal forward.
+- A system of `Annotation`s allows changes to mutable entities (like neurons that are categorized) while communicating the context when a signal enters the DAG.  
 - `StackSignals` and `UnstackSignals` allow vectorized computation.
 - Mixin Methods on signals that call transformers are the basis of a fluent API
 - `Selector` can optionally walk a signal's provenance graph to enable pushdown selection. Validity propagates automatically through output signals.  
@@ -14,8 +15,6 @@
 - Users can create dimensions with arbitrary names when selecting sets; these become dimensions on the xarray data.  
 - `Intersection` and `ApplyMask` calculators form the basis for masking based on data quality.
 - A pipeline to categorize neurons on the basis of extracted features is complete
-- A system of `Annotation`s allows changes to mutable entities (like neurons that are categorized) while communicating the context when a signal enters the DAG.
-
 
 
 ## Phase 0 - To a Minimal Demo
@@ -47,33 +46,36 @@ Make K-Onda a reliable and user-friendly electrophysiology tool for our lab and 
 
 ### 4. Retire Technical Debt/Write Tests
 
-- Review codebase for TODOs.  For instance: the hard disk cache/eager/lazy distinction is promised in comments but not implemented.
+- Review codebase for TODOs/NotImplementedErrors/Known Issues.  For instance: the hard disk cache/eager/lazy distinction is promised in comments but not implemented.
 - End-to-end tests for major pipelines (spike, power, mrl, etc.) a
 - “Golden-file tests” for plots.
 - Evaluate further targets for unit tests 
 
 ### 5. Expansion of Select Functionality
 
-- Only letting selectors select one dim was a deliberate regression/simplification, but multiple dim 
-  support should be added.
+- Only letting selectors select one dim was a deliberate regression/simplification, but multiple dim support should be added.
 - Right now `where` (a method on the `SelectMixin`) only tests for equality of conditions. Expand to: negation, multi-value, ranges on numeric conditions (intensity > 60), and boolean combinations. 
-- Develop an API for "this event should be normalized relative to its own baseline window."
-- Figure out how to handle ragged epochs.
+- Handle ragged epochs.
 
 ---
 
-### 6. Marker/Interval Set Algebra and Other Functionality
+### 6. API Expansion
+
+- Develop an API for "this event should be normalized relative to its own baseline window."
+- Accessors over subjects, sources, sessions, and data identities like: experiment.subj23.day_1.lfp.bla
+- Build YAML/JSON specification for pipelines
+- May need to reimplement something like the legacy project's Runner class.
+- Add input validation with informative errors.  
+
+---
+
+### 7. Marker/Interval Set Algebra and Other Functionality
 
 - Union, intersection, difference, etc.
-- Should calculators *return* IntervalSets, like Z-score based good intervals versus artifacts? 
+- Support data-derived loci, with provenance included in the analysis graph.
 - Design question: currently you can currently create a ValidityMask and get its Intersection with a signal, but is this functionality more elegantly handled by IntervalSets such that this could be removed?  Needs thinking about.
 
 ---
-
-### 7. Expand validation
-
-- Current DataSchemas and DatasetSchemas are very light weight; expand them.
-- Also work on validating user input. 
 
 ### 8. Reestablish the Calculation Functionality of the Legacy Version
 
@@ -97,14 +99,6 @@ Make K-Onda a reliable and user-friendly electrophysiology tool for our lab and 
 - Reimplement the legacy project's concept of a plot layer.
 - Reimplement the legacy project's capacity for nested plots. Add: gridspec-like functionality for more customization. 
 - Mechanism to attach statistical significance annotations to plots.
-
----
-
-### 11. UI/Input
-
-- Build YAML/JSON specification for pipelines
-- May need to reimplement something like the legacy project's Runner class.
-- Add input validation with informative errors.  
 
 ---
 

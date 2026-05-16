@@ -9,11 +9,6 @@ from k_onda.central import type_registry, SpanDimPair, DimBounds
 DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 
 
-# TODO: condition filtering methods
-# TODO: set algebra on Interval/MarkerSet
-# TODO: Construction log
-
-
 @type_registry.register
 class Locus:
     name = "locus"
@@ -28,7 +23,6 @@ class Locus:
         self.kind = kind
 
     def validate_conditions(self):
-        # TODO when I actually have docs the messages should be replaced with a nice link to the docs.
         for key in self.conditions.keys():
             if any(
                 [
@@ -351,7 +345,6 @@ class FrequencyBand(Interval):
 
 @type_registry.register
 class LocusSet(Locus):
-    # TODO put set algebra here
 
     def __init__(self, loci, conditions=None, metadim=None, kind=None):
         self.conditions = conditions or {}

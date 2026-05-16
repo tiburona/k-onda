@@ -1,4 +1,8 @@
-K-Onda is a Python application for analyzing electrophysiology experiments. It will serve two audiences: researchers who are comfortable programming in Python and researchers who are looking for a higher-level application that still provides them with the transparency and control of custom scripts. It aims to develop into an application that can unify disparate stages of data analysis into a workflow that will create a provenance record as a byproduct of using it.
+K-Onda is a Python application for analyzing electrophysiology experiments. It is intended to serve two audiences: researchers who are comfortable programming in Python and researchers who are looking for a higher-level application that still provides them with the transparency and control of custom scripts. The goal is to unify disparate stages of data analysis into a workflow that will create a provenance record as a byproduct of using it, so that artifacts such as figures and tables can be traced back to the data, parameters, and transformations that produced them.
+
+One of the project’s more aspirational goals is that the interactive process of building these artifacts, like editing a figure, will be integrated with the analysis record. A researcher should be able to inspect how displayed data were produced, explore variations on an analysis, and prepare publication-ready figures and tables in the same interface.
+
+K-Onda is focused on electrophysiology first, but may some day expand into other kinds of experimental data in the biological and social sciences.
 
 ## Quickstart
 

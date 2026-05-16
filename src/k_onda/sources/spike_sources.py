@@ -24,8 +24,6 @@ class SpikeSource(GenericSource):
         self._waveforms_by_cluster = {}
         self._spike_times_by_cluster = {}
         self._sampling_rate = sampling_rate or data_loader_config.get('sampling_rate')
-        # TODO should I eventually try to unify the helpers/properties of PhyOutput
-        # and Generic Spike Source?
 
     @property
     def sampling_rate(self):
@@ -251,9 +249,7 @@ class SpikeCluster(DataComponent):
     def data_loader(self):
         spike_times = self.data_source.spike_times_from_cluster(self.cluster_id)
         spike_times = xr.DataArray(
-            spike_times
-            * pint.application_registry.s,  # TODO is this the actual unit they come from phy in?
-            dims=("spikes",),
+            spike_times * pint.application_registry.s, dims=("spikes",)
         )
         waveforms = self.data_source.waveforms_from_cluster(self.cluster_id)
         waveform_dims = ("spikes", "samples")

@@ -143,10 +143,6 @@ class Session(NEVMixin, ConfigSetter):
             self.metadata_loader()
         return self._onsets
 
-    # TODO: it would be nice to be able to make epochs
-    # into an epochs_view that could be
-    # so you could access epochs.tone, epochs.pretone
-    # the same way I had the idea to be able tok do subj.learning_day_1.lfp.bla etc.
     @property
     def epochs(self):
         if not self._epoch_sets:
