@@ -4,6 +4,32 @@ One of the project’s more aspirational goals is that the interactive process o
 
 K-Onda is focused on electrophysiology first, but may some day expand into other kinds of experimental data in the biological and social sciences.
 
+## Example
+
+K-Onda uses a fluent API.
+
+```
+experiment = (
+    Experiment.from_config('<EXP_NAME>', global_config='config.yaml')
+    .initialize()
+    .all_lfp_brain_regions
+    .scale(.25)
+    .filter(filter_config)
+    .normalize("rms")
+    .spectrogram({
+        "freqs": freqs, 
+        "decim": 20, 
+        "n_cycles": freqs * 0.5,
+        "time_bandwidth": 2, 
+        "output": "power"}
+    ) 
+    .select('epochs', stimulus='tone', new_dim='trial', mode='pushdown')
+    .select(frequency=(4, 8))
+    .compile()
+    .data
+)
+```
+
 ## Quickstart
 
 K-Onda is currently pre-alpha. The best way to try it is to install the development environment and run the test suite:
@@ -38,7 +64,7 @@ It operates under the following principles (all of which were sometimes violated
 
 ## Directions
 
-The original project included a declarative plotting specification that let users compose complex multipanel, multilayer figures. The new version will reimplement and extend this functionality. For more on planned features, see the [roadmap](plans/Roadmap.md).  
+The original project included a declarative plotting specification that let users compose complex multipanel, multilayer figures. The new version will reimplement and extend this functionality. For more on planned features, see the [roadmap](docs/plans/Roadmap.md).  
 
 
 ## Statement on the use of generative AI:

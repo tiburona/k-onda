@@ -427,7 +427,7 @@ class MarkerSet(LocusSet):
             )
         self.places = None
         if markers is None:
-            self.markers = self.markers_from_places()
+            markers = self.markers_from_places()
         self._loci = markers
         self.dim = dim or self.markers[0].dim
         self.conditions = conditions or {}
@@ -441,7 +441,7 @@ class MarkerSet(LocusSet):
         return self._loci
 
     def markers_from_places(self):
-        self.markers = [
+        markers = [
             self.marker_class(
                 self.dim,
                 place,
@@ -453,6 +453,8 @@ class MarkerSet(LocusSet):
             )
             for i, place in enumerate(self.places)
         ]
+
+        return markers
 
     def to_intervals(self, window):
         return self.to_interval_set(window)

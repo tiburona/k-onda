@@ -2,7 +2,7 @@ class CalculateMixin:
     def add(self, other, key=None, key_output_mode=None):
         return self.shift(other, key=key, key_output_mode=key_output_mode)
 
-    def substract(self, other, key=None, key_output_mode=None):
+    def subtract(self, other, key=None, key_output_mode=None):
         return self.shift(-other, key=key, key_output_mode=key_output_mode)
 
     def multiply_by(self, other, key=None, key_output_mode=None):

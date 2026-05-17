@@ -172,7 +172,9 @@ markupsafe==3.0.3
     #   jinja2
     #   nbconvert
 matplotlib==3.10.8
-    # via mne
+    # via
+    #   k-onda
+    #   mne
 matplotlib-inline==0.2.1
     # via
     #   ipykernel

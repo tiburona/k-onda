@@ -90,9 +90,12 @@ class Classify:
                 # assign labels to the entity in the index
                 for i, entity in enumerate(entities_to_label):
                     int_label = int(classification.data.values[i])
+                    label = inds_and_labels[int_label]
+                    setattr(entity, self.label_name, label)
+                    print(f"neuron {i} is {id(entity)}")
                     entity.set_annotation(
                         self.label_name,
-                        inds_and_labels[int_label],
+                        label,
                         annotator=self,
                         source_signal=classification,
                     )

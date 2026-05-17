@@ -1,4 +1,3 @@
-from functools import partial
 
 import numpy as np
 
@@ -84,10 +83,6 @@ class BinaryCalculatorMixin:
                 raise TypeError(f"{signal} is not of type BinarySignal.")
 
 
-# TODO: this and ApplyMasks __call__'s need to be evaluated for how they're
-# working with keys, how they apply to stacks, and in general to be brought up
-# to date with the code base.  However given I might be refactoring key spec
-# related stuff soon why don't I wait till I've done that.
 class Intersection(Calculator, BinaryCalculatorMixin):
     name = "intersection"
 
@@ -128,7 +123,6 @@ class ApplyMask(Calculator, BinaryCalculatorMixin):
     def __init__(self, mask=None):
         self.mask = mask
 
-    # TODO: all these calls need to be verified to work with SignalStack.
     def __call__(self, input, mask=None, key=None, key_output_mode=None):
         
         if key is not None or key_output_mode is not None:

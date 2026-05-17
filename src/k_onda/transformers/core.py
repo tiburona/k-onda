@@ -1,6 +1,5 @@
 from collections import namedtuple
-from dataclasses import dataclass
-from functools import partial, wraps
+from functools import partial
 import numpy as np
 import xarray as xr
 from copy import deepcopy
@@ -28,6 +27,12 @@ KeySpec = namedtuple("KeySpec", "input_name output_mode", defaults=[None, "repla
 
 
 class Transformer:
+    """A Transformer is a callable object that consumes a signal and returns a new signal.
+    Transformers are configured at initialization and then immutable. When a Transformer
+    is called on a group of Signals (e.g., a Collection or CollectionMap) it dispatches
+    to signals.  The base Transformer class also handles key access when the signal
+    has a DatasetSchema."""
+
     fixed_output_class = None
 
     def __call__(self, input, key=None, key_output_mode=None):
@@ -166,7 +171,6 @@ class Transformer:
             new_key_schema = self.output_schema(key_schema)
             if output_mode == "standalone":
                 return new_key_schema
-            # TODO does replace_key remove the original key?  Check that names here aren't misleading.
             elif output_mode == "rename":  
                 return input_schema.replace_key(self.name, new_key_schema)
             elif output_mode == "replace":
@@ -234,6 +238,11 @@ class Transformer:
 
 
 class Calculator(Transformer):
+    """A base class for most Transformers, Calculator performs data validation and 
+    defines the template methods that its descendant calculators will use to generate 
+    the transform, apply it to data it receives from its inputs, and wrap the result 
+    return the result as an xarray DataArray or Dataset."""
+    
     name = None
     key_mode = "replace"  # replace | append | standalone
     require_some_finite = True

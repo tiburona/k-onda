@@ -40,6 +40,10 @@ class AxisInfo:
 @type_registry.register
 @dataclass
 class Schema:
+    """Metadata container that tracks the format of data before it is materialized.
+    Allows operations like comparing two coordinates (e.g., 'epoch_time', 'event_time'),
+    and disovering that they share the same `metadim`, 'time'."""
+
     axes: list[AxisInfo] = field(default_factory=list)
     value_metadim: str | None = None
 
@@ -215,8 +219,6 @@ class Schema:
         metadim = self.metadim_from(our_coord)
         return metadim if metadim == other_schema.metadim_from(other_coord) else None
             
-
-        
 
 @type_registry.register
 class DatasetSchema(MutableMapping):

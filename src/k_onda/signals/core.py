@@ -9,7 +9,7 @@ from ..transformers.transformer_mixins import (
     IntersectionMixin,
 )
 from k_onda.transformers import SelectMixin
-from k_onda.graph.traversal import build_generations, list_nodes, new_tree, rebuild_tree
+from k_onda.graph.traversal import build_generations, list_nodes, rebuild_tree
 from k_onda.central.registry import type_registry
 
 
@@ -208,7 +208,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
     def endpoints(self):
         return {
             dim: (self.data.coords[dim][0], self.data.coords[dim][-1])
-            for dim in self.data
+            for dim in self.data.coords
         }
 
     @property

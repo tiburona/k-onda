@@ -3,7 +3,7 @@ import pint
 from k_onda.central import make_time_series, Schema
 from  k_onda.signals import TimeSeriesSignal
 from .core import DataComponent, DataIdentity, GenericSource
-from k_onda.central import Schema, AxisInfo, AxisKind, CoordInfo
+from k_onda.central import AxisInfo, AxisKind
 from k_onda.utils import is_unitful
 
 

@@ -191,7 +191,7 @@ class Session(NEVMixin, ConfigSetter):
 
         identity_config = self.experiment.data_identity_config.get(identity_string)
         if not identity_config:
-            raise ValueError("neurons were not configured for this experiment")
+            raise ValueError(f"Identity {identity_string} was not configured for this experiment")
 
         registry_key = identity_config["source"]
         data_sources = [
@@ -229,7 +229,8 @@ class Session(NEVMixin, ConfigSetter):
     def create_identity(self, identity_class, identity_string, components, config):
         identity = identity_class(components, config=config, subject=self.subject)
         self.subject.data_identities[identity_string].append(identity)
-
+        self.identities_initalized.add(identity_string)
+        
     def initialize_data_sources(self, data_sources_config=None):
 
         data_sources_config = data_sources_config or self.config.get("data_sources", [])
