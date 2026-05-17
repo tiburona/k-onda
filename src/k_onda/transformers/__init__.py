@@ -40,6 +40,5 @@ __all__ = [
     "ExtractFeatures",
     "KMeans",
     "Slicer",
-    "SelectionPlanner",
-    "DimBounds",
+    "SelectionPlanner"
 ]

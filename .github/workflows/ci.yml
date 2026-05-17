@@ -48,6 +48,9 @@ jobs:
             echo "No test files found; skipping pytest."
           fi
 
+      - name: Run Ruff
+        run: uv run --locked ruff check .
+
   notebooks-clean:
     name: Notebook outputs stripped
     runs-on: ubuntu-latest

@@ -1,4 +1,4 @@
-.PHONY: check ready fix test lint lint-fix notebook-clean-check notebook-clean binder-requirements
+.PHONY: check ready fix test lint lint-fix notebook-clean-check notebook-clean pre-commit binder-requirements
 
 check: lint notebook-clean-check test
 

@@ -1073,7 +1073,6 @@ source = { editable = "." }
 dependencies = [
     { name = "frozendict" },
     { name = "h5py" },
-    { name = "matplotlib" },
     { name = "mne" },
     { name = "neo" },
     { name = "numpy" },
@@ -1090,6 +1089,7 @@ dependencies = [
 demo = [
     { name = "ipykernel" },
     { name = "jupyterlab" },
+    { name = "matplotlib" },
     { name = "nbconvert" },
     { name = "pandas" },
 ]
@@ -1107,7 +1107,7 @@ requires-dist = [
     { name = "h5py" },
     { name = "ipykernel", marker = "extra == 'demo'" },
     { name = "jupyterlab", marker = "extra == 'demo'" },
-    { name = "matplotlib", specifier = ">=3.10.8" },
+    { name = "matplotlib", marker = "extra == 'demo'", specifier = ">=3.10.8" },
     { name = "mne" },
     { name = "nbconvert", marker = "extra == 'demo'" },
     { name = "neo", specifier = ">=0.14.4" },
