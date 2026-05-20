@@ -528,13 +528,13 @@ class Slicer(Calculator):
         return selected
     
     def attach_condition_coords(self, selected):
-        conditions = reduce(and_, [set(l.conditions.keys()) for l in self.locus])
+        conditions = reduce(and_, [set(loc.conditions.keys()) for loc in self.locus])
 
         selected = selected.assign_coords(
             {
                 condition: (
                     self.new_dim, 
-                    [l.conditions.get(condition) for l in self.locus]
+                    [loc.conditions.get(condition) for loc in self.locus]
                     ) for condition in conditions
                 }
             )

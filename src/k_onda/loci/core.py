@@ -1,8 +1,6 @@
 import numpy as np
 from collections.abc import Iterable
 from collections import defaultdict
-from functools import reduce
-from operator import and_
 
 from k_onda.utils import is_unitful, wout_units
 from k_onda.central import type_registry, SpanDimPair, DimBounds
@@ -401,7 +399,7 @@ class LocusSet(LocusBase):
     
     @property
     def member_condition_names(self):
-        return set().union(*(l.conditions.keys() for l in self.loci))
+        return set().union(*(loc.conditions.keys() for loc in self.loci))
     
     def _sort_loci(self):
         pass
