@@ -33,7 +33,7 @@ class Spectrogram(PaddingCalculator):
             pad_needed = n_cycles / (2 * f_min)
         pad_seconds = pad_needed * pint.application_registry.seconds
 
-        return DimBounds({"time": DimPair([pad_seconds, pad_seconds])})
+        return DimBounds({"time": DimPair([-pad_seconds, pad_seconds])})
 
     def _get_extra_apply_kwargs(self, parent):
         return {"fs": scalar(parent.sampling_rate)}
@@ -115,6 +115,16 @@ class Spectrogram(PaddingCalculator):
             }
         
         da = da.assign_coords(all_time_coords)
+
+        preserved_aux_coords = {
+            name: coord 
+            for name, coord in data.coords.items()
+            if name not in result_dim_coords 
+            and concrete_time_dim not in coord.dims
+            and set(coord.dims).issubset(set(result_dims))
+        }
+
+        da = da.assign_coords(preserved_aux_coords)
 
         da.attrs = data.attrs
         

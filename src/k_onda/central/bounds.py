@@ -159,7 +159,7 @@ class DimBounds(DictDelegator):
                     self._per_dim_add(other, my_dim, their_dim)
             if not did_match:
                 if inclusive:
-                    self[their_dim] = other[their_dim]
+                    self[their_dim] = deepcopy(other[their_dim])
         return self
     
     def cover(self, other):

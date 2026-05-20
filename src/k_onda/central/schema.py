@@ -9,6 +9,7 @@ from copy import copy
 class AxisKind(Enum):
     POINT_PROCESS_INDEX = auto()
     AXIS = auto()
+    ORDINAL_INDEX = auto()
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,9 @@ class Schema:
                 if c.name == coord_name or c.metadim == coord_name:
                     return ax
         return None
+    
+    def names_by_axis_kind(self, axis_kind) -> list[str]:
+        return [ax.name for ax in self.axes_of_kind(axis_kind)]
 
     def axes_of_kind(self, kind) -> list[AxisInfo]:
         return [ax for ax in self.axes if ax.kind == kind]

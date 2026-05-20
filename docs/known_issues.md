@@ -4,9 +4,11 @@ In addition to all input types that aren't supported yet, the class called NEVMi
 
 This is more of a question than an issue, and probably not an answerable one until I see more examples, but I had a TODO that read "Should I eventually try to unify the helpers/properties of PhyOutput and Generic Spike Source?"  
 
+
 ## Model and Config
 
-Experiment inherits from AnnotatorMixin, but is not currently setting an annotation upon adding an animal.
+Experiment inherits from AnnotatorMixin, but is not currently setting an annotation upon adding a subject.
+
 
 ## Graph and Signals
 
@@ -25,13 +27,9 @@ Right now `payload` is guaranteed to return a signal of the same type for `Datas
 
 ## Loci
 
-I should add an 'absolute' option to `generate_markers`.
-
-In loci/core.py `generate_markers` I suspect that the line that takes q.magnitude is going to break on the iterables (`offsets`, `positions`).
-
 `Locus`/`LocusSet` has currently has no provenance record.  This is okay for config-derived epochs/events, but insufficient for future loci derived from signals.
 
-There are some forbidden names for loci conditions (e.g., 'time', 'frequency'). Right not the code raises ValueError but when I actually have docs the messages should be replaced with a nice link to the docs.
+There are some forbidden names for loci conditions (e.g., 'time', 'frequency'). Right now the code raises ValueError but when I actually have docs the messages should be replaced with a nice link to the docs.
 
 
 ## Transformers
@@ -48,7 +46,7 @@ The only filter currently supported is sos; this needs to be expanded.
 
 `Histogram` currently accepts a string `range_source`, "session", but there should be at least one other (which could maybe supercede "session") -- the smallest enclosing container on the histogram dim.  (e.g. if user has created epochs and the histogram is over time, "epochs".)
 
-Check the behavior of the various key modes (particularly "rename") and make sure they the names here aren't misleading.
+Check the behavior of the various key modes (particularly "rename") and make sure the names here aren't misleading.
 
 
 ## Selection
@@ -60,3 +58,9 @@ You can't `select_point_process` yet because there's not yet support for ragged 
 The only kind of filtering by condition you can do is by equality; needs expansion.
 
 Selectors should probably be edited out of the graph after Slicer placement.
+
+When selecting intervals multiple times (e.g. epochs then events), if those intervals overlap (e.g., the window of an event extends into the last epoch), it currently produces unexpected shapes. The selection planner eventually needs to preserve parent-child locus relationships and pass parent identity constraints to the slicer, e.g. `time in window AND trial == event.parent_epoch`.  This is really a subset of 
+a broad class of unknown unknowns that needs a test suite that covers a wide swathe
+of potential setups/user behavior.  
+
+`attach_condition_coords` only attaches coords if all loci have the condition (`conditions = reduce(and_, [set(l.conditions.keys()) for l in self.locus])`).  Should decide if that's the desired behavior.

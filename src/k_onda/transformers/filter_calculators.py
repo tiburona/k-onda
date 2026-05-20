@@ -63,7 +63,7 @@ class Filter(PaddingCalculator):
         pad_needed = settled[-1] if len(settled) > 0 else 0
         pad_seconds = pad_needed / fs * pint.application_registry.s
 
-        return DimBounds({"time": DimPair([pad_seconds, pad_seconds])})
+        return DimBounds({"time": DimPair([-pad_seconds, pad_seconds])})
 
     def _apply_inner(self, data, designed_filter, data_schema=None, *args, **kwargs):
         concrete_dim = (

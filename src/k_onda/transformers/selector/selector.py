@@ -1,7 +1,7 @@
 from copy import deepcopy
 from functools import reduce
 import xarray as xr
-from operator import and_
+from operator import and_, or_
 import numpy as np
 from collections import defaultdict
 
@@ -81,10 +81,9 @@ class SelectionPlanner(Transformer):
         leaf = signal
         if len(selector_nodes):
             padlen_accumulators = self._accumulate_padlen(all_nodes)
-            lower_bound_offsets = self._lower_bound_correction(selector_nodes)
             leaf = self._build_slice_plan(
-                all_nodes, selector_nodes, padlen_accumulators, lower_bound_offsets
-            )
+                all_nodes, selector_nodes, padlen_accumulators
+                )
         return leaf
 
     def _gather_selectors(self, signal):
@@ -120,21 +119,8 @@ class SelectionPlanner(Transformer):
                     pa += node.transform.padlen
 
         return padlen_accumulators
-
-    def _lower_bound_correction(self, selector_nodes):
-        offsets = {}
-
-        for selector_node in selector_nodes:
-            if selector_node.transformer.window:
-                metadim = selector_node.transformer.locus.metadim
-                if metadim in offsets:
-                    continue
-                offsets[metadim] = selector_node.transformer.window[metadim][0]
-        return offsets
     
-    def _build_slice_plan(
-        self, all_nodes, selector_signals, padlen_accumulators, lower_bound_offsets
-    ):
+    def _build_slice_plan(self, all_nodes, selector_signals, padlen_accumulators):
 
         pushdown_selector_nodes = []
         local_selector_nodes = []
@@ -166,10 +152,7 @@ class SelectionPlanner(Transformer):
 
         self._make_trim_slicers(leaf, pushdown_selector_nodes, local_selector_nodes, slicer_plan)
 
-        leaf = self._rebuild_tree(leaf, slicer_plan)
-
-        for metadim, offset in lower_bound_offsets.items():
-            leaf = CoordTranslator(metadim=metadim, offset=offset)(leaf)
+        leaf = self._rebuild_tree(leaf, slicer_plan) 
 
         return leaf
 
@@ -179,9 +162,7 @@ class SelectionPlanner(Transformer):
 
         for ls_node in local_selector_nodes:
             padlen = padlen_accumulators[node_index[id(ls_node)]]
-            dim_bounds = deepcopy(ls_node.transformer.locus.dim_bounds)
-            dim_bounds += padlen
-            self._make_slicer(ls_node, ls_node, dim_bounds, slicer_plan)
+            self._make_slicer(ls_node, ls_node, slicer_plan, padlen=padlen)
 
     def _make_pushdown_slicers(
         self,
@@ -240,10 +221,7 @@ class SelectionPlanner(Transformer):
                 continue
             elif live_dims:
                 padlen = padlen_accumulators[node_index[id(node)]]
-                dim_bounds = deepcopy(ps_node.transformer.locus.dim_bounds)
-                dim_bounds += padlen
-
-                self._make_slicer(node, ps_node, dim_bounds, slicer_plan)
+                self._make_slicer(node, ps_node, slicer_plan, padlen=padlen)
 
                 live_dims.remove(dim)
             else:
@@ -288,27 +266,29 @@ class SelectionPlanner(Transformer):
                     trim_bounds.cover(window_node.transformer.locus.dim_bounds)
 
             self._make_slicer(
-                leaf, ps_node, trim_bounds, slicer_plan, is_trim=True
+                leaf, ps_node, slicer_plan, is_trim=True, trim_bounds=trim_bounds
             )
         
     def _make_slicer(
         self,
         node,
         selector_signal,
-        selection_bounds,
         slicer_plan,
+        padlen=None,
         is_trim=False,
+        trim_bounds=None
     ):
         selector = selector_signal.transformer
         new_dim = selector.new_dim
         window = selector.window if not is_trim else None
         slicer = Slicer(
-            selection_bounds,
             selector.mode,
             selector.locus,
             new_dim,
             window,
+            padlen=padlen,
             is_trim=is_trim,
+            trim_bounds=trim_bounds
         )
 
         slicer_plan[id(node)].append(slicer)
@@ -331,14 +311,25 @@ class SelectionPlanner(Transformer):
 
 
 class Slicer(Calculator):
-    def __init__(self, selection_bounds, mode, locus, new_dim, window, is_trim=False):
+    def __init__(
+            self, 
+            mode, 
+            locus, 
+            new_dim, 
+            window, 
+            padlen=None, 
+            is_trim=False,
+            trim_bounds=None
+            ):
         self.mode = mode
         self.locus = locus
         self.new_dim = new_dim
         self.window = window
+        self.padlen=padlen
         self.is_trim = is_trim
-        self.selection_bounds = selection_bounds
+        self.trim_bounds = trim_bounds
         self.multi_select = isinstance(locus, IntervalSet)
+        self.selection_bounds = self.compute_selection_bounds()
 
     def _call_on_signal(self, signal, key_spec=None):
         output_signal = super()._call_on_signal(signal, key_spec=key_spec)
@@ -371,8 +362,11 @@ class Slicer(Calculator):
             # add the new dim
             new_axis = AxisInfo(
                 name=self.new_dim,
-                kind=AxisKind.AXIS,
-                coords=(CoordInfo(name=self.new_dim),)
+                kind=AxisKind.ORDINAL_INDEX,
+                coords=(
+                    CoordInfo(name=self.new_dim), 
+                    *[CoordInfo(name=condition) for condition in self.locus.member_condition_names]
+                    )
             )
             arr_schema = arr_schema.with_added(new_axis)
             arr_schema = arr_schema.rename_axis(
@@ -447,7 +441,50 @@ class Slicer(Calculator):
             if data_schema.is_point_process():
                 return self.select_point_process(data, data_schema)
             else:
+                if self.is_trim:
+                    return self.trim_continuous(data)
                 return self.select_continuous(data, data_schema)
+            
+    def trim_continuous(self, data):
+        selection_bounds = self.selection_bounds.to_array_of_dicts()
+
+        mask = reduce(
+            or_,
+            [self.make_bounds_mask_over_dims(data, bounds) 
+             for bounds in selection_bounds]
+             )
+        
+        trimmed = data.where(mask, drop=True)
+        return trimmed
+
+    @staticmethod   
+    def make_bounds_mask_over_dims(data, bounds):
+        return reduce(
+                and_,
+                [
+                    (data.coords[dim] >= bounds[dim][0])
+                    & (data.coords[dim] < bounds[dim][1])
+                    for dim in bounds
+                ],
+            )
+    
+    def compute_selection_bounds(self):
+        if self.is_trim:
+            return deepcopy(self.trim_bounds)
+        
+        bounds = deepcopy(self.locus.dim_bounds)
+        if self.padlen:
+            bounds += self.padlen
+        
+        return bounds
+
+    def coord_correction(self):
+        coord_correction = self.locus.w_units(0.0)
+        if self.window:
+            coord_correction += self.window[self.locus.dim][0]
+        if self.padlen:
+            coord_correction += self.padlen[self.locus.dim][0]
+        return coord_correction
 
     def select_continuous(self, data, data_schema):
 
@@ -458,14 +495,9 @@ class Slicer(Calculator):
         selected = []
 
         for bounds in selection_bounds:
-            mask = reduce(
-                and_,
-                [
-                    (data.coords[dim] >= bounds[dim][0])
-                    & (data.coords[dim] < bounds[dim][1])
-                    for dim in bounds
-                ],
-            )
+
+            mask = self.make_bounds_mask_over_dims(data, bounds)
+
             sliced = data.where(mask, drop=True)
 
             if any(size == 0 for size in sliced.sizes.values()):
@@ -481,24 +513,60 @@ class Slicer(Calculator):
                 "Selection produced no data in the current `selection_bounds`."
             )
 
-        if self.new_dim and not self.is_trim:
-            selected = self.attach_continuous_relative_coords(selected)
-            selected = self.swap_coords(selected)
+        if not self.new_dim:
+            selected = self.concat_or_extract(selected)
+            return selected
+        
+        parent_coords = self.parent_metadata_coords(data, data_schema)
 
+        selected = self.attach_continuous_relative_coords(selected)
+        selected = self.swap_coords(selected)
         selected = self.concat_or_extract(selected)
-        selected = self.unfold_new_dim(selected)
+        selected = self.unfold_new_dim(selected, data_schema, parent_coords)
+        selected = self.attach_condition_coords(selected)
 
         return selected
+    
+    def attach_condition_coords(self, selected):
+        conditions = reduce(and_, [set(l.conditions.keys()) for l in self.locus])
 
-    def unfold_new_dim(self, arr):
+        selected = selected.assign_coords(
+            {
+                condition: (
+                    self.new_dim, 
+                    [l.conditions.get(condition) for l in self.locus]
+                    ) for condition in conditions
+                }
+            )
+
+        return selected
+    
+    def parent_metadata_coords(self, arr, data_schema):
+        ordinal_dims = set(data_schema.names_by_axis_kind(AxisKind.ORDINAL_INDEX))
+        current_condition_names = self.locus.member_condition_names
+        return {
+            name: coord 
+            for name, coord in arr.coords.items()
+            if name not in arr.dims
+            and name not in current_condition_names
+            and set(coord.dims).issubset(ordinal_dims)
+        }
+
+    def unfold_new_dim(self, arr, data_schema, parent_coords=None):
+
+        parent_coords = parent_coords or {}
+
         new_dim = self.new_dim
         structure = [
             name
             for name, c in arr.coords.items()
-            if c.dims == (new_dim,) and name != new_dim
+            if c.dims == (new_dim,) 
+            and name != new_dim
+            and name in data_schema.names_by_axis_kind(AxisKind.ORDINAL_INDEX)
         ]
 
         if not structure:
+            arr = arr.assign_coords(parent_coords)
             return arr
 
         # inner index: position within each unique tuple of structure-values
@@ -511,13 +579,17 @@ class Slicer(Calculator):
 
         inner_name = f"__{new_dim}_inner"  # unique placeholder
 
-        return (
+        arr = (
             arr.drop_vars(new_dim)
             .assign_coords({inner_name: (new_dim, inner)})
             .set_index({new_dim: structure + [inner_name]})
             .unstack(new_dim)
             .rename({inner_name: new_dim})
         )
+
+        arr = arr.assign_coords(parent_coords)
+
+        return arr
 
     def _new_dim_coord(self):
         return f"{self.new_dim}_{self.locus.metadim}"  # e.g., epoch_time
@@ -527,9 +599,11 @@ class Slicer(Calculator):
         for i, arr in enumerate(selected_data):
             if i == 0:
                 relative_coord = (
-                    arr.coords[self.locus.dim] - arr.coords[self.locus.dim][0]
+                    arr.coords[self.locus.dim] - 
+                    arr.coords[self.locus.dim][0] + 
+                    self.coord_correction()
                 )
-
+          
             # every arr will have coord relative_foo
             arr = arr.assign_coords(
                 {
@@ -660,51 +734,3 @@ class Slicer(Calculator):
 
         pass
 
-
-class CoordTranslator(Calculator):
-    def __init__(self, metadim, offset):
-        self.metadim = metadim
-        self.offset = offset
-
-    def _call_on_signal(self, signal, key_spec=None):
-        output_signal = super()._call_on_signal(signal, key_spec=key_spec)
-        for attr in ("start", "duration"):
-            val = getattr(signal, attr, None)
-            if val is not None:
-                setattr(output_signal, attr, val)
-
-        return output_signal
-
-    def _get_apply_kwargs(self, input, **kwargs):
-        return {"data_schema": getattr(input, "data_schema")}
-
-    def _apply(self, data, *, data_schema=None, **_):
-
-        next(ax for ax in data_schema.axes if ax.metadim == self.metadim)
-        updated = {
-            name: data.coords[name] + self.offset
-            for name in data.coords
-            if data_schema.coord_by_name(name).is_relative
-        }
-
-        if not updated:
-            return data
-        
-        coord_units = {
-            name: data.coords[name].pint.units
-            for name in updated
-            if data.coords[name].pint.units is not None
-        }
-
-        result = data.assign_coords(updated) if updated else data
-
-        stripped = {
-            name: units 
-            for name, units in coord_units.items()
-            if result.coords[name].pint.units is None
-        }
-
-        if stripped:
-            result = result.pint.quantify(stripped)
-
-        return result

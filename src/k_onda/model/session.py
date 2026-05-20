@@ -96,7 +96,6 @@ class Session(NEVMixin, ConfigSetter):
         self.label = label or self.config.get("label")
         self.conditions = conditions or self.config.get("conditions")
         self.data_sources = {}
-        self.ureg = self.experiment.ureg
         self._time_base = None
         self._onsets = None
         self._epoch_sets = defaultdict(lambda: EpochSet(self, epochs=[]))
@@ -106,6 +105,10 @@ class Session(NEVMixin, ConfigSetter):
         self.initialize_data_sources()
         self.create_epochs(self.config.get("epochs"))
         self.identities_initalized = set()
+
+    @property
+    def ureg(self):
+        return self.experiment.ureg
 
     @property
     def neurons(self):
@@ -373,12 +376,12 @@ class Session(NEVMixin, ConfigSetter):
             epoch 
             for epoch_set in self._epoch_sets.values()
             for epoch in epoch_set 
-            if epoch.kind == relative_to
+            if epoch.locus_type == relative_to
             ]
         if len(target_epochs) == 0:
-            raise ValueError(f"No target epochs of kind {relative_to} were found.")
-        shift = epoch_config["shift"] * self.experiment.ureg("s")
-        duration = epoch_config["duration"] * self.experiment.ureg("s")
+            raise ValueError(f"No target epochs of epoch_type {relative_to} were found.")
+        shift = epoch_config["shift"] * self.ureg("s")
+        duration = epoch_config["duration"] * self.ureg("s")
         if baseline_ind is not None:
             target_epochs = [target_epochs[baseline_ind]]
         self._epoch_sets[epoch_key].extend(

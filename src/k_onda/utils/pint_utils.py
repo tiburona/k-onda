@@ -41,3 +41,17 @@ def w_units(value, dim=None, units=None, ureg=None):
         return np.array(value) * units
     else:
         return value * units
+    
+
+def wout_units(quantity):
+    if not is_unitful(quantity):
+        return quantity
+    
+    if isinstance(quantity, pint.Quantity):
+        return quantity.magnitude
+    
+    if isinstance(quantity, Iterable):
+        return type(quantity)(el.magnitude for el in quantity)
+    
+    else:
+        raise ValueError("Unknown type passed to `wout_units`")

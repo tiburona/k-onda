@@ -1,26 +1,24 @@
 import numpy as np
 from collections.abc import Iterable
 from collections import defaultdict
+from functools import reduce
+from operator import and_
 
-from k_onda.utils import is_unitful
+from k_onda.utils import is_unitful, wout_units
 from k_onda.central import type_registry, SpanDimPair, DimBounds
 
 
 DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 
 
-@type_registry.register
-class Locus:
-    name = "locus"
+class LocusBase:
 
-    def __init__(self, dim, units=None, ureg=None, conditions=None, metadim=None, kind=None):
-        self.dim = dim
-        self.units = units
-        self.ureg = ureg
-        self.conditions = conditions or {}
-        self.validate_conditions()
+    def __init__(self, locus_type=None, metadim=None, conditions=None, inherited_conditions=None):
+        self.locus_type = locus_type
         self.metadim = metadim
-        self.kind = kind
+        self.conditions = conditions or {}
+        self.inherited_conditions = inherited_conditions or {}
+        self.validate_conditions()
 
     def validate_conditions(self):
         for key in self.conditions.keys():
@@ -44,6 +42,14 @@ class Locus:
             if any([key == string for string in ["x", "y"]]):
                 raise ValueError("'x' and 'y' are forbidden condition names.")
 
+            if (key in self.inherited_conditions and 
+                self.inherited_conditions[key] != self.conditions[key]):
+                raise ValueError(f"Incompatible condition {key}: {self.conditions[key]}")
+            
+    @property
+    def all_conditions(self):
+        return self.inherited_conditions | self.conditions
+    
     def w_units(self, value):
         if is_unitful(value):
             return value
@@ -57,12 +63,23 @@ class Locus:
         if isinstance(value, Iterable):
             return [v * self.ureg(self.units) for v in value]
         else:
-            return value * self.ureg(self.units)
-        
+            return value * self.ureg(self.units)  
+
+
+@type_registry.register
+class Locus(LocusBase):
+    name = "locus"
+
+    def __init__(self, dim, *, units=None, ureg=None, **kwargs):
+        super().__init__(**kwargs)
+        self.dim = dim
+        self.units = units
+        self.ureg = ureg
+
     def conditions_are_met(self, conditions, strict=True):
         for key, value in conditions.items():
             if strict:
-                if self.conditions.get(key) != value:
+                if self.all_conditions.get(key) != value:
                     return False
             else:
                 if key in self.conditions and value != self.conditions[key]:
@@ -70,22 +87,13 @@ class Locus:
         return True
 
 
+
 @type_registry.register
 class Marker(Locus):
     name = "marker"
 
-    def __init__(
-        self,
-        dim,
-        value,
-        index=None,
-        parent_interval=None,
-        units=None,
-        ureg=None,
-        conditions=None,
-        kind=None
-    ):
-        super().__init__(dim, units=units, ureg=ureg, conditions=conditions, kind=kind)
+    def __init__(self, dim, value, *, index=None, parent_interval=None, **kwargs):
+        super().__init__(dim, **kwargs)
         self.value = self.w_units(value)
         self.index = index
         self.parent_interval = parent_interval
@@ -98,8 +106,10 @@ class Marker(Locus):
             anchor=self,
             ureg=self.ureg,
             index=self.index,
+            parent_interval=self.parent_interval,
             conditions=self.conditions,
-            kind=self.kind
+            inherited_conditions=self.inherited_conditions,
+            locus_type=self.locus_type
         )
 
     def to_intervals(self, window):
@@ -110,19 +120,15 @@ class Marker(Locus):
 class Event(Marker):
     name = "event"
 
-    def __init__(
-        self, session, value, index=None, epoch=None, units="s", conditions=None, kind=None
-    ):
+    def __init__(self, session, value, epoch=None, **kwargs):
         super().__init__(
-            "time",
-            value,
-            index,
-            epoch,
-            units,
-            ureg=session.experiment.ureg,
-            conditions=conditions,
-            kind=kind
-        )
+            "time", 
+            value, 
+            parent_interval=epoch, 
+            units="s", 
+            ureg=session.experiment.ureg, 
+            **kwargs
+            )
         self.session = session
         self.parent_epoch = epoch
         self.metadim = "time"
@@ -141,12 +147,11 @@ class Interval(Locus):
         units=None,
         ureg=None,
         index=None,
-        conditions=None,
-        metadim=None,
         label=None,
-        kind=None
+        metadim=None,
+        **kwargs
     ):
-        super().__init__(dim, units=units, ureg=ureg, conditions=conditions)
+        super().__init__(dim, units=units, ureg=ureg, **kwargs)
 
         self.span = (
             span
@@ -157,7 +162,6 @@ class Interval(Locus):
         self.anchor = anchor
         self.index = index
         self.label = label
-        self.kind = kind
         self.extent = self.span[1] - self.span[0]
         self.metadim = self.get_metadim(metadim)
 
@@ -175,14 +179,34 @@ class Interval(Locus):
             else:
                 raise ValueError("Metadim was not provided and cannot be inferred.")
 
-    def generate_markers(
+    def get_markers(
         self,
         spacing=None,
         offsets=None,
         count=None,
         positions=None,
         linspace=None,
-        conditions=None,
+        conditions=None
+     ):
+        places = self.generate_marker_places(
+            spacing=spacing, 
+            offsets=offsets, 
+            count=count, 
+            positions=positions, 
+            linspace=linspace
+        )
+
+        markers = self.build_markers(places, conditions=conditions)
+
+        return markers
+
+    def generate_marker_places(
+        self,
+        spacing=None,
+        offsets=None,
+        count=None,
+        positions=None,
+        linspace=None
     ):
         if (
             len(
@@ -199,7 +223,7 @@ class Interval(Locus):
                 "`positions`, `linspace` to generate_markers"
             )
         lo, hi, extent, spacing, offsets, count, positions, linspace = [
-            q.magnitude if q is not None else None
+            wout_units(q) if q is not None else None
             for q in [
                 *self.span,
                 self.extent,
@@ -223,22 +247,23 @@ class Interval(Locus):
         elif linspace is not None:
             places = np.linspace(lo, hi, linspace)
 
-        return self.get_markers(places, conditions=conditions)
+        return places
 
     @property
     def marker_set_class(self):
         return MarkerSet
 
-    def get_markers(self, places, conditions=None):
-        conditions = self.conditions | (conditions or {})
+    def build_markers(self, places, conditions=None):
         return self.marker_set_class(
-            [
+            markers = [
                 self.marker_class(
                     self.dim,
-                    place + self.span[0],
+                    place,
                     index=i,
                     units=self.units,
-                    conditions=self.conditions,
+                    ureg=self.ureg,
+                    conditions=conditions or {},
+                    inherited_conditions = self.inherited_conditions | self.conditions
                 )
                 for i, place in enumerate(places)
             ],
@@ -262,25 +287,25 @@ class Epoch(Interval):
         conditions=None,
         config=None,
         label=None,
-        kind=None,
+        locus_type=None,
         key=None
     ):
+        self.config = config or {}
         super().__init__(
             "time",
             (onset, onset + duration),
             index=index,
             parent_interval=parent_epoch,
             units=units,
-            ureg=session.experiment.ureg,
+            ureg=session.ureg,
             conditions=conditions,
             metadim="time",
-            label=label or config.get("label"),
-            kind=kind or config.get("epoch_kind")
+            label=label or self.config.get("label"),
+            locus_type=locus_type or self.config.get("epoch_type")
         )
         self.session = session
         self.duration = self.w_units(duration)
         self.onset = self.w_units(onset)
-        self.config = config or {}
         self.parent_epoch = self.parent_interval
         self.epoch_key = key
         self._events = defaultdict(list)
@@ -289,41 +314,46 @@ class Epoch(Interval):
     def events(self):
         if not self._events:
             event_keys = self.config.get("events", [])
-            for event_type in event_keys:
-                config = self.session.experiment.events_config.get(event_type)
+            for event_key in event_keys:
+                config = self.session.experiment.events_config.get(event_key)
                 if config is None:
                     raise ValueError(
                         f"Events not configured for epoch of key {self.epoch_key} \
-                        and events of type {event_type}"
+                        and events of type {event_key}"
                     )
                 for key, val in config.items():
                     config[key] = self.w_units(val).to("s")
-                self._events[event_type] = self.generate_events(**config)
+                self._events[event_key] = self.get_events(**config)
 
         return [event for event_list in self._events.values() for event in event_list]
 
-    def generate_events(
+    def get_events(
         self,
         spacing=None,
         offsets=None,
         count=None,
         positions=None,
-        linspace=None,
-        conditions=None,
-    ):
-        return self.generate_markers(
-            spacing, offsets, count, positions, linspace, conditions
-        )
+        linspace=None, 
+        conditions=None
+        ):
+
+        places = self.generate_marker_places(spacing, offsets, count, positions, linspace)
+        events = self.build_events(
+            places, 
+            conditions=conditions, 
+            inherited_conditions=self.inherited_conditions | self.conditions
+            )
+        return events
 
     @property
     def marker_set_class(self):
         return EventSet
 
-    def get_markers(self, markers, conditions=None):
-        conditions = self.conditions | (conditions or {})
+    def build_events(self, places, **kwargs):
+        
         return [
-            Event(self.session, place, index=i, epoch=self, conditions=self.conditions)
-            for i, place in enumerate(markers)
+            Event(self.session, place, index=i, epoch=self, **kwargs)
+            for i, place in enumerate(places)
         ]
 
 
@@ -344,15 +374,14 @@ class FrequencyBand(Interval):
 
 
 @type_registry.register
-class LocusSet(Locus):
+class LocusSet(LocusBase):
 
-    def __init__(self, loci, conditions=None, metadim=None, kind=None):
-        self.conditions = conditions or {}
+    def __init__(self, loci, **kwargs):
+        super().__init__(**kwargs)
         self._loci = loci
+        self._sort_loci()
         self.validate(loci)
-        self.metadim = metadim
-        self.kind=kind
-
+       
     def __iter__(self):
         return iter(self.loci)
 
@@ -365,14 +394,27 @@ class LocusSet(Locus):
     @property
     def loci(self):
         return self._loci
+    
+    @property
+    def all_conditions(self):
+        return self.inherited_conditions | self.conditions
+    
+    @property
+    def member_condition_names(self):
+        return set().union(*(l.conditions.keys() for l in self.loci))
+    
+    def _sort_loci(self):
+        pass
 
     def append(self, locus):
         self.validate([locus])
         self._loci.append(locus)
+        self._sort_loci()
 
     def extend(self, loci):
         self.validate(loci)
         self._loci.extend(loci)
+        self._sort_loci()
 
     def validate(self, loci):
         if self.loci and not all(type(locus) is type(self.loci[0]) for locus in loci):
@@ -402,39 +444,33 @@ class LocusSet(Locus):
             loci=loci,
             conditions=self.conditions,
             metadim=self.metadim,
-            kind=self.kind
+            locus_type=self.locus_type
         )
 
 
 @type_registry.register
 class MarkerSet(LocusSet):
+    marker_class = Marker
+
     def __init__(
-        self,
-        places=None,
-        dim=None,
-        markers=None,
-        conditions=None,
-        units=None,
-        ureg=None,
-        metadim=None,
-        kind=None
-    ):
+        self, places=None, dim=None, markers=None, units=None, ureg=None, **kwargs
+        ):
         if places is None and markers is None:
             raise ValueError("One of places or markers must not be None")
         if markers is None and dim is None:
             raise ValueError(
                 "You must supply `dim` if you're not passing markers that already have one."
             )
-        self.places = None
-        if markers is None:
-            markers = self.markers_from_places()
-        self._loci = markers
-        self.dim = dim or self.markers[0].dim
-        self.conditions = conditions or {}
+        self.places = places
         self.units = units
         self.ureg = ureg
-        self.metadim = metadim
-        self.kind = kind
+        self.dim = dim or markers[0].dim
+        if markers is None:
+            markers = self.markers_from_places()
+        super().__init__(markers, **kwargs)
+        self._loci = markers
+        
+       
 
     @property
     def markers(self):
@@ -458,6 +494,9 @@ class MarkerSet(LocusSet):
 
     def to_intervals(self, window):
         return self.to_interval_set(window)
+    
+    def _sort_loci(self):
+        self._loci.sort(key=lambda interval: interval.span[0])
 
     def to_interval_set(self, window):
         intervals = [marker.to_interval(window) for marker in self.markers]
@@ -478,24 +517,22 @@ class MarkerSet(LocusSet):
             units=self.units,
             ureg=self.ureg,
             metadim=self.metadim,
-            kind=self.kind
+            locus_type=self.locus_type
         )
 
 
 @type_registry.register
 class EventSet(MarkerSet):
-    def __init__(self, session, events=None, places=None, conditions=None, units="s", kind=None):
+    def __init__(self, session, events=None, units="s", **kwargs):
         super().__init__(
             markers=events,
-            places=places,
             dim="time",
-            conditions=conditions,
             units=units,
             ureg=session.experiment.ureg,
+            **kwargs
         )
         self.session = session
         self.metadim = "time"
-        self.kind = kind
 
     @property
     def events(self):
@@ -505,13 +542,16 @@ class EventSet(MarkerSet):
     def to_epoch_set(self, window):
         return super().to_intervals(window)
     
+    def _sort_loci(self):
+        self._loci.sort(key=lambda event: event.value)
+    
     def filtered(self, loci):
         return type(self)(
            self.session,
            events=loci,
            conditions=self.conditions,
            units=self.units,
-           kind=self.kind
+           locus_type=self.locus_type
         )
 
 
@@ -519,30 +559,19 @@ class EventSet(MarkerSet):
 class IntervalSet(LocusSet):
     locus_class = Interval
 
-    def __init__(
-        self,
-        dim,
-        spans=None,
-        intervals=None,
-        ureg=None,
-        units=None,
-        conditions=None,
-        metadim=None,
-        kind=None
-    ):
+    def __init__(self, dim, spans=None, units=None, ureg=None, intervals=None, **kwargs):
         if spans is None and intervals is None:
             raise ValueError("One of intervals or spans must not be None")
-        super().__init__(loci=intervals, conditions=conditions, metadim=metadim)
+        super().__init__(loci=intervals, **kwargs)
         self.dim = dim
         self.spans = spans
-        self.ureg = ureg
         self.units = units
-        self.metadim = metadim
-        self.conditions = conditions or {}
-        self.kind = kind
-        
+        self.ureg = ureg
+       
         if intervals is None:
             self.intervals_from_spans()
+
+        self._sort_loci()
 
         self.dim_bounds = DimBounds(
             {self.dim: [interval.dim_bounds[dim][0] for interval in self.intervals]}
@@ -562,7 +591,7 @@ class IntervalSet(LocusSet):
                 ureg=self.ureg,
                 conditions=self.conditions,
                 metadim=self.metadim,
-                kind=self.kind
+                locus_type=self.locus_type
             )
             for i, span in enumerate(self.spans)
         ]
@@ -574,8 +603,9 @@ class IntervalSet(LocusSet):
             ureg=self.ureg,
             units=self.units,
             conditions=self.conditions,
+            inherited_conditions=self.inherited_conditions,
             metadim=self.metadim,
-            kind=self.kind
+            locus_type=self.locus_type
         )
 
 
@@ -583,17 +613,15 @@ class IntervalSet(LocusSet):
 class EpochSet(IntervalSet):
     locus_class = Epoch
 
-    def __init__(self, session, spans=None, epochs=None, conditions=None, units="s", kind=None):
+    def __init__(self, session, spans=None, epochs=None, **kwargs):
         self.session = session
         super().__init__(
-            "time",
-            spans=spans,
-            intervals=epochs,
-            conditions=conditions,
-            units=units,
-            ureg=session.experiment.ureg,
-            metadim="time",
-            kind=kind
+            "time", 
+            spans=spans, 
+            intervals=epochs, 
+            ureg=session.experiment.ureg, 
+            metadim="time", 
+            **kwargs
         )
 
     def attrs_to_copy(self):
@@ -604,6 +632,9 @@ class EpochSet(IntervalSet):
     @property
     def epochs(self):
         return self._loci
+    
+    def _sort_loci(self):
+        self._loci.sort(key=lambda epoch: epoch.onset)
 
     def epochs_from_spans(self):
         self._loci = [
@@ -614,7 +645,8 @@ class EpochSet(IntervalSet):
                 units=self.units,
                 index=i,
                 conditions=self.conditions,
-                kind=self.kind
+                inherited_conditions=self.inherited_conditions,
+                locus_type=self.locus_type
             )
             for i, span in enumerate(self.spans)
         ]
@@ -632,8 +664,9 @@ class EpochSet(IntervalSet):
             self.session,
             epochs=loci,
             conditions=self.conditions,
+            inherited_conditions=self.inherited_conditions,
             units=self.units,
-            kind=self.kind
+            locus_type=self.locus_type
         )
 
        

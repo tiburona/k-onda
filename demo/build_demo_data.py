@@ -37,7 +37,7 @@ def raised_cosine_window(t, start, stop, ramp):
 def generate_animal_lfp(animal):
 
     fs = 500
-    duration = 60
+    duration = 120
     t = np.arange(0, duration, 1 / fs)
     n = len(t)
 

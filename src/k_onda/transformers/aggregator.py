@@ -16,7 +16,6 @@ class Aggregator(Transformer):
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
-
         if isinstance(input, type_registry.CollectionMap):
             if self.group_by is not None:
                 raise ValueError("input of type CollectionMap is already grouped.")
