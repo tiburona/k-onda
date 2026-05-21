@@ -14,7 +14,7 @@ class FWHM(Calculator):
         self,
         dim="samples",
         include_valleys=True,
-        permissible_distance=50,
+        permissible_distance=75,
         distance_unit=None,
     ):
         self.dim = dim

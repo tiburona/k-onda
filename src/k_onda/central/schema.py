@@ -219,6 +219,12 @@ class Schema:
         new_schema = new_schema.with_added(new_ax)
         return new_schema
     
+    def reorder_axes(self, axis_names):
+        if set(axis_names) != {ax.name for ax in self.axes}:
+            raise ValueError("axis_names must contain exactly the schema axes")
+        by_name = {ax.name: ax for ax in self.axes}
+        return type(self)(axes=tuple(by_name[name] for name in axis_names))
+
     def get_common_metadim(self, our_coord, other_schema, other_coord):
         metadim = self.metadim_from(our_coord)
         return metadim if metadim == other_schema.metadim_from(other_coord) else None

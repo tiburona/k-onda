@@ -112,8 +112,8 @@ def fwhm_to_sigma(fwhm):
 
 
 fs = 30000.
-trough_time = 0.001
-rebound_time = 0.002
+trough_time = 0.0033
+rebound_time = 0.004
 n_samples = 200
 
 PN_rate = 2
@@ -136,7 +136,7 @@ def generate_animal_neurons(animal):
 
     for i in range(n_PNs):
         rate = PN_rate + rng.normal(0, PN_rate/5)
-        spikes = random_spikes(rate, 0, 60)
+        spikes = random_spikes(rate, 0, 120)
         waveforms = random_waveforms(
             trough_amp=100, 
             trough_sigma=fwhm_to_sigma(PN_fwhm), 
@@ -154,7 +154,7 @@ def generate_animal_neurons(animal):
       
     for i in range(n_INs):
         rate = IN_rate + rng.normal(0, IN_rate/5)
-        spikes = random_spikes(rate, 0, 60)
+        spikes = random_spikes(rate, 0, 120)
         waveforms = random_waveforms(
             trough_amp=100, 
             trough_sigma=fwhm_to_sigma(IN_fwhm), 

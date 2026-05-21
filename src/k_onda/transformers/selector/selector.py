@@ -372,6 +372,9 @@ class Slicer(Calculator):
             arr_schema = arr_schema.rename_axis(
                 arr_schema.concrete_dim_from(self.locus.dim), self._new_dim_coord()
                 )
+            
+            dim_order = self.output_dim_order(arr_schema.dim_names, arr_schema)
+            arr_schema.reorder_axes(dim_order)
 
             return arr_schema
 
@@ -381,6 +384,7 @@ class Slicer(Calculator):
             return DatasetSchema(
                 {key: update_schema(val) for key, val in data_schema.items()}
             )
+
 
     def start_and_duration(self, signal):
 
@@ -524,6 +528,7 @@ class Slicer(Calculator):
         selected = self.concat_or_extract(selected)
         selected = self.unfold_new_dim(selected, data_schema, parent_coords)
         selected = self.attach_condition_coords(selected)
+        selected = self.transpose(selected, data_schema)
 
         return selected
     
@@ -718,6 +723,31 @@ class Slicer(Calculator):
             )
 
         return selected
+    
+    def output_dim_order(self, dims, data_schema):
+        ordinal_dims =  [
+            *data_schema.names_by_axis_kind(AxisKind.ORDINAL_INDEX),
+            self.new_dim
+            ]
+
+        feature_dims = [
+            dim for dim in dims
+            if dim not in ordinal_dims
+            and dim != self._new_dim_coord()
+        ]
+
+        ordered = (
+            feature_dims
+            + [dim for dim in ordinal_dims if dim in dims]
+            + [self._new_dim_coord()]
+        )
+
+        return ordered
+
+    def transpose(self, arr, data_schema):
+        ordered = self.output_dim_order(arr.dims, data_schema)
+        arr = arr.transpose(*[dim for dim in ordered if dim in arr.dims])
+        return arr
 
     def attach_point_process_relative_coords(self, data, selection_bounds):
 
