@@ -9,6 +9,8 @@ K-Onda is focused on electrophysiology first, but may some day expand into other
 K-Onda uses a fluent API.
 
 ```
+freqs = np.arange(1, 21, 1)
+
 experiment = (
     Experiment.from_config('<EXP_NAME>', global_config='config.yaml')
     .initialize()
