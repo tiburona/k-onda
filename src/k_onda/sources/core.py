@@ -184,7 +184,7 @@ class DataIdentity(AnnotatorMixin, SelectMixin):
 
     @property
     def component_ids(self):
-        return (dc.uid for dc in self.data_components)
+        return tuple(sorted(dc.uid for dc in self.data_components))
 
     def compile(self):
         raise ValueError("You can't call .compile on DataIdentities, only signals.")
