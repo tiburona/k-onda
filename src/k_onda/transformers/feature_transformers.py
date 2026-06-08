@@ -53,7 +53,7 @@ class ExtractFeatures(Transformer):
 
         if isinstance(input, type_registry.Collection) and self.group_by is None:
             raise ValueError(
-                "If ExtractFeatures is called on Collection, group_on mustbe defined."
+                "If ExtractFeatures is called on Collection, group_by mustbe defined."
             )
 
         if not isinstance(

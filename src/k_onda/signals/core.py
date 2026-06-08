@@ -58,6 +58,12 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin):
         self._validate()
         self._is_compiled = False
         self.apply_kwargs = apply_kwargs
+        if self.origin:
+            self.session = self.origin.session
+            self.subject = self.origin.session.subject
+        else:
+            self.session = None
+            self.subject = None
     
 
     @property

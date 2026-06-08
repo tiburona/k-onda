@@ -169,6 +169,20 @@ class DimBounds(DictDelegator):
                     self._per_dim_cover(other, my_dim, their_dim)
         return self
 
+    def cover_merge(self, other):
+        # Include bounds on unshared dims; cover only exact shared dims.
+        for their_dim in other:
+            did_match = False
+            for my_dim in self:
+                if self.are_equivalent(my_dim, their_dim, strict=True):
+                    did_match = True
+                    if not self[my_dim].overlaps(other[their_dim]):
+                        raise ValueError("A non-overlapping dim was passed to `cover_merge`.")
+                    self._per_dim_cover(other, my_dim, their_dim)
+            if not did_match:
+                self[their_dim] = deepcopy(other[their_dim])
+        return self
+
     def merge(self, other):
         return self.plus(other, inclusive=True)
 

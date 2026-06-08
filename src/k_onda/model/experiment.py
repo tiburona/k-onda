@@ -159,7 +159,7 @@ class Experiment(AnnotatorMixin, ConfigSetter):
             config = self.resolve_inheritance(config_key, config_source)
         subject_config = config | (subject_config or {})
         subject_sessions = subject_config.get("sessions", [])
-        subject = Subject(subject_id)
+        subject = Subject(subject_id, subject_config)
         self.subject_conditions[subject_id] = subject_config.get("conditions", {})
         subject.create_sessions(self, subject_sessions)
         self.subjects.add(subject)

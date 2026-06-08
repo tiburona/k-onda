@@ -96,3 +96,46 @@ def rebuild_tree(leaf, rebuild_node, memo=None):
 
     memo[id(leaf)] = rebuilt
     return rebuilt
+
+
+def walk_graph(leaf, initial_state, *, step, merge_state=None, revisit_merged=True):
+    """
+    initial_state: an accumulator for state that can change through traversal
+    step: a function of the current node, the current state, and the consumer that
+    generates the next state
+    merge_state: a function of the current node, the stored state for that node, and
+    the current computed state that decides how to compute state when a node is revisited
+    revisit_merged: a boolean to indicate whether on merge the nodes inputs are rewalked. 
+    (At some point this may need to be expanded into an enumerated policy.)
+    """
+    states_by_node = {}
+
+    def walk(node, state, consumer=None):
+        node_id = id(node)
+
+        if node_id in states_by_node:
+            if merge_state is not None:
+                state = merge_state(node, states_by_node[node_id], state)
+                states_by_node[node_id] = state
+            if not revisit_merged:
+                return
+        else:
+            states_by_node[node_id] = state
+    
+        next_state = step(node, state, consumer)
+
+        for input_node in getattr(node, "inputs", []):
+            walk(input_node, deepcopy(next_state), consumer=node)
+
+    walk(leaf, deepcopy(initial_state), consumer=None)
+
+    return states_by_node
+
+
+    
+
+
+
+
+    
+

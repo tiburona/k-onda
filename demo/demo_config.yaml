@@ -12,10 +12,14 @@ subjects_config:
   control:
     inherits: _base
     members: [animal_1, animal_2, animal_3]
+    conditions: 
+      treatment: control
 
   drug:
     inherits: _base
     members: [animal_4, animal_5, animal_6]
+    conditions:
+      treatment: drug
 
 sessions_config:
   session_1:

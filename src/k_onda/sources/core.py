@@ -321,13 +321,14 @@ class SignalMap(MapMixin):
 class CollectionMap(CalculateMixin, SelectMixin, AggregateMixin, MapMixin):
     _delegate_attr = "groups"
 
-    def __init__(self, members=None, group_on=None, strict=True, groups=None):
+    def __init__(self, members=None, group_on=None, strict=True, groups=None, group_on_name=None):
         if groups is None:
             if members is None or group_on is None:
                 raise ValueError("members and group_on are required.")
             self.group_on = group_on
             self.members = list(members)
             self.groups = self.map_groups(strict=strict)
+            self.group_on_name = group_on_name
 
         else:
             self.group_on = group_on or getattr(groups, "group_on", None)

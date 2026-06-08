@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from k_onda.loci import IntervalSet
 from ..core import Transformer, Transform, Calculator
-from k_onda.graph import list_nodes, walk_tree, rebuild_tree
+from k_onda.graph import list_nodes, rebuild_tree, walk_graph
 from k_onda.central import (
     Schema,
     DatasetSchema,
@@ -77,133 +77,102 @@ class SelectionPlanner(Transformer):
 
     def _call_on_signal(self, signal, key_spec=None):
 
-        all_nodes, selector_nodes = self._gather_selectors(signal)
+        selector_nodes = [
+            node for node in list_nodes(signal) if hasattr(node, "transformer")
+            and isinstance(node.transformer, Selector)
+        ]
+
         leaf = signal
+
         if len(selector_nodes):
-            padlen_accumulators = self._accumulate_padlen(all_nodes)
-            leaf = self._build_slice_plan(
-                all_nodes, selector_nodes, padlen_accumulators
-                )
+            padlen_accumulator = self._accumulate_padlen(leaf)
+            leaf = self._build_slice_plan(leaf, selector_nodes, padlen_accumulator)
         return leaf
 
-    def _gather_selectors(self, signal):
+    def _accumulate_padlen(self, leaf):
 
-        all_nodes = [
-            node for node in list_nodes(signal) if hasattr(node, "transformer")
-        ]
+        def merge_state(node, previous_padlen, incoming_padlen):
+            merged = deepcopy(previous_padlen)
+            return merged.cover_merge(incoming_padlen)
 
-        selector_nodes = [
-            node for node in all_nodes if isinstance(node.transformer, Selector)
-        ]
-        return all_nodes, selector_nodes
+        def step(node, accumulated_padlen, _):
+            node_padlen = getattr(node.transform, "padlen", None)
+            if node_padlen:
+                return accumulated_padlen + node_padlen
+            return accumulated_padlen
+        
+        accumulated_padlen = walk_graph(leaf, DimBounds(), step=step, merge_state=merge_state)
 
-    def _accumulate_padlen(self, all_nodes):
-        # Imagine 5 (pseudocode) nodes, listed downstream->upstream
-        # [select_event(window=w), select_epoch, filter, scale, source]
-
-        # In our example: because window and epoch share a metadim, time, an events
-        # window can be outside the range of the epoch. So every slot upstream of
-        # window must be padded.
-
-        # If the selector is going to get pushed upstream of filter,
-        # which needs padding, it must add padlen to accommodate the filter.  If it
-        # stays downstream of filter, it doesn't need to pad.
-
-        padlen_accumulators = [
-            DimBounds(metadim_of=node.data_schema.metadim_from) for node in all_nodes
-        ]
-
-        for i, node in enumerate(all_nodes):
-            if hasattr(node, "transform") and getattr(node.transform, "padlen", None):
-                for pa in padlen_accumulators[i + 1 :]:
-                    pa += node.transform.padlen
-
-        return padlen_accumulators
+        return accumulated_padlen
     
-    def _build_slice_plan(self, all_nodes, selector_signals, padlen_accumulators):
+    def _build_slice_plan(self, leaf, selector_nodes, accumulated_padlen):
 
         pushdown_selector_nodes = []
         local_selector_nodes = []
 
-        for s in selector_signals:
+        for s in selector_nodes:
             if s.transformer.mode == "pushdown":
                 pushdown_selector_nodes.append(s)
             else:
                 local_selector_nodes.append(s)
 
-        pushdown_selector_nodes.reverse()
-        local_selector_nodes.reverse()
-
         slicer_plan = defaultdict(list)
-
-        leaf = all_nodes[0]
-
-        node_index = {id(node): i for i, node in enumerate(all_nodes)}
        
         if len(pushdown_selector_nodes):
             self._make_pushdown_slicers(
-                pushdown_selector_nodes, padlen_accumulators, node_index, slicer_plan
+                pushdown_selector_nodes, accumulated_padlen, slicer_plan
             )
 
         if len(local_selector_nodes):
             self._make_local_slicers(
-                local_selector_nodes, padlen_accumulators, node_index, slicer_plan 
+                local_selector_nodes, accumulated_padlen, slicer_plan 
             )
 
-        self._make_trim_slicers(leaf, pushdown_selector_nodes, local_selector_nodes, slicer_plan)
+        self._make_trim_slicers(
+            leaf, pushdown_selector_nodes, local_selector_nodes, slicer_plan
+            )
 
         leaf = self._rebuild_tree(leaf, slicer_plan) 
 
         return leaf
 
     def _make_local_slicers(
-        self, local_selector_nodes, padlen_accumulators, node_index, slicer_plan
-    ):
+        self, local_selector_nodes, accumulated_padlen, slicer_plan
+        ):
 
         for ls_node in local_selector_nodes:
-            padlen = padlen_accumulators[node_index[id(ls_node)]]
+            padlen = accumulated_padlen[id(ls_node)]
             self._make_slicer(ls_node, ls_node, slicer_plan, padlen=padlen)
 
     def _make_pushdown_slicers(
-        self,
-        pushdown_selector_nodes,
-        padlen_accumulators,
-        node_index,
-        slicer_plan
-    ):
+            self, selector_nodes, accumulated_padlen, slicer_plan
+            ):
         # for each pushdown selector, walk the graph from the selector node
         # carrying the set of dims still looking for placement
 
-        for ps_node in pushdown_selector_nodes:
+        for ps_node in selector_nodes:
 
-            def _check_and_make(node, last_node, value):
+            def _check_and_make(node, value, _):
                 return self._check_and_make(
                     node,
-                    last_node,
                     value,
                     ps_node,
-                    padlen_accumulators,
-                    node_index,
+                    accumulated_padlen,
                     slicer_plan,
                 )
 
             live_dims = set(ps_node.transformer.locus.dim_bounds)
 
-            for _, live_dims, _ in walk_tree(
-                ps_node,
-                func=_check_and_make,  # signature: (node, downstream, live_dims)
-                starting_val=live_dims,
-            ):
-                pass
+            # TODO: in a true DAG (i.e., not a tree, with consumers that share an upstream node,
+            # this can create multiple slicers.  Need to come back to this.)
+            walk_graph(ps_node, live_dims, step=_check_and_make)
 
     def _check_and_make(
         self,
         node,
-        _,
         live_dims,
         ps_node,
-        padlen_accumulators,
-        node_index,
+        accumulated_padlen,
         slicer_plan,
     ):
 
@@ -214,20 +183,19 @@ class SelectionPlanner(Transformer):
 
         if not live_dims:
             return live_dims
+        next_live_dims = set(live_dims)
         for dim in selectable_dims:
-            if dim not in live_dims:
+            if dim not in next_live_dims:
                 continue
             elif not node.is_source and dim_in_inputs(node, dim):
                 continue
-            elif live_dims:
-                padlen = padlen_accumulators[node_index[id(node)]]
-                self._make_slicer(node, ps_node, slicer_plan, padlen=padlen)
-
-                live_dims.remove(dim)
+            elif next_live_dims:
+                self._make_slicer(node, ps_node, slicer_plan, accumulated_padlen[id(node)])
+                next_live_dims.remove(dim)
             else:
                 break
 
-        return live_dims
+        return next_live_dims
 
     def _make_trim_slicers(
             self, 

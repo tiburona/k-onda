@@ -1,3 +1,6 @@
+from k_onda.central import type_registry
+
+
 class CalculateMixin:
     def add(self, other, key=None, key_output_mode=None):
         return self.shift(other, key=key, key_output_mode=key_output_mode)
@@ -81,6 +84,7 @@ class CalculateMixin:
         return Histogram(**config)(self, key=key, key_output_mode=key_output_mode)
 
 
+
 class IntersectionMixin:
     def intersection(self, other, tolerance_decimals=9):
         from . import Intersection
@@ -118,3 +122,13 @@ class AggregateMixin:
         from . import Aggregator
 
         return Aggregator(method=method)(self)
+    
+
+    def mean(self, across=None, group_by=None):
+        
+        new_dim = group_by if isinstance(group_by, str) else None
+       
+        return type_registry.Aggregator(method='mean', group_by=group_by, new_dim=new_dim)(self)
+    
+
+        
