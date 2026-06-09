@@ -124,11 +124,16 @@ class AggregateMixin:
         return Aggregator(method=method)(self)
     
 
-    def mean(self, across=None, group_by=None):
+    def mean(self, across=None, group_by=None, preserve_groups=False):
         
         new_dim = group_by if isinstance(group_by, str) else None
        
-        return type_registry.Aggregator(method='mean', group_by=group_by, new_dim=new_dim)(self)
+        return type_registry.Aggregator(
+            method='mean', 
+            group_by=group_by, 
+            new_dim=new_dim,
+            preserve_groups=preserve_groups
+            )(self)
     
 
         
