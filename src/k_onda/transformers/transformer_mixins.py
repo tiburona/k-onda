@@ -117,23 +117,70 @@ class UnstackMixin:
         return UnstackSignals(dim=dim)(self)
 
 
-class AggregateMixin:
-    def aggregate(self, method="mean"):
-        from . import Aggregator
+class AggregateMixin:    
 
-        return Aggregator(method=method)(self)
-    
-
-    def mean(self, across=None, group_by=None, preserve_groups=False):
+    def mean(self, across=None, group_by=None, preserve_groups=False, order='sequential'):
         
-        new_dim = group_by if isinstance(group_by, str) else None
+        if isinstance(self, type_registry.Collection):
+            data_schema = self.signals[0].data_schema
+        elif isinstance(self, type_registry.CollectionMap):
+            data_schema = next(iter(self.values()))[0].data_schema
+        else:
+            data_schema = self.data_schema
+
+        if group_by is None:
+            group_by = []
+        elif isinstance(group_by, str):
+            group_by = [group_by]
+
+        if across is None:
+            across = []
+        elif isinstance(across, str):
+            across = [across]
+
+        collection_dims = [dim for dim in across + group_by 
+                           if dim not in data_schema.dim_names]
+
+        if not isinstance(self, type_registry.Signal):
+            signal = type_registry.Aggregator(
+                group_by=collection_dims,
+                preserve_groups = preserve_groups
+                )(self)
+            
+            if not len(across):
+                across = ["signals"]
+        else:
+            signal = self
+
+        return self._reduce_dims_in_data(signal, across, group_by, signal.data_schema, order)
+
+
+    def _reduce_dims_in_data(self, signal, across, group_by, data_schema, order):
+        grouping_coords_in_data = [coord for coord in group_by if data_schema.coord_names]
+
+        reduced_dims_in_data = [dim for dim in across if dim in data_schema.dim_names]
+
+        # signal = type_registry.GroupBy(coords=grouping_coords_in_data)(signal)
+
+        if order == 'simultaneous':
+            signal = type_registry.ReduceDim(dim=reduced_dims_in_data)(signal)
+        else:
+            for dim in reduced_dims_in_data:
+                signal = type_registry.ReduceDim(dim=dim)(signal)
+
+        return signal
+        
        
-        return type_registry.Aggregator(
-            method='mean', 
-            group_by=group_by, 
-            new_dim=new_dim,
-            preserve_groups=preserve_groups
-            )(self)
+
+        
+
+
+       
+
+
+        
+        
+        
     
 
         

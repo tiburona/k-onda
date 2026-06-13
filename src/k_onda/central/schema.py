@@ -17,7 +17,7 @@ class CoordInfo:
     name: str
     metadim: str | None = None
     is_relative: str | bool = False
-
+    is_grouping: bool = False
 
 @dataclass(frozen=True)
 class AxisInfo:
@@ -218,6 +218,34 @@ class Schema:
         new_schema = new_schema.without(ax.name)
         new_schema = new_schema.with_added(new_ax)
         return new_schema
+
+    def with_coord_grouping(self, coord_name, *, is_grouping=True):
+        axis = self.axis_by_coord_name(coord_name)
+        if axis is None:
+            raise ValueError(f"Coord {coord_name!r} not found")
+        new_coords = tuple(
+            CoordInfo(
+                name=c.name,
+                metadim=c.metadim,
+                is_relative=c.is_relative,
+                is_grouping=is_grouping if c.name == coord_name else c.is_grouping,
+            ) 
+            for c in axis.coords
+        )
+
+        new_axis = AxisInfo(
+            name=axis.name,
+            kind=axis.kind,
+            metadim=axis.metadim,
+            coords=new_coords,
+        )
+
+        return self.without(axis.name).with_added(new_axis)
+    
+    def is_grouping_coord(self, coord_name) -> bool:
+        coord = self.coord_by_name(coord_name)
+        return coord is not None and coord.is_grouping
+
     
     def reorder_axes(self, axis_names):
         if set(axis_names) != {ax.name for ax in self.axes}:
@@ -337,3 +365,9 @@ class DatasetSchema(MutableMapping):
     def get_common_metadim(self, our_coord, other_schema, other_coord):
         metadim = self.metadim_from(our_coord)
         return metadim if metadim == other_schema.metadim_from(other_coord) else None
+    
+    def with_axis(self, axis, *, if_exists="keep"):
+        return DatasetSchema({
+            key: schema.with_axis(axis, if_exists=if_exists)
+            for key, schema in self.key_schemas.items()
+        })

@@ -2,11 +2,12 @@ from collections import defaultdict
 
 from .session import Session
 from k_onda.provenance import AnnotatorMixin
-from k_onda.mixins import ConfigSetter
+from k_onda.mixins import ConfigSetter, FactorMixin
 
 
-class Subject(AnnotatorMixin, ConfigSetter):
+class Subject(AnnotatorMixin, ConfigSetter, FactorMixin):
     _snapshot_fields = ("session_ids",)
+    name = 'subject'
 
     def __init__(self, subject_id, subject_config):
         self.id = subject_id

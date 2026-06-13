@@ -16,7 +16,7 @@ from k_onda.transformers.transformer_mixins import (
 )
 from k_onda.transformers import SelectMixin
 from k_onda.signals import Signal
-from k_onda.mixins import DictDelegator, ConfigSetter
+from k_onda.mixins import DictDelegator, ConfigSetter, FactorMixin
 from k_onda.transformers import feature_registry
 from k_onda.provenance import ProvenanceContext
 from k_onda.central import type_registry, Schema
@@ -155,9 +155,10 @@ class DataComponent(CalculateMixin, SelectMixin):
 
 
 @type_registry.register
-class DataIdentity(AnnotatorMixin, SelectMixin):
+class DataIdentity(AnnotatorMixin, SelectMixin, FactorMixin):
     name = "identity"
     _snapshot_fields = ("component_ids",)
+    factor_fields = ("neuron_type",)
 
     def __init__(self, data_components=None, config=None, subject=None):
         self.uid = uuid.uuid4()

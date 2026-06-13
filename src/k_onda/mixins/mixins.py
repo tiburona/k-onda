@@ -81,3 +81,18 @@ class ConfigSetter:
         return constructor["template"].format(
             session=session, subject=subject, experiment=experiment, **kwargs
         )
+    
+
+class FactorMixin:
+    factor_fields = tuple()
+
+    @property
+    def factors(self):
+        factor_fields = self.factor_fields + ("label",)
+        factors = {**getattr(self, "conditions", {})}
+        for name in factor_fields:
+            value = getattr(self, name, None)
+            if value is not None:
+                factors[name] = value
+        return factors
+       

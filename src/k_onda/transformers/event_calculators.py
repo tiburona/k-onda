@@ -28,6 +28,9 @@ class Rate(Calculator):
             "duration": parent.duration,
             "is_binary": isinstance(parent, BinarySignal),
         }
+    
+    def output_schema(self, input_schema):
+        return type_registry.Schema()   
 
     def _validate_input(self, input, **kwargs):
         from ..signals import BinarySignal, PointProcessSignal

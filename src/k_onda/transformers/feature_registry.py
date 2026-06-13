@@ -21,7 +21,7 @@ def fwhm(input, config=None):
     return (
         input.fwhm(**config, key=key, key_output_mode="standalone")
         .reduce(dim)
-        .aggregate()
+        .mean()
     )
 
 
@@ -29,7 +29,7 @@ def firing_rate(input, config=None):
     if config is None:
         config = {}
 
-    return input.rate(**config).aggregate()
+    return input.rate(**config).mean()
 
 
 feature_registry["fwhm"] = fwhm

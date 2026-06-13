@@ -6,7 +6,7 @@ from copy import deepcopy
 import uuid
 import re
 
-from k_onda.mixins import ConfigSetter
+from k_onda.mixins import ConfigSetter, FactorMixin
 from k_onda.utils import group_to_dict
 from k_onda.loci import Epoch, EpochSet, EventSet
 
@@ -87,7 +87,7 @@ class NEVMixin:
         return markers
 
 
-class Session(NEVMixin, ConfigSetter):
+class Session(NEVMixin, ConfigSetter, FactorMixin):
     def __init__(self, experiment, subject, config, label=None, conditions=None):
         self.uid = uuid.uuid4()
         self.experiment = experiment

@@ -181,6 +181,11 @@ class Neuron(DataIdentity):
         integer_id = 0 if not len(integer_ids) else max(integer_ids) + 1
         label = f"neuron{integer_id}"
         return label
+    
+    @property
+    def factors(self):
+        pass
+
 
     @property
     def label(self):

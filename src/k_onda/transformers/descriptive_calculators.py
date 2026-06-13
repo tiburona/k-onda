@@ -56,7 +56,52 @@ class ReduceDim(Calculator):
                 else:
                     return type_registry.Signal
         return super()._infer_output_class(input)
+    
 
+@type_registry.register
+class GroupBy(Calculator):
+    name = "groupby"
+
+    def __init__(self, coord, method="mean"):
+        self.coords = [coord] if isinstance(coord, str) else coord
+
+    def _apply_inner(self, data, *args, **kwargs):
+      
+        return getattr(data, self.method)(dim=self.dim, keep_attrs=True)
+
+    def output_schema(self, input_schema):
+        output_schema = input_schema
+        for coord in self.coords:
+            output_schema = output_schema.with_coord_grouping(coord)
+
+        return self.output_schema
+    
+    def _validate_input(self, input, **kwargs):
+        super()._validate_input(input, **kwargs)
+        if any(not input.data_schema.coord_by_name(coord) for coord in self.coords):
+            raise ValueError("You are grouping on a coord that does not exist in the data.")
+
+    def resolve_output_class(self, input):
+        # If we're operating on a StackedSignal, preserve the stack type.
+        # If this calculator has a fixed output class, return that.
+        # Otherwise ask the parent signal what it would produce.
+        if getattr(input, "is_stack", False):
+            return type(input)
+        return self.fixed_output_class or self._infer_output_class(input)
+
+    def _infer_output_class(self, input):
+
+
+        if input.data_schema.is_point_process():
+            if not input.data_schema.is_point_process_essential(self.dim):
+                return type_registry.PointProcessSignal
+            else:
+                if input.data_schema.has_dim("time"):
+                    return type_registry.TimeSeriesSignal
+                else:
+                    return type_registry.Signal
+        return super()._infer_output_class(input)
+   
 
 @type_registry.register
 class Histogram(Calculator):
