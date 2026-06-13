@@ -303,5 +303,43 @@ class Aggregator(Transformer):
             gathered_data[key] = self._apply_to_arrays(arrays, group_keys, group_dim)
         
         return xr.Dataset(gathered_data)
-       
 
+
+@type_registry.register
+class GroupBy(Transformer):
+  
+    def __init__(self, coords):
+        self.coords = [coords] if isinstance(coords, str) else coords
+
+    def _validate_input(self, input, **kwargs):
+        acceptable_types = [
+            type_registry.Signal,
+            type_registry.SignalStack,
+            type_registry.Collection,
+            type_registry.CollectionMap,
+            type_registry.DataIdentity,
+        ]
+        if not any([isinstance(input, typ) for typ in acceptable_types]):
+            raise ValueError(f"Calculators can't operate on type {type(input)}")
+        
+    def _apply_to_arrays(self, data):
+        return data.groupby(self.coords)
+   
+    def _apply(self, data, **kwargs):
+
+        if isinstance(data[0], xr.DataArray):
+            return self._apply_to_arrays(data)
+    
+        keys = data[0].keys()
+        grouped_data = {}
+
+        for key in keys:
+            arrays = []
+            for dataset in data:
+                arr = dataset[key]
+                arrays.append(arr)
+        
+            grouped_data[key] = self._apply_to_arrays(arrays)
+        
+        return xr.Dataset(grouped_data)
+        

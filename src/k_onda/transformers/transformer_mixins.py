@@ -160,7 +160,8 @@ class AggregateMixin:
 
         reduced_dims_in_data = [dim for dim in across if dim in data_schema.dim_names]
 
-        # signal = type_registry.GroupBy(coords=grouping_coords_in_data)(signal)
+        if group_by:
+            signal = type_registry.GroupBy(coords=grouping_coords_in_data)(signal)
 
         if order == 'simultaneous':
             signal = type_registry.ReduceDim(dim=reduced_dims_in_data)(signal)
