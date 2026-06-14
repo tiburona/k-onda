@@ -82,26 +82,40 @@ class Aggregator(Transformer):
     @staticmethod
     def build_grouping_func(groupings, strict=True):
 
-        def get_grouping_key(entity, grouping):
-            if getattr(entity, grouping, None) is not None:
-                return getattr(entity, grouping)
-            elif (
-                hasattr(entity, "data_identity")
-                and getattr(entity.data_identity, "name", None) == grouping
-            ):
-                return entity.data_identity
-
-            try:
-                return attrgetter(grouping)(entity)
-            except AttributeError as e:
-                if strict:
-                    raise e
-                return None
-
-        def grouping_func(entity):
-            return (get_grouping_key(entity, grouping) for grouping in groupings)
-
+        def grouping_func(signal):
+            return {
+                name: Aggregator.resolve_grouping_value(signal, name, strict=strict)
+                for name in groupings
+            }
+        
         return grouping_func
+    
+    @staticmethod
+    def resolve_grouping_value(signal, name, strict=True):
+        context = (
+            getattr(signal, "data_identity", None),
+            getattr(signal, "subject", None),
+            getattr(signal, "session", None),
+        )
+        
+        for obj in context:
+            if obj is None:
+                continue
+            
+            # if hasattr(obj, name):
+            #     return getattr(obj, name)
+            
+            #  entity name: "neuron", "subject", "session"
+            if getattr(obj, "name", None) == name:
+                return getattr(obj, "label", obj)
+            
+            # factor name: "neuron_type", "treatment", etc.
+            factors = getattr(obj, "factors", {}) or {}
+            if name in factors:
+                return factors[name]
+            
+        if strict:
+            raise AttributeError(f"Could not resolve group_by={name!r} for {signal!r}")
 
     def output_schema(self, input_schema): 
         schema = input_schema.with_axis(AxisInfo(
@@ -261,18 +275,7 @@ class Aggregator(Transformer):
                 )
         
         return result
-
-    def _get_factors(self, group_keys_by_signal):
-        factors = []
-        for per_signal_keys in group_keys_by_signal:
-            per_signal_factors = {}
-            for key in per_signal_keys:
-                key_factors_copy = deepcopy(key.factors)
-                if "label" in key_factors_copy:
-                    key_factors_copy[key.name] = key.factors["label"]
-                per_signal_factors.update(key_factors_copy)
-            factors.append(per_signal_factors)
-        return factors
+        
     
     def _apply_to_arrays(self, arrs, group_keys_by_signal, group_dim):
         group_dim = group_dim or "signals"
@@ -281,7 +284,7 @@ class Aggregator(Transformer):
         if not group_keys_by_signal:
             return result
         
-        factors = self._get_factors(group_keys_by_signal)
+        factors = list(group_keys_by_signal)
         result = self._apply_metadata_coords(result, factors, group_dim)
         return result
 
@@ -311,16 +314,8 @@ class GroupBy(Transformer):
     def __init__(self, coords):
         self.coords = [coords] if isinstance(coords, str) else coords
 
-    def _validate_input(self, input, **kwargs):
-        acceptable_types = [
-            type_registry.Signal,
-            type_registry.SignalStack,
-            type_registry.Collection,
-            type_registry.CollectionMap,
-            type_registry.DataIdentity,
-        ]
-        if not any([isinstance(input, typ) for typ in acceptable_types]):
-            raise ValueError(f"Calculators can't operate on type {type(input)}")
+    def _validate_input(self, input, key_spec):
+        return True
         
     def _apply_to_arrays(self, data):
         return data.groupby(self.coords)

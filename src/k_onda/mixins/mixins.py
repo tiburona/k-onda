@@ -89,7 +89,7 @@ class FactorMixin:
     @property
     def factors(self):
         factor_fields = self.factor_fields + ("label",)
-        factors = {**getattr(self, "conditions", {})}
+        factors = {**(getattr(self, "conditions", {}) or {})}
         for name in factor_fields:
             value = getattr(self, name, None)
             if value is not None:

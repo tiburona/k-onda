@@ -170,6 +170,9 @@ class AggregateMixin:
                 signal = type_registry.ReduceDim(dim=dim)(signal)
 
         return signal
+    
+    def candidate_entities(self, signal):
+        pass
         
        
 

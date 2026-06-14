@@ -184,8 +184,7 @@ class Neuron(DataIdentity):
     
     @property
     def factors(self):
-        pass
-
+        return {"neuron_type": self.neuron_type}
 
     @property
     def label(self):
