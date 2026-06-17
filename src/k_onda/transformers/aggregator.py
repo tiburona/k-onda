@@ -1,9 +1,7 @@
 import xarray as xr
-from operator import attrgetter
 from pint_xarray import PintIndex
 import numpy as np
 import math
-from copy import deepcopy
 
 from .core import Transformer, KeySpec
 from k_onda.central import type_registry, AxisInfo, AxisKind, CoordInfo
@@ -11,11 +9,12 @@ from k_onda.central import type_registry, AxisInfo, AxisKind, CoordInfo
 
 @type_registry.register
 class Aggregator(Transformer):
-    def __init__(self, group_by=None, preserve_groups=False):
-        self.group_by = group_by or []
-        if isinstance(self.group_by, str):
-            self.group_by = [self.group_by]
+    def __init__(self, collection_coords=None, preserve_groups=False, planned_input_schema=None):
+        self.collection_coords = collection_coords or []
+        if isinstance(self.collection_coords, str):
+            self.collection_coords = [self.collection_coords]
         self.preserve_groups = preserve_groups
+        self.planned_input_schema = planned_input_schema
         
     def __call__(self, input, key=None, key_output_mode=None):
 
@@ -41,9 +40,7 @@ class Aggregator(Transformer):
             group_on = getattr(collection_map, "group_on", None)
             return type_registry.CollectionMap(
                 groups={
-                    k: self._call_on_collection(
-                        v, group_keys=collection_map.keys(), key_spec=key_spec
-                        )
+                    k: self._call_on_collection(v, key_spec=key_spec)
                     for k, v in collection_map.items()
                 },
                 group_on=group_on
@@ -51,43 +48,49 @@ class Aggregator(Transformer):
         
         return self._call_on_collection(collection_map.as_collection(), key_spec=key_spec)
         
-    def _call_on_collection(self, collection, group_keys=None, key_spec=None):
+    def _call_on_collection(self, collection, key_spec=None):
 
         inputs = tuple(collection.signals)
-        transform = self._get_transform(inputs)
         
-        if self.group_by: 
-            if callable(self.group_by):
-                grouping_func = self.group_by
+        if self.collection_coords: 
+            if callable(self.collection_coords):
+                grouping_func = self.collection_coords
             else:
-                grouping_func = self.build_grouping_func(self.group_by)
-            group_keys = [grouping_func(sig) for sig in collection.signals]     
-     
-        data_schema = self.make_output_schema(inputs[0].data_schema, key_spec=key_spec)
+                grouping_func = self.build_grouping_func(self.collection_coords)
+            labels_and_factors = [grouping_func(sig) for sig in collection.signals]
+        else:
+            labels_and_factors = []
+             
+      
+        input_schema = self.planned_input_schema or inputs[0].data_schema
+        data_schema = self.make_output_schema(input_schema, key_spec=key_spec)
 
         apply_kwargs = {
             "data_schema": data_schema,
-            "group_keys": group_keys
+            "labels_and_factors": labels_and_factors
         }
 
         return type_registry.AggregatedSignal(
             inputs=inputs,
             transformer=self,
-            transform=transform,
+            transform=None,
             data_schema=data_schema,
             key_spec=key_spec,
             apply_kwargs=apply_kwargs
         )
     
     @staticmethod
-    def build_grouping_func(groupings, strict=True):
+    def build_grouping_func(groupings, strict=False):
 
         def grouping_func(signal):
-            return {
-                name: Aggregator.resolve_grouping_value(signal, name, strict=strict)
-                for name in groupings
-            }
-        
+            result = {}
+            for name in groupings:
+                value =  Aggregator.resolve_grouping_value(signal, name, strict=strict)
+                if value is not None:
+                    result[name] = value
+
+            return result
+            
         return grouping_func
     
     @staticmethod
@@ -102,9 +105,6 @@ class Aggregator(Transformer):
             if obj is None:
                 continue
             
-            # if hasattr(obj, name):
-            #     return getattr(obj, name)
-            
             #  entity name: "neuron", "subject", "session"
             if getattr(obj, "name", None) == name:
                 return getattr(obj, "label", obj)
@@ -118,10 +118,11 @@ class Aggregator(Transformer):
             raise AttributeError(f"Could not resolve group_by={name!r} for {signal!r}")
 
     def output_schema(self, input_schema): 
+        input_schema = self.planned_input_schema or input_schema
         schema = input_schema.with_axis(AxisInfo(
-            "signals", 
-            kind=AxisKind.AXIS,
-            coords=tuple(CoordInfo(group) for group in self.group_by)))
+            "signal", 
+            kind=AxisKind.OBSERVATION_INDEX,
+            coords=tuple(CoordInfo(group) for group in self.collection_coords)))
         return schema
 
     def canonicalize_arrays(self, arrs):
@@ -258,7 +259,7 @@ class Aggregator(Transformer):
         
         return arr
     
-    def _apply_metadata_coords(self, result, factors, group_dim="signals"):
+    def _apply_metadata_coords(self, result, factors, group_dim="signal"):
      
         factor_names = list(dict.fromkeys(
             factor
@@ -276,23 +277,21 @@ class Aggregator(Transformer):
         
         return result
         
-    
-    def _apply_to_arrays(self, arrs, group_keys_by_signal, group_dim):
-        group_dim = group_dim or "signals"
-        result = self._concat_arrs(arrs, dim="signals")
+    def _apply_to_arrays(self, arrs, labels_and_factors, group_dim):
+        group_dim = group_dim or "signal"
+        result = self._concat_arrs(arrs, dim="signal")
 
-        if not group_keys_by_signal:
+        if not labels_and_factors:
             return result
         
-        factors = list(group_keys_by_signal)
-        result = self._apply_metadata_coords(result, factors, group_dim)
+        labels_and_factors = list(labels_and_factors)
+        result = self._apply_metadata_coords(result, labels_and_factors, group_dim)
         return result
 
-
-    def _apply(self, *data, group_keys=None, group_dim=None, **kwargs):
+    def _apply(self, *data, labels_and_factors=None, group_dim=None, **kwargs):
 
         if isinstance(data[0], xr.DataArray):
-            return self._apply_to_arrays(data, group_keys, group_dim)
+            return self._apply_to_arrays(data, labels_and_factors, group_dim)
     
         keys = data[0].keys()
         gathered_data = {}
@@ -303,7 +302,7 @@ class Aggregator(Transformer):
                 arr = dataset[key]
                 arrays.append(arr)
         
-            gathered_data[key] = self._apply_to_arrays(arrays, group_keys, group_dim)
+            gathered_data[key] = self._apply_to_arrays(arrays, labels_and_factors, group_dim)
         
         return xr.Dataset(gathered_data)
 
@@ -316,25 +315,17 @@ class GroupBy(Transformer):
 
     def _validate_input(self, input, key_spec):
         return True
-        
-    def _apply_to_arrays(self, data):
-        return data.groupby(self.coords)
+    
+    def output_schema(self, input_schema):
+
+        output_schema = input_schema
+
+        for coord in self.coords:
+            output_schema = output_schema.with_coord_grouping(coord)
+            
+        return output_schema
    
     def _apply(self, data, **kwargs):
 
-        if isinstance(data[0], xr.DataArray):
-            return self._apply_to_arrays(data)
-    
-        keys = data[0].keys()
-        grouped_data = {}
-
-        for key in keys:
-            arrays = []
-            for dataset in data:
-                arr = dataset[key]
-                arrays.append(arr)
-        
-            grouped_data[key] = self._apply_to_arrays(arrays)
-        
-        return xr.Dataset(grouped_data)
+        return data.groupby(self.coords)
         

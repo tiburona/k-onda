@@ -1,15 +1,19 @@
 from __future__ import annotations
 from collections.abc import MutableMapping
+from functools import reduce
+from collections import defaultdict
 from .registry import type_registry
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from copy import copy
+from operator import and_, or_
 
 
 class AxisKind(Enum):
     POINT_PROCESS_INDEX = auto()
     AXIS = auto()
     ORDINAL_INDEX = auto()
+    OBSERVATION_INDEX = auto()
 
 
 @dataclass(frozen=True)
@@ -85,6 +89,15 @@ class Schema:
                     return ax
         return None
     
+    def axis_by_name_has_coord(self, axis_name, coord_name):
+        axis = self.axis_by_name(axis_name)
+        if axis is None: 
+            return False
+        for coord in axis.coords:
+            if coord_name == coord.name:
+                return True
+        return False
+    
     def names_by_axis_kind(self, axis_kind) -> list[str]:
         return [ax.name for ax in self.axes_of_kind(axis_kind)]
 
@@ -96,6 +109,17 @@ class Schema:
             for coord in ax.coords:
                 if coord.name == name:
                     return coord
+                
+    def ax_coord_map(self, coords=None) -> dict:
+        if not coords:
+            return {ax.name: self.coord_names_by_dim(ax.name) for ax in self.axes}
+        else:
+            return {
+                ax.name: [
+                    c for c in self.coord_names_by_dim(ax.name) if c in coords
+                    ] 
+                for ax in self.axes
+                }
 
     def without(self, name) -> Schema:
         new_schema = copy(self)
@@ -156,10 +180,28 @@ class Schema:
     @property
     def selectable(self) -> set[str]:
         return set(self.dim_names) | set(self.metadims) | set(self.coord_names)
+
+    @property
+    def observation_axis(self):
+        obs_axes = self.axes_by_kind(AxisKind.OBSERVATION_INDEX)
+        return obs_axes[0] if obs_axes else None
+    
+    @property
+    def collectable_coords(self):
+        return self.coord_names
+    
+    def axes_by_kind(self, kind):
+        return [ax for ax in self.axes if ax.kind == kind]
     
     def coord_names_by_dim(self, dim) -> list[str]:
-        axis = self.ax_by_name(dim)
+        axis = self.axis_by_name(dim)
+        if not axis:
+            return []
         return [coord.name for coord in axis.coords]
+    
+    def coord_names_by_axis_kind(self, axis_kind) -> list[str]:
+        axes = self.axes_of_kind(axis_kind)
+        return [coord.name for ax in axes for coord in ax.coords]
 
     def is_point_process(self) -> bool:
         return any(ax.kind == AxisKind.POINT_PROCESS_INDEX for ax in self.axes)
@@ -282,6 +324,9 @@ class DatasetSchema(MutableMapping):
     def dim_names(self):
         # union: for Selector, a dim is 'available' here if any key has it
         return set.union(set(), *(s.dim_names for s in self.key_schemas.values()))
+    
+    def dim_names_intersection(self):
+        return set.intersection(set(), *(s.dim_names for s in self.values()))
 
     @property
     def selectable(self):
@@ -366,8 +411,92 @@ class DatasetSchema(MutableMapping):
         metadim = self.metadim_from(our_coord)
         return metadim if metadim == other_schema.metadim_from(other_coord) else None
     
-    def with_axis(self, axis, *, if_exists="keep"):
-        return DatasetSchema({
-            key: schema.with_axis(axis, if_exists=if_exists)
+    def map_schemas(self, func):
+        return type(self)({
+            key: func(schema)
             for key, schema in self.key_schemas.items()
         })
+    
+    def collect_unique(self, func):
+        return list(dict.fromkeys(
+            item 
+            for schema in self.values() 
+            for item in func(schema)
+        ))
+
+    def with_axis(self, axis, *, if_exists="keep"):
+        return self.map_schemas(lambda s: s.with_axis(axis, if_exists=if_exists))
+    
+    @property
+    def coord_names(self):
+        return self.collect_unique(lambda s: s.coord_names)
+    
+    @property
+    def observation_axis(self):
+        for s in self.values():
+            if s.observation_axis:
+                return s.observation_axis
+            
+    @property
+    def collectable_coords(self):
+        return reduce(and_, [set(s.coord_names) for s in self.values()])
+
+    def names_by_axis_kind(self, axis_kind):
+        return self.collect_unique(lambda s: s.names_by_axis_kind(axis_kind))
+
+    def coord_names_by_dim(self, dim):
+        return self.collect_unique(lambda s: s.coord_names_by_dim(dim))
+    
+    def coord_names_by_axis_kind(self, axis_kind):
+        return self.collect_unique(lambda s: s.coord_names_by_axis_kind(axis_kind))
+
+    def ax_coord_map(self, coords=None, mode="intersection"):
+
+        # for each schema ax_coord_dict is a mapping of axis names to lists of coords
+        # in the intersection case you choose only the axes that are on all the schemas
+        # and only the coords that are available on that axis for all sub schemas
+        # in the union case you choose the union of all the axes, and all the 
+        # coords that are available on that axis in any subschema.
+        
+        if mode == "intersection":
+            dim_names = reduce(and_, [set(s.dim_names) for s in self.values()])
+            dict_to_return = {
+                dim: list(reduce(
+                    and_, 
+                    list(set(s.ax_coord_map(coords)[dim]) for s in self.values())
+                    ))
+                    for dim in dim_names 
+                    }
+            return dict_to_return
+        
+        elif mode == "union":
+            dim_names = self.dim_names
+            dict_to_return = {
+                dim: list(reduce(
+                    or_, 
+                    list(set(s.ax_coord_map(coords).get(dim, [])) for s in self.values())
+                    ))
+                    for dim in dim_names 
+                    }
+            return dict_to_return
+        
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+        
+    def axis_by_coord_name(self, coord_name, mode="first"):
+        if mode == "first":
+            for s in self.values():
+                if s.axis_by_coord_name(coord_name):
+                    return s.axis_by_coord_name(coord_name)
+        elif mode == "union":
+            raise NotImplementedError("Mode 'union' for DatasetSchema.axis_by_coord_name "
+            "is not yet implemented.")
+        else:
+            raise ValueError(f"Unknown mode {mode}")
+
+
+
+    
+
+            
+       

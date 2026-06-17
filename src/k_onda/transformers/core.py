@@ -154,6 +154,9 @@ class Transformer:
 
     def _infer_output_class(self, entity):
         return getattr(entity, "output_class", type(entity))
+    
+    def _validate_data_schema(self, input_schema):
+        return True
 
     def make_output_schema(self, *input_schemas, key_spec):
         """Compute the output schema."""
@@ -168,6 +171,7 @@ class Transformer:
 
         if isinstance(input_schema, DatasetSchema) and key is not None:
             key_schema = input_schema[key]
+            self._validate_data_schema(key_schema)
             new_key_schema = self.output_schema(key_schema)
             if output_mode == "standalone":
                 return new_key_schema
@@ -180,6 +184,7 @@ class Transformer:
 
         else:
             # Plain Schema input
+            self._validate_data_schema(input_schema)
             return self.output_schema(*input_schemas)
 
     # this gets overridden

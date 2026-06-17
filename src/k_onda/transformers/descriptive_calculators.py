@@ -20,18 +20,56 @@ DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 class ReduceDim(Calculator):
     name = "reduce_dim"
 
-    def __init__(self, dim, method="mean", weights=None):
-        self.dim = dim
+    def __init__(self, dims, method="mean", weights=None):
+        self.dims = dims if not isinstance(dims, str) else [dims]
         self.method = method
         self.weights = weights
 
     def _apply_inner(self, data, *args, **kwargs):
         if self.weights is not None:
             data = data.weighted(self.weights, keep_attrs=True)
-        return getattr(data, self.method)(dim=self.dim, keep_attrs=True)
+        return getattr(data, self.method)(dim=self.dims, keep_attrs=True)
 
     def output_schema(self, input_schema):
-        return input_schema.without(self.dim)
+        # TODO: right now, if you grouped the long axis, you can't carry over
+        # any ungrouped coords.  For example, if you had neuron and neuron type
+        # on the long axis, and then you group by neurons, neuron_type is lost
+        # Eventually you should be able to migrate that coord over to the new axis,
+        # but that will require that somewhere knowledge is encoded about how to
+        # migrate them
+        if isinstance(input_schema, type_registry.DatasetSchema):
+            return input_schema.map_schemas(self._reduce_schema)
+        
+        return self._reduce_schema(input_schema)
+    
+    def _reduce_schema(self, schema):
+        output_schema = schema
+        for dim in self.dims:
+            axis = schema.axis_by_name(dim)
+            if axis is None:
+                continue
+            grouping_coords = [coord for coord in axis.coords if coord.is_grouping]
+            for coord in grouping_coords:
+                output_schema = output_schema.with_axis(
+                    AxisInfo(
+                        name=coord.name,
+                        kind=AxisKind.AXIS,
+                        metadim=coord.metadim
+                    )
+                ) 
+            
+            output_schema = output_schema.without(dim)
+
+        return output_schema
+
+    
+    def _validate_data_schema(self, input_schema):
+        missing = [
+            dim for dim in self.dims
+            if not input_schema.has_dim(dim)
+        ]
+        if missing:
+            raise ValueError(f"Cannot reduce missing dim(s): {missing}")
         
     def _validate_data(self, data, **kwargs):
         if not isinstance(data, (xr.DataArray, xr.Dataset, DataArrayGroupBy)):
@@ -56,7 +94,11 @@ class ReduceDim(Calculator):
         ):
             return type_registry.ScalarSignal
         if input.data_schema.is_point_process():
-            if not input.data_schema.is_point_process_essential(self.dim):
+            reduces_essential = any(
+                input.data_schema.is_point_process_essential(dim)
+                for dim in self.dims
+            )
+            if not reduces_essential:
                 return type_registry.PointProcessSignal
             else:
                 if input.data_schema.has_dim("time"):

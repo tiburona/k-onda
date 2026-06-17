@@ -1,4 +1,7 @@
-from k_onda.central import type_registry
+from collections import defaultdict
+from copy import copy
+
+from k_onda.central import type_registry, AxisKind
 
 
 class CalculateMixin:
@@ -121,12 +124,7 @@ class AggregateMixin:
 
     def mean(self, across=None, group_by=None, preserve_groups=False, order='sequential'):
         
-        if isinstance(self, type_registry.Collection):
-            data_schema = self.signals[0].data_schema
-        elif isinstance(self, type_registry.CollectionMap):
-            data_schema = next(iter(self.values()))[0].data_schema
-        else:
-            data_schema = self.data_schema
+        planned_data_schema = self.get_planned_data_schema()
 
         if group_by is None:
             group_by = []
@@ -138,53 +136,130 @@ class AggregateMixin:
         elif isinstance(across, str):
             across = [across]
 
-        collection_dims = [dim for dim in across + group_by 
-                           if dim not in data_schema.dim_names]
+        # Any dims that are not in the xarray data at the time of execution must 
+        # exist as metadata on the signal object. 
+        # E.g. "subject", "session", "neuron_type"
+        collection_coords = [dim for dim in across + group_by 
+                             if not planned_data_schema.is_selectable(dim)]
 
+        # Collect any of these dims and turn them into coords on a single long 
+        # dim in the xarray data.
         if not isinstance(self, type_registry.Signal):
             signal = type_registry.Aggregator(
-                group_by=collection_dims,
-                preserve_groups = preserve_groups
+                collection_coords=collection_coords,
+                preserve_groups = preserve_groups, 
+                planned_input_schema = planned_data_schema
                 )(self)
             
             if not len(across):
-                across = ["signals"]
+                across = ["signal"]
         else:
             signal = self
 
-        return self._reduce_dims_in_data(signal, across, group_by, signal.data_schema, order)
+        self._validate_params_on_aggregate(across, group_by, signal.data_schema)
 
-
-    def _reduce_dims_in_data(self, signal, across, group_by, data_schema, order):
-        grouping_coords_in_data = [coord for coord in group_by if data_schema.coord_names]
-
-        reduced_dims_in_data = [dim for dim in across if dim in data_schema.dim_names]
-
-        if group_by:
-            signal = type_registry.GroupBy(coords=grouping_coords_in_data)(signal)
-
-        if order == 'simultaneous':
-            signal = type_registry.ReduceDim(dim=reduced_dims_in_data)(signal)
-        else:
-            for dim in reduced_dims_in_data:
-                signal = type_registry.ReduceDim(dim=dim)(signal)
+        if order == "simultaneous": 
+            raise NotImplementedError(
+                    "Simultaneous averaging has not been implemented."
+                )
+           
+        stages = self._create_stages(group_by, across, signal.data_schema)
+    
+        signal = self._group_and_reduce_in_stages(signal, stages)
 
         return signal
     
-    def candidate_entities(self, signal):
-        pass
-        
-       
+    def _validate_params_on_aggregate(self, across, group_by, data_schema):
+        for coord in group_by:
+            if coord not in data_schema.collectable_coords:
+                raise ValueError(f"Coord {coord} not found in data schema")
+        for dim in across:
+            if not data_schema.is_selectable(dim):
+                raise ValueError(f"{dim} not found in data schema.")
 
+    def _find_long_across_dims(self, across, group_by, data_schema):
+
+        if data_schema.observation_axis:
+            long_dim = data_schema.observation_axis.name
+            long_across = [
+                dim for dim in across 
+                if dim not in data_schema.dim_names
+                if dim in data_schema.coord_names_by_dim(long_dim)
+                ]
+            long_groupby = [
+                coord for coord in group_by
+                if data_schema.axis_by_coord_name(coord).name == long_dim
+            ]
+        else:
+            long_dim = None
+            long_across = []
+            long_groupby = []
+
+        return long_dim, long_across, long_groupby
+
+    def _create_stages(self, group_by, across, data_schema):
+        long_dim, long_across, long_groupby = self._find_long_across_dims(across, group_by, data_schema)
+        ax_coord_dict = data_schema.ax_coord_map(group_by)
+
+        dims_to_reduce = list(across)
+        if long_dim:
+            # Insert long dim where it goes in the order of concrete dims to reduce
+            for i, dim in enumerate(across):
+                if dim in long_across:
+                    dims_to_reduce.insert(i, long_dim)
+                    break
+
+        stages = []
+        for dim in dims_to_reduce:
+            stage = {"reduce_dim": dim}
+            if dim == long_dim:
+                stage["group_by"] = list(dict.fromkeys(long_groupby + long_across))
+            elif dim in long_across:
+                stage["group_by"] = []
+            elif ax_coord_dict.get(dim):
+                stage["group_by"] = [coord for coord in group_by if coord in ax_coord_dict.get(dim)]
+            else:
+                stage["group_by"] = []
+            stages.append(stage)
+
+        return stages
+        
+    def _group_and_reduce_in_stages(self, signal, stages):
+
+        for stage in stages:
+            if stage.get("group_by"):
+                signal = type_registry.GroupBy(coords=stage["group_by"])(signal)
+            signal = type_registry.ReduceDim(stage["reduce_dim"])(signal)
+        
+        return signal
+    
+    def get_planned_data_schema(self):
+        planned_obj = self.planned_for_schema(self)
+
+        if isinstance(planned_obj, type_registry.Collection):
+            return planned_obj.signals[0].data_schema
+        elif isinstance(planned_obj, type_registry.CollectionMap):
+            return next(iter(planned_obj.values()))[0].data_schema 
+        else:
+            return planned_obj.data_schema
+
+    def planned_for_schema(self, obj):
+        if isinstance(obj, type_registry.Signal):
+            return obj.plan_on_signal()
+        if isinstance(obj, type_registry.Collection):
+            return type_registry.Collection([self.planned_for_schema(member) for member in obj])
+        if isinstance(obj, type_registry.CollectionMap):
+            return type_registry.CollectionMap(
+                groups={k: self.planned_for_schema(v) for k, v in obj.items()}
+                )
+        if isinstance(obj, type_registry.DataIdentity):
+            return type_registry.Collection([
+                self.planned_for_schema(component) for component in obj.data_components
+            ])
+        
+   
         
 
-
-       
-
-
-        
-        
-        
     
 
         

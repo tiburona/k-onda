@@ -336,7 +336,7 @@ class Slicer(Calculator):
                     *[CoordInfo(name=condition) for condition in self.locus.member_condition_names]
                     )
             )
-            arr_schema = arr_schema.with_added(new_axis)
+            arr_schema = arr_schema.with_axis(new_axis, if_exists="error")
             arr_schema = arr_schema.rename_axis(
                 arr_schema.concrete_dim_from(self.locus.dim), self._new_dim_coord()
                 )
