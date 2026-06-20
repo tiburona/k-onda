@@ -181,7 +181,15 @@ Build the pieces that allow K-Onda to grow.
 
 ---
 
-### 22. Beyond e-phys
+
+### 22. Array Layer
+
+- Identify the generic xarray-adjacent layer: schemas, metadims, ordinal axes,
+  nested selection reshaping, factor coords, grouping/reduction helpers.
+- Evaluate whether this should become an xarray accessor or standalone package.
+
+
+### 23. Beyond e-phys
 
 - Consider what kind of classes would support researchers with multi-modal data.  
 
@@ -192,19 +200,26 @@ Aspirational goals.
 
 ---
 
-### 23. Statistical Environment & Standardized Outputs
+### 24. Statistical Environment & Standardized Outputs
 - Embed a version-locked Python/R environment for statistical analyses  
 - Return standardized JSON summaries for automated plot annotations  
 
 ---
 
-### 24. Plugin Ecosystem
+### 25. Plugin Ecosystem
 - Formalize interfaces so external labs can contribute new transformers, signal types, or plot types  
 - Define a governance model for reviewing and merging popular plugins  
 
 ---
 
-### 25. GUI for Publication-Ready Analysis
+
+### 26. Xarray Extension Library
+
+- Depending on the evaluation in (22) publish the xarray extension as a standalone library.
+
+---
+
+### 27. GUI for Publication-Ready Analysis
 - Cross-platform GUI for assembling figures  
 - Automatic embedding of provenance  
 - Drag-and-drop layout editing  
@@ -212,13 +227,13 @@ Aspirational goals.
 
 ---
 
-### 26. Multi-user server mode: Auth, Roles (RBAC), and Remote Execution
+### 28. Multi-user server mode: Auth, Roles (RBAC), and Remote Execution
 - Support authentication (distinct user identities) and authorization (role-based permissions).
 - Support a server/worker deployment: run on a host machine; connect from a client.
 - Add a security review focused on user-supplied configs/plugins and any user-injectable code paths.
 
 ---
 
-### 27. AI-Assisted Statistical and Analytical Guidance
+### 29. AI-Assisted Statistical and Analytical Guidance
 - Suggest appropriate analyses  
 - Provide retrieval-augmented explanations referencing the user’s data  

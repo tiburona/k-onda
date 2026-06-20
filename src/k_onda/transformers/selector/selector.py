@@ -11,29 +11,30 @@ from k_onda.graph import list_nodes, rebuild_tree, walk_graph
 from k_onda.central import (
     Schema,
     DatasetSchema,
-    type_registry,
+    type_registry as tr,
     DimBounds,
+    DimBoundsArray,
     AxisInfo,
     AxisKind,
     CoordInfo,
 )
 
 # Why it requires three different classes to accomplish selection:
-# The first, Selector, marks the user's intention to select with whatever
+# The first, SpecifySelection, marks the user's intention to select with whatever
 # configuration they chose.
 #
-# The second, SelectionPlanner, executes only when the user requests `.data`,
+# The second, PlanSelection, executes only when the user requests `.data`,
 # or calls `plan_selection()` for debugging purposes, because correctly
 # calculating padlen and deciding when to trim depend on knowing the entire
 # shape of the graph. Specifically, a selection's bounds can depend on whether
 # a later selector had a window. Further, you should only trim padding once,
 # after every selection has concluded.
 #
-# The third, Slicer, actually performs select operations on the data array.
+# The third, SliceSelection, actually performs select operations on the data array.
 
 
-@type_registry.register
-class Selector(Transformer):
+@tr.register
+class SpecifySelection(Transformer):
     name = "selector"
 
     def __init__(self, mode="local", locus=None, new_dim=None, window=None):
@@ -41,6 +42,7 @@ class Selector(Transformer):
         self.locus = locus
         self.new_dim = new_dim
         self.window = window
+        # Todo: raise if new_dim and locus has multiple overlapping windows.
 
     def _call_on_signal(self, signal, key_spec):
         output = super()._call_on_signal(signal, key_spec)
@@ -53,7 +55,7 @@ class Selector(Transformer):
 
     @property
     def fixed_output_class(self):
-        return type_registry.SelectorSignal
+        return tr.SelectorSignal
 
     def _validate_input(self, signal, key_spec=None):
 
@@ -62,7 +64,7 @@ class Selector(Transformer):
                 "Use signal.payload(key).select(...) or signal[key].select"
             )
         if signal.data_schema.is_point_process() and isinstance(
-            self.locus, type_registry.LocusSet
+            self.locus, tr.LocusSet
         ):
             raise NotImplementedError(
                 "This operation will result in a ragged array and "
@@ -70,16 +72,16 @@ class Selector(Transformer):
             )
 
 
-class SelectionPlanner(Transformer):
+class PlanSelection(Transformer):
     @property
     def fixed_output_class(self):
-        return type_registry.SelectorSignal
+        return tr.SelectorSignal
 
     def _call_on_signal(self, signal, key_spec=None):
 
         selector_nodes = [
             node for node in list_nodes(signal) if hasattr(node, "transformer")
-            and isinstance(node.transformer, Selector)
+            and isinstance(node.transformer, SpecifySelection)
         ]
 
         leaf = signal
@@ -249,7 +251,7 @@ class SelectionPlanner(Transformer):
         selector = selector_signal.transformer
         new_dim = selector.new_dim
         window = selector.window if not is_trim else None
-        slicer = Slicer(
+        slicer = SliceSelection(
             selector.mode,
             selector.locus,
             new_dim,
@@ -278,7 +280,7 @@ class SelectionPlanner(Transformer):
         return new_leaf
 
 
-class Slicer(Calculator):
+class SliceSelection(Calculator):
     def __init__(
             self, 
             mode, 
@@ -331,8 +333,12 @@ class Slicer(Calculator):
             new_axis = AxisInfo(
                 name=self.new_dim,
                 kind=AxisKind.ORDINAL_INDEX,
+                created_from_dim=self.locus.dim,
+                created_from_metadim=metadim,
                 coords=(
                     CoordInfo(name=self.new_dim), 
+                    CoordInfo(f"{self.new_dim}_start_{metadim}", metadim=metadim),
+                    CoordInfo(f"{self.new_dim}_stop_{metadim}", metadim=metadim),
                     *[CoordInfo(name=condition) for condition in self.locus.member_condition_names]
                     )
             )
@@ -342,7 +348,7 @@ class Slicer(Calculator):
                 )
             
             dim_order = self.output_dim_order(arr_schema.dim_names, arr_schema)
-            arr_schema.reorder_axes(dim_order)
+            arr_schema = arr_schema.reorder_axes(dim_order)
 
             return arr_schema
 
@@ -395,7 +401,7 @@ class Slicer(Calculator):
 
     def _apply(self, data, data_schema=None):
 
-        if isinstance(data_schema, type_registry.DatasetSchema):
+        if isinstance(data_schema, tr.DatasetSchema):
             if data_schema.is_point_process(require_all=True):
                 return self.select_point_process(data, data_schema)
             else:
@@ -428,17 +434,6 @@ class Slicer(Calculator):
         
         trimmed = data.where(mask, drop=True)
         return trimmed
-
-    @staticmethod   
-    def make_bounds_mask_over_dims(data, bounds):
-        return reduce(
-                and_,
-                [
-                    (data.coords[dim] >= bounds[dim][0])
-                    & (data.coords[dim] < bounds[dim][1])
-                    for dim in bounds
-                ],
-            )
     
     def compute_selection_bounds(self):
         if self.is_trim:
@@ -457,18 +452,90 @@ class Slicer(Calculator):
         if self.padlen:
             coord_correction += self.padlen[self.locus.dim][0]
         return coord_correction
+    
+    def mask_by_parent_intervals(self, data_schema):
+        if not self.new_dim:
+            return False
+        
+        coord = data_schema.coord_by_name(self.locus.dim)
+        if coord and coord.is_relative:
+            return False
+        
+        if not data_schema.ordinal_axes_created_from(self.locus.metadim):
+            return False
+        
+        return True
+
+    def get_parent_interval_masks(self, data, data_schema, selection_bounds):
+    
+        parent_axes = data_schema.ordinal_axes_created_from(self.locus.metadim)
+
+        ordinal_axis_masks = []
+
+        for ord_ax in parent_axes:
+           
+            start_coord = data.coords[f"{ord_ax.name}_start_{self.locus.metadim}"]
+            stop_coord = data.coords[f"{ord_ax.name}_stop_{self.locus.metadim}"]
+            ordinal_bounds = DimBoundsArray.from_coords(
+                start=start_coord, stop=stop_coord, dim=self.locus.dim
+            )
+
+            # a list of len selection_bounds
+            if getattr(self.locus[0], "anchor", None):
+                indices_of_parent_intervals = ordinal_bounds.containing_indices(
+                    [interval.anchor.value for interval in self.locus], self.locus.dim
+                    )
+            else:
+                indices_of_parent_intervals = ordinal_bounds.containing_indices(
+                    selection_bounds, self.locus.dim
+                    )
+            
+            # filter
+
+            empty_mask = xr.full_like(data.coords[ord_ax.name], False, dtype=bool)
+
+            ordinal_bounds_mask = [
+                data.coords[ord_ax.name] == data.coords[ord_ax.name][ind]
+                if ind is not None
+                else empty_mask
+                for ind in indices_of_parent_intervals
+            ]
+
+            ordinal_axis_masks.append(ordinal_bounds_mask)
+
+        return list(zip(*ordinal_axis_masks))
+        
+    @staticmethod   
+    def make_bounds_mask_over_dims(data, bounds):
+        return reduce(
+                and_,
+                [
+                    (data.coords[dim] >= bounds[dim][0])
+                    & (data.coords[dim] < bounds[dim][1])
+                    for dim in bounds
+                ],
+            )
 
     def select_continuous(self, data, data_schema):
 
         original_dim = data_schema.concrete_dim_from(self.locus.dim)
 
-        selection_bounds = self.selection_bounds.to_array_of_dicts()
+        selection_bounds = self.selection_bounds.to_array()
+
+        mask_by_parent_intervals = self.mask_by_parent_intervals(data_schema)
+
+        if mask_by_parent_intervals:
+            ordinal_bounds = self.get_parent_interval_masks(data, data_schema, selection_bounds)
 
         selected = []
+        kept_indices = []
 
-        for bounds in selection_bounds:
+        for i, bounds in enumerate(selection_bounds):
 
             mask = self.make_bounds_mask_over_dims(data, bounds)
+            if mask_by_parent_intervals:
+                for ob_mask in ordinal_bounds[i]:
+                    mask = mask & ob_mask
 
             sliced = data.where(mask, drop=True)
 
@@ -479,6 +546,7 @@ class Slicer(Calculator):
                 if d != original_dim and sliced.sizes[d] == 1:
                     sliced = sliced.squeeze(d)
             selected.append(sliced)
+            kept_indices.append(i)
 
         if not selected:
             raise ValueError(
@@ -493,21 +561,24 @@ class Slicer(Calculator):
 
         selected = self.attach_continuous_relative_coords(selected)
         selected = self.swap_coords(selected)
-        selected = self.concat_or_extract(selected)
-        selected = self.unfold_new_dim(selected, data_schema, parent_coords)
-        selected = self.attach_condition_coords(selected)
+        selected = self.concat_or_extract(selected, kept_indices)
+        selected = self.restore_ordinal_dims(selected, data_schema, parent_coords)
+        selected = self.attach_condition_coords(selected, kept_indices)
         selected = self.transpose(selected, data_schema)
 
         return selected
     
-    def attach_condition_coords(self, selected):
-        conditions = reduce(and_, [set(loc.conditions.keys()) for loc in self.locus])
+    def attach_condition_coords(self, selected, kept_indices):
+
+        locs = [loc for i, loc in enumerate(self.locus) if i in kept_indices]
+
+        conditions = reduce(and_, [set(loc.conditions.keys()) for loc in locs])
 
         selected = selected.assign_coords(
             {
                 condition: (
                     self.new_dim, 
-                    [loc.conditions.get(condition) for loc in self.locus]
+                    [loc.conditions.get(condition) for loc in locs]
                     ) for condition in conditions
                 }
             )
@@ -525,12 +596,16 @@ class Slicer(Calculator):
             and set(coord.dims).issubset(ordinal_dims)
         }
 
-    def unfold_new_dim(self, arr, data_schema, parent_coords=None):
+    def restore_ordinal_dims(self, arr, data_schema, parent_coords=None):
+        # If child selections were made inside parent ordinal rows, reconstruct 
+        # that hierarchy as real dimensions instead of leaving parent identity 
+        # as a coordinate on the child dimension.
 
         parent_coords = parent_coords or {}
-
         new_dim = self.new_dim
-        structure = [
+
+        # any previously created ordinal dims are at this point coords on the new dim
+        parent_ordinal_coords = [
             name
             for name, c in arr.coords.items()
             if c.dims == (new_dim,) 
@@ -538,24 +613,24 @@ class Slicer(Calculator):
             and name in data_schema.names_by_axis_kind(AxisKind.ORDINAL_INDEX)
         ]
 
-        if not structure:
+        if not parent_ordinal_coords:
             arr = arr.assign_coords(parent_coords)
             return arr
 
-        # inner index: position within each unique tuple of structure-values
-        keys = list(zip(*[arr.coords[s].data for s in structure]))
+        # inner index: position within each unique tuple of parent ordinal coords
+        keys = list(zip(*[arr.coords[poc].data for poc in parent_ordinal_coords]))
         counts = {}
-        inner = np.empty(len(keys), dtype=int)
+        index_within_parent_ordinal_coords = np.empty(len(keys), dtype=int)
         for i, k in enumerate(keys):
             counts[k] = counts.get(k, -1) + 1
-            inner[i] = counts[k]
+            index_within_parent_ordinal_coords[i] = counts[k]
 
-        inner_name = f"__{new_dim}_inner"  # unique placeholder
+        inner_name = f"__{new_dim}_index_within_parent_ordinal_coords"  # unique placeholder
 
         arr = (
-            arr.drop_vars(new_dim)
-            .assign_coords({inner_name: (new_dim, inner)})
-            .set_index({new_dim: structure + [inner_name]})
+            arr.drop_vars(new_dim)  
+            .assign_coords({inner_name: (new_dim, index_within_parent_ordinal_coords)})
+            .set_index({new_dim: parent_ordinal_coords + [inner_name]})
             .unstack(new_dim)
             .rename({inner_name: new_dim})
         )
@@ -621,8 +696,27 @@ class Slicer(Calculator):
             swapped.append(arr)
 
         return swapped
+    
+    def assign_ordinal_coordinates(self, data, kept_indices):
+        new_dim = self.new_dim or "interval"
 
-    def concat_or_extract(self, data):
+        def make_unitful_ord_coord(ind):
+            coord = [bounds[ind] for i, bounds in enumerate(self.locus.dim_bounds[self.locus.dim])
+                     if i in kept_indices]
+            unit = coord[0].units
+            return np.array([q.to(unit).magnitude for q in coord]) * unit
+
+        data = data.assign_coords(
+            {
+                new_dim: np.arange(data.sizes[new_dim]),
+                f"{new_dim}_start_{self.locus.metadim}": (new_dim, make_unitful_ord_coord(0)),
+                f"{new_dim}_stop_{self.locus.metadim}": (new_dim, make_unitful_ord_coord(1))
+            }
+        )
+
+        return data
+
+    def concat_or_extract(self, data, kept_indices):
 
         for i, arr in enumerate(data):
             if i == 0:
@@ -637,18 +731,13 @@ class Slicer(Calculator):
 
             selected_data = xr.concat(
                 data,
-                dim=self.new_dim or "intervals",
+                dim=self.new_dim or "interval",
                 combine_attrs="no_conflicts",
                 join="exact",
                 coords="different",
             )
-            selected_data = selected_data.assign_coords(
-                {
-                    self.new_dim or "intervals": np.arange(
-                        selected_data.sizes[self.new_dim or "intervals"]
-                    )
-                }
-            )
+
+            selected_data = self.assign_ordinal_coordinates(selected_data, kept_indices)
 
         else:
             selected_data = data[0]
@@ -660,7 +749,7 @@ class Slicer(Calculator):
 
         for dim in self.selection_bounds:
             if data_schema.is_value_metadim(dim):
-                if isinstance(data_schema, type_registry.DatasetSchema):
+                if isinstance(data_schema, tr.DatasetSchema):
                     source = data[data_schema.variable_for_metadim(dim)]
                 else:
                     source = data
@@ -693,11 +782,8 @@ class Slicer(Calculator):
         return selected
     
     def output_dim_order(self, dims, data_schema):
-        ordinal_dims =  [
-            *data_schema.names_by_axis_kind(AxisKind.ORDINAL_INDEX),
-            self.new_dim
-            ]
-
+        ordinal_dims =  data_schema.names_by_axis_kind(AxisKind.ORDINAL_INDEX)
+        
         feature_dims = [
             dim for dim in dims
             if dim not in ordinal_dims

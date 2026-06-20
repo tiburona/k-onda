@@ -1,14 +1,14 @@
 from .magnitude_calculators import Normalize, Scale, Shift
 from .core import Calculator, PaddingCalculator, Transform, Transformer
 from .data_shape_transformers import StackSignals, UnstackSignals
-from .descriptive_calculators import Histogram, ReduceDim
+from .descriptive_calculators import Histogram
 from .event_calculators import Rate
 from .waveform_calculators import FWHM
 from .filter_calculators import Filter, MedianFilter
 from .mask_calculators import ApplyMask, Intersection, Threshold
 from .spectral_calculators import Spectrogram
-from .selector import Selector, SelectMixin, Slicer, SelectionPlanner
-from .aggregator import Aggregator
+from .selector import SpecifySelection, SelectMixin, SliceSelection, PlanSelection
+from .aggregator import AssembleArray, GroupBy, ReduceDim
 from .feature_registry import feature_registry
 from .feature_transformers import ExtractFeatures
 from .classifier_calculators import KMeans
@@ -33,12 +33,13 @@ __all__ = [
     "ApplyMask",
     "StackSignals",
     "UnstackSignals",
-    "Selector",
+    "SpecifySelection",
     "SelectMixin",
-    "Aggregator",
+    "AssembleArray",
+    "GroupBy",
     "feature_registry",
     "ExtractFeatures",
     "KMeans",
-    "Slicer",
-    "SelectionPlanner"
+    "SliceSelection",
+    "PlanSelection"
 ]

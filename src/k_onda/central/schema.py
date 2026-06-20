@@ -29,6 +29,9 @@ class AxisInfo:
     kind: AxisKind  # structural: how the machinery treats it
     metadim: str | None = None  # semantic: what physical quantity it represents
     coords: tuple[CoordInfo, ...] = ()  # all the coords available on the axis
+    created_from_metadim: str | None = None  # these coords are provenance 
+    created_from_dim: str | None = None  # metadata specific to ordinal axes 
+ 
 
     def __post_init__(self):
         coords = tuple(self.coords)
@@ -153,7 +156,9 @@ class Schema:
             name=name, 
             kind=old_axis.kind, 
             metadim=old_axis.metadim,
-            coords=old_axis.coords
+            coords=old_axis.coords, 
+            created_from_metadim=old_axis.created_from_metadim, 
+            created_from_dim=old_axis.created_from_dim
             )
         for i, axis in enumerate(new_schema.axes):
             if axis.name == old_name:
@@ -256,7 +261,13 @@ class Schema:
     def update_axis_coords(self, ax, coords):
         new_schema = copy(self)
         coords = copy(ax.coords) + coords
-        new_ax = AxisInfo(name=ax.name, metadim=ax.metadim, kind=ax.kind, coords=coords)
+        new_ax = AxisInfo(
+            name=ax.name,
+            metadim=ax.metadim, 
+            kind=ax.kind, 
+            coords=coords,
+            created_from_dim=ax.created_from_dim,
+            created_from_metadim=ax.created_from_metadim)
         new_schema = new_schema.without(ax.name)
         new_schema = new_schema.with_added(new_ax)
         return new_schema
@@ -280,6 +291,8 @@ class Schema:
             kind=axis.kind,
             metadim=axis.metadim,
             coords=new_coords,
+            created_from_dim=axis.created_from_dim,
+            created_from_metadim=axis.created_from_metadim
         )
 
         return self.without(axis.name).with_added(new_axis)
@@ -293,11 +306,17 @@ class Schema:
         if set(axis_names) != {ax.name for ax in self.axes}:
             raise ValueError("axis_names must contain exactly the schema axes")
         by_name = {ax.name: ax for ax in self.axes}
-        return type(self)(axes=tuple(by_name[name] for name in axis_names))
+        return type(self)(
+            axes=tuple(by_name[name] for name in axis_names),
+              value_metadim=self.value_metadim
+              )
 
     def get_common_metadim(self, our_coord, other_schema, other_coord):
         metadim = self.metadim_from(our_coord)
         return metadim if metadim == other_schema.metadim_from(other_coord) else None
+    
+    def ordinal_axes_created_from(self, metadim):
+        return [ax for ax in self.axes if ax.created_from_metadim == metadim]
             
 
 @type_registry.register

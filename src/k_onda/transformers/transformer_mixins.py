@@ -145,7 +145,7 @@ class AggregateMixin:
         # Collect any of these dims and turn them into coords on a single long 
         # dim in the xarray data.
         if not isinstance(self, type_registry.Signal):
-            signal = type_registry.Aggregator(
+            signal = type_registry.AssembleArray(
                 collection_coords=collection_coords,
                 preserve_groups = preserve_groups, 
                 planned_input_schema = planned_data_schema

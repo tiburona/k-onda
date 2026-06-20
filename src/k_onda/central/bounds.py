@@ -55,6 +55,12 @@ class DimPair:
     def overlaps(self, other):
         return self[0] <= other[1] and other[0] <= self[1]
     
+    def contains_value(self, value):
+        return self[0] <= value < self[1]
+    
+    def contains_pair(self, other):
+        return other[0] >= self[0] and other[1] <= self[1]
+    
 
 class SpanDimPair(DimPair):
     pass
@@ -201,3 +207,64 @@ class DimBounds(DictDelegator):
                 {dim: bounds[i] for dim, bounds in self._dim_bounds.items()}
                 for i in range(n)
             ]
+        
+    def to_array(self):
+        return DimBoundsArray(self)
+        
+
+class DimBoundsArray:
+    def __init__(self, dim_bounds=None, array=None):
+        self.array = array or self.convert_bounds_to_array(dim_bounds)
+
+    def __iter__(self):
+        return iter(self.array)
+    
+    def __len__(self):
+        return len(self.array)
+    
+    def __getitem__(self, i):
+        return self.array[i]
+    
+
+    @classmethod
+    def from_coords(cls, start, stop, dim):
+        array = [DimBounds(dim_pair_map={dim: SpanDimPair(pair)}) for pair in zip(start, stop)] 
+        return cls(array=array)
+    
+    def containing_indices(self, values_or_bounds, dim):
+
+        if isinstance(values_or_bounds[0], DimPair):
+            contains = lambda our_bounds, their_value: our_bounds[dim].contains_pair(their_value)
+        elif isinstance(values_or_bounds[0], DimBounds):
+            contains = lambda our_bounds, their_value: our_bounds[dim].contains_pair(their_value[dim])
+        elif isinstance(values_or_bounds[0], pint.Quantity):
+            contains = lambda our_bounds, their_value: our_bounds[dim].contains_value(their_value)
+        else:
+            raise TypeError("Unknown type for values_or_bounds")
+        
+        indices = [[i for i, our_bounds in enumerate(self) if contains(our_bounds, val_or_bnds)]
+                   for val_or_bnds in values_or_bounds]
+        
+        if any(len(inds) > 1 for inds in indices):
+            raise ValueError("Selector loci must have exactly one parent interval.")
+        
+        return [inds[0] if len(inds) else None for inds in indices]
+        
+        
+    def generate_mask(self, data):
+        pass
+    
+    def convert_bounds_to_array(self, dim_bounds):
+        if isinstance(next(iter(dim_bounds.values())), DimPair):
+            return [dim_bounds]
+        else:
+            # I have a dictionary of lists
+            # and I want a list of dictionaries
+            n = len(list(dim_bounds.values())[0])
+            return [
+                DimBounds(
+                    dim_pair_map={dim: bounds[i] for dim, bounds in dim_bounds.items()}
+                    )
+                for i in range(n)
+            ]
+

@@ -6,7 +6,7 @@ from .central import operations
 
 from .dataarray_factories import make_time_series
 
-from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds
+from .bounds import PadDimPair, DimPair, SpanDimPair, DimBounds, DimBoundsArray
 
 
 __all__ = [
@@ -19,6 +19,7 @@ __all__ = [
     "PadDimPair",
     "SpanDimPair",
     "DimBounds",
+    "DimBoundsArray",
     "AxisInfo",
     "AxisKind",
     "CoordInfo",

@@ -4,7 +4,7 @@ from k_onda.central import type_registry
 from k_onda.central import DimBounds, PadDimPair
 from k_onda.utils import w_units
 
-from .selector import Selector, SelectionPlanner
+from .selector import SpecifySelection, PlanSelection
 
 
 @dataclass
@@ -140,7 +140,7 @@ class SelectMixin:
                 selection = selection.to_intervals(window_span)
                 window = DimBounds({selection.metadim: window_span})
 
-        return Selector(mode, selection, new_dim, window)(signal)
+        return SpecifySelection(mode, selection, new_dim, window)(signal)
 
     def parse_select_kwargs(self, kwargs, selection, conditions):
 
@@ -187,5 +187,5 @@ class SelectMixin:
         )
 
     def plan_on_signal(self):
-        leaf = SelectionPlanner()(self)
+        leaf = PlanSelection()(self)
         return leaf
