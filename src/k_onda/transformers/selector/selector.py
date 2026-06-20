@@ -42,7 +42,6 @@ class SpecifySelection(Transformer):
         self.locus = locus
         self.new_dim = new_dim
         self.window = window
-        # Todo: raise if new_dim and locus has multiple overlapping windows.
 
     def _call_on_signal(self, signal, key_spec):
         output = super()._call_on_signal(signal, key_spec)
@@ -165,8 +164,6 @@ class PlanSelection(Transformer):
 
             live_dims = set(ps_node.transformer.locus.dim_bounds)
 
-            # TODO: in a true DAG (i.e., not a tree, with consumers that share an upstream node,
-            # this can create multiple slicers.  Need to come back to this.)
             walk_graph(ps_node, live_dims, step=_check_and_make)
 
     def _check_and_make(
@@ -554,7 +551,7 @@ class SliceSelection(Calculator):
             )
 
         if not self.new_dim:
-            selected = self.concat_or_extract(selected)
+            selected = self.concat_or_extract(selected, kept_indices)
             return selected
         
         parent_coords = self.parent_metadata_coords(data, data_schema)
@@ -735,6 +732,7 @@ class SliceSelection(Calculator):
                 combine_attrs="no_conflicts",
                 join="exact",
                 coords="different",
+                compat="equals"
             )
 
             selected_data = self.assign_ordinal_coordinates(selected_data, kept_indices)

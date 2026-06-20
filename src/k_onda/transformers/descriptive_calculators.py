@@ -6,7 +6,6 @@ import warnings
 
 import numpy as np
 import xarray as xr
-from xarray.core.groupby import DataArrayGroupBy
 
 from .core import Calculator
 from k_onda.central import type_registry, AxisInfo, AxisKind, CoordInfo
@@ -158,7 +157,7 @@ class Histogram(Calculator):
         else:
             slice_weights = False
 
-        data = np.asarray(data)
+        data = np.asarray(data.pint.magnitude)
         if is_unitful(hist_range[0]):
             hist_range = np.asarray([b.magnitude for b in hist_range])
         data = np.moveaxis(data, axis, -1)

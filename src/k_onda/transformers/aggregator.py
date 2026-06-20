@@ -20,7 +20,7 @@ class AssembleArray(Transformer):
     def __call__(self, input, key=None, key_output_mode=None):
 
         if key is not None or key_output_mode is not None:
-            raise NotImplementedError("Key access is not yet implemented for Aggregator")
+            raise NotImplementedError("Key access is not yet implemented for AssembleArray.")
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
@@ -158,7 +158,7 @@ class AssembleArray(Transformer):
         return arr
     
     def _get_tolerance(self, coord_da):
-        values = np.asarray(coord_da)
+        values = np.asarray(coord_da.pint.magnitude)
         values = values[np.isfinite(values)]
         values = np.sort(np.unique(values))
 
@@ -211,14 +211,14 @@ class AssembleArray(Transformer):
                 tolerance = self._get_tolerance(coord) 
                 if tolerance is None:
                     equal = all(np.array_equal(
-                        np.asarray(first.coords[name]), 
-                        np.asarray(arr.coords[name])
+                        np.asarray(first.coords[name].pint.magnitude), 
+                        np.asarray(arr.coords[name].pint.magnitude)
                     )
                     for arr in rest)
                 else:
                     equal = all(np.allclose(
-                        np.asarray(first.coords[name]), 
-                        np.asarray(arr.coords[name]),
+                        np.asarray(first.coords[name].pint.magnitude), 
+                        np.asarray(arr.coords[name].pint.magnitude),
                         atol=tolerance,
                         rtol=0.0
                     )
@@ -230,8 +230,8 @@ class AssembleArray(Transformer):
             else:
                 if any(
                     not np.array_equal(
-                        np.asarray(first.coords[name]),
-                        np.asarray(arr.coords[name])
+                        np.asarray(first.coords[name].pint.magnitude),
+                        np.asarray(arr.coords[name].pint.magnitude)
                         )
                     for arr in rest
                 ):
@@ -346,12 +346,6 @@ class ReduceDim(Calculator):
         return getattr(data, self.method)(dim=self.dims, keep_attrs=True)
 
     def output_schema(self, input_schema):
-        # TODO: right now, if you grouped the long axis, you can't carry over
-        # any ungrouped coords.  For example, if you had neuron and neuron type
-        # on the long axis, and then you group by neurons, neuron_type is lost
-        # Eventually you should be able to migrate that coord over to the new axis,
-        # but that will require that somewhere knowledge is encoded about how to
-        # migrate them
         if isinstance(input_schema, type_registry.DatasetSchema):
             return input_schema.map_schemas(self._reduce_schema)
         

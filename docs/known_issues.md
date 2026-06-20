@@ -57,10 +57,20 @@ You can't `select_point_process` yet because there's not yet support for ragged 
 
 The only kind of filtering by condition you can do is by equality; needs expansion.
 
-Selectors should probably be edited out of the graph after Slicer placement.
+SpecifySelection transformers should probably be edited out of the graph after Slicer placement.
 
-When selecting intervals multiple times (e.g. epochs then events), if those intervals overlap (e.g., the window of an event extends into the last epoch), it currently produces unexpected shapes. The selection planner eventually needs to preserve parent-child locus relationships and pass parent identity constraints to the slicer, e.g. `time in window AND trial == event.parent_epoch`.  This is really a subset of 
-a broad class of unknown unknowns that needs a test suite that covers a wide swathe
-of potential setups/user behavior.  
+When making a new ordinal dim during selection, the program should validate and raise if the new loci belong to more than one earlier ordinal dim.  
+
+In a true DAG (i.e., not a tree, with consumers that share an upstream node), `walk_graph` will create multiple SelectionSlicers.  At some point it's consumer named argument needs to be more expressive to prevent this kind of duplication.
 
 `attach_condition_coords` only attaches coords if all loci have the condition (`conditions = reduce(and_, [set(l.conditions.keys()) for l in self.locus])`).  Should decide if that's the desired behavior.
+
+Selection (or maybe aggregation, or both) is already slow.  It needs to be time profiled.
+
+
+## Aggregation 
+
+Right now, if you grouped the long axis (created by AssembleArray), you can't carry over any ungrouped coords.  For example, if you had neuron and neuron type on the long axis, and then you group by neurons, neuron_type is lost Eventually you should be able to migrate that coord over to the new axis, but that will require that somewhere knowledge is encoded about how to migrate them.
+
+You should be able to calculate a simultaneous mean (i.e. unweighted by number of members of a group.)
+

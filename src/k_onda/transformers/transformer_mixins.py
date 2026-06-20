@@ -1,7 +1,5 @@
-from collections import defaultdict
-from copy import copy
 
-from k_onda.central import type_registry, AxisKind
+from k_onda.central import type_registry
 
 
 class CalculateMixin:

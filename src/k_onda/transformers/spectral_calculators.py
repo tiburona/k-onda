@@ -45,7 +45,7 @@ class Spectrogram(PaddingCalculator):
         time_dim = data_schema.concrete_dim_from("time")
         leading_dims = [d for d in data.dims if d != time_dim]
         data.transpose(*leading_dims, time_dim)
-        data_np = np.asarray(data)
+        data_np = np.asarray(data.pint.magnitude)
         if data_np.ndim == 1:
             data_3d = data_np[np.newaxis, np.newaxis, :]
         elif data_np.ndim == 2:
@@ -74,7 +74,7 @@ class Spectrogram(PaddingCalculator):
         
         # concrete time dim coord
         dt = self.config["decim"] / fs
-        start = data.coords[concrete_time_dim].isel({concrete_time_dim: 0}).values
+        start = data.coords[concrete_time_dim].isel({concrete_time_dim: 0}).pint.magnitude
         concrete_time_dim_coord = np.arange(result.shape[-1]) * dt + start
         result_dim_coords[concrete_time_dim] = concrete_time_dim_coord
 
@@ -91,14 +91,16 @@ class Spectrogram(PaddingCalculator):
             
             if is_relative:
                 time_dim_coord = time_coord_base 
-                start = data.coords[coord].isel({concrete_time_dim:0}).values
+                start = data.coords[coord].isel({concrete_time_dim:0}).pint.magnitude
             else:
                 leading_shape = data.shape[:-1]
                 time_dim_coord = np.broadcast_to(
                     time_coord_base, 
                     (*leading_shape, time_coord_base.size)
                     ).copy()
-                start = data.coords[coord].isel({concrete_time_dim:0}).values[..., np.newaxis]
+                start = data.coords[coord].isel(
+                    {concrete_time_dim:0}
+                    ).pint.magnitude[..., np.newaxis]
                 
             time_dim_coord += start
             time_dim_coord = pint.Quantity(time_dim_coord, 's')

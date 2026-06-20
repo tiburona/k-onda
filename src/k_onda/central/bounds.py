@@ -233,16 +233,16 @@ class DimBoundsArray:
     
     def containing_indices(self, values_or_bounds, dim):
 
-        if isinstance(values_or_bounds[0], DimPair):
-            contains = lambda our_bounds, their_value: our_bounds[dim].contains_pair(their_value)
-        elif isinstance(values_or_bounds[0], DimBounds):
-            contains = lambda our_bounds, their_value: our_bounds[dim].contains_pair(their_value[dim])
-        elif isinstance(values_or_bounds[0], pint.Quantity):
-            contains = lambda our_bounds, their_value: our_bounds[dim].contains_value(their_value)
-        else:
+        def contains(our_bounds, their_value):
+            if isinstance(their_value, DimPair):
+                return our_bounds[dim].contains_pair(their_value)
+            if isinstance(their_value, DimBounds):
+                return our_bounds[dim].contains_pair(their_value[dim])
+            if isinstance(their_value, pint.Quantity):
+                return our_bounds[dim].contains_value(their_value)
             raise TypeError("Unknown type for values_or_bounds")
-        
-        indices = [[i for i, our_bounds in enumerate(self) if contains(our_bounds, val_or_bnds)]
+                
+        indices = [[i for i, our_bounds in enumerate(self) if contains(our_bounds, val_or_bnds)] 
                    for val_or_bnds in values_or_bounds]
         
         if any(len(inds) > 1 for inds in indices):

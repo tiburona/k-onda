@@ -27,7 +27,7 @@ def make_time_series(
 
     time = get_time_coords(data, start, sampling_rate=sampling_rate)
 
-    attrs = _ensure_attrs(getattr(data, "attrs", {}), sampling_rate=sampling_rate)
+    attrs = _ensure_attrs(getattr(data, "attrs", {}))
 
     return make_data_series(
         data,
