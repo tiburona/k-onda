@@ -216,7 +216,7 @@ class SpikeCluster(DataComponent):
                 AxisInfo(
                     "spikes",
                     kind=AxisKind.POINT_PROCESS_INDEX,
-                    coords=(CoordInfo(name="spike"),),
+                    coords=(CoordInfo(name="spike", scale="ordinal"),),
                 )
             ],
             value_metadim="time",
@@ -227,7 +227,7 @@ class SpikeCluster(DataComponent):
                     "spikes",
                     AxisKind.POINT_PROCESS_INDEX,
                     metadim=None,
-                    coords=(CoordInfo(name="spike"),),
+                    coords=(CoordInfo(name="spike", scale="ordinal"),),
                 ),
                 AxisInfo("samples", AxisKind.AXIS, metadim="time"),
             ]

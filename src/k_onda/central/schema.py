@@ -21,6 +21,7 @@ class CoordInfo:
     metadim: str | None = None
     is_relative: str | bool = False
     is_grouping: bool = False
+    scale: str | None = None
 
 @dataclass(frozen=True)
 class AxisInfo:
@@ -31,17 +32,26 @@ class AxisInfo:
     created_from_metadim: str | None = None  # these coords are provenance 
     created_from_dim: str | None = None  # metadata specific to ordinal axes 
  
-
     def __post_init__(self):
         coords = tuple(self.coords)
-
         if not any(c.name == self.name for c in coords):
-            coords = (
-                CoordInfo(name=self.name, metadim=self.metadim),
-                *coords,
-            )
-
+            coords = (self._default_coord_for_axis(), *coords)
         object.__setattr__(self, "coords", coords)
+
+    def _default_coord_for_axis(self):
+        scale = None
+
+        if self.kind == AxisKind.AXIS and self.metadim in {"time", "frequency"}:
+            scale = "continuous"
+        elif self.kind in (
+            AxisKind.ORDINAL_INDEX, 
+            AxisKind.OBSERVATION_INDEX, 
+            AxisKind.POINT_PROCESS_INDEX
+            ):
+            scale = "ordinal"
+
+        return CoordInfo(name = self.name, metadim=self.metadim, scale=scale)
+        
 
 
 @type_registry.register
@@ -206,6 +216,16 @@ class Schema:
     def coord_names_by_axis_kind(self, axis_kind) -> list[str]:
         axes = self.axes_of_kind(axis_kind)
         return [coord.name for ax in axes for coord in ax.coords]
+    
+    def coord_names_minus(self, names):
+        return [name for name in self.coord_names if name not in names]
+    
+    def axis_names_minus_axes_with_coords(self, coord_names):
+        used_axis_names = []
+        for coord_name in coord_names:
+            used_axis_names.append(getattr(self.axis_by_coord_name(coord_name), 'name', None)) 
+        return [name for name in self.dim_names if name not in used_axis_names]
+        
 
     def is_point_process(self) -> bool:
         return any(ax.kind == AxisKind.POINT_PROCESS_INDEX for ax in self.axes)

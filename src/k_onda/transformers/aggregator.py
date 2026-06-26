@@ -123,7 +123,7 @@ class AssembleArray(Transformer):
         schema = input_schema.with_axis(AxisInfo(
             "signal", 
             kind=AxisKind.OBSERVATION_INDEX,
-            coords=tuple(CoordInfo(group) for group in self.collection_coords)))
+            coords=tuple(CoordInfo(group, scale="nominal") for group in self.collection_coords)))
         return schema
 
     def canonicalize_arrays(self, arrs):

@@ -61,8 +61,8 @@ class Histogram(Calculator):
                 AxisKind.AXIS,
                 metadim=metadim or self.dim,
                 coords=(
-                    CoordInfo(name=f"{self.dim}_bins", metadim=metadim),
-                    CoordInfo(name=self.dim, metadim=metadim),
+                    CoordInfo(name=f"{self.dim}_bins", metadim=metadim, scale="continuous"),
+                    CoordInfo(name=self.dim, metadim=metadim, scale="continuous"),
                 ),
             )
         )
