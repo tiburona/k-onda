@@ -5,7 +5,6 @@ from functools import reduce
 from operator import and_
 
 
-from k_onda.central import type_registry as tr
 
 
 class PlotMixin:

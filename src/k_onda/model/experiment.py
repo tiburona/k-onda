@@ -1,7 +1,6 @@
 from pathlib import PurePath
 from collections import defaultdict
 import pint
-import pint_xarray
 import yaml
 import json
 
