@@ -6,6 +6,8 @@ ureg = pint.UnitRegistry()
 pint.set_application_registry(ureg)
 pint_xarray.setup_registry(ureg)
 
+ureg.define("spike = [spike] = spk")
+
 
 operations = {
     "==": lambda a, b: a == b,

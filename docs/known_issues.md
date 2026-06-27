@@ -27,7 +27,7 @@ Right now `payload` is guaranteed to return a signal of the same type for `Datas
 
 ## Loci
 
-`Locus`/`LocusSet` has currently has no provenance record.  This is okay for config-derived epochs/events, but insufficient for future loci derived from signals.
+`Locus`/`LocusSet` currently has no provenance record.  This is okay for config-derived epochs/events, but insufficient for future loci derived from signals.
 
 There are some forbidden names for loci conditions (e.g., 'time', 'frequency'). Right now the code raises ValueError but when I actually have docs the messages should be replaced with a nice link to the docs.
 

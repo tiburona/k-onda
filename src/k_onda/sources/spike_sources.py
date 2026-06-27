@@ -211,16 +211,19 @@ class SpikeCluster(DataComponent):
 
     @property
     def data_schema(self):
+        ureg = pint.get_application_registry()
         spike_times_schema = Schema(
             axes=[
                 AxisInfo(
                     "spikes",
                     kind=AxisKind.POINT_PROCESS_INDEX,
                     coords=(CoordInfo(name="spike", scale="ordinal"),),
+                    item_unit=ureg.spike
                 )
             ],
-            value_metadim="time",
-        )
+            value_metadim="time"
+            )
+        
 
         axes=[
                 AxisInfo(
@@ -228,6 +231,7 @@ class SpikeCluster(DataComponent):
                     AxisKind.POINT_PROCESS_INDEX,
                     metadim=None,
                     coords=(CoordInfo(name="spike", scale="ordinal"),),
+                    item_unit=ureg.spike
                 ),
                 AxisInfo("samples", AxisKind.AXIS, metadim="time"),
             ]

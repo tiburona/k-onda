@@ -25,6 +25,7 @@ class Histogram(Calculator):
         bins=None,
         bin_size=None,
         hist_range=None,
+        stat="count",
         density=False,
         dim="time",
         range_source="data",
@@ -36,10 +37,11 @@ class Histogram(Calculator):
         # weights None or callable that operates on parent.data
         self.bins = bins
         self.hist_range = hist_range
+        self.stat = stat
         self.weights = None
         self.density = density
         self.dim = dim
-        self.bin_size = w_units(bin_size, dim=self.dim)
+        self.bin_size = None if bin_size is None else w_units(bin_size, dim=self.dim)
         self.range_source = range_source
         self.bin_coord = bin_coord
 
@@ -71,8 +73,8 @@ class Histogram(Calculator):
 
     def _get_extra_apply_kwargs(self, input):
 
-        extra_kwargs = {"is_point_process": isinstance(input, type_registry.PointProcessSignal)}
-
+        extra_kwargs = {}
+        
         if self.range_source == "session":
             extra_kwargs["hist_range"] = (
                 input.origin.session.start,
@@ -119,6 +121,7 @@ class Histogram(Calculator):
                 if not is_unitful(self.bin_size):
                     lo = lo.magnitude
                     hi = hi.magnitude
+                    bin_size = self.bin_size
                 elif not all([is_unitful(b) for b in (lo, hi)]):
                     bin_size = self.bin_size.magnitude
                 else:
@@ -144,8 +147,7 @@ class Histogram(Calculator):
 
         return data, axis, bins, (lo, hi), weights
 
-    @staticmethod
-    def histogram_along_axis(data, bins, axis, hist_range, weights, density):
+    def histogram_along_axis(self, data, bins, axis, hist_range, weights):
         """
         Apply np.histogram to every 1D slice along one axis of an N-D array.
 
@@ -163,7 +165,7 @@ class Histogram(Calculator):
         data = np.moveaxis(data, axis, -1)
         outer_shape = data.shape[:-1]
         n_bins = bins if isinstance(bins, int) else len(bins) - 1
-        dtype = float if density or weights is not None else int
+        dtype = float if self.density or weights is not None else int
         result = np.empty(outer_shape + (n_bins,), dtype=dtype)
         for idx in product(*(range(s) for s in outer_shape)):
             result[idx], bin_edges = np.histogram(
@@ -171,14 +173,15 @@ class Histogram(Calculator):
                 bins=bins,
                 range=hist_range,
                 weights=weights if not slice_weights else weights[idx],
-                density=density,
+                density=self.density,
             )
         result = np.moveaxis(result, -1, axis)
         return result, bin_edges
 
-    def _wrap_result(self, result, data, axis, bin_edges, transformed_data):
+    def _wrap_result(self, result, data, axis, bin_edges, transformed_data, input_schema):
         new_dims = []
         new_coords = {}
+
         for i, dim in enumerate(transformed_data.dims):
             if i != axis:
                 new_dims.append(dim)
@@ -199,16 +202,7 @@ class Histogram(Calculator):
                     ]
                 else:
                     raise ValueError("Unknown bin coord")
-
-        if is_unitful(self.bins):
-            units = self.bins[0].u
-        elif is_unitful(self.bin_size):
-            units = self.bin_size.u
-        elif self.dim in DIM_DEFAULT_UNITS:
-            units = DIM_DEFAULT_UNITS[self.dim]
-        else:
-            raise ValueError("Can't put units back on coords")
-
+                
         new_attrs = copy(data.attrs)
 
         # It can make sense to compute a histogram over the stacked dimension
@@ -217,13 +211,33 @@ class Histogram(Calculator):
             new_attrs.pop("stack_dim")
             new_attrs.pop("boundaries")
 
+        if is_unitful(self.bins):
+            bin_unit = self.bins[0].u
+        elif is_unitful(self.bin_size):
+            bin_unit = self.bin_size.u
+        elif self.dim in DIM_DEFAULT_UNITS:
+            bin_unit = DIM_DEFAULT_UNITS[self.dim]
+        else:
+            raise ValueError("Can't put units back on coords")
+
+       
+
         result = xr.DataArray(result, dims=new_dims, coords=new_coords, attrs=new_attrs)
         # For instance, even though the new dim is time_bins, make sure 'time' is available
         # as an auxiliary coord for later selection
         result = result.assign_coords(
             {self.dim: (new_dim, result.coords[new_dim].data)}
         )
-        result = result.pint.quantify({new_dim: units, self.dim: units})
+        result = result.pint.quantify({new_dim: bin_unit, self.dim: bin_unit})
+
+        source_axis = input_schema.ax_with_dim(self.dim)
+        ureg = pint.get_application_registry()
+        count_unit = getattr(source_axis, "item_unit", ureg.dimensionless)
+
+        data_unit = count_unit/bin_unit if self.stat == "rate" else count_unit
+        result = result.pint.quantify(data_unit)
+
+     
 
         result = super()._wrap_result(result)
         return result
@@ -234,10 +248,18 @@ class Histogram(Calculator):
 
         data, axis, bins, hist_range, weights = self._prepare_hist_inputs(
             data, hist_range, data_schema
-        )
+            )
 
-        hist, bin_edges = self.histogram_along_axis(
-            data, bins, axis, hist_range, weights, self.density
-        )
+        hist, bin_edges = self.histogram_along_axis(data, bins, axis, hist_range, weights)
 
-        return hist, {"axis": axis, "bin_edges": bin_edges, "transformed_data": data}
+        if self.stat == "rate":
+            hist = hist/(bin_edges[1]-bin_edges[0])
+
+        extra_args_for_wrap_result = {
+            "axis": axis, 
+            "bin_edges": bin_edges, 
+            "transformed_data": data, 
+            "input_schema": data_schema
+            }
+
+        return hist, extra_args_for_wrap_result

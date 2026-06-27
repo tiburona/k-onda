@@ -18,6 +18,9 @@ class PlotMixin:
 
     def render(self):
         return Render()(self)
+    
+    def labels(self, x=None, y=None, units=True):
+        return Label(x=x, y=y, units=units)
 
 
 @dataclass
@@ -39,11 +42,19 @@ class Panel:
 
 
 class PlotNode(PlotMixin):
-    def __init__(self, data_source=None, plot_type=None, layout=None, coords=None):
+    def __init__(
+            self, 
+            data_source=None, 
+            plot_type=None, 
+            layout=None, 
+            coords=None, 
+            labels=None
+            ):
         self.data_source = data_source
         self.plot_type = plot_type
         self.layout_spec = layout
         self.coords = coords
+        self.labels = labels
 
 
 class PlotDirective:
@@ -74,6 +85,7 @@ class LayoutSpec(PlotDirective):
             data_source = input.data_source,
             plot_type=input.plot_type,
             coords=input.coords,
+            labels=input.labels, 
             layout=layout)
 
 
@@ -105,6 +117,26 @@ class LayoutSpec(PlotDirective):
 
         layout = Layout(len(rows), max_cols, panels)
         return layout
+    
+class Label(PlotDirective):
+
+    def __init__(self, x, y, units=True):
+        self.x = x
+        self.y = y
+        self.units = units
+
+    def direct(self, input):
+        labels = self.parse_labels()
+        return PlotNode(
+            data_source = input.data_source,
+            plot_type=input.plot_type,
+            coords=input.coords,
+            labels=labels, 
+            layout=input.layout)
+
+
+    def parse_labels(self):
+        pass
 
 
 class Render(PlotDirective):

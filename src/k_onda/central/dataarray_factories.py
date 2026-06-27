@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 import pint
 
-ureg = pint.application_registry
+ureg = pint.get_application_registry()
 
 
 def get_time_coords(data, start, sampling_rate=None, dt=None):

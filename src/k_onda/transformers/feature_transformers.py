@@ -37,8 +37,8 @@ class ExtractFeatures(Transformer):
     def make_output_schema(self, *input_schemas, key_spec):
         return Schema(
             axes=[
-                AxisInfo(name="index", kind=AxisKind.AXIS),
-                AxisInfo(name="feature", kind=AxisKind.AXIS),
+                AxisInfo(name="index", kind=AxisKind.OBSERVATION_INDEX),
+                AxisInfo(name="feature", kind=AxisKind.ORDINAL_INDEX),
             ]
             )
 

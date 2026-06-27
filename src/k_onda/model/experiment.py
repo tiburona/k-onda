@@ -133,9 +133,7 @@ class Experiment(AnnotatorMixin, ConfigSetter):
 
         units_to_set = self.top_level_config.get("units_to_set")
         if units_to_set is not None:
-            ureg = pint.UnitRegistry()
-            pint.set_application_registry(ureg)
-            pint_xarray.setup_registry(ureg)
+            ureg = pint.get_application_registry()
 
             for unit_name, (mag, ref_unit, abbrev) in units_to_set.items():
                 ureg.define(f"{unit_name} = {mag} * {ref_unit} = {abbrev}")

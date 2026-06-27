@@ -99,7 +99,7 @@ class Rate(Calculator):
             return num_events / duration
 
         if intervals:
-            ureg = pint.application_registry
+            ureg = pint.get_application_registry()
             starts = np.searchsorted(
                 selected_data, [interval[0] for interval in intervals]
             )

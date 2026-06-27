@@ -31,6 +31,7 @@ class AxisInfo:
     coords: tuple[CoordInfo, ...] = ()  # all the coords available on the axis
     created_from_metadim: str | None = None  # these coords are provenance 
     created_from_dim: str | None = None  # metadata specific to ordinal axes 
+    item_unit: object | None = None  # the unit of an item represented by a point process index 
  
     def __post_init__(self):
         coords = tuple(self.coords)
@@ -141,7 +142,7 @@ class Schema:
     def without_dim(self, dim) -> Schema:
         new_schema = copy(self)
         new_schema.axes = [
-            ax for ax in self.axes if ax is not self.ax_with_concrete_dim(dim)
+            ax for ax in self.axes if ax is not self.ax_with_dim(dim)
         ]
         return new_schema
     
@@ -167,7 +168,8 @@ class Schema:
             metadim=old_axis.metadim,
             coords=old_axis.coords, 
             created_from_metadim=old_axis.created_from_metadim, 
-            created_from_dim=old_axis.created_from_dim
+            created_from_dim=old_axis.created_from_dim,
+            item_unit=old_axis.item_unit
             )
         for i, axis in enumerate(new_schema.axes):
             if axis.name == old_name:
@@ -239,7 +241,7 @@ class Schema:
             return True
         return False
 
-    def ax_with_concrete_dim(self, dim) -> AxisInfo:
+    def ax_with_dim(self, dim) -> AxisInfo:
         # 1. exact dim match
         if self.has_name(dim):
             return self.axis_by_name(dim)
@@ -255,7 +257,7 @@ class Schema:
             return None
 
     def concrete_dim_from(self, dim) -> str:
-        axis = self.ax_with_concrete_dim(dim)
+        axis = self.ax_with_dim(dim)
         return axis if axis is None else axis.name
 
     def axis_position_from(self, name) -> int | None:
@@ -286,7 +288,8 @@ class Schema:
             kind=ax.kind, 
             coords=coords,
             created_from_dim=ax.created_from_dim,
-            created_from_metadim=ax.created_from_metadim)
+            created_from_metadim=ax.created_from_metadim,
+            item_unit=ax.item_unit)
         new_schema = new_schema.without(ax.name)
         new_schema = new_schema.with_added(new_ax)
         return new_schema
@@ -311,7 +314,8 @@ class Schema:
             metadim=axis.metadim,
             coords=new_coords,
             created_from_dim=axis.created_from_dim,
-            created_from_metadim=axis.created_from_metadim
+            created_from_metadim=axis.created_from_metadim,
+            item_unit=axis.item_unit
         )
 
         return self.without(axis.name).with_added(new_axis)
@@ -433,7 +437,7 @@ class DatasetSchema(MutableMapping):
 
     def concrete_dim_from(self, dim):
         for s in self.values():
-            ax = s.ax_with_concrete_dim(dim)
+            ax = s.ax_with_dim(dim)
             if ax is not None:
                 return ax.name
         return None
