@@ -218,7 +218,7 @@ class AddLabel(PlotDirective):
                 "but the figure already has one.")
             
     def check_panel_labels(self, existing_labels):
-        panel_labels = [l for l in existing_labels if l.scope == "panel"]
+        panel_labels = [el for el in existing_labels if el.scope == "panel"]
         if any([self._is_conflicting(panel_label, self.label) for panel_label in panel_labels]):
             raise ValueError("You are setting a panel label on a panel and axis that already has" \
             "one.")
