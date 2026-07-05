@@ -1,6 +1,7 @@
 import numpy as np
 from collections.abc import Iterable
 from collections import defaultdict
+from functools import reduce
 
 from k_onda.utils import is_unitful, wout_units
 from k_onda.central import type_registry, SpanDimPair, DimBounds
@@ -399,7 +400,43 @@ class LocusSet(LocusBase):
     
     @property
     def member_condition_names(self):
-        return set().union(*(loc.conditions.keys() for loc in self.loci))
+        return tuple(dict.fromkeys(
+            name
+            for loc in self.loci
+            for name in loc.conditions
+            ))
+    
+    @property
+    def member_condition_levels(self):
+
+        condition_levels = {
+            name: tuple(dict.fromkeys(
+                loc.conditions[name] 
+                for loc in self.loci 
+                if name in loc.conditions)
+                ) for name in self.member_condition_names
+        }
+
+        return condition_levels
+        
+
+    @property 
+    def shared_member_condition_names(self):
+        if not len(self.loci):
+            return tuple()
+        shared = set(self.loci[0].conditions)
+        for loc in self.loci[1:]:
+            shared &= set(loc.conditions)
+        return tuple(
+            name for name in self.loci[0].conditions if name in shared
+            )
+                   
+    @property 
+    def levels_of_shared_member_conditions(self):
+        if not self.shared_member_condition_names:
+            return {}
+        return {k: v for k, v in self.member_condition_levels.items() 
+                if k in self.shared_member_condition_names}
     
     def _sort_loci(self):
         pass

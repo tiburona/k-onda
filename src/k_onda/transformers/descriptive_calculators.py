@@ -68,7 +68,8 @@ class Histogram(Calculator):
                 ),
             )
         )
-        schema.value_metadim = None
+        if input_schema.value_metadim:
+            schema.value_metadim = f"{input_schema.value_metadim}_{self.stat}" 
         return schema
 
     def _get_extra_apply_kwargs(self, input):

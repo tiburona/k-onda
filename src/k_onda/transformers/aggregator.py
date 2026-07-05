@@ -3,6 +3,7 @@ from pint_xarray import PintIndex
 import numpy as np
 import math
 from xarray.core.groupby import DataArrayGroupBy
+from dataclasses import replace
 
 from .core import Transformer, KeySpec, Calculator
 from k_onda.central import type_registry, AxisInfo, AxisKind, CoordInfo
@@ -62,12 +63,32 @@ class AssembleArray(Transformer):
         else:
             labels_and_factors = []
              
-      
         input_schema = self.planned_input_schema or inputs[0].data_schema
-        data_schema = self.make_output_schema(input_schema, key_spec=key_spec)
+        
+        coord_levels = {}
 
+        for factors in labels_and_factors:
+            for coord_name, level in factors.items():
+                coord_levels.setdefault(coord_name, [])
+                if level not in coord_levels[coord_name]:
+                    coord_levels[coord_name].append(level)
+        
+        coord_infos = tuple(
+            CoordInfo(name=name, scale="nominal", levels=tuple(levels))
+                      for name, levels in coord_levels.items())
+        
+        if coord_levels:
+            a = 'foo'
+        
+        data_schema = self.make_output_schema(
+            input_schema, key_spec=key_spec, coord_infos=coord_infos
+            )
+        
+        schema_kwargs = {
+            "coord_infos": coord_infos
+        }
+        
         apply_kwargs = {
-            "data_schema": data_schema,
             "labels_and_factors": labels_and_factors
         }
 
@@ -77,7 +98,8 @@ class AssembleArray(Transformer):
             transform=None,
             data_schema=data_schema,
             key_spec=key_spec,
-            apply_kwargs=apply_kwargs
+            apply_kwargs=apply_kwargs,
+            schema_kwargs=schema_kwargs
         )
     
     @staticmethod
@@ -117,13 +139,22 @@ class AssembleArray(Transformer):
             
         if strict:
             raise AttributeError(f"Could not resolve group_by={name!r} for {signal!r}")
+    
+    def make_output_schema(self, *input_schemas, key_spec, **schema_kwargs):
+        # This method and the next might seem a bit roundabout, but parent's make_output_schema
+        # assumes the existence of output_schema, and does a lot of key validation it's best to 
+        # leave there.
+        output_schema = super().make_output_schema(*input_schemas, key_spec=key_spec)
+
+        coord_infos = schema_kwargs.get("coord_infos", tuple())
+        
+        output_schema = output_schema.add_coords_to_axis_with_name("signal", coord_infos)
+        return output_schema
 
     def output_schema(self, input_schema): 
+        # TODO where did `group_dim` every come from and how am I going to get it in here?
         input_schema = self.planned_input_schema or input_schema
-        schema = input_schema.with_axis(AxisInfo(
-            "signal", 
-            kind=AxisKind.OBSERVATION_INDEX,
-            coords=tuple(CoordInfo(group, scale="nominal") for group in self.collection_coords)))
+        schema = input_schema.with_axis(AxisInfo("signal", kind=AxisKind.OBSERVATION_INDEX))
         return schema
 
     def canonicalize_arrays(self, arrs):
@@ -280,7 +311,7 @@ class AssembleArray(Transformer):
         
     def _apply_to_arrays(self, arrs, labels_and_factors, group_dim):
         group_dim = group_dim or "signal"
-        result = self._concat_arrs(arrs, dim="signal")
+        result = self._concat_arrs(arrs, dim=group_dim)
 
         if not labels_and_factors:
             return result
@@ -363,7 +394,8 @@ class ReduceDim(Calculator):
                     AxisInfo(
                         name=coord.name,
                         kind=AxisKind.AXIS,
-                        metadim=coord.metadim
+                        metadim=coord.metadim,
+                        coords=(replace(coord, is_grouping=False),)
                     )
                 ) 
             

@@ -37,7 +37,8 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin, PlotMixin):
         storage_strategy="lazy",
         conditions=None,
         last_stack_index = None,
-        apply_kwargs = None
+        apply_kwargs = None,
+        schema_kwargs = None
     ):
         self._inputs = inputs if isinstance(inputs, Iterable) else (inputs,)
         self._transform = transform
@@ -58,6 +59,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin, PlotMixin):
         self._validate()
         self._is_compiled = False
         self.apply_kwargs = apply_kwargs
+        self.schema_kwargs = schema_kwargs or {}
         if self.origin:
             self.session = self.origin.session
             self.subject = self.origin.session.subject
@@ -83,7 +85,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin, PlotMixin):
     def data_schema(self):
         if self._data_schema is None:
             self._data_schema = self.transformer.make_output_schema(
-                self.inputs[0].data_schema, key_spec=self.key_spec
+                self.inputs[0].data_schema, key_spec=self.key_spec, **self.schema_kwargs
             )
         return self._data_schema
     
@@ -147,7 +149,8 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin, PlotMixin):
             storage_strategy=self._storage_strategy,
             conditions=self.conditions,
             last_stack_index=self.last_stack_index,
-            apply_kwargs=self.apply_kwargs
+            apply_kwargs=self.apply_kwargs,
+            schema_kwargs=self.schema_kwargs
             )
 
     def _validate(self):
@@ -196,6 +199,7 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin, PlotMixin):
         copied.conditions = deepcopy(self.conditions, memo)
         copied._is_compiled = self._is_compiled
         copied.apply_kwargs = deepcopy(self.apply_kwargs, memo)
+        copied.schema_kwargs = deepcopy(self.schema_kwargs, memo)
 
         return copied
 
@@ -372,7 +376,8 @@ class SignalStack(CalculateMixin, UnstackMixin):
         data_schema=None,
         signal_class=None,
         key_spec=None,
-        apply_kwargs=None
+        apply_kwargs=None,
+        schema_kwargs=None
     ):
         if isinstance(inputs, type_registry.Collection):
             self.collection = inputs
@@ -403,6 +408,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
         self._is_compiled = False
         self.key_spec = key_spec
         self.apply_kwargs = apply_kwargs
+        self.schema_kwargs = schema_kwargs or {}
         
 
     @property
@@ -419,7 +425,8 @@ class SignalStack(CalculateMixin, UnstackMixin):
             transformer=self.transformer,
             data_schema=None,
             signal_class=self.signal_class,
-            apply_kwargs=self.apply_kwargs
+            apply_kwargs=self.apply_kwargs,
+            schema_kwargs=self.schema_kwargs
             )
 
     def compile(self):
@@ -455,7 +462,7 @@ class SignalStack(CalculateMixin, UnstackMixin):
     def data_schema(self):
         if self._data_schema is None:
             self._data_schema = self.transformer.make_output_schema(
-                self.inputs[0].data_schema, key_spec=self.key_spec
+                self.inputs[0].data_schema, key_spec=self.key_spec, **self.schema_kwargs
             )
         return self._data_schema
 

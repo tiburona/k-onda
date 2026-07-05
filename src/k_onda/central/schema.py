@@ -2,7 +2,7 @@ from __future__ import annotations
 from collections.abc import MutableMapping
 from functools import reduce
 from .registry import type_registry
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from copy import copy
 from operator import and_, or_
@@ -22,6 +22,8 @@ class CoordInfo:
     is_relative: str | bool = False
     is_grouping: bool = False
     scale: str | None = None
+    levels: tuple[str, ...] | None = None
+
 
 @dataclass(frozen=True)
 class AxisInfo:
@@ -122,7 +124,7 @@ class Schema:
             for coord in ax.coords:
                 if coord.name == name:
                     return coord
-                
+     
     def ax_coord_map(self, coords=None) -> dict:
         if not coords:
             return {ax.name: self.coord_names_by_dim(ax.name) for ax in self.axes}
@@ -162,15 +164,7 @@ class Schema:
     def rename_axis(self, old_name, name):
         new_schema = self.copy()
         old_axis = self.axis_by_name(old_name)
-        new_axis = AxisInfo(
-            name=name, 
-            kind=old_axis.kind, 
-            metadim=old_axis.metadim,
-            coords=old_axis.coords, 
-            created_from_metadim=old_axis.created_from_metadim, 
-            created_from_dim=old_axis.created_from_dim,
-            item_unit=old_axis.item_unit
-            )
+        new_axis = replace(old_axis, name=name)
         for i, axis in enumerate(new_schema.axes):
             if axis.name == old_name:
                 new_schema.axes[i] = new_axis
@@ -192,6 +186,10 @@ class Schema:
     @property
     def coord_names(self) -> list[str]:
         return [c.name for ax in self.axes for c in ax.coords]
+    
+    @property
+    def coords(self) -> list[CoordInfo]:
+        return [c for ax in self.axes for c in ax.coords]
 
     @property
     def selectable(self) -> set[str]:
@@ -218,6 +216,13 @@ class Schema:
     def coord_names_by_axis_kind(self, axis_kind) -> list[str]:
         axes = self.axes_of_kind(axis_kind)
         return [coord.name for ax in axes for coord in ax.coords]
+    
+    def coord_names_by_level(self, level) -> list[str]:
+        return [
+            coord.name
+            for coord in self.coords
+            if coord.levels and level in coord.levels
+        ]
     
     def coord_names_minus(self, names):
         return [name for name in self.coord_names if name not in names]
@@ -279,52 +284,42 @@ class Schema:
     def is_value_metadim(self, dim) -> bool:
         return self.value_metadim == dim
 
-    def update_axis_coords(self, ax, coords):
+    def add_coords_to_axis(self, ax, coords):
         new_schema = copy(self)
         coords = copy(ax.coords) + coords
-        new_ax = AxisInfo(
-            name=ax.name,
-            metadim=ax.metadim, 
-            kind=ax.kind, 
-            coords=coords,
-            created_from_dim=ax.created_from_dim,
-            created_from_metadim=ax.created_from_metadim,
-            item_unit=ax.item_unit)
+        new_ax = replace(ax, coords=coords)
         new_schema = new_schema.without(ax.name)
         new_schema = new_schema.with_added(new_ax)
         return new_schema
+    
+    def add_coords_to_axis_with_name(self, ax_name, coords):
+        ax = self.axis_by_name(ax_name)
+        return self.add_coords_to_axis(ax, coords)
 
-    def with_coord_grouping(self, coord_name, *, is_grouping=True):
+    def update_coords(self, coord_name, new_coord_param):
         axis = self.axis_by_coord_name(coord_name)
         if axis is None:
             raise ValueError(f"Coord {coord_name!r} not found")
+
         new_coords = tuple(
-            CoordInfo(
-                name=c.name,
-                metadim=c.metadim,
-                is_relative=c.is_relative,
-                is_grouping=is_grouping if c.name == coord_name else c.is_grouping,
-            ) 
+            replace(c, **new_coord_param) if c.name == coord_name else c
             for c in axis.coords
         )
 
-        new_axis = AxisInfo(
-            name=axis.name,
-            kind=axis.kind,
-            metadim=axis.metadim,
-            coords=new_coords,
-            created_from_dim=axis.created_from_dim,
-            created_from_metadim=axis.created_from_metadim,
-            item_unit=axis.item_unit
-        )
+        new_axis = replace(axis, coords=new_coords)
 
         return self.without(axis.name).with_added(new_axis)
+
+    def with_coord_grouping(self, coord_name, *, is_grouping=True):
+        return self.update_coords(coord_name, {"is_grouping": is_grouping})
+        
+    def add_levels_to_coord(self, coord_name, levels):
+       return self.update_coords(coord_name, {"levels": levels})
     
     def is_grouping_coord(self, coord_name) -> bool:
         coord = self.coord_by_name(coord_name)
         return coord is not None and coord.is_grouping
 
-    
     def reorder_axes(self, axis_names):
         if set(axis_names) != {ax.name for ax in self.axes}:
             raise ValueError("axis_names must contain exactly the schema axes")
@@ -535,7 +530,14 @@ class DatasetSchema(MutableMapping):
             "is not yet implemented.")
         else:
             raise ValueError(f"Unknown mode {mode}")
+        
+    def add_coords_to_axis_with_name(self, ax_name, coords):
+        return self.map_schemas(lambda s: s.add_coords_to_axis_with_name(ax_name, coords))
 
+    def with_coord_grouping(self, coord_name, *, is_grouping=True):
+        return self.map_schemas(
+            lambda s: s.with_coord_grouping(coord_name, is_grouping=is_grouping)
+            )
 
 
     

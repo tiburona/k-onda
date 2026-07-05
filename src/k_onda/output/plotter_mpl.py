@@ -3,6 +3,9 @@ import numpy as np
 from dataclasses import dataclass, field
 from functools import reduce
 from operator import and_
+from collections.abc import Iterable
+from collections import defaultdict
+import re
 
 from k_onda.utils import is_unitful
 
@@ -12,15 +15,18 @@ from k_onda.utils import is_unitful
 class PlotMixin:
 
     def plot(self, plot_type):
-        return PlotSpecInit(plot_type=plot_type)(self)
+        return SetPlotType(plot_type=plot_type)(self)
 
     def layout(self, by=None, panels=None):
-        return LayoutSpec(by=by, panels=panels)(self)
+        return SetLayout(by=by, panels=panels)(self)
 
     def render(self):
         return Render()(self)
     
-    def labels(self, x=None, y=None, units="auto"):
+    def label(self):
+        raise NotImplementedError("Default label method not yet implemented.")
+    
+    def plot_labels(self, x=None, y=None, units="auto"):
         labels = []
 
         for ax_param, ax_string in zip([x, y], ["x", "y"]):
@@ -64,6 +70,107 @@ class PlotMixin:
             
         return node
 
+    def style(self, rules):
+        
+        style_rules = []
+        for rule in rules:
+            selector = {}
+            props = {}
+            for key in rule:
+                if key in self.data_source.data_schema.coord_names:
+                    selector[key] = rule[key]
+                else:
+                    props[key] = rule[key]
+            style_rule = StyleRule(selector=selector, props=props)
+            style_rules.append(style_rule)
+         
+        node = self
+        for rule in style_rules:
+            node = AddStyle(style_rule=rule)(node)
+
+        return node
+       
+
+    def colors(self, rules=None, **kwargs):
+        data_schema = self.data_source.data_schema
+        # possible keys in kwargs
+        # "control|defeat"
+        # "control&tone"
+        # "control"
+
+        rules = rules or []
+
+        style_rules = [
+            StyleRule(
+                props={"color": rule["color"]}, 
+                selector={k: v for k, v in rule.items() if k != "color"}
+                )
+            for rule in rules
+        ]
+
+        if kwargs:
+            data_schema = self.data_source.data_schema
+            style_rules.extend([self._parse_kwarg(kwargs, kwarg, data_schema) for kwarg in kwargs])
+        
+        node = self
+        for rule in style_rules:
+            node = AddStyle(style_rule=rule)(node)
+
+        return node
+    
+    def _get_coord_level_map(self, levels, data_schema):
+        coord_level_map = defaultdict(list)
+        for level in levels:
+            matches = self._get_coord_matches(level, data_schema)
+            coord_level_map[matches[0]].append(level)
+        return dict(coord_level_map)
+    
+    def _get_coord_matches(self, level, data_schema):
+        matches = data_schema.coord_names_by_level(level)
+        if len(matches) == 0:
+            raise ValueError(f"No coord level {level!r} found in data schema.")
+        if len(matches) > 1:
+            raise ValueError(
+                f"Condition value {level!r} is ambiguous; found in coords {matches}."
+            )
+        return matches
+    
+
+    def _parse_kwarg(self, kwargs, kwarg, data_schema):
+        if "|" in kwarg:
+            if "&" in kwarg:
+                raise ValueError("Use structured input format if you have | and & conditions")
+            levels = kwarg.split("|")
+            coord_level_map = self._get_coord_level_map(levels, data_schema)
+            if len(coord_level_map) > 1:
+                raise ValueError("You can only use | keywords for combination within a condition." \
+                "For more complex combinations, use structured input.")
+            rule = StyleRule(
+                selector = coord_level_map,
+                props = {"color": kwargs[kwarg]}
+            )
+        elif "&" in kwarg:
+            levels = kwarg.split("&")
+            coord_level_map = self._get_coord_level_map(levels, data_schema)
+            if any(len(coord_level_map[key]) > 1 for key in coord_level_map):
+                raise ValueError("You can only use & keywords for combination across conditions." \
+                "For more complex combinations, use structured input.")
+
+            rule = StyleRule(
+                selector = coord_level_map,
+                props = {"color": kwargs[kwarg]}
+            )
+            
+        else:
+            matches = self._get_coord_matches(kwarg, data_schema)
+            coord = matches[0]
+            
+            rule = StyleRule(
+                selector={coord: kwarg},
+                props = {"color": kwargs[kwarg]}
+            )
+
+        return rule
      
 
 @dataclass
@@ -101,6 +208,12 @@ class Label:
     kwargs: dict = field(default_factory=dict)
 
 
+@dataclass
+class StyleRule:
+    selector: dict = field(default_factory=dict)
+    props: dict = field(default_factory=dict)
+
+
 class PlotNode(PlotMixin):
     def __init__(
             self, 
@@ -108,13 +221,18 @@ class PlotNode(PlotMixin):
             plot_type=None, 
             layout=None, 
             coords=None, 
-            labels=None
+            labels=None,
+            style_rules=None
             ):
         self.data_source = data_source
         self.plot_type = plot_type
         self.layout_spec = layout
         self.coords = coords
         self.label_specs = labels
+        self.style_rules = style_rules
+
+
+
 
 
 class PlotDirective:
@@ -123,7 +241,7 @@ class PlotDirective:
         return self.direct(input)
     
 
-class PlotSpecInit(PlotDirective):
+class SetPlotType(PlotDirective):
 
     def __init__(self, plot_type=None):
         self.plot_type = plot_type
@@ -135,7 +253,7 @@ class PlotSpecInit(PlotDirective):
         return plot_node
 
 
-class LayoutSpec(PlotDirective):
+class SetLayout(PlotDirective):
 
     def __init__(self, by=None, panels=None):
         self.by = by
@@ -148,7 +266,8 @@ class LayoutSpec(PlotDirective):
             plot_type=input.plot_type,
             coords=input.coords,
             labels=input.label_specs, 
-            layout=layout)
+            layout=layout,
+            style_rules=input.style_rules)
 
 
     def parse_layout(self):
@@ -169,6 +288,9 @@ class LayoutSpec(PlotDirective):
                 cols_in_row +=1
                 
                 conditions = c.strip().split()
+
+                if len(conditions) != len(self.by):
+                    raise ValueError(f"Length {self.by} does not equal length {c}")
                 panel = Panel(row=i, col=j, coords={
                     k: v for k, v in zip(self.by, conditions)
                 })
@@ -187,13 +309,13 @@ class AddLabel(PlotDirective):
         self.label = label
 
     def direct(self, input):
-        labels = self.parse_label(input)
         return PlotNode(
             data_source = input.data_source,
             plot_type=input.plot_type,
             coords=input.coords,
-            labels=labels, 
-            layout=input.layout_spec)
+            labels=self.parse_label(input), 
+            layout=input.layout_spec,
+            style_rules=input.style_rules)
 
 
     def parse_label(self, input):
@@ -237,6 +359,22 @@ class AddLabel(PlotDirective):
         if compatible[panel_label_1.where] != panel_label_2.where: 
             return True
         return False
+
+
+class AddStyle(PlotDirective):
+    def __init__(self, style_rule):
+        self.style_rule = style_rule
+
+    def direct(self, input):
+        style_rules = input.style_rules or []
+        return PlotNode(
+            data_source = input.data_source,
+            plot_type=input.plot_type,
+            coords=input.coords,
+            labels=input.label_specs, 
+            layout=input.layout_spec,
+            style_rules=[*style_rules, self.style_rule]
+        )
 
     
 
@@ -286,6 +424,7 @@ class Render(PlotDirective):
         figsize = getattr(input, 'figsize', (8, 8))
         fig = plt.figure(figsize=figsize)
         layout = input.layout_spec
+        style_rules = input.style_rules or []
         gs = fig.add_gridspec(layout.num_rows, layout.num_cols)
 
         
@@ -297,9 +436,10 @@ class Render(PlotDirective):
             ax = fig.add_subplot(gs[panel.row, panel.col])
             panel_ax_map[(panel.row, panel.col)] = ax
             func = self.plot_function_map[input.plot_type]
-            func(panel, ax, data, role_source_map)
+            func(panel, ax, data, role_source_map, style_rules)
 
         self.add_labels(input, fig, data, panel_ax_map, role_source_map)
+
 
         fig.show()
 
@@ -319,9 +459,9 @@ class Render(PlotDirective):
     def add_figure_label(self, label, data, fig, role_source_map):
         text = self.resolve_label_text(label, data, role_source_map)
         if label.axis == "x":
-            fig.supxlabel(text)
+            fig.supxlabel(text, **label.kwargs)
         elif label.axis == "y":
-            fig.supylabel(text)
+            fig.supylabel(text, **label.kwargs)
         
     def add_panel_label(self, input, label, data, panel_ax_map, role_source_map):
         panels_to_label = self.select_panels_to_label(input, label.where)
@@ -358,7 +498,7 @@ class Render(PlotDirective):
                     units = ''
 
             if units:
-                text += f" {units}"
+                text += f" ({units})"
 
         return text
     
@@ -381,15 +521,53 @@ class Render(PlotDirective):
             raise ValueError(f"Unknown value for where {where}")
        
 
-    def histogram(self, panel, ax, data, role_source_map):
+    def histogram(self, panel, ax, data, role_source_map, style_rules):
         x_source = role_source_map["x"]
         panel_data = self.get_panel_data(panel, data)
         x = panel_data.coords[x_source.name].pint.magnitude
         y = panel_data.pint.magnitude
         width = np.median(np.diff(x))
-        ax.bar(x, y, width=width, align="edge")
+        kwargs = self.get_merged_kwargs(style_rules, panel_data)
+        ax.bar(x, y, width=width, align="edge", **kwargs)
         ax.set_xlim(x[0], x[-1] + width)
         ax.margins(y = 0.08)
+
+    def get_merged_kwargs(self, style_rules, panel_data):
+        selected_style_rules = [
+            sr for sr in style_rules if self.panel_matches_style_rule(panel_data, sr)
+            ]
+        kwargs_list = [self.bar_kwargs_from_style_rule(sr) for sr in selected_style_rules]
+        merged_kwargs = reduce(lambda acc, d: {**acc, **d}, kwargs_list, {})
+        return merged_kwargs
+
+    def bar_kwargs_from_style_rule(self, style_rule):
+        kwargs = {}
+        for prop in style_rule.props:
+            if prop == "color":
+                kwargs["color"] = style_rule.props["color"]
+
+        return kwargs
+
+        # TODO need to think about other kwargs later.  Not clear
+        # that every style can just be passed through as a kwarg.
+
+    def panel_matches_style_rule(self, panel_data, style_rule):
+        for key in style_rule.selector:
+            if key not in panel_data.coords:
+                return False
+            
+            selected = style_rule.selector[key]
+
+            if isinstance(selected, str):
+                if panel_data.coords[key].item() != selected:
+                    return False
+            elif isinstance(selected, Iterable):
+                if panel_data.coords[key].item() not in selected:
+                    return False
+            else:
+                raise TypeError(f"Unknown type for {style_rule.selector[key]}")
+
+        return True
 
     def get_plot_data(self, input):
         compiled_input = input.data_source.compile()

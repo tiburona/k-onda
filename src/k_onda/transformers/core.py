@@ -158,7 +158,7 @@ class Transformer:
     def _validate_data_schema(self, input_schema):
         return True
 
-    def make_output_schema(self, *input_schemas, key_spec):
+    def make_output_schema(self, *input_schemas, key_spec, **schema_kwargs):
         """Compute the output schema."""
 
         input_schema = input_schemas[0]

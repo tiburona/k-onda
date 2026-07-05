@@ -324,7 +324,7 @@ class SliceSelection(Calculator):
                         name=f"relative_{metadim}", metadim=metadim, is_relative=True
                     ),
                 )
-            arr_schema = arr_schema.update_axis_coords(metadim_axis, coords=coords)
+            arr_schema = arr_schema.add_coords_to_axis(metadim_axis, coords=coords)
 
             # add the new dim
             new_axis = AxisInfo(
@@ -336,7 +336,10 @@ class SliceSelection(Calculator):
                     CoordInfo(name=self.new_dim), 
                     CoordInfo(f"{self.new_dim}_start_{metadim}", metadim=metadim),
                     CoordInfo(f"{self.new_dim}_stop_{metadim}", metadim=metadim),
-                    *[CoordInfo(name=condition) for condition in self.locus.member_condition_names]
+                    *[CoordInfo(
+                        name=condition, 
+                        levels=self.locus.levels_of_shared_member_conditions[condition]
+                        ) for condition in self.locus.levels_of_shared_member_conditions]
                     )
             )
             arr_schema = arr_schema.with_axis(new_axis, if_exists="error")
