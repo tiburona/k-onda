@@ -17,5 +17,6 @@ workpad*
 bugs/
 
 demo/data
+demo/k_onda_demo_time.ipynb
 
 .vscode
