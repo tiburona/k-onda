@@ -44,6 +44,7 @@ demo = [
 [dependency-groups]
 dev = [
     "ipykernel>=7.2.0",
+    "line-profiler>=5.0.2",
     "pytest>=9.0.2",
     "ruff",
 ]

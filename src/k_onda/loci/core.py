@@ -1,7 +1,6 @@
 import numpy as np
 from collections.abc import Iterable
 from collections import defaultdict
-from functools import reduce
 
 from k_onda.utils import is_unitful, wout_units
 from k_onda.central import type_registry, SpanDimPair, DimBounds

@@ -77,9 +77,6 @@ class AssembleArray(Transformer):
             CoordInfo(name=name, scale="nominal", levels=tuple(levels))
                       for name, levels in coord_levels.items())
         
-        if coord_levels:
-            a = 'foo'
-        
         data_schema = self.make_output_schema(
             input_schema, key_spec=key_spec, coord_infos=coord_infos
             )

@@ -453,7 +453,7 @@ class SliceSelection(Calculator):
             coord_correction += self.padlen[self.locus.dim][0]
         return coord_correction
     
-    def mask_by_parent_intervals(self, data_schema):
+    def select_by_parent_intervals(self, data_schema):
         if not self.new_dim:
             return False
         
@@ -465,6 +465,28 @@ class SliceSelection(Calculator):
             return False
         
         return True
+    
+    def get_parent_interval_indices(self, data, data_schema, selection_bounds):
+        parent_axes = data_schema.ordinal_axes_created_from(self.locus.metadim)
+
+        for ord_ax in parent_axes:
+           
+            start_coord = data.coords[f"{ord_ax.name}_start_{self.locus.metadim}"]
+            stop_coord = data.coords[f"{ord_ax.name}_stop_{self.locus.metadim}"]
+            ordinal_bounds = DimBoundsArray.from_coords(
+                start=start_coord, stop=stop_coord, dim=self.locus.dim
+            )
+
+            # a list of len selection_bounds
+            if getattr(self.locus[0], "anchor", None):
+                indices_of_parent_intervals = ordinal_bounds.containing_indices(
+                    [interval.anchor.value for interval in self.locus], self.locus.dim
+                    )
+            else:
+                indices_of_parent_intervals = ordinal_bounds.containing_indices(
+                    selection_bounds, self.locus.dim
+                    )
+        return indices_of_parent_intervals
 
     def get_parent_interval_masks(self, data, data_schema, selection_bounds):
     
@@ -516,28 +538,182 @@ class SliceSelection(Calculator):
                 ],
             )
 
+
+    @staticmethod
+    def coord_values(coord):
+        try:
+            return np.asarray(coord.pint.magnitude)
+        except Exception:
+            return np.asarray(coord)
+
+    @staticmethod
+    def is_monotonic_increasing(coord):
+        values = np.asarray(coord.pint.magnitude if hasattr(coord, "pint") else coord)
+
+        if values.size < 2:
+            return True
+
+        monotonic = (
+            values.ndim == 1
+            and np.all(np.isfinite(values))
+            and np.all(values[1:] >= values[:-1])
+        )
+        
+        return monotonic
+    
+    @staticmethod
+    def is_one_dimensional(coord_values):
+        return coord_values.ndim == 1
+    
+
+    def can_isel(self, coord):
+        coord_values = self.coord_values(coord)
+        return (self.is_one_dimensional(coord_values) & 
+                self.is_monotonic_increasing(self.coord_values))
+
+    def try_isel_uniform_intervals_within_parent(self, data_schema, data, selection_bounds):
+        parent_axis = data_schema.ordinal_axes_created_from(self.locus.metadim)[-1]
+        parent_name = parent_axis.name
+        
+        original_dim = data_schema.concrete_dim_from(self.locus.dim)
+
+        start_coord = data.coords[f"{parent_name}_start_{self.locus.metadim}"]
+        stop_coord = data.coords[f"{parent_name}_stop_{self.locus.metadim}"].pint.magnitude
+        units = start_coord.pint.units
+        start_coord = start_coord.pint.magnitude
+        
+        trial_indices = []
+        trial_boundaries = [0]
+        last_trial_ind = 0
+
+        for i, interval in enumerate(self.locus):
+            
+            anchor = interval.anchor.value.to(units).magnitude
+            idx = np.searchsorted(start_coord, anchor, side="right") - 1
+            if idx < 0 or idx >= len(start_coord) or anchor >= stop_coord[idx]:
+                idx = None
+            if last_trial_ind != idx:
+                trial_boundaries.append(i)
+            last_trial_ind = idx
+            trial_indices.append(idx)
+        
+        starts = []
+        stops = []
+
+        last_trial_ind = 0
+        for trial_ind in np.arange(len(start_coord)):
+            abs_time_for_trial = data[self.locus.dim].isel(trial=trial_ind)
+            abs_time = np.asarray(abs_time_for_trial.pint.magnitude)
+            right_edge = trial_boundaries[trial_ind + 1] if trial_ind < len(trial_boundaries) - 1 else None
+            slicer = slice(trial_boundaries[trial_ind], right_edge)
+            bounds = selection_bounds[slicer]
+
+            for bnds in bounds:
+            
+                coord_units = abs_time_for_trial.pint.units
+                lo = bnds[self.locus.dim][0].to(coord_units).magnitude
+                hi = bnds[self.locus.dim][1].to(coord_units).magnitude
+                
+                start = np.searchsorted(abs_time, lo, side="left")
+                stop = np.searchsorted(abs_time, hi, side="left")
+
+                starts.append(start)
+                stops.append(stop)
+            
+        starts = np.asarray(starts)
+        stops = np.asarray(stops)
+        unique_trials, counts = np.unique(trial_indices, return_counts=True)
+        num_new_dim_per_parent = counts[0]
+        starts_2d = starts.reshape(data.sizes[parent_name], num_new_dim_per_parent)
+        widths = stops - starts
+
+        width = widths[0]
+
+        sample_indexer = xr.DataArray(
+            starts_2d[:, :, None] + np.arange(width)[None, None, :],
+            dims=(parent_axis.name, self.new_dim, original_dim)
+        )
+
+        parent_indexer = xr.DataArray(
+            np.arange(len(unique_trials)),
+            dims=(parent_axis.name,)
+        )
+
+        selected = data.isel({
+            parent_name: parent_indexer,
+            original_dim: sample_indexer,
+        })
+
+        selected = selected.assign_coords(
+            {self.new_dim: (self.new_dim, np.arange(num_new_dim_per_parent))})
+
+        parent_base_coord_name = f"{parent_name}_{self.locus.metadim}"
+        base_coord_name = f"{self.new_dim}_{self.locus.metadim}"
+        base_coord = selected.coords[parent_base_coord_name].isel(
+            {parent_name:0, self.new_dim:0}, drop=True
+            )
+      
+        parent_base_coord = selected.coords[parent_base_coord_name].isel(
+            {parent_name: 0}, drop=True
+        )
+
+        selected = selected.rename({parent_base_coord_name: base_coord_name})
+
+        selected = selected.assign_coords(
+            {base_coord_name: (base_coord_name, base_coord.data) }
+        )
+
+        selected = selected.pint.quantify({base_coord_name: base_coord.pint.units})
+
+        selected = selected.assign_coords(
+            {parent_base_coord_name: ((self.new_dim, base_coord_name), parent_base_coord.data)}
+        )
+
+        selected = selected.assign_coords(
+            {f"relative_{self.locus.metadim}": (base_coord_name, base_coord.data)}
+        )
+
+
+        return selected
+
+
     def select_continuous(self, data, data_schema):
 
         original_dim = data_schema.concrete_dim_from(self.locus.dim)
 
         selection_bounds = self.selection_bounds.to_array()
 
-        mask_by_parent_intervals = self.mask_by_parent_intervals(data_schema)
+        select_by_parent_intervals = self.select_by_parent_intervals(data_schema)
 
-        if mask_by_parent_intervals:
+        if select_by_parent_intervals:
             ordinal_bounds = self.get_parent_interval_masks(data, data_schema, selection_bounds)
 
         selected = []
         kept_indices = []
+        coord = data.coords[self.locus.dim]
+        can_isel = self.can_isel(coord)
 
+        if self.new_dim == "pip":
+            return self.try_isel_uniform_intervals_within_parent(data_schema, data, selection_bounds)
+        
         for i, bounds in enumerate(selection_bounds):
 
-            mask = self.make_bounds_mask_over_dims(data, bounds)
-            if mask_by_parent_intervals:
-                for ob_mask in ordinal_bounds[i]:
-                    mask = mask & ob_mask
+            if can_isel:
+                values = coord.pint.magnitude
+                lo = bounds[self.locus.dim][0].to(coord.pint.units).magnitude
+                hi = bounds[self.locus.dim][1].to(coord.pint.units).magnitude
 
-            sliced = data.where(mask, drop=True)
+                start = np.searchsorted(values, lo, side="left")
+                stop = np.searchsorted(values, hi, side="left")
+                sliced = data.isel({coord.dims[0]: slice(start, stop)})
+
+            else:
+                mask = self.make_bounds_mask_over_dims(data, bounds)
+                if select_by_parent_intervals:
+                    for ob_mask in ordinal_bounds[i]:
+                        mask = mask & ob_mask
+
+                sliced = data.where(mask, drop=True)
 
             if any(size == 0 for size in sliced.sizes.values()):
                 continue

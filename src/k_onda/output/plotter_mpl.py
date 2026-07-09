@@ -5,7 +5,6 @@ from functools import reduce
 from operator import and_
 from collections.abc import Iterable
 from collections import defaultdict
-import re
 
 from k_onda.utils import is_unitful
 
