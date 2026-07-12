@@ -582,20 +582,30 @@ class SliceSelection(Calculator):
         units = start_coord.pint.units
         start_coord = start_coord.pint.magnitude
         
-        trial_indices = []
         trial_boundaries = [0]
         last_trial_ind = 0
+
+        # an interval's anchor is valid if an index i can be found such that start_coord[i] <= anchor
+        # and stop_coord > i is greater than the anchor 
+
+        valid_intervals = []
+        valid_trial_indices = []
+        valid_selection_bounds = []
 
         for i, interval in enumerate(self.locus):
             
             anchor = interval.anchor.value.to(units).magnitude
             idx = np.searchsorted(start_coord, anchor, side="right") - 1
-            if idx < 0 or idx >= len(start_coord) or anchor >= stop_coord[idx]:
-                idx = None
+            if idx < 0 or idx >= len(start_coord):
+                continue
+            if not (start_coord[idx] <= anchor < stop_coord[idx]):
+                continue
+            valid_intervals.append(interval)
+            valid_trial_indices.append(idx)
+            valid_selection_bounds.append(selection_bounds[i])
             if last_trial_ind != idx:
-                trial_boundaries.append(i)
+                trial_boundaries.append(len(valid_intervals)-1)
             last_trial_ind = idx
-            trial_indices.append(idx)
         
         starts = []
         stops = []
@@ -606,7 +616,7 @@ class SliceSelection(Calculator):
             abs_time = np.asarray(abs_time_for_trial.pint.magnitude)
             right_edge = trial_boundaries[trial_ind + 1] if trial_ind < len(trial_boundaries) - 1 else None
             slicer = slice(trial_boundaries[trial_ind], right_edge)
-            bounds = selection_bounds[slicer]
+            bounds = valid_selection_bounds[slicer]
 
             for bnds in bounds:
             
@@ -622,7 +632,7 @@ class SliceSelection(Calculator):
             
         starts = np.asarray(starts)
         stops = np.asarray(stops)
-        unique_trials, counts = np.unique(trial_indices, return_counts=True)
+        unique_trials, counts = np.unique(valid_trial_indices, return_counts=True)
         num_new_dim_per_parent = counts[0]
         starts_2d = starts.reshape(data.sizes[parent_name], num_new_dim_per_parent)
         widths = stops - starts

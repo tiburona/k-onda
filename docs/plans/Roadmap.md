@@ -95,7 +95,6 @@ Make K-Onda a reliable and user-friendly electrophysiology tool for our lab and 
 ### 9. DAG Improvements
 
 - Write methods for pretty printing the graph, including the configuration options for all the calculators.  
-- Write methods for printing the full 
 
 ### 10. User-Facing Documentation 
 Several complementary modes:

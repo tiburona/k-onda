@@ -16,6 +16,9 @@ scratch*
 workpad*
 bugs/
 
+# Local grant/application figure drafts
+grant_figures/
+
 demo/data
 demo/k_onda_demo_time.ipynb
 
