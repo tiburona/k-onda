@@ -18,6 +18,7 @@ from k_onda.central import (
     AxisKind,
     CoordInfo,
 )
+from k_onda.utils import is_monotonic_increasing, is_one_dimensional
 
 # Why it requires three different classes to accomplish selection:
 # The first, SpecifySelection, marks the user's intention to select with whatever
@@ -537,60 +538,64 @@ class SliceSelection(Calculator):
                     for dim in bounds
                 ],
             )
-
-
+   
     @staticmethod
-    def coord_values(coord):
+    def is_one_dimensional(coord):
         try:
-            return np.asarray(coord.pint.magnitude)
+            coord_values = np.asarray(coord.pint.magnitude)
         except Exception:
-            return np.asarray(coord)
-
-    @staticmethod
-    def is_monotonic_increasing(coord):
-        values = np.asarray(coord.pint.magnitude if hasattr(coord, "pint") else coord)
-
-        if values.size < 2:
-            return True
-
-        monotonic = (
-            values.ndim == 1
-            and np.all(np.isfinite(values))
-            and np.all(values[1:] >= values[:-1])
-        )
-        
-        return monotonic
-    
-    @staticmethod
-    def is_one_dimensional(coord_values):
+            coord_values = np.asarray(coord)
         return coord_values.ndim == 1
     
-
-    def can_isel(self, coord):
-        coord_values = self.coord_values(coord)
-        return (self.is_one_dimensional(coord_values) & 
-                self.is_monotonic_increasing(self.coord_values))
-
-    def try_isel_uniform_intervals_within_parent(self, data_schema, data, selection_bounds):
-        parent_axis = data_schema.ordinal_axes_created_from(self.locus.metadim)[-1]
+    def collect_variables_and_validate_isel_within_parent(self, data_schema, data, selection_bounds):
+        if not self.new_dim:
+            return None
+        parent_axes = data_schema.ordinal_axes_created_from(self.locus.metadim)
+        if len(parent_axes) != 1:
+            return None
+        if not getattr(self.locus[0], 'anchor', None):
+            return None
+        parent_axis = parent_axes[-1]
         parent_name = parent_axis.name
-        
-        original_dim = data_schema.concrete_dim_from(self.locus.dim)
-
         start_coord = data.coords[f"{parent_name}_start_{self.locus.metadim}"]
+        if not is_monotonic_increasing(start_coord):
+            return None
+        if not selection_bounds.is_monotonic_increasing(self.locus.dim):
+            return None
         stop_coord = data.coords[f"{parent_name}_stop_{self.locus.metadim}"].pint.magnitude
         units = start_coord.pint.units
         start_coord = start_coord.pint.magnitude
+        original_dim = data_schema.concrete_dim_from(self.locus.dim)
+        return parent_axis, parent_name, start_coord, stop_coord, units, original_dim
+    
+    def validate_array_regularity_for_isel_within_parent(
+            self, data, unique_trials, counts, widths, parent_name):
+        if (
+            not len(unique_trials) == data.sizes[parent_name] or
+            not np.all(unique_trials == np.arange(data.sizes[parent_name])) or
+            not np.all(counts == counts[0]) or
+            not np.all(widths == widths[0])):
+                return False
+        else:
+            return True
+
+    def try_isel_uniform_intervals_within_parent(self, data_schema, data, selection_bounds):
+        isel_variables = self.collect_variables_and_validate_isel_within_parent(
+            data_schema, data, selection_bounds
+        )
         
-        trial_boundaries = [0]
-        last_trial_ind = 0
+        if isel_variables is None:
+            return None
+        
+        parent_axis, parent_name, start_coord, stop_coord, units, original_dim = isel_variables
 
         # an interval's anchor is valid if an index i can be found such that start_coord[i] <= anchor
         # and stop_coord > i is greater than the anchor 
 
-        valid_intervals = []
-        valid_trial_indices = []
-        valid_selection_bounds = []
+        valid_parent_indices = []
+        valid_selection_bounds_by_parent = [[] for _ in range(len(start_coord))]
+        interval_starts_by_parent = [[] for _ in range(len(start_coord))]
+        interval_stops_by_parent = [[] for _ in range(len(start_coord))]
 
         for i, interval in enumerate(self.locus):
             
@@ -600,27 +605,22 @@ class SliceSelection(Calculator):
                 continue
             if not (start_coord[idx] <= anchor < stop_coord[idx]):
                 continue
-            valid_intervals.append(interval)
-            valid_trial_indices.append(idx)
-            valid_selection_bounds.append(selection_bounds[i])
-            if last_trial_ind != idx:
-                trial_boundaries.append(len(valid_intervals)-1)
-            last_trial_ind = idx
+            valid_parent_indices.append(idx)
+            valid_selection_bounds_by_parent[idx].append(selection_bounds[i])
+            interval_starts_by_parent[idx].append(interval.span[0])
+            interval_stops_by_parent[idx].append(interval.span[1])
         
         starts = []
         stops = []
 
-        last_trial_ind = 0
-        for trial_ind in np.arange(len(start_coord)):
-            abs_time_for_trial = data[self.locus.dim].isel(trial=trial_ind)
-            abs_time = np.asarray(abs_time_for_trial.pint.magnitude)
-            right_edge = trial_boundaries[trial_ind + 1] if trial_ind < len(trial_boundaries) - 1 else None
-            slicer = slice(trial_boundaries[trial_ind], right_edge)
-            bounds = valid_selection_bounds[slicer]
+        for parent_ind in np.arange(len(start_coord)):
+            abs_time_for_parent = data[self.locus.dim].isel(trial=parent_ind)
+            abs_time = np.asarray(abs_time_for_parent.pint.magnitude)
+            bounds = valid_selection_bounds_by_parent[parent_ind]
 
             for bnds in bounds:
             
-                coord_units = abs_time_for_trial.pint.units
+                coord_units = abs_time_for_parent.pint.units
                 lo = bnds[self.locus.dim][0].to(coord_units).magnitude
                 hi = bnds[self.locus.dim][1].to(coord_units).magnitude
                 
@@ -632,12 +632,16 @@ class SliceSelection(Calculator):
             
         starts = np.asarray(starts)
         stops = np.asarray(stops)
-        unique_trials, counts = np.unique(valid_trial_indices, return_counts=True)
-        num_new_dim_per_parent = counts[0]
-        starts_2d = starts.reshape(data.sizes[parent_name], num_new_dim_per_parent)
+        unique_parents, counts = np.unique(valid_parent_indices, return_counts=True)
         widths = stops - starts
 
+        if not self.validate_array_regularity_for_isel_within_parent(
+            data, unique_parents, counts, widths, parent_name):
+            return None
+
+        num_new_dim_per_parent = counts[0]
         width = widths[0]
+        starts_2d = starts.reshape(data.sizes[parent_name], num_new_dim_per_parent)
 
         sample_indexer = xr.DataArray(
             starts_2d[:, :, None] + np.arange(width)[None, None, :],
@@ -645,7 +649,7 @@ class SliceSelection(Calculator):
         )
 
         parent_indexer = xr.DataArray(
-            np.arange(len(unique_trials)),
+            np.arange(len(unique_parents)),
             dims=(parent_axis.name,)
         )
 
@@ -682,7 +686,29 @@ class SliceSelection(Calculator):
         selected = selected.assign_coords(
             {f"relative_{self.locus.metadim}": (base_coord_name, base_coord.data)}
         )
+        
+        units = interval_starts_by_parent[0][0].units
+        start_values = np.array([
+            [q.to(units).magnitude for q in row]
+             for row in interval_starts_by_parent
+        ])
+        stop_values = np.array([
+            [q.to(units).magnitude for q in row]
+             for row in interval_stops_by_parent
+        ])
 
+        new_dim = self.new_dim
+        selected = selected.assign_coords({
+            f"{new_dim}_start_{self.locus.metadim}": ((parent_name, new_dim), start_values),
+            f"{new_dim}_stop_{self.locus.metadim}": ((parent_name, new_dim), stop_values)},
+        )
+
+        selected = selected.pint.quantify(
+            {
+                f"{new_dim}_start_{self.locus.metadim}": units,
+                f"{new_dim}_stop_{self.locus.metadim}": units
+            }
+        )
 
         return selected
 
@@ -701,10 +727,21 @@ class SliceSelection(Calculator):
         selected = []
         kept_indices = []
         coord = data.coords[self.locus.dim]
-        can_isel = self.can_isel(coord)
 
-        if self.new_dim == "pip":
-            return self.try_isel_uniform_intervals_within_parent(data_schema, data, selection_bounds)
+        # First check whether we are performing a selection within a parent 
+        # ordinal dimension, i.e., events within epochs, and whether we meet
+        # criteria for the current fast path. 
+        isel_within_parent_result = self.try_isel_uniform_intervals_within_parent(
+            data_schema, 
+            data, 
+            selection_bounds
+            )
+        
+        # If so, return that result
+        if isel_within_parent_result is not None:
+            return isel_within_parent_result
+        
+        can_isel = is_one_dimensional(coord) & is_monotonic_increasing(coord)
         
         for i, bounds in enumerate(selection_bounds):
 
@@ -882,6 +919,7 @@ class SliceSelection(Calculator):
             swapped.append(arr)
 
         return swapped
+    
     
     def assign_ordinal_coordinates(self, data, kept_indices):
         new_dim = self.new_dim or "interval"

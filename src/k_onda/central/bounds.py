@@ -1,8 +1,10 @@
 from copy import deepcopy
 import pint
 from pprint import pformat
+import numpy as np
 
 from k_onda.mixins import DictDelegator
+from k_onda.utils import is_monotonic_increasing
 
 
 DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
@@ -249,7 +251,15 @@ class DimBoundsArray:
             raise ValueError("Selector loci must have exactly one parent interval.")
         
         return [inds[0] if len(inds) else None for inds in indices]
-        
+    
+    def is_monotonic_increasing(self, dim=None):
+        if dim:
+            return is_monotonic_increasing(np.asarray([bounds[dim][0].magnitude for bounds in self]))
+        else:
+            return all(
+                [is_monotonic_increasing(np.asarray([bounds[dim][0].magnitude for bounds in self])) 
+                 for dim in self[0].keys()]
+                 )
         
     def generate_mask(self, data):
         pass
