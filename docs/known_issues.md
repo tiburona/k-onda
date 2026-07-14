@@ -14,7 +14,7 @@ Experiment inherits from AnnotatorMixin, but is not currently setting an annotat
 
 That graph nodes and signals are synonymous is persistently confusing. There needs to be a refactor in which Signal is renamed to Node and Signal either inherits Node or  Signal becomes a Dataclass attached to Node with truly Signal-specific attributes, like sampling rate. 
 
-To think about: do I need new `AxisKind`s for the dim over which signals are stacked?  For the integer indexes created by the user?
+To think about: do I need new `AxisKind`s for the dim over which signals are stacked?  
 
 A `SignalStack` can't currently be compiled.  You probably mostly wouldn't want to, but there's no reason it shouldn't have the capability.
 
@@ -65,7 +65,9 @@ In a true DAG (i.e., not a tree, with consumers that share an upstream node), `w
 
 `attach_condition_coords` only attaches coords if all loci have the condition (`conditions = reduce(and_, [set(l.conditions.keys()) for l in self.locus])`).  Should decide if that's the desired behavior.
 
-Selection (or maybe aggregation, or both) is already slow.  It needs to be time profiled.
+`SliceSelection` is in an intermediate state.  After building a set of more carefully organized methods using the intersection of masks approach, I realized this was unacceptably slow for cases with regular arrays that could be handled by a single isel call, so now there is a long, insufficiently general method that handles this for the case where you're selecting child intervals that have one parent, and child and parent intervals make perfectly rectangular data. I think it is not worth trying to reorganize and make this properly general until I am ready to tackle ragged arrays, because it's only then that I will see the true abstraction shape.
+
+In the slow path attach_condition_coords is potentially wrong when the order of child conditions varies over levels of the parent locus set -- it should be a 2D coordinate.  
 
 
 ## Aggregation 

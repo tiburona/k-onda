@@ -596,6 +596,7 @@ class SliceSelection(Calculator):
         valid_selection_bounds_by_parent = [[] for _ in range(len(start_coord))]
         interval_starts_by_parent = [[] for _ in range(len(start_coord))]
         interval_stops_by_parent = [[] for _ in range(len(start_coord))]
+        conditions_by_parent = [[] for _ in range(len(start_coord))]
 
         for i, interval in enumerate(self.locus):
             
@@ -609,9 +610,11 @@ class SliceSelection(Calculator):
             valid_selection_bounds_by_parent[idx].append(selection_bounds[i])
             interval_starts_by_parent[idx].append(interval.span[0])
             interval_stops_by_parent[idx].append(interval.span[1])
+            conditions_by_parent[idx].append(interval.conditions)
         
         starts = []
         stops = []
+        
 
         for parent_ind in np.arange(len(start_coord)):
             abs_time_for_parent = data[self.locus.dim].isel(trial=parent_ind)
@@ -703,12 +706,44 @@ class SliceSelection(Calculator):
             f"{new_dim}_stop_{self.locus.metadim}": ((parent_name, new_dim), stop_values)},
         )
 
+        valid_condition_dicts = [
+            conditions
+            for parent_row in conditions_by_parent
+            for conditions in parent_row
+        ]
+
+
         selected = selected.pint.quantify(
             {
                 f"{new_dim}_start_{self.locus.metadim}": units,
                 f"{new_dim}_stop_{self.locus.metadim}": units
             }
         )
+        
+        all_child_conditions = reduce(and_, [set(c.keys()) for c in valid_condition_dicts])
+        
+        def get_child_conditions(condition, conditions_for_one_parent):
+            return [conditions.get(condition) for conditions in conditions_for_one_parent]
+
+        for condition in all_child_conditions:
+            reference_conditions = get_child_conditions(condition, conditions_by_parent[0])
+            condition_is_identical_over_parent = all(
+                get_child_conditions(condition, conditions_per_parent) == reference_conditions 
+                for conditions_per_parent in conditions_by_parent[1:]
+            )
+            if condition_is_identical_over_parent:
+                selected = selected.assign_coords({condition: (new_dim, reference_conditions)})
+
+            else:
+                selected = selected.assign_coords({
+                    condition: (
+                        (parent_name, new_dim), 
+                        [
+                            [conditions.get(condition) for conditions in parent_row]
+                            for parent_row in conditions_by_parent 
+                            ]
+                        )
+                })
 
         return selected
 
