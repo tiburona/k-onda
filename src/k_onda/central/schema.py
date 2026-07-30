@@ -21,6 +21,7 @@ class CoordInfo:
     metadim: str | None = None
     is_relative: str | bool = False
     is_grouping: bool = False
+    is_condition: bool = False
     scale: str | None = None
     levels: tuple[str, ...] | None = None
 
@@ -124,6 +125,21 @@ class Schema:
             for coord in ax.coords:
                 if coord.name == name:
                     return coord
+
+    def levels_grouped_by_coord(self, names=None) -> list[tuple]:
+        if names is None:
+            return [tuple(self.coord_by_name(name).levels) for name in self.coord_names]
+        else:
+            [tuple(self.coord_by_name(name).levels) for name in self.coord_names if name in names]
+
+    def coord_name_levels_map(self, names=None) -> dict:
+        if names is None:
+            return {name: self.coord_by_name(name).levels for name in self.coord_names}
+        else:
+            return {
+                name: self.coord_by_name(name).levels for name in self.coord_names if name in names
+                }
+
      
     def ax_coord_map(self, coords=None) -> dict:
         if not coords:
@@ -203,6 +219,10 @@ class Schema:
     @property
     def collectable_coords(self):
         return self.coord_names
+    
+    @property
+    def condition_coords(self):
+        return [coord for coord in self.coords if coord.is_condition]
     
     def axes_by_kind(self, kind):
         return [ax for ax in self.axes if ax.kind == kind]

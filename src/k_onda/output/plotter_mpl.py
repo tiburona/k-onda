@@ -1,14 +1,46 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import reduce
 from operator import and_
 from collections.abc import Iterable
 from collections import defaultdict
+from matplotlib.patches import Patch
+import itertools
+
 
 from k_onda.utils import is_unitful
 
 
+BAR_DEFAULT_PROPS = {
+    "color": "#4C78A8",
+}
+
+PLOT_TYPE_TO_DEFAULTS = {
+    "histogram": BAR_DEFAULT_PROPS,
+    "time-histogram": BAR_DEFAULT_PROPS,
+    "psth": BAR_DEFAULT_PROPS
+}
+
+
+def candidate_matches_selector(selector, candidate):
+    for key, selected in selector.items():
+        if key not in candidate:
+            return False
+            
+        actual = candidate[key]
+
+        if isinstance(selected, str):
+            if actual != selected:
+                return False
+        elif isinstance(selected, Iterable):
+            if actual not in selected:
+                return False
+        else:
+            if actual != selected:
+                return False
+
+    return True
 
 
 class PlotMixin:
@@ -89,7 +121,6 @@ class PlotMixin:
 
         return node
        
-
     def colors(self, rules=None, **kwargs):
         data_schema = self.data_source.data_schema
         # possible keys in kwargs
@@ -134,7 +165,6 @@ class PlotMixin:
             )
         return matches
     
-
     def _parse_kwarg(self, kwargs, kwarg, data_schema):
         if "|" in kwarg:
             if "&" in kwarg:
@@ -170,7 +200,48 @@ class PlotMixin:
             )
 
         return rule
-     
+    
+    def legend(self, *args, position="upper right", title="", **kwargs):
+        infer_entries = False
+        if not args:
+            infer_entries=True
+            legend_entries = []
+        else:
+            if len(args) > 1:
+                raise ValueError("`legend` accepts a maximum of one positional arg")
+            if not isinstance(args[0], dict):
+                raise ValueError("Positional arg passed to `legend` must be of type `dict`.")
+            legend_entries = self.construct_legend_entries_from_structured_input(args)
+
+        legend_spec = Legend(
+                entries=legend_entries,
+                title=title,
+                position=position,
+                infer_entries=infer_entries,
+                kwargs = kwargs
+            )
+
+        return AddLegend(legend_spec=legend_spec)(self)
+
+    def construct_legend_entries_from_structured_input(self, args):
+        if len(args) != 1:
+            raise ValueError(
+                "If you are using the structured format for `legend` you can " \
+                "only pass one positional arg"
+                )
+        legend_entries = []
+
+        for label, vals in args[0].items():
+            legend_entries.append(
+                LegendEntry(
+                    label=label,
+                    selector={k:v for k, v in vals.items() if k != "traits"},
+                    traits=vals.get("traits")
+                )
+            )
+        return legend_entries
+            
+
 
 @dataclass
 class Layout:
@@ -208,30 +279,53 @@ class Label:
 
 
 @dataclass
+class LabelPlan:
+    explicit: list[Label] = field(default_factory=list)
+    infer_missing: bool = False
+
+
+@dataclass
 class StyleRule:
     selector: dict = field(default_factory=dict)
     props: dict = field(default_factory=dict)
 
 
+@dataclass
+class LegendEntry:
+    label: str
+    selector: dict = field(default_factory=dict)
+    traits: list[str] | None = None
+    props: dict | None = None
+
+
+@dataclass
+class Legend:
+    entries: list[LegendEntry] = field(default_factory=list)
+    infer_entries: bool = False
+    position: str = "upper right"
+    title: str | None = None
+    kwargs: dict = field(default_factory=dict)
+
+
 class PlotNode(PlotMixin):
     def __init__(
             self, 
+
             data_source=None, 
             plot_type=None, 
-            layout=None, 
+            layout_spec=None, 
             coords=None, 
-            labels=None,
-            style_rules=None
+            label_plan=None,
+            style_rules=None,
+            legend_spec=None
             ):
         self.data_source = data_source
         self.plot_type = plot_type
-        self.layout_spec = layout
+        self.layout_spec = layout_spec
         self.coords = coords
-        self.label_specs = labels
+        self.label_plan = label_plan
         self.style_rules = style_rules
-
-
-
+        self.legend_spec = legend_spec
 
 
 class PlotDirective:
@@ -259,23 +353,53 @@ class SetLayout(PlotDirective):
         self.panels_string = panels
 
     def direct(self, input):
-        layout = self.parse_layout()
+        layout_spec = self.parse_layout(input)
         return PlotNode(
             data_source = input.data_source,
             plot_type=input.plot_type,
             coords=input.coords,
-            labels=input.label_specs, 
-            layout=layout,
-            style_rules=input.style_rules)
+            label_plan=input.label_plan, 
+            layout_spec=layout_spec,
+            style_rules=input.style_rules,
+            legend_spec=input.legend_spec)
+    
+    def validate_layout(self, panel_array, data_schema):
+        for row in panel_array:
+            for panel in row:
+                levels = panel.strip().split()
+                if self.by:
+                    if len(self.by) != len(levels):
+                        raise ValueError(
+                            f"The length of {self.by} does not equal the length of {panel}"
+                            )
+                self.validate_condition_levels(data_schema, levels)
+              
 
+    def validate_condition_levels(self, data_schema, panel_levels):
+      
+        for i, level in enumerate(panel_levels):
+            conditions = data_schema.coord_names_by_level(level)
+            if self.by:
+                if not any(self.by[i] == condition for condition in conditions):
+                    raise ValueError(f"{level} does not belong to condition indicated in {self.by[i]}")
+            else:
+                if len(conditions) > 1:
+                    raise ValueError(f"You have provided ambiguous input to layout. {level} does not "
+                                     "indicate a unique condition.  Use the `by` keyword.")
+                if len(conditions) < 1:
+                    raise ValueError(f"{level} does not belong to any conditions")
 
-    def parse_layout(self):
+    
+
+    def parse_layout(self, input):
         """
         example layout string
         'control IN, control PN; defeat IN, defeat PN'
         """
+        data_schema = input.data_source.data_schema
         rows = self.panels_string.split(";")
         panel_array = [row.split(",") for row in rows]
+        self.validate_layout(panel_array, data_schema)
         panels = []
         max_cols = 0
        
@@ -285,14 +409,15 @@ class SetLayout(PlotDirective):
             
             for j, c in enumerate(r):
                 cols_in_row +=1
-                
-                conditions = c.strip().split()
-
-                if len(conditions) != len(self.by):
-                    raise ValueError(f"Length {self.by} does not equal length {c}")
-                panel = Panel(row=i, col=j, coords={
-                    k: v for k, v in zip(self.by, conditions)
-                })
+                levels = c.strip().split()
+                if self.by:
+                    panel = Panel(row=i, col=j, coords={
+                        k: v for k, v in zip(self.by, levels)
+                    })
+                else:
+                    panel = Panel(row=i, col=j, coords={
+                        data_schema.coord_names_by_level(level): level for level in levels
+                    })
                 row.append(panel)
             if max_cols < cols_in_row:
                 max_cols = cols_in_row
@@ -304,30 +429,43 @@ class SetLayout(PlotDirective):
 
 class AddLabel(PlotDirective):
 
-    def __init__(self, label):
-        self.label = label
+    def __init__(self, label, infer_missing=False):
+        self.label = label 
+        self.infer_missing = infer_missing
+       
 
     def direct(self, input):
+        self.validate_label(input)
+
+        if input.label_plan is None:
+            explicit = [self.label] or []
+            infer_missing = self.infer_missing
+        else:
+            if self.label:
+                explicit = [*input.label_plan.explicit, self.label]
+            else:
+                explicit = input.label_plan.explicit
+            infer_missing = input.label_plan.infer_missing or self.infer_missing
+        
+        label_plan = LabelPlan(explicit=explicit, infer_missing=infer_missing)
+        
         return PlotNode(
             data_source = input.data_source,
             plot_type=input.plot_type,
             coords=input.coords,
-            labels=self.parse_label(input), 
-            layout=input.layout_spec,
-            style_rules=input.style_rules)
+            label_plan=label_plan, 
+            layout_spec=input.layout_spec,
+            style_rules=input.style_rules,
+            legend_spec=input.legend_spec)
 
-
-    def parse_label(self, input):
-        # my job is going to be merging or raising if there's a conflict
-        # also I can resolve text maybe?
-
-        existing_labels = input.label_specs or []
+    def validate_label(self, input):
+        if input.label_plan is None:
+            return
+        existing_labels = input.label_plan.explicit or []
         if self.label.scope == "figure":
             self.check_figure_labels(existing_labels)
         else:
             self.check_panel_labels(existing_labels)
-
-        return [*existing_labels, self.label]
 
     def check_figure_labels(self, existing_labels):
         for label in existing_labels:
@@ -370,27 +508,44 @@ class AddStyle(PlotDirective):
             data_source = input.data_source,
             plot_type=input.plot_type,
             coords=input.coords,
-            labels=input.label_specs, 
-            layout=input.layout_spec,
+            label_plan=input.label_plan, 
+            layout_spec=input.layout_spec,
+            legend_spec=input.legend_spec,
             style_rules=[*style_rules, self.style_rule]
         )
-
     
 
+class AddLegend(PlotDirective):
+    def __init__(self, legend_spec):
+        self.legend_spec = legend_spec
+
+    def direct(self, input):
+        return PlotNode(
+            data_source = input.data_source,
+            plot_type=input.plot_type,
+            coords=input.coords,
+            label_plan=input.label_plan, 
+            layout_spec=input.layout_spec,
+            style_rules=input.style_rules,
+            legend_spec=self.legend_spec
+        )
+
+
 class PlotRoleResolver:
-    def resolve(self, plot_node):
+
+    def resolve(self, plot_node, layout_spec):
         if plot_node.plot_type in ("histogram", "time-histogram", "psth"):
-            return self.resolve_histogram(plot_node)
+            return self.resolve_histogram(plot_node, layout_spec)
         raise NotImplementedError("Only histogram plots are currently implemented")
 
-    def resolve_histogram(self, plot_node):
+    def resolve_histogram(self, plot_node, layout_spec):
         role_source_map = {
-            "x": PlotSource(kind="coord", name=self.infer_x_source(plot_node)),
+            "x": PlotSource(kind="coord", name=self.infer_x_source(plot_node, layout_spec)),
             "y": PlotSource(kind="values")
         }
         return role_source_map
 
-    def infer_x_source(self, input):
+    def infer_x_source(self, input, layout_spec):
         if input.coords:
             # The user has supplied a coord name
             source = next(iter(input.coords.values()))
@@ -399,7 +554,7 @@ class PlotRoleResolver:
             # The default coord is the name of the one remaining axis.
             data_schema = input.data_source.data_schema
             panel_coord_names = set().union(
-                *(panel.coords.keys() for panel in input.layout_spec.flat_panels)
+                *(panel.coords.keys() for panel in layout_spec.flat_panels)
             )
             default_axes = data_schema.axis_names_minus_axes_with_coords(panel_coord_names)
 
@@ -408,13 +563,252 @@ class PlotRoleResolver:
             source = default_axes[0]
 
         return source
+    
+
+class LabelResolver:
+    
+    def resolve(self, input, role_source_map, layout_spec):
+       
+        if input.label_plan.infer_missing:
+            label_plan = self.infer_missing_labels(input, role_source_map, layout_spec)
+        else:
+            label_plan = input.label_plan
+
+        return label_plan
+
+    def infer_missing_labels(self, input,  role_source_map, layout_spec):
+        label_plan = self.ensure_axis_labels(input.label_plan, role_source_map)
+        label_plan = self.ensure_panel_labels(layout_spec, label_plan)
+        return label_plan
+
+    def ensure_axis_labels(self, label_plan, role_source_map):
+        labels = list(label_plan.explicit)
+        for axis in ("x", "y"):
+            axis_label = [label for label in label_plan.explicit if label.axis == axis]
+            if not axis_label:
+                labels.append(Label(role_source_map[axis].name, axis= axis))
+
+        return replace(label_plan, explicit=labels)
+    
+    def ensure_panel_labels(self, layout, label_plan):
+
+        labels = list(label_plan)
+
+        panel_labels_exist = bool([
+            label for label in label_plan.explicit if label.scope == "panel"
+            ])
+        
+        if not panel_labels_exist:
+            panels = layout.flat_panels
+            coord_sets = {set(panel.coords) for panel in panels}
+            
+            if len(coord_sets) != 1:
+                raise ValueError(
+                    "Automatic panel labels require all panels to use the same "
+                    "condition coordinates. Use panel_labels() explicitly."
+                    )
+            
+            labels.append(
+                Label(
+                    text = " ".join(f"{{{coord_name}}}" for coord_name in panels[0].coords),
+                    scope="panel",
+                    side="bottom",
+                    where="all",
+                    units=None
+                    )
+            )
+
+        return replace(label_plan, explicit=labels)
 
 
+class LegendResolver:
+
+    def resolve(self, input):
+        legend_spec = input.legend_spec
+
+        if legend_spec.infer_entries:
+            entries = self.infer_legend_entries(input)
+        else:
+            entries = self.resolve_legend_entries(input)
+
+        return replace(legend_spec, entries=entries)
+
+    def resolve_style(self, selector, style_rules, defaults=None):
+        defaults = defaults or {}
+        props = {**defaults}
+        for rule in style_rules:
+            if candidate_matches_selector(rule.selector, selector):
+                props = {**props, **rule.props}
+        return props
+    
+    def infer_legend_entries(self, input):
+        # Combined legend inference:
+        #
+        # 1. Find the condition coordinates referenced by StyleRule selectors.
+        #    Coordinates not referenced by any StyleRule do not affect the legend.
+        #
+        # 2. Get every level of each relevant coordinate from the schema, including
+        #    levels that have no explicit StyleRule and therefore use defaults.
+        #
+        # 3. Generate the Cartesian product of those level domains. Each combination
+        #    becomes a concrete candidate selector.
+        #
+        # 4. For each candidate selector, resolve its effective props by starting with
+        #    the plot-type defaults and applying every matching StyleRule in order.
+        #
+        # 5. Generate one label from the complete selector combination.
+        #
+        # 6. Construct one LegendEntry from each selector, label, and resolved props.
+        if not input.style_rules:
+            raise ValueError("You have called `legend` with no arguments, but have added no styles " \
+            "from which to build a legend")
+        style_rules = input.style_rules
+        data_schema = input.data_source.data_schema
+        entries = []
+
+        coordinates = list(
+            dict.fromkeys([k for rule in style_rules for k in rule.selector.keys()])
+            )
+
+        if not coordinates:
+            raise ValueError(
+                "Cannot infer legend entries because no style rule refers "
+                "to a condition coordinate."
+            )
+
+        for coord_name in coordinates:
+            coord = data_schema.coord_by_name(coord_name)
+            if  not coord.is_condition:
+                raise ValueError(f"You've attached a style rule to coordinate {coord_name}, which" 
+                    "is not a condition, and are inferring a legend. Style rules"
+                    "should only be attached to condition coordinates.")
+            if  coord.levels is None:
+                raise ValueError(f"You've attached a style rule to coordinate {coord_name} without" 
+                    "levels, and are inferring a legend.  Style rules should only be " 
+                    "attached to condition coordinates with levels.")
+
+        coord_names_to_levels = data_schema.coord_name_levels_map(coordinates)
+        coordinates = list(coord_names_to_levels)
+        levels = coord_names_to_levels.values()
+
+        selectors = [
+            dict(zip(coordinates, combo)) for combo in itertools.product(*levels)
+        ]
+
+        defaults = PLOT_TYPE_TO_DEFAULTS[input.plot_type]
+
+        for combination in selectors:
+            props = self.resolve_style(combination, style_rules, defaults)
+            label = " ".join(combination.values())
+            entries.append(LegendEntry(label=label, props=props, selector=combination))
+
+        return entries
+
+    def resolve_legend_entries(self, input):
+        style_rules = input.style_rules or []
+        defaults = PLOT_TYPE_TO_DEFAULTS[input.plot_type]
+        
+        entries = input.legend_spec.entries
+        resolved_entries = []
+        for entry in entries:
+            if entry.props is None:
+                props = self.resolve_style(entry.selector, style_rules, defaults=defaults)
+                if entry.traits is not None:
+                    props = {k: v for k, v in props.items() if k in entry.traits}
+                    resolved_entry = replace(entry, props=props)
+                else:
+                    resolved_entry = replace(entry, traits=list(props), props=props)
+            else:
+                resolved_entry = entry
+            resolved_entries.append(resolved_entry)
+
+        return resolved_entries
+    
+
+class LayoutResolver:
+    
+    def resolve(self, input):
+        data_schema = input.data_source.data_schema
+        self.validate(data_schema)
+        conditions = data_schema.condition_coords
+        if len(conditions) == 1:
+            condition = conditions[0]
+            num_rows = 1
+            num_cols = len(condition.levels)
+            flat_panels = [Panel(row=0, col=j, coords={condition.name: level}) 
+                      for j, level in enumerate(condition.values())]
+            panels = [flat_panels]
+        elif len(conditions) == 2:
+            condition_a, condition_b = conditions
+            num_rows = len(condition_a.levels)
+            num_cols = len(condition_b.levels)
+            panels = [[
+                Panel(
+                    row=i, col=j, coords={condition_a.name: a_level, condition_b.name: b_level}
+                    ) 
+                for j, b_level in enumerate(condition_b.levels)
+                ] for i, a_level in enumerate(condition_a.levels)
+                ]
+            flat_panels = [panel for row in panels for panel in row]
+        else:
+            condition_a, condition_b, condition_c = conditions
+            num_rows = condition_a.levels * condition_b.levels
+            num_cols = condition_c.levels
+            panels = [[[
+                Panel(
+                    row = j*i + j, 
+                    col=k, 
+                    coords={
+                        condition_a.name: a_level, 
+                        condition_b.name: b_level, 
+                        condition_c.name: c_level
+                        }) 
+                        for k, c_level in enumerate(condition_c.levels)] 
+                        for j, b_level in enumerate(condition_b.levels)] 
+                        for i, a_level in enumerate(condition_a.levels)
+                    ]
+            flat_panels = [panel for facet in panels for row in facet for panel in row]
+        
+        return Layout(
+            num_rows=num_rows,
+            num_cols=num_cols,
+            panels = panels,
+            flat_panels = flat_panels
+        )
+
+    def validate(self, data_schema):
+        conditions = data_schema.condition_coords
+        
+        if len(conditions) > 3:
+            condition_names = "\n".join(condition.name for condition in conditions)
+            raise ValueError(
+                f"Automatic layout supports at most 3 varying conditions, but found {len(conditions)}:" \
+                f"\n{condition_names}\n" \
+                "You must define the layout explicitly.")
+        num_panels = reduce(
+            lambda x, y: x*y, 
+            [len(condition.levels) for condition in conditions]
+            )
+        if num_panels > 20:
+            raise ValueError(
+                f"Automatic layout supports 20 total levels of conditions, but found {num_panels}." \
+                f"You must define the layout explicitly."
+            )
+        
 
 class Render(PlotDirective):
 
-    def __init__(self, role_resolver=None):
+    def __init__(
+            self, 
+            role_resolver=None, 
+            label_resolver=None, 
+            layout_resolver=None, 
+            legend_resolver=None
+            ):
         self.role_resolver = role_resolver or PlotRoleResolver()
+        self.label_resolver = label_resolver or LabelResolver()
+        self.layout_resolver = layout_resolver or LayoutResolver()
+        self.legend_resolver = legend_resolver or LegendResolver()
 
     def direct(self, input):
         return self.make_figure(input)
@@ -422,35 +816,70 @@ class Render(PlotDirective):
     def make_figure(self, input):
         figsize = getattr(input, 'figsize', (8, 8))
         fig = plt.figure(figsize=figsize)
-        layout = input.layout_spec
+        data = self.get_plot_data(input)
+
+        if input.layout_spec is None:
+            layout = self.layout_resolver.resolve(input)
+        else:
+            layout = input.layout_spec
         style_rules = input.style_rules or []
         gs = fig.add_gridspec(layout.num_rows, layout.num_cols)
-
-        
         panel_ax_map = {}
-        data = self.get_plot_data(input)
-        role_source_map = self.role_resolver.resolve(input)
+        role_source_map = self.role_resolver.resolve(input, layout)
 
         for panel in layout.flat_panels:
             ax = fig.add_subplot(gs[panel.row, panel.col])
             panel_ax_map[(panel.row, panel.col)] = ax
             func = self.plot_function_map[input.plot_type]
-            func(panel, ax, data, role_source_map, style_rules)
+            func(input.plot_type, panel, ax, data, role_source_map, style_rules)
 
-        self.add_labels(input, fig, data, panel_ax_map, role_source_map)
+        label_plan =  self.label_resolver.resolve(input, role_source_map, layout)
 
+        if label_plan:
+            self.add_labels(layout, label_plan, fig, data, panel_ax_map, role_source_map)
+
+        if input.legend_spec:
+            legend_spec = self.legend_resolver.resolve(input)
+            self.add_legend(legend_spec, fig)
 
         fig.show()
 
         return fig
     
-    def add_labels(self, input, fig, data, panel_ax_map, role_source_map):
-        labels = input.label_specs or []
+    def bar_kwargs_from_props(self, props):
+        # matplotlib accepts {'/', '\', '|', '-', '+', 'x', 'o', 'O', '.', '*'}
+        # for hatch
+        
+        bar_kwargs = {k:v for k, v in props.items() if k not in ["pattern", "color"]}
+        if "pattern" in props:
+            bar_kwargs["hatch"] = props["pattern"]
+        if "color" in props:
+            bar_kwargs["facecolor"] = props["color"]
+        return bar_kwargs
+        
+    
+    def add_legend(self, legend_spec, fig):
+        entries = legend_spec.entries
+      
+        handles = [Patch(**self.bar_kwargs_from_props(entry.props)) for entry in entries]
+        labels = [entry.label for entry in entries]
+
+        fig.legend(
+            handles=handles, 
+            labels=labels, 
+            title=legend_spec.title, 
+            loc=legend_spec.position,
+            **legend_spec.kwargs
+            )
+
+    
+    def add_labels(self, layout, label_plan, fig, data, panel_ax_map, role_source_map):
+        labels = label_plan.explicit or []
         for label in labels:
             if label.scope == "figure":
                 self.add_figure_label(label, data, fig, role_source_map)
             elif label.scope == "panel":
-                self.add_panel_label(input, label, data, panel_ax_map, role_source_map)
+                self.add_panel_label(layout, label, data, panel_ax_map, role_source_map)
             else:
                 raise ValueError(f"Unknown value {label.scope} for label scope.")
 
@@ -462,8 +891,8 @@ class Render(PlotDirective):
         elif label.axis == "y":
             fig.supylabel(text, **label.kwargs)
         
-    def add_panel_label(self, input, label, data, panel_ax_map, role_source_map):
-        panels_to_label = self.select_panels_to_label(input, label.where)
+    def add_panel_label(self, layout, label, data, panel_ax_map, role_source_map):
+        panels_to_label = self.select_panels_to_label(layout, label.where)
         if label.side in ("bottom", "top"):
             for panel in panels_to_label:
                 ax = panel_ax_map[(panel.row, panel.col)]
@@ -501,9 +930,7 @@ class Render(PlotDirective):
 
         return text
     
-
-    def select_panels_to_label(self, input, where):
-        layout = input.layout_spec
+    def select_panels_to_label(self, layout, where):
         panels = layout.panels
         flat_panels = layout.flat_panels
         if where == "all":
@@ -520,53 +947,30 @@ class Render(PlotDirective):
             raise ValueError(f"Unknown value for where {where}")
        
 
-    def histogram(self, panel, ax, data, role_source_map, style_rules):
+    def histogram(self, plot_type, panel, ax, data, role_source_map, style_rules):
         x_source = role_source_map["x"]
         panel_data = self.get_panel_data(panel, data)
         x = panel_data.coords[x_source.name].pint.magnitude
         y = panel_data.pint.magnitude
         width = np.median(np.diff(x))
-        kwargs = self.get_merged_kwargs(style_rules, panel_data)
+        kwargs = self.get_merged_kwargs(plot_type, style_rules, panel_data)
         ax.bar(x, y, width=width, align="edge", **kwargs)
         ax.set_xlim(x[0], x[-1] + width)
         ax.margins(y = 0.08)
 
-    def get_merged_kwargs(self, style_rules, panel_data):
+    def get_merged_kwargs(self, plot_type, style_rules, panel_data):
+        defaults = PLOT_TYPE_TO_DEFAULTS[plot_type]
         selected_style_rules = [
             sr for sr in style_rules if self.panel_matches_style_rule(panel_data, sr)
             ]
-        kwargs_list = [self.bar_kwargs_from_style_rule(sr) for sr in selected_style_rules]
+        kwargs_list = [sr.props for sr in selected_style_rules]
         merged_kwargs = reduce(lambda acc, d: {**acc, **d}, kwargs_list, {})
+        merged_kwargs = {**defaults, **merged_kwargs}
+        merged_kwargs = self.bar_kwargs_from_props(merged_kwargs)
         return merged_kwargs
 
-    def bar_kwargs_from_style_rule(self, style_rule):
-        kwargs = {}
-        for prop in style_rule.props:
-            if prop == "color":
-                kwargs["color"] = style_rule.props["color"]
-
-        return kwargs
-
-        # TODO need to think about other kwargs later.  Not clear
-        # that every style can just be passed through as a kwarg.
-
     def panel_matches_style_rule(self, panel_data, style_rule):
-        for key in style_rule.selector:
-            if key not in panel_data.coords:
-                return False
-            
-            selected = style_rule.selector[key]
-
-            if isinstance(selected, str):
-                if panel_data.coords[key].item() != selected:
-                    return False
-            elif isinstance(selected, Iterable):
-                if panel_data.coords[key].item() not in selected:
-                    return False
-            else:
-                raise TypeError(f"Unknown type for {style_rule.selector[key]}")
-
-        return True
+        return candidate_matches_selector(style_rule.selector, panel_data.coords)
 
     def get_plot_data(self, input):
         compiled_input = input.data_source.compile()

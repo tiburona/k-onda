@@ -338,7 +338,8 @@ class SliceSelection(Calculator):
                     CoordInfo(f"{self.new_dim}_start_{metadim}", metadim=metadim),
                     CoordInfo(f"{self.new_dim}_stop_{metadim}", metadim=metadim),
                     *[CoordInfo(
-                        name=condition, 
+                        name=condition,
+                        is_condition=True, 
                         levels=self.locus.levels_of_shared_member_conditions[condition]
                         ) for condition in self.locus.levels_of_shared_member_conditions]
                     )

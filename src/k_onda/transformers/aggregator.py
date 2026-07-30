@@ -74,7 +74,7 @@ class AssembleArray(Transformer):
                     coord_levels[coord_name].append(level)
         
         coord_infos = tuple(
-            CoordInfo(name=name, scale="nominal", levels=tuple(levels))
+            CoordInfo(name=name, scale="nominal", is_condition=True, levels=tuple(levels))
                       for name, levels in coord_levels.items())
         
         data_schema = self.make_output_schema(
