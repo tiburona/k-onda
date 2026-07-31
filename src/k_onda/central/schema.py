@@ -223,6 +223,10 @@ class Schema:
     @property
     def condition_coords(self):
         return [coord for coord in self.coords if coord.is_condition]
+
+    @property
+    def conditions_coord_names(self):
+        return [coord.name for coord in self.condition_coords]
     
     def axes_by_kind(self, kind):
         return [ax for ax in self.axes if ax.kind == kind]

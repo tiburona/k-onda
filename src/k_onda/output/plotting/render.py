@@ -5,6 +5,7 @@ from .bars import BarRenderer
 from .core import PlotDirective
 from .labels import LabelRenderer, LabelResolver
 from .layout import LayoutResolver
+from .axes import AxisSharingResolver
 from .legend import LegendRenderer, LegendResolver
 
 
@@ -15,6 +16,7 @@ class Render(PlotDirective):
         role_resolver=None,
         label_resolver=None,
         layout_resolver=None,
+        axis_sharing_resolver=None,
         legend_resolver=None,
         bar_renderer=None,
         label_renderer=None,
@@ -23,6 +25,7 @@ class Render(PlotDirective):
         self.role_resolver = role_resolver or PlotRoleResolver()
         self.label_resolver = label_resolver or LabelResolver()
         self.layout_resolver = layout_resolver or LayoutResolver()
+        self.share_ax_resolver = axis_sharing_resolver or AxisSharingResolver()
         self.legend_resolver = legend_resolver or LegendResolver()
         self.bar_renderer = bar_renderer or BarRenderer()
         self.label_renderer = label_renderer or LabelRenderer()
@@ -44,9 +47,22 @@ class Render(PlotDirective):
         grid = fig.add_gridspec(layout.num_rows, layout.num_cols)
         panel_ax_map = {}
         role_source_map = self.role_resolver.resolve(input, layout)
-
+        panel_to_x_anchor_panel, panel_to_y_anchor_panel = self.share_ax_resolver.resolve(
+            input, 
+            layout
+            )
+        
+        def get_shareax(panel_to_anchor_panel_map, panel):
+            share_panel = panel_to_anchor_panel_map[(panel.row, panel.col)]
+            if share_panel is None:
+                return None
+            return panel_ax_map[(share_panel.row, share_panel.col)]
+    
         for panel in layout.flat_panels:
-            ax = fig.add_subplot(grid[panel.row, panel.col])
+            
+            sharex = get_shareax(panel_to_x_anchor_panel, panel)
+            sharey = get_shareax(panel_to_y_anchor_panel, panel)
+            ax = fig.add_subplot(grid[panel.row, panel.col], sharex=sharex, sharey=sharey)
             panel_ax_map[(panel.row, panel.col)] = ax
             self.bar_renderer.render(
                 input.plot_type,

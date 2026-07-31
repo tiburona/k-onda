@@ -37,6 +37,7 @@ def replace_plot_node(input, **changes):
         "data_source": input.data_source,
         "plot_type": input.plot_type,
         "layout_spec": input.layout_spec,
+        "axis_sharing": input.axis_sharing,
         "coords": input.coords,
         "label_plan": input.label_plan,
         "style_rules": input.style_rules,

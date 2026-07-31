@@ -1,6 +1,7 @@
 from .core import PlotDirective, new_plot_node
 from .labels import LabelMixin
 from .layout import LayoutMixin
+from .axes import AxisSharingMixin
 from .legend import LegendMixin
 from .render import Render
 from .style import StyleMixin
@@ -8,6 +9,7 @@ from .style import StyleMixin
 
 class PlotMixin(
     LayoutMixin,
+    AxisSharingMixin,
     LabelMixin,
     StyleMixin,
     LegendMixin,

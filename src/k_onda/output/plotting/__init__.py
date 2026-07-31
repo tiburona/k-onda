@@ -19,6 +19,14 @@ from .labels import (
     LabelResolver,
 )
 from .layout import Layout, LayoutMixin, LayoutResolver, Panel, SetLayout
+
+from .axes import (
+    AxisSharing, 
+    AxisSharingMixin, 
+    SetAxisSharing, 
+    AxisSharingResolver
+    )
+
 from .legend import (
     AddLegend,
     Legend,
@@ -36,6 +44,9 @@ __all__ = [
     "AddLabel",
     "AddLegend",
     "AddStyle",
+    "AxisSharing",
+    "AxisSharingMixin",
+    "AxisSharingResolver",
     "BAR_DEFAULT_PROPS",
     "BarRenderer",
     "Label",
@@ -59,6 +70,7 @@ __all__ = [
     "PlotRoleResolver",
     "PlotSource",
     "Render",
+    "SetAxisSharing",
     "SetLayout",
     "SetPlotType",
     "StyleMixin",
