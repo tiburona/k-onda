@@ -735,9 +735,8 @@ class LayoutResolver:
             condition = conditions[0]
             num_rows = 1
             num_cols = len(condition.levels)
-            flat_panels = [Panel(row=0, col=j, coords={condition.name: level}) 
-                      for j, level in enumerate(condition.values())]
-            panels = [flat_panels]
+            panels = [[Panel(row=0, col=j, coords={condition.name: level}) 
+                      for j, level in enumerate(condition.values())]]
         elif len(conditions) == 2:
             condition_a, condition_b = conditions
             num_rows = len(condition_a.levels)
@@ -749,31 +748,29 @@ class LayoutResolver:
                 for j, b_level in enumerate(condition_b.levels)
                 ] for i, a_level in enumerate(condition_a.levels)
                 ]
-            flat_panels = [panel for row in panels for panel in row]
         else:
             condition_a, condition_b, condition_c = conditions
-            num_rows = condition_a.levels * condition_b.levels
-            num_cols = condition_c.levels
-            panels = [[[
+            num_rows = len(condition_a.levels) * len(condition_b.levels)
+            num_cols = len(condition_c.levels)
+            panels = [[
                 Panel(
-                    row = j*i + j, 
+                    row = i*len(condition_b.levels) + j, 
                     col=k, 
                     coords={
                         condition_a.name: a_level, 
                         condition_b.name: b_level, 
                         condition_c.name: c_level
                         }) 
-                        for k, c_level in enumerate(condition_c.levels)] 
-                        for j, b_level in enumerate(condition_b.levels)] 
+                        for k, c_level in enumerate(condition_c.levels)]
                         for i, a_level in enumerate(condition_a.levels)
+                        for j, b_level in enumerate(condition_b.levels) 
+                        
                     ]
-            flat_panels = [panel for facet in panels for row in facet for panel in row]
         
         return Layout(
             num_rows=num_rows,
             num_cols=num_cols,
-            panels = panels,
-            flat_panels = flat_panels
+            panels = panels
         )
 
     def validate(self, data_schema):
@@ -815,7 +812,7 @@ class Render(PlotDirective):
 
     def make_figure(self, input):
         figsize = getattr(input, 'figsize', (8, 8))
-        fig = plt.figure(figsize=figsize)
+        fig = plt.figure(figsize=figsize, layout="constrained")
         data = self.get_plot_data(input)
 
         if input.layout_spec is None:
