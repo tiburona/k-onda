@@ -1,4 +1,4 @@
-from .plotter_mpl import PlotMixin
+from .plotting import PlotMixin
 
 __all__ = [
     "PlotMixin"

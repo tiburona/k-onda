@@ -8,7 +8,7 @@ class PlotNode(PlotMixin):
         data_source=None,
         plot_type=None,
         layout_spec=None,
-        axis_sharing=None,
+        axes_spec=None,
         coords=None,
         label_plan=None,
         style_rules=None,
@@ -17,7 +17,7 @@ class PlotNode(PlotMixin):
         self.data_source = data_source
         self.plot_type = plot_type
         self.layout_spec = layout_spec
-        self.axis_sharing = axis_sharing
+        self.axes_spec = axes_spec
         self.coords = coords
         self.label_plan = label_plan
         self.style_rules = style_rules

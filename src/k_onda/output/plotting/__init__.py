@@ -1,5 +1,12 @@
 from .api import PlotMixin, SetPlotType
-from .axes import PlotRoleResolver
+from .axes import (
+    AxesSpec,
+    AxisRenderer,
+    AxisResolver,
+    AxisSpec, 
+    AxisMixin
+    )
+
 from .bars import (
     BarRenderer,
     bar_kwargs_from_props,
@@ -20,13 +27,6 @@ from .labels import (
 )
 from .layout import Layout, LayoutMixin, LayoutResolver, Panel, SetLayout
 
-from .axes import (
-    AxisSharing, 
-    AxisSharingMixin, 
-    SetAxisSharing, 
-    AxisSharingResolver
-    )
-
 from .legend import (
     AddLegend,
     Legend,
@@ -44,9 +44,10 @@ __all__ = [
     "AddLabel",
     "AddLegend",
     "AddStyle",
-    "AxisSharing",
-    "AxisSharingMixin",
-    "AxisSharingResolver",
+    "AxesSpec",
+    "AxisRenderer",
+    "AxisSpec",
+    "AxisMixin",
     "BAR_DEFAULT_PROPS",
     "BarRenderer",
     "Label",
@@ -67,10 +68,10 @@ __all__ = [
     "PlotDirective",
     "PlotMixin",
     "PlotNode",
-    "PlotRoleResolver",
+    "AxisResolver",
     "PlotSource",
     "Render",
-    "SetAxisSharing",
+    "PlotDirective",
     "SetLayout",
     "SetPlotType",
     "StyleMixin",
