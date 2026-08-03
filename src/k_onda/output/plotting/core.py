@@ -42,6 +42,7 @@ def replace_plot_node(input, **changes):
         "label_plan": input.label_plan,
         "style_rules": input.style_rules,
         "legend_spec": input.legend_spec,
+        "overlays": input.overlays
     }
     values.update(changes)
     return new_plot_node(**values)

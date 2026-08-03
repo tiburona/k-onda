@@ -8,7 +8,7 @@ from k_onda.sources import Collection
 from k_onda.mixins import ConfigSetter
 from .subject import Subject
 from k_onda.provenance import AnnotatorMixin
-from k_onda.utils import recursive_update
+from k_onda.utils import recursive_update, OrderedSet
 
 
 class Experiment(AnnotatorMixin, ConfigSetter):
@@ -28,10 +28,10 @@ class Experiment(AnnotatorMixin, ConfigSetter):
         events_config=None,
     ):
         self.id = experiment_id
-        if subjects is None:
-            self.subjects = set()
+        if subjects is not None:
+            self.subjects = OrderedSet(subjects)
         else:
-            self.subjects = set(subjects)
+            self.subjects = OrderedSet()
         self.global_config = global_config or {}
         self.top_level_config = top_level_config or {}
         self.subjects_config = subjects_config or {}
@@ -159,7 +159,7 @@ class Experiment(AnnotatorMixin, ConfigSetter):
         subject = Subject(subject_id, subject_config)
         self.subject_conditions[subject_id] = subject_config.get("conditions", {})
         subject.create_sessions(self, subject_sessions)
-        self.subjects.add(subject)
+        self.add_subject(subject)
         return subject
 
     def add_subjects(self, subjects, sessions=None):
@@ -167,5 +167,7 @@ class Experiment(AnnotatorMixin, ConfigSetter):
         pass
 
     def add_subject(self, subject, sessions=None):
-        # to implement later
-        pass
+        # TODO: need to come up with a procedure for merging info from two subjects
+        # if subject is already in the experiment
+        self.subjects.add(subject)
+        

@@ -1,4 +1,5 @@
-from collections.abc import Iterable
+from collections.abc import Iterable     
+from dataclasses import replace, fields
 
 
 def candidate_matches_selector(selector, candidate):
@@ -19,3 +20,22 @@ def candidate_matches_selector(selector, candidate):
                 return False
 
     return True
+
+
+UNSET = object()
+
+def merge_dataclasses(instance, patch_instance=None, **changes):
+    if patch_instance is not None:
+        changes = {
+            **changes, 
+            **{
+                field.name: getattr(patch_instance, field.name) 
+                for field in fields(patch_instance) 
+                if getattr(patch_instance, field.name) is not UNSET
+                }
+            }
+        
+    return replace(
+        instance,
+        **{name: value for name, value in changes.items() if value is not UNSET}
+    )

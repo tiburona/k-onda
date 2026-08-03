@@ -3,6 +3,7 @@ from collections import defaultdict
 from .session import Session
 from k_onda.provenance import AnnotatorMixin
 from k_onda.mixins import ConfigSetter, FactorMixin
+from k_onda.utils import OrderedSet
 
 
 class Subject(AnnotatorMixin, ConfigSetter, FactorMixin):
@@ -20,9 +21,17 @@ class Subject(AnnotatorMixin, ConfigSetter, FactorMixin):
         self.label = self.id
         self._init_annotations()
 
+    def __eq__(self, other):
+        if not isinstance(other, Subject):
+            return NotImplemented
+        return self.id == other.id
+
+    def __hash__(self):
+        return hash((Subject, self.id))
+
     @property
     def experiments(self):
-        return list({session.experiment for session in self.sessions})
+        return list(OrderedSet(session.experiment for session in self.sessions))
 
     @property
     def session_ids(self):

@@ -20,6 +20,7 @@ from k_onda.mixins import DictDelegator, ConfigSetter, FactorMixin
 from k_onda.transformers import feature_registry
 from k_onda.provenance import ProvenanceContext
 from k_onda.central import type_registry, Schema
+from k_onda.utils import OrderedSet
 
 
 @type_registry.register
@@ -163,7 +164,7 @@ class DataIdentity(AnnotatorMixin, SelectMixin, FactorMixin):
     def __init__(self, data_components=None, config=None, subject=None):
         self.uid = uuid.uuid4()
         self.config = config
-        self.data_components = set()
+        self.data_components = OrderedSet()
         self._init_annotations()
         self.subject = subject
         if data_components is not None:

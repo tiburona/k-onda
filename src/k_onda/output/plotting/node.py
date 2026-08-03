@@ -13,6 +13,7 @@ class PlotNode(PlotMixin):
         label_plan=None,
         style_rules=None,
         legend_spec=None,
+        overlays=(),
     ):
         self.data_source = data_source
         self.plot_type = plot_type
@@ -22,3 +23,4 @@ class PlotNode(PlotMixin):
         self.label_plan = label_plan
         self.style_rules = style_rules
         self.legend_spec = legend_spec
+        self.overlays = overlays

@@ -7,7 +7,7 @@ import uuid
 import re
 
 from k_onda.mixins import ConfigSetter, FactorMixin
-from k_onda.utils import group_to_dict
+from k_onda.utils import group_to_dict, OrderedSet
 from k_onda.loci import Epoch, EpochSet, EventSet
 
 
@@ -224,7 +224,7 @@ class Session(NEVMixin, ConfigSetter, FactorMixin):
                 matched_components.extend(match_comps)
                 di.add_data_components(matched_components)
 
-            for component in set(components) - set(matched_components):
+            for component in OrderedSet(components) - OrderedSet(matched_components):
                 self.create_identity(
                     identity_class, identity_string, [component], identity_config
                 )

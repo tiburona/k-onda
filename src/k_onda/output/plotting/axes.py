@@ -1,16 +1,16 @@
 from __future__ import annotations
-from dataclasses import dataclass, replace, fields, field
+from dataclasses import dataclass, replace, field
 from collections.abc import Hashable
 from typing import TYPE_CHECKING
 
 from .core import PlotSource, PlotDirective, replace_plot_node
 from .layout import Panel, Layout
+from .utils import merge_dataclasses, UNSET
 
 if TYPE_CHECKING:
     from .node import PlotNode
 
 
-UNSET = object()
 Cell = tuple[int, int]
 
 class AxisMixin:
@@ -85,21 +85,7 @@ class AxesSpec:
     y: AxisSpec = field(default_factory=AxisSpec)
 
 
-def merge_dataclasses(instance, patch_instance=None, **changes):
-    if patch_instance is not None:
-        changes = {
-            **changes, 
-            **{
-                field.name: getattr(patch_instance, field.name) 
-                for field in fields(patch_instance) 
-                if getattr(patch_instance, field.name) is not UNSET
-                }
-            }
-        
-    return replace(
-        instance,
-        **{name: value for name, value in changes.items() if value is not UNSET}
-    )
+
 
 
 class ConfigureAxes(PlotDirective):

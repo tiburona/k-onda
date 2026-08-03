@@ -1,4 +1,5 @@
 from .api import PlotMixin, SetPlotType
+
 from .axes import (
     AxesSpec,
     AxisRenderer,
@@ -6,6 +7,13 @@ from .axes import (
     AxisSpec, 
     AxisMixin
     )
+
+from .band import (
+    AddBand,
+    Band,
+    BandMixin,
+    BandRenderer
+)
 
 from .bars import (
     BarRenderer,
@@ -40,7 +48,9 @@ from .render import Render
 from .style import AddStyle, StyleMixin, StyleRule
 from .utils import candidate_matches_selector
 
+
 __all__ = [
+    "AddBand",
     "AddLabel",
     "AddLegend",
     "AddStyle",
@@ -48,6 +58,9 @@ __all__ = [
     "AxisRenderer",
     "AxisSpec",
     "AxisMixin",
+    "Band",
+    "BandMixin",
+    "BandRenderer",
     "BAR_DEFAULT_PROPS",
     "BarRenderer",
     "Label",

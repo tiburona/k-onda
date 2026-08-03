@@ -22,6 +22,7 @@ dependencies = [
     "mne",
     "neo>=0.14.4",
     "numpy",
+    "orderedsets>=2026.1",
     "phylib>=2.7.0",
     "pint",
     "pint-xarray",

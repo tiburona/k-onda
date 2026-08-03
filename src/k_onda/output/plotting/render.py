@@ -5,6 +5,7 @@ from matplotlib.axes import Axes as MPLAxes
 from matplotlib.figure import Figure
 
 from .axes import AxisResolver
+from .band import BandRenderer
 from .bars import BarRenderer
 from .core import PlotDirective
 from .labels import LabelRenderer, LabelResolver
@@ -30,6 +31,7 @@ class Render(PlotDirective):
         axis_renderer=None,
         label_renderer=None,
         legend_renderer=None,
+        band_renderer=None
     ):
         self.axis_resolver = axis_resolver or AxisResolver()
         self.label_resolver = label_resolver or LabelResolver()
@@ -39,6 +41,7 @@ class Render(PlotDirective):
         self.axis_renderer = axis_renderer or AxisRenderer()
         self.label_renderer = label_renderer or LabelRenderer()
         self.legend_renderer = legend_renderer or LegendRenderer()
+        self.band_renderer = band_renderer or BandRenderer()
 
     def direct(self, input: PlotNode) -> Figure:
         figsize = getattr(input, "figsize", (8, 8))
@@ -68,7 +71,9 @@ class Render(PlotDirective):
                 return None
            
             return panel_mpl_axis_map[(anchor_panel.row, anchor_panel.col)]
-    
+
+        band_plan = self.band_renderer.build_band_plan(input, layout)
+
         for panel in layout.flat_panels:
             share_x = get_share_anchor(panel_to_x_anchor, panel)
             share_y = get_share_anchor(panel_to_y_anchor, panel)
@@ -82,6 +87,9 @@ class Render(PlotDirective):
             self.bar_renderer.render(
                 input.plot_type, panel, ax, data, role_source_map, style_rules,
             )
+
+            for band in band_plan[(panel.row, panel.col)]:
+                self.band_renderer.make_band(band, ax)
 
         if input.label_plan:
             label_plan = self.label_resolver.resolve(input, role_source_map, layout)

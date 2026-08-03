@@ -1076,6 +1076,7 @@ dependencies = [
     { name = "mne" },
     { name = "neo" },
     { name = "numpy" },
+    { name = "orderedsets" },
     { name = "phylib" },
     { name = "pint" },
     { name = "pint-xarray" },
@@ -1113,6 +1114,7 @@ requires-dist = [
     { name = "nbconvert", marker = "extra == 'demo'" },
     { name = "neo", specifier = ">=0.14.4" },
     { name = "numpy" },
+    { name = "orderedsets", specifier = ">=2026.1" },
     { name = "pandas", marker = "extra == 'demo'" },
     { name = "phylib", specifier = ">=2.7.0" },
     { name = "pint" },
@@ -1495,6 +1497,15 @@ wheels = [
 ]
 
 [[package]]
+name = "more-itertools"
+version = "11.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/de/1d/f4da6f02cdffe04d6362210b807146a26044c88d839208aec273bb0d9184/more_itertools-11.1.0.tar.gz", hash = "sha256:48e8f4d9e7e5878571ecf6f2b4e57634f93cd474cc8cfbd2376f2d11b396e30d", size = 145772, upload-time = "2026-05-22T14:14:29.909Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/3d/1087453384dbde46a8c7f9356eead2c58be8a7bf156bca40243377c85715/more_itertools-11.1.0-py3-none-any.whl", hash = "sha256:4b65538ae22f6fed0ce4874efd317463a7489796a0939fa66824dd542125a192", size = 72226, upload-time = "2026-05-22T14:14:28.824Z" },
+]
+
+[[package]]
 name = "mtscomp"
 version = "1.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1670,6 +1681,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/58/ad/1100d7229bb248394939a12a8074d485b655e8ed44207d328fdd7fcebc7b/numpy-2.4.3-pp311-pypy311_pp73-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7e58765ad74dcebd3ef0208a5078fba32dc8ec3578fe84a604432950cd043d79", size = 15800434, upload-time = "2026-03-09T07:58:44.837Z" },
     { url = "https://files.pythonhosted.org/packages/0c/fd/16d710c085d28ba4feaf29ac60c936c9d662e390344f94a6beaa2ac9899b/numpy-2.4.3-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8e236dbda4e1d319d681afcbb136c0c4a8e0f1a5c58ceec2adebb547357fe857", size = 16729409, upload-time = "2026-03-09T07:58:47.972Z" },
     { url = "https://files.pythonhosted.org/packages/57/a7/b35835e278c18b85206834b3aa3abe68e77a98769c59233d1f6300284781/numpy-2.4.3-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:4b42639cdde6d24e732ff823a3fa5b701d8acad89c4142bc1d0bd6dc85200ba5", size = 12504685, upload-time = "2026-03-09T07:58:50.525Z" },
+]
+
+[[package]]
+name = "orderedsets"
+version = "2026.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "more-itertools" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/0b/e2e6fbc93e8e84170db56653af570bc7205f706d5174f5bfba294c317e4d/orderedsets-2026.1-py3-none-any.whl", hash = "sha256:eeba66599de8822a13e507cb9f10169cef7f0fd627cafe398e5c0d6a4f1db8b7", size = 7674, upload-time = "2026-05-22T16:15:56.563Z" },
 ]
 
 [[package]]

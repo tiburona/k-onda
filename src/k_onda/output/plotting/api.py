@@ -5,6 +5,7 @@ from .axes import AxisMixin
 from .legend import LegendMixin
 from .render import Render
 from .style import StyleMixin
+from .band import BandMixin
 
 
 class PlotMixin(
@@ -13,7 +14,8 @@ class PlotMixin(
     LabelMixin,
     StyleMixin,
     LegendMixin,
-):
+    BandMixin,
+    ):
 
     def plot(self, plot_type):
         return SetPlotType(plot_type=plot_type)(self)
