@@ -126,6 +126,8 @@ class Signal(CalculateMixin, SelectMixin, IntersectionMixin, PlotMixin):
         return build_generations(self, func)
 
     def compile(self, memo=None):
+        if self._is_compiled:
+            return self
         memo = {} if memo is None else memo
         leaf = rebuild_tree(self, None, memo=memo)
         plan = leaf.plan_on_signal()
