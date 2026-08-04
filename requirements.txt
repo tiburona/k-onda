@@ -183,6 +183,8 @@ mistune==3.2.1
     # via nbconvert
 mne==1.11.0
     # via k-onda
+more-itertools==11.1.0
+    # via orderedsets
 mtscomp==1.0.2
     # via phylib
 nbclient==0.10.4
@@ -217,6 +219,8 @@ numpy==2.4.3
     #   scikit-learn
     #   scipy
     #   xarray
+orderedsets==2026.1
+    # via k-onda
 overrides==7.7.0 ; python_full_version < '3.12'
     # via jupyter-server
 packaging==26.0
