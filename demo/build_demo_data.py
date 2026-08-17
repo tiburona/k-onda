@@ -14,6 +14,16 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 rng = np.random.default_rng(42)
 
+TONE_EPOCH_ONSETS = np.array([20, 40, 60, 80, 100], dtype=float)
+PIP_OFFSETS = np.arange(0, 5, 1, dtype=float)
+TONE_PIP_TIMES = (TONE_EPOCH_ONSETS[:, None] + PIP_OFFSETS).ravel()
+PIP_RESPONSE_DURATION = 0.05
+
+# These contrasts are intentionally conspicuous in the teaching dataset so a
+# short demo visibly recovers both an event response and a treatment effect.
+TREATMENT_RATE_MULTIPLIER = {"control": 0.9, "drug": 1.1}
+PIP_RESPONSE_RATE = {"PN": 8, "IN": 16}
+
 
 def bandpass_noise(rng, n, fs, low, high, order=4):
     white = rng.normal(size=n)
@@ -55,7 +65,7 @@ def generate_animal_lfp(animal):
     np.save(DATA_DIR / f"{animal}_lfp.npy", lfp)
    
 
-def random_spikes(rate, start, stop):
+def random_spikes(rate, start, stop, rng):
     spikes = []
     time = start
     while time < stop:
@@ -63,6 +73,16 @@ def random_spikes(rate, start, stop):
         time += time_to_next
         if time < stop:
             spikes.append(time)
+    return spikes
+
+
+def event_locked_spikes(rate, event_times, duration, rng):
+    """Generate a Poisson response distributed across each event interval."""
+    spikes = []
+    for event_time in event_times:
+        count = rng.poisson(rate * duration)
+        delays = rng.uniform(0, duration, size=count)
+        spikes.extend(event_time + delays)
     return spikes
 
 
@@ -79,7 +99,8 @@ def random_waveforms(
         rebound_time,
         n_spikes,
         n_samples, 
-        fs
+        fs,
+        rng,
         ):
     
     waveforms = []
@@ -123,7 +144,10 @@ IN_fwhm = 0.00025
 
 
 def generate_animal_neurons(animal):
-    rng = np.random.default_rng(42)
+    animal_index = int(animal.rsplit("_", 1)[1])
+    rng = np.random.default_rng(4200 + animal_index)
+    treatment = "control" if animal_index <= 3 else "drug"
+    treatment_multiplier = TREATMENT_RATE_MULTIPLIER[treatment]
     n_PNs = 4
     n_INs = 8
 
@@ -135,8 +159,17 @@ def generate_animal_neurons(animal):
     IN_spikes = []
 
     for i in range(n_PNs):
-        rate = PN_rate + rng.normal(0, PN_rate/5)
-        spikes = random_spikes(rate, 0, 120)
+        rate = max(0.1, PN_rate * treatment_multiplier + rng.normal(0, PN_rate / 5))
+        spikes = random_spikes(rate, 0, 120, rng)
+        spikes.extend(
+            event_locked_spikes(
+                PIP_RESPONSE_RATE["PN"] * treatment_multiplier,
+                TONE_PIP_TIMES,
+                PIP_RESPONSE_DURATION,
+                rng,
+            )
+        )
+        spikes = np.sort(spikes)
         waveforms = random_waveforms(
             trough_amp=100, 
             trough_sigma=fwhm_to_sigma(PN_fwhm), 
@@ -146,15 +179,25 @@ def generate_animal_neurons(animal):
             rebound_time=rebound_time,
             n_spikes=len(spikes),
             n_samples=n_samples,
-            fs=fs)
+            fs=fs,
+            rng=rng)
         PN_clusters.append(np.repeat(i, len(spikes)))
         PN_waveforms.append(waveforms) 
         PN_spikes.append(spikes) 
     
       
     for i in range(n_INs):
-        rate = IN_rate + rng.normal(0, IN_rate/5)
-        spikes = random_spikes(rate, 0, 120)
+        rate = max(0.1, IN_rate * treatment_multiplier + rng.normal(0, IN_rate / 5))
+        spikes = random_spikes(rate, 0, 120, rng)
+        spikes.extend(
+            event_locked_spikes(
+                PIP_RESPONSE_RATE["IN"] * treatment_multiplier,
+                TONE_PIP_TIMES,
+                PIP_RESPONSE_DURATION,
+                rng,
+            )
+        )
+        spikes = np.sort(spikes)
         waveforms = random_waveforms(
             trough_amp=100, 
             trough_sigma=fwhm_to_sigma(IN_fwhm), 
@@ -164,7 +207,8 @@ def generate_animal_neurons(animal):
             rebound_time=rebound_time,
             n_spikes=len(spikes),
             n_samples=n_samples,
-            fs=fs)
+            fs=fs,
+            rng=rng)
         IN_clusters.append(np.repeat(i + n_PNs, len(spikes)))
         IN_waveforms.append(waveforms) 
         IN_spikes.append(spikes) 
@@ -215,6 +259,4 @@ experiment = Experiment.from_config(
         
 
        
-
-
 

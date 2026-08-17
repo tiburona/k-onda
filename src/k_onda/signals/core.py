@@ -486,7 +486,15 @@ class IndexedSignal(Signal):
 
         return KMeans(n_clusters=n_clusters, **kwargs)(self)
 
-    def classify(self, label_name, label_spec=None, label_func=None):
+    def classify(
+            self, 
+            label_name, 
+            spec=None, 
+            func=None, 
+            order="ascending", 
+            labels=None,
+            sort_by=None,
+            ):
         from k_onda.sinks import Classify
 
         node = self.compile()
@@ -495,9 +503,14 @@ class IndexedSignal(Signal):
             chain.append(node)
             node = node.inputs[0] if node.inputs else None
 
-        return Classify(label_name, label_spec=label_spec, label_func=label_func)(
-            *chain
-        )
+        return Classify(
+            label_name, 
+            spec=spec, 
+            func=func,
+            order=order,
+            sort_by=sort_by,
+            labels=labels
+            )(*chain)
 
 
 @type_registry.register

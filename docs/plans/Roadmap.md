@@ -17,16 +17,9 @@
 - Data can be successively successive aggregated over dimensions and grouped by coordinates (groups become dimensions).
 - `Intersection` and `ApplyMask` calculators form the basis for masking based on data quality.
 - A tiny test suite exists. (At least it's a start.)
+- The fluent API was extended to take an grouped, aggregated signal as an input and output a bar plot.  
+-  the API also has methods for labels, a legend, color setting, and the stimulus marker.
 
-## Phase 0 - To a Minimal Demo
-Produce a PSTH plot from our own data.
-
-### 1. Plotting
-
-- The fluent API must be extended to take an grouped, aggregated signal as an input and output a bar plot.  
-- To produce a minimal PSTH, the API also needs methods for labels, a legend, color setting, and the stimulus marker.
-
----
 
 ## Phase 1 — Electrophysiology Foundation  
 Make K-Onda a reliable and user-friendly electrophysiology tool for our lab and others.

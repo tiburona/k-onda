@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from k_onda.utils import ValidationMixin
+
 
 BAR_DEFAULT_PROPS = {
     "color": "#4C78A8",
@@ -12,7 +14,7 @@ PLOT_TYPE_TO_DEFAULTS = {
 }
 
 
-class PlotDirective:
+class PlotDirective(ValidationMixin):
 
     def __call__(self, input):
         return self.direct(input)

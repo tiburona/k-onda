@@ -1,7 +1,14 @@
 from k_onda.central import type_registry
 
 
-def classify_neurons(neuron_collection, label_spec):
+def classify_neurons(
+        neuron_collection, 
+        spec=None,
+        func=None,
+        order="ascending",
+        labels=None,
+        sort_by=None,
+        ):
     if not isinstance(neuron_collection, type_registry.Collection):
         raise ValueError("`neuron_collection` must be a Collection")
     if not len(neuron_collection):
@@ -23,7 +30,14 @@ def classify_neurons(neuron_collection, label_spec):
         .extract_features("fwhm", "firing_rate", group_by="neuron")
         .normalize(method="zscore", dim="index")
         .kmeans(n_clusters=2, random_state=0)
-        .classify("neuron_type", label_spec=label_spec)
+        .classify(
+            "neuron_type", 
+            spec=spec,
+            func=func,
+            order=order,
+            labels=labels,
+            sort_by=sort_by
+            )
     )
 
     return classified_neurons

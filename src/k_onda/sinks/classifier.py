@@ -1,22 +1,74 @@
-import json
-import yaml
 import pint
 
 from k_onda.transformers import KMeans, ExtractFeatures
 from k_onda.central import operations
 from k_onda.sources import Collection
+from k_onda.utils import ValidationMixin
 
 
-class Classify:
+class Classify(ValidationMixin):
     def __init__(
-        self, label_name, label_spec=None, label_func=None, spec_format="yaml"
-    ):
+            self, 
+            label_name, 
+            *, 
+            spec=None, 
+            func=None, 
+            order=None, 
+            sort_by=None, 
+            labels=None
+            ):
+        self._validate_configuration(spec, func, order, sort_by, labels)
         self.label_name = label_name
-        self.classification_spec = label_spec
-        self.label_func = label_func
-        self.spec_format = spec_format
-        if self.classification_spec is None and self.label_func is None:
-            raise ValueError("One of label_spec and label_func must not be None.")
+        self.spec = spec
+        self.func = func
+        if not spec and not func:
+            self.spec = {
+                "rules": [
+                    {
+                        "type": "classifier",
+                        "order": order or "ascending",
+                        "sort_by": sort_by,
+                        "labels": labels
+                    }
+                ]
+            }
+        
+    def _validate_configuration(self, spec, func, order, sort_by, labels):
+        if spec is not None:
+            for arg in (func, sort_by, labels, order):
+                if arg is not None:
+                    raise ValueError(
+                        f"{self.format_call()} received `spec` and {arg}."
+                    )
+        elif func is not None:
+            for arg in (sort_by, labels):
+                if arg is not None:
+                    raise ValueError(
+                        f"{self.format_call()} received `func` and {arg}."
+                            )
+        else:
+            if not (sort_by is not None and labels is not None):
+                raise ValueError(
+                    f"{self.format_call()} received neither `spec` nor `func` nor a complete set "
+                    "of keyword args to specify a rule."
+                )
+
+        allowed_keys = [
+            "type", "order", "feature", "sort_by", "labels", "operator", "value", 
+            "from_computed_features", "unit", "label"
+        ]
+
+        if spec:
+            for rule in spec["rules"]:
+                for key in rule:
+                    if key not in allowed_keys:
+                        raise ValueError(
+                            f"{self.format_call()} received spec with unknown key {key}"
+                        )
+                    if key == "order" and rule["order"] not in {"ascending", "descending"}:
+                        raise ValueError(
+                            f"{self.format_call()} received unknown order {rule[key]}"
+                        )
 
     def _validate_input(self, *inputs):
         from k_onda.signals import IndexedSignal
@@ -28,10 +80,10 @@ class Classify:
     def __call__(self, *inputs):
         self._validate_input(*inputs)
 
-        if self.classification_spec and not self.label_func:
+        if self.spec:
             labeled_entities = self._parse_spec(*inputs)
         else:
-            labeled_entities = self.label_func(*inputs)
+            labeled_entities = self.func(*inputs)
 
         return Collection(labeled_entities)
 
@@ -39,24 +91,17 @@ class Classify:
 
         entities_to_label = chain[0].data.coords["index"].values
 
-        if self.spec_format == "yaml":
-            spec = yaml.safe_load(self.classification_spec)
-        elif self.spec_format == "json":
-            spec = json.loads(self.classification_spec)
-        else:
-            raise ValueError("Unknown specification format for Classfiier")
-
-        # spec is a list of dictionaries. each item in the list is a rule
+        # spec["rules"] is a list of dictionaries. each item in the list is a rule
         # each successive rule is allowed to override the next rule
 
-        for i, rule in enumerate(spec):
+        for i, rule in enumerate(self.spec["rules"]):
             spec_type = rule["type"]  # threshold | classifier | default
             if spec_type == "classifier":
                 # example classifier specification:
                 # feature: 'fwhm'
                 # order: 'ascending'  # ascending | descending
                 # labels: ['IN', 'PN']  # in order of their value on the selected feature
-                feature = rule["feature"]
+                sort_by = rule["sort_by"]
                 order = rule.get("order", "ascending")
                 labels = rule["labels"]
 
@@ -69,7 +114,7 @@ class Classify:
                 feature_names = classification.data.attrs["kmeans_feature_names"]
 
                 # the column ind of the feature that determines the label, e.g. 'fwhm'
-                feature_ind = feature_names.index(feature)
+                feature_ind = feature_names.index(sort_by)
 
                 # sort row indexes on the value of the center at the selected feature.
                 center_inds, feature_vals = (
@@ -136,7 +181,7 @@ class Classify:
                 test_func = operations[operator]
                 for entity, fval in zip(entities_to_label, feature_vals):
                     if test_func(fval, value):
-                        setattr(entity, self.label_name, value)
+                        setattr(entity, self.label_name, label)
                         entity.set_annotation(
                             self.label_name,
                             label,

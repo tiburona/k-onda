@@ -5,6 +5,7 @@ import xarray as xr
 from copy import deepcopy
 
 from k_onda.central import DatasetSchema, type_registry
+from k_onda.utils import ValidationMixin
 
 
 class Transform:
@@ -26,7 +27,7 @@ class Transform:
 KeySpec = namedtuple("KeySpec", "input_name output_mode", defaults=[None, "replace"])
 
 
-class Transformer:
+class Transformer(ValidationMixin):
     """A Transformer is a callable object that consumes a signal and returns a new signal.
     Transformers are configured at initialization and then immutable. When a Transformer
     is called on a group of Signals (e.g., a Collection or CollectionMap) it dispatches

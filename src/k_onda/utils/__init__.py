@@ -4,6 +4,7 @@ from .array_utils import (
     is_one_dimensional)
 from .pint_utils import is_unitful, w_units, wout_units
 from .collection_utils import OrderedSet, FrozenOrderedSet
+from .validation_utils import ValidationMixin
 
 __all__ = [
     "group_to_dict",
@@ -18,5 +19,6 @@ __all__ = [
     "w_units",
     "wout_units",
     "OrderedSet",
-    "FrozenOrderedSet"
+    "FrozenOrderedSet",
+    "ValidationMixin",
 ]

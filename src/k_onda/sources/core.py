@@ -278,12 +278,27 @@ class Collection(
     def group_by(self, group_on, strict=True):
         return CollectionMap(self.members, group_on, strict=strict)
 
-    def classify(self, label_spec, recipe=None):
+    def classify(
+            self, 
+            spec=None, 
+            func=None, 
+            order="ascending", 
+            sort_by=None, 
+            labels=None, 
+            recipe=None
+            ):
         from k_onda.transformers.recipes import classification_registry
 
         if recipe is None and isinstance(self.members[0], type_registry.Neuron):
             recipe = "classify_neurons"
-        return classification_registry[recipe](self, label_spec)
+        return classification_registry[recipe](
+            self,   
+            spec=spec,
+            func=func,
+            order=order,
+            labels=labels,
+            sort_by=sort_by
+            )
 
 
 class MapMixin(DictDelegator, FeatureMixin):
