@@ -11,10 +11,10 @@ class Threshold(Calculator):
         self.threshold = threshold
         self.comparison = comparison
         self.operations = {
-            "gt": lambda data, value: data > value,
-            "lt": lambda data, value: data < value,
-            "ge": lambda data, value: data >= value,
-            "le": lambda data, value: data <= value,
+            ">": lambda data, value: data > value,
+            "<": lambda data, value: data < value,
+            ">=": lambda data, value: data >= value,
+            "<=": lambda data, value: data <= value,
         }
 
     @property
@@ -86,7 +86,7 @@ class BinaryCalculatorMixin:
 class Intersection(Calculator, BinaryCalculatorMixin):
     name = "intersection"
 
-    def __init__(self, tolerance_decimals=9):
+    def __init__(self, *, tolerance_decimals=9):
         self.tolerance = 10 ** (-tolerance_decimals)
 
     def __call__(self, a, b, key=None, key_output_mode=None):
@@ -120,19 +120,13 @@ class Intersection(Calculator, BinaryCalculatorMixin):
 class ApplyMask(Calculator, BinaryCalculatorMixin):
     name = "apply_mask"
 
-    def __init__(self, mask=None):
-        self.mask = mask
-
-    def __call__(self, input, mask=None, key=None, key_output_mode=None):
+    def __call__(self, input, mask, *, key=None, key_output_mode=None):
         
         if key is not None or key_output_mode is not None:
             raise NotImplementedError("Key access is not yet implemented for ApplyMask")
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
-        mask = mask or self.mask
-        if mask is None:
-            raise ValueError("mask must be provided at init or call time")
         self.validate_sig_types([mask])
         output_class = self.resolve_output_class(input)
 

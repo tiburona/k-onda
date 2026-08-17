@@ -4,7 +4,7 @@ from .data_shape_transformers import StackSignals, UnstackSignals
 from .descriptive_calculators import Histogram
 from .event_calculators import Rate
 from .waveform_calculators import FWHM
-from .filter_calculators import Filter, MedianFilter
+from .filter_calculators import Filter, MedianFilter, filter_registry
 from .mask_calculators import ApplyMask, Intersection, Threshold
 from .spectral_calculators import Spectrogram
 from .selector import SpecifySelection, SelectMixin, SliceSelection, PlanSelection
@@ -23,6 +23,7 @@ __all__ = [
     "ReduceDim",
     "Normalize",
     "Filter",
+    "filter_registry",
     "Rate",
     "FWHM",
     "Histogram",

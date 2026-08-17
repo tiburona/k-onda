@@ -7,14 +7,14 @@ from k_onda.utils import np_from_xr
 class Shift(Calculator):
     name = "shift"
 
-    def __init__(self, shift):
-        self.shift = shift
+    def __init__(self, offset):
+        self.offset = offset
 
     def _apply_inner(self, data, *args, **kwargs):
         try:
-            result = data + self.shift.data
+            result = data + self.offset.data
         except AttributeError:
-            result = data + self.shift
+            result = data + self.offset
         return result
 
 
@@ -35,7 +35,7 @@ class Scale(Calculator):
 class Normalize(Calculator):
     name = "normalize"
 
-    def __init__(self, method="rms", dim=None):
+    def __init__(self, method="rms", *, dim=None):
         self.dim = dim
         self.method = method
 

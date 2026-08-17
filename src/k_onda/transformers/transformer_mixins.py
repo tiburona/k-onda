@@ -3,24 +3,24 @@ from k_onda.central import type_registry
 
 
 class CalculateMixin:
-    def add(self, other, key=None, key_output_mode=None):
+    def add(self, other, *, key=None, key_output_mode=None):
         return self.shift(other, key=key, key_output_mode=key_output_mode)
 
-    def subtract(self, other, key=None, key_output_mode=None):
+    def subtract(self, other, *, key=None, key_output_mode=None):
         return self.shift(-other, key=key, key_output_mode=key_output_mode)
 
-    def multiply_by(self, other, key=None, key_output_mode=None):
+    def multiply_by(self, other, *, key=None, key_output_mode=None):
         return self.scale(other, key=key, key_output_mode=key_output_mode)
 
-    def divide_by(self, other, key=None, key_output_mode=None):
+    def divide_by(self, other, *, key=None, key_output_mode=None):
         return self.scale(1 / other, key=key, key_output_mode=key_output_mode)
 
-    def scale(self, factor, key=None, key_output_mode=None):
+    def scale(self, factor, *, key=None, key_output_mode=None):
         from . import Scale
 
         return Scale(factor)(self, key=key, key_output_mode=key_output_mode)
 
-    def shift(self, offset, key=None, key_output_mode=None):
+    def shift(self, offset, *, key=None, key_output_mode=None):
         from . import Shift
 
         return Shift(offset)(self, key=key, key_output_mode=key_output_mode)
@@ -30,14 +30,19 @@ class CalculateMixin:
 
         return ReduceDim(dim, method)(self, key=key, key_output_mode=key_output_mode)
 
-    def normalize(self, method="rms", dim=None, key=None, key_output_mode=None):
+    def normalize(
+        self, method="rms", *, dim=None, key=None, key_output_mode=None
+    ):
         from . import Normalize
 
-        return Normalize(method, dim)(self, key=key, key_output_mode=key_output_mode)
+        return Normalize(method, dim=dim)(
+            self, key=key, key_output_mode=key_output_mode
+        )
 
     def median_filter(
         self,
         kernel_sizes,
+        *,
         key=None,
         key_output_mode=None,
     ):
@@ -47,27 +52,41 @@ class CalculateMixin:
             self, key=key, key_output_mode=key_output_mode
         )
 
-    def filter(self, config, key=None, key_output_mode=None):
+    def filter(
+        self,
+        method,
+        *,
+        dim="time",
+        key=None,
+        key_output_mode=None,
+        **kwargs,
+    ):
         from . import Filter
 
-        return Filter(config)(self, key=key, key_output_mode=key_output_mode)
+        return Filter(method, dim=dim, **kwargs)(
+            self, key=key, key_output_mode=key_output_mode
+        )
 
     def spectrogram(self, config, key=None, key_output_mode=None):
         from . import Spectrogram
 
         return Spectrogram(config)(self, key=key, key_output_mode=key_output_mode)
 
-    def threshold(self, comparison, threshold, key=None, key_output_mode=None):
+    def threshold(
+        self, comparison, threshold, *, key=None, key_output_mode=None
+    ):
         from . import Threshold
 
         return Threshold(comparison, threshold)(
             self, key=key, key_output_mode=key_output_mode
         )
 
-    def apply_mask(self, mask, key=None, key_output_mode=None):
+    def apply_mask(self, mask, *, key=None, key_output_mode=None):
         from . import ApplyMask
 
-        return ApplyMask(mask)(self, key=key, key_output_mode=key_output_mode)
+        return ApplyMask()(
+            self, mask, key=key, key_output_mode=key_output_mode
+        )
 
     def fwhm(self, config=None, key=None, key_output_mode=None):
         from . import FWHM
@@ -87,10 +106,10 @@ class CalculateMixin:
 
 
 class IntersectionMixin:
-    def intersection(self, other, tolerance_decimals=9):
+    def intersection(self, other, *, tolerance_decimals=9):
         from . import Intersection
 
-        return Intersection(tolerance_decimals)(self, other)
+        return Intersection(tolerance_decimals=tolerance_decimals)(self, other)
 
 
 class PointProcessMixin:

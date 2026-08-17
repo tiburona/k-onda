@@ -1,4 +1,6 @@
+from dataclasses import dataclass
 from functools import lru_cache
+import inspect
 
 import numpy as np
 from scipy.signal import iirnotch, medfilt, sosfilt, sosfiltfilt, tf2sos
@@ -11,11 +13,64 @@ from .core import Calculator, PaddingCalculator
 from  k_onda.utils import scalar, is_unitful
 
 
+class FilterRegistry:
+    def __init__(self):
+        self._filter_types = {}
+
+    def register(self, method):
+        def decorator(filter_type):
+            self._filter_types[method] = filter_type
+            return filter_type
+
+        return decorator
+
+    def create_designer(self, method, **kwargs):
+        try:
+            filter_type = self._filter_types[method]
+        except KeyError:
+            known_types = ", ".join(sorted(self._filter_types))
+            raise ValueError(
+                f"Unknown filter method {method!r}. Registered methods: {known_types}."
+            ) from None
+
+        try:
+            inspect.signature(filter_type).bind(**kwargs)
+        except TypeError as error:
+            raise TypeError(
+                f"Invalid parameters for filter method {method!r}: {error}"
+            ) from None
+
+        return filter_type(**kwargs)
+
+
+filter_registry = FilterRegistry()
+
+
+@filter_registry.register("iir_notch")
+@dataclass(frozen=True)
+class IIRNotchDesigner:
+    f_lo: float
+    f_hi: float
+    notch_Q: float | None = None
+
+    @lru_cache(maxsize=32)
+    def design_sos(self, fs):
+        f0 = 0.5 * (self.f_lo + self.f_hi)
+        bandwidth = max(1e-12, self.f_hi - self.f_lo)
+        q_value = float(self.notch_Q) if self.notch_Q is not None else float(f0 / bandwidth)
+        b, a = iirnotch(w0=f0, Q=q_value, fs=fs)
+        return tf2sos(b, a)
+
+
 class Filter(PaddingCalculator):
     name = "filter"
 
-    def __init__(self, filter_config, dim="time"):
-        self.config = filter_config
+    def __init__(self, method, *, dim="time", **kwargs):
+        self.method = method
+        try:
+            self.filter_designer = filter_registry.create_designer(method, **kwargs)
+        except (TypeError, ValueError) as error:
+            raise type(error)(f"{self.format_call()}: {error}") from None
         self.dim = dim
 
     def _get_extra_apply_kwargs(self, parent_signal):
@@ -26,25 +81,7 @@ class Filter(PaddingCalculator):
         if not is_unitful(parent_signal.sampling_rate):
             raise ValueError("A sampling rate must have units.")
         fs = scalar(parent_signal.sampling_rate)
-        return self._design_sos(fs=fs, **self.config)
-
-    @staticmethod
-    @lru_cache(maxsize=32)
-    def _design_sos(method, f_lo, f_hi, fs, notch_Q=None, **_):
-        if method == "iir_notch":
-            f0 = 0.5 * (f_lo + f_hi)
-            bw = max(1e-12, (f_hi - f_lo))
-
-            if notch_Q is not None:
-                q_val = float(notch_Q)
-            else:
-                # Q = center frequency divided by bandwidth
-                q_val = float(f0 / bw)
-            b, a = iirnotch(w0=f0, Q=q_val, fs=fs)
-            sos = tf2sos(b, a)
-            return sos
-
-        raise ValueError(f"Unknown filter method: {method}")
+        return self.filter_designer.design_sos(fs)
 
     def _compute_padlen(self, parent_signal, apply_kwargs):
         fs = parent_signal.sampling_rate.magnitude

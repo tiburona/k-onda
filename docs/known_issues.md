@@ -76,3 +76,4 @@ Right now, if you grouped the long axis (created by AssembleArray), you can't ca
 
 You should be able to calculate a simultaneous mean (i.e. unweighted by number of members of a group.)
 
+`reduce()` and `ReduceDim` knowingly violate the API constitution's constructor-mirroring rule. `ReduceDim` supports weighted reduction, but it hasn't been decided how to deal with weights in the fluent API.

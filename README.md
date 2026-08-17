@@ -16,7 +16,7 @@ experiment = (
     .initialize()
     .all_lfp_brain_regions
     .scale(.25)
-    .filter(filter_config)
+    .filter(**filter_config)
     .normalize("rms")
     .spectrogram({
         "freqs": freqs, 
