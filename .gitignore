@@ -21,5 +21,6 @@ grant_figures/
 
 demo/data
 demo/k_onda_demo_time.ipynb
+demo/k_onda_demo_debug.ipynb
 
 .vscode

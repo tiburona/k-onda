@@ -1,19 +1,91 @@
-from copy import deepcopy
 from mne.time_frequency import tfr_array_multitaper
 import numpy as np
 import xarray as xr
 import pint
+import inspect
+from dataclasses import dataclass
 
 from k_onda.central import DimBounds, DimPair, AxisInfo, AxisKind, type_registry
 from .core import PaddingCalculator
 from ..utils import scalar
 
 
+class SpectrogramCalculatorRegistry:
+
+    def __init__(self):
+        self._spectrogram_types = {}
+
+    def register(self, method):
+        def decorator(spectrogram_type):
+            self._spectrogram_types[method] = spectrogram_type
+            return spectrogram_type
+
+        return decorator
+
+    def create_calculator(self, method, **kwargs):
+        try:
+            spectrogram_type = self._spectrogram_types[method]
+        except KeyError:
+            known_types = ", ".join(sorted(self._spectrogram_types))
+            raise ValueError(
+                f"Unknown spectrogram method {method!r}. Registered methods: {known_types}."
+                ) from None
+
+        try:
+            inspect.signature(spectrogram_type).bind(**kwargs)
+        except TypeError as error:
+            raise TypeError(
+                f"Invalid parameters for spectrogram method {method!r}: {error}"
+            ) from None
+        
+        return spectrogram_type(**kwargs)
+
+
+spectrogram_registry = SpectrogramCalculatorRegistry()
+
+
+@spectrogram_registry.register("multitaper")
+@dataclass(frozen=True)
+class MultitaperSpectrogram:
+    n_cycles: int | float | list[int] | list[float] | tuple[int] | tuple [float]
+    freqs: tuple | list
+    decim: int
+    time_bandwidth: int
+    output: str
+
+    def compute_spectrogram(self, data_3d, fs):
+        power = tfr_array_multitaper(
+            data_3d, 
+            fs,
+            self.freqs,
+            n_cycles=self.n_cycles,
+            time_bandwidth=self.time_bandwidth,
+            decim=self.decim,
+            output=self.output
+            ).squeeze()
+        return power
+
+    def compute_padlen(self):
+        n_cycles = self.n_cycles
+        freqs = self.freqs
+        f_min = self.freqs[0]
+        if isinstance(n_cycles, np.ndarray):
+            pad_needed = np.max(n_cycles / freqs) / 2
+        else:
+            pad_needed = n_cycles / (2 * f_min)
+        pad_seconds = pad_needed * pint.application_registry.seconds
+        return pad_seconds
+
+
 class Spectrogram(PaddingCalculator):
     name = "spectrogram"
 
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, method, **kwargs):
+        self.method = method
+        try:
+            self.spectrogram_calculator = spectrogram_registry.create_calculator(method, **kwargs)
+        except (TypeError, ValueError) as error:
+            raise type(error)(f"{self.format_call()}: {error}") from None
 
     @property
     def fixed_output_class(self):
@@ -24,23 +96,13 @@ class Spectrogram(PaddingCalculator):
         return input_schema.with_added(new_axis)
 
     def _compute_padlen(self, _, apply_kwargs):
-        n_cycles = self.config["n_cycles"]
-        freqs = self.config["freqs"]
-        f_min = freqs[0]
-        if isinstance(n_cycles, np.ndarray):
-            pad_needed = np.max(n_cycles / freqs) / 2
-        else:
-            pad_needed = n_cycles / (2 * f_min)
-        pad_seconds = pad_needed * pint.application_registry.seconds
-
+        pad_seconds = self.spectrogram_calculator.compute_padlen()
         return DimBounds({"time": DimPair([-pad_seconds, pad_seconds])})
 
     def _get_extra_apply_kwargs(self, parent):
         return {"fs": scalar(parent.sampling_rate)}
 
     def _apply_inner(self, data, fs, data_schema=None, **kwargs):
-        config = deepcopy(self.config)
-        config["sfreq"] = fs
         
         time_dim = data_schema.concrete_dim_from("time")
         leading_dims = [d for d in data.dims if d != time_dim]
@@ -54,8 +116,8 @@ class Spectrogram(PaddingCalculator):
             data_3d = data_np
         else:
             raise ValueError("tfr_array_multitaper can not run on data with more than 3 dims.")
-       
-        power = tfr_array_multitaper(data_3d, **config).squeeze()
+
+        power = self.spectrogram_calculator.compute_spectrogram(data_3d, fs)
         return (power, {"fs": fs, "data_schema": data_schema})
 
     def _wrap_result(self, result, data, fs, data_schema): 
@@ -69,11 +131,11 @@ class Spectrogram(PaddingCalculator):
             k: data.coords[k] for k in other_dims
         }
 
-        # freequency coord
-        result_dim_coords["frequency"] = self.config["freqs"]
+        # frequency coord
+        result_dim_coords["frequency"] = self.spectrogram_calculator.freqs
         
         # concrete time dim coord
-        dt = self.config["decim"] / fs
+        dt = self.spectrogram_calculator.decim / fs
         start = data.coords[concrete_time_dim].isel({concrete_time_dim: 0}).pint.magnitude
         concrete_time_dim_coord = np.arange(result.shape[-1]) * dt + start
         result_dim_coords[concrete_time_dim] = concrete_time_dim_coord

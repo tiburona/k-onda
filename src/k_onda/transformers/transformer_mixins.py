@@ -67,10 +67,28 @@ class CalculateMixin:
             self, key=key, key_output_mode=key_output_mode
         )
 
-    def spectrogram(self, config, key=None, key_output_mode=None):
+    def spectrogram(
+            self, 
+            method,
+            *, 
+            freqs=None, 
+            decim=None, 
+            n_cycles=None, 
+            time_bandwidth=None, 
+            output="power", 
+            key=None, 
+            key_output_mode=None
+            ):
         from . import Spectrogram
 
-        return Spectrogram(config)(self, key=key, key_output_mode=key_output_mode)
+        return Spectrogram(
+            method, 
+            freqs=freqs,
+            decim=decim,
+            n_cycles=n_cycles,
+            time_bandwidth=time_bandwidth,
+            output=output
+            )(self, key=key, key_output_mode=key_output_mode)
 
     def threshold(
         self, comparison, threshold, *, key=None, key_output_mode=None
