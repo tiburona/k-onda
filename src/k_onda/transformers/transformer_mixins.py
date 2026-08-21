@@ -52,43 +52,74 @@ class CalculateMixin:
             self, key=key, key_output_mode=key_output_mode
         )
 
-    def filter(
+    def filter(self, method, **kwargs):
+        methods = {"iir_notch": self.iir_notch}
+        try:
+            filter_method = methods[method]
+        except KeyError:
+            known_methods = ", ".join(sorted(methods))
+            raise ValueError(
+                f"Unknown filter method {method!r}. Available methods: {known_methods}."
+            ) from None
+
+        return filter_method(**kwargs)
+
+    def iir_notch(
         self,
-        method,
         *,
+        f_lo,
+        f_hi,
+        notch_Q=None,
         dim="time",
         key=None,
         key_output_mode=None,
-        **kwargs,
     ):
         from . import Filter
 
-        return Filter(method, dim=dim, **kwargs)(
+        return Filter(
+            "iir_notch",
+            dim=dim,
+            f_lo=f_lo,
+            f_hi=f_hi,
+            notch_Q=notch_Q,
+        )(
             self, key=key, key_output_mode=key_output_mode
         )
 
-    def spectrogram(
-            self, 
-            method,
-            *, 
-            freqs=None, 
-            decim=None, 
-            n_cycles=None, 
-            time_bandwidth=None, 
-            output="power", 
-            key=None, 
-            key_output_mode=None
-            ):
+    def spectrogram(self, method, **kwargs):
+        methods = {"multitaper": self.multitaper_spectrogram}
+        try:
+            spectrogram_method = methods[method]
+        except KeyError:
+            known_methods = ", ".join(sorted(methods))
+            raise ValueError(
+                f"Unknown spectrogram method {method!r}. "
+                f"Available methods: {known_methods}."
+            ) from None
+
+        return spectrogram_method(**kwargs)
+
+    def multitaper_spectrogram(
+        self,
+        *,
+        freqs,
+        decim,
+        n_cycles,
+        time_bandwidth,
+        output="power",
+        key=None,
+        key_output_mode=None,
+    ):
         from . import Spectrogram
 
         return Spectrogram(
-            method, 
+            "multitaper",
             freqs=freqs,
             decim=decim,
             n_cycles=n_cycles,
             time_bandwidth=time_bandwidth,
-            output=output
-            )(self, key=key, key_output_mode=key_output_mode)
+            output=output,
+        )(self, key=key, key_output_mode=key_output_mode)
 
     def threshold(
         self, comparison, threshold, *, key=None, key_output_mode=None
@@ -106,12 +137,22 @@ class CalculateMixin:
             self, mask, key=key, key_output_mode=key_output_mode
         )
 
-    def fwhm(self, config=None, key=None, key_output_mode=None):
+    def fwhm(self,  
+            dim="samples",
+            include_valleys=True,
+            permissible_distance=75,
+            distance_unit=None,
+            key=None, 
+            key_output_mode=None):
         from . import FWHM
 
-        if config is None:
-            config = {}
-        return FWHM(**config)(self, key=key, key_output_mode=key_output_mode)
+    
+        return FWHM(
+            dim=dim, 
+            include_valleys=include_valleys, 
+            permissible_distance=permissible_distance, 
+            distance_unit=distance_unit
+            )(self, key=key, key_output_mode=key_output_mode)
 
     def count(self, config=None, key=None, key_output_mode=None, **kwargs):
         from . import Histogram

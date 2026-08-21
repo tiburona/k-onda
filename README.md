@@ -18,13 +18,14 @@ experiment = (
     .scale(.25)
     .filter(**filter_config)
     .normalize("rms")
-    .spectrogram({
-        "freqs": freqs, 
-        "decim": 20, 
-        "n_cycles": freqs * 0.5,
-        "time_bandwidth": 2, 
-        "output": "power"}
-    ) 
+    .spectrogram(
+        "multitaper",
+        freqs=freqs,
+        decim=20,
+        n_cycles=freqs * 0.5,
+        time_bandwidth=2,
+        output="power",
+    )
     .select('epochs', stimulus='tone', new_dim='trial', mode='pushdown')
     .select(frequency=(4, 8))
     .compile()

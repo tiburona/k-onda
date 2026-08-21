@@ -11,16 +11,26 @@ class FeatureRegistry(DictDelegator):
 feature_registry = FeatureRegistry()
 
 
-def fwhm(input, config=None):
-    if config is None:
-        config = {}
-
-    key = config.pop("key", "waveforms")
-    dim = config.pop("dim", "spikes")
-
+def fwhm(
+        input, 
+        fwhm_dim="samples", 
+        reduce_dim="spikes",
+        include_valleys=True, 
+        permissible_distance=75, 
+        distance_unit=None, 
+        key="waveforms",
+        key_output_mode="standalone"
+        ):
+    
     return (
-        input.fwhm(**config, key=key, key_output_mode="standalone")
-        .reduce(dim)
+        input.fwhm(
+            dim=fwhm_dim, 
+            include_valleys=include_valleys, 
+            permissible_distance=permissible_distance, 
+            distance_unit=distance_unit, 
+            key=key,
+            key_output_mode=key_output_mode)
+        .reduce(reduce_dim)
         .mean()
     )
 

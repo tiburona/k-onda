@@ -47,11 +47,11 @@ spectrogram_registry = SpectrogramCalculatorRegistry()
 @spectrogram_registry.register("multitaper")
 @dataclass(frozen=True)
 class MultitaperSpectrogram:
-    n_cycles: int | float | list[int] | list[float] | tuple[int] | tuple [float]
-    freqs: tuple | list
+    n_cycles: int | float | list | tuple | np.ndarray
+    freqs: tuple | list | np.ndarray
     decim: int
     time_bandwidth: int
-    output: str
+    output: str = "power"
 
     def compute_spectrogram(self, data_3d, fs):
         power = tfr_array_multitaper(
@@ -66,7 +66,11 @@ class MultitaperSpectrogram:
         return power
 
     def compute_padlen(self):
-        n_cycles = self.n_cycles
+        n_cycles = (
+            np.asarray(self.n_cycles) 
+            if isinstance(self.n_cycles, (list, tuple)) 
+            else self.n_cycles
+            )
         freqs = self.freqs
         f_min = self.freqs[0]
         if isinstance(n_cycles, np.ndarray):
@@ -106,7 +110,7 @@ class Spectrogram(PaddingCalculator):
         
         time_dim = data_schema.concrete_dim_from("time")
         leading_dims = [d for d in data.dims if d != time_dim]
-        data.transpose(*leading_dims, time_dim)
+        data = data.transpose(*leading_dims, time_dim)
         data_np = np.asarray(data.pint.magnitude)
         if data_np.ndim == 1:
             data_3d = data_np[np.newaxis, np.newaxis, :]
@@ -115,7 +119,7 @@ class Spectrogram(PaddingCalculator):
         elif data_np.ndim == 3:
             data_3d = data_np
         else:
-            raise ValueError("tfr_array_multitaper can not run on data with more than 3 dims.")
+            raise ValueError("Spectrogram can not run on data with more than 3 dims.")
 
         power = self.spectrogram_calculator.compute_spectrogram(data_3d, fs)
         return (power, {"fs": fs, "data_schema": data_schema})
