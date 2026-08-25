@@ -24,6 +24,17 @@ Right now `payload` is guaranteed to return a signal of the same type for `Datas
 
 `Intersection` and `ApplyMask`'s `__call__`s need to be evaluated for how they're working with keys, how they apply to stacks, and in general to be brought up-to-date with the code base.  
 
+`Intersection` does not yet support signals sampled on genuinely different grids
+(for example, a 30 fps video-derived mask and power calculated every 0.01 seconds).
+It needs an explicit alignment/resampling policy and a decision about the output
+grid. Coordinate tolerance should handle only trivial floating-point differences
+between grids that are otherwise equivalent. It should eventually be possible to
+specify that tolerance with units rather than only as a number of decimal places.
+`Intersection` should also support locations described by multiple paired
+coordinates (for example, repeated observations with `x` and `y` coordinates),
+and define pairing semantics for repeated coordinates that cannot be matched
+unambiguously by position.
+
 
 ## Loci
 
@@ -43,6 +54,12 @@ I'm missing dispatch over `SignalMap` for `Transformer` and the `select` mixin.
 `Spectrogram` currently tests `if isinstance(n_cycles, np.ndarray):`. This is only working because the only way anyone has run spectrogram is after defining config variables in Python; it will break as soon as config comes from a string source -- need to test for iterables more generally.
 
 The only filter currently supported is sos; this needs to be expanded.
+
+`MedianFilter` currently delegates to `scipy.signal.medfilt`, which treats values
+outside ordinary array boundaries as zero. This can affect filtered values near
+either edge even when the kernel is no larger than the dimension. K-Onda needs
+to choose an explicit boundary policy and decide whether that policy should be
+fixed or user-configurable.
 
 `Histogram` currently accepts a string `range_source`, "session", but there should be at least one other (which could maybe supercede "session") -- the smallest enclosing container on the histogram dim.  (e.g. if user has created epochs and the histogram is over time, "epochs".)
 

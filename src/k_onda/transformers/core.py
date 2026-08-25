@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 from copy import deepcopy
 
-from k_onda.central import DatasetSchema, type_registry
+from k_onda.central import type_registry as tr
 from k_onda.utils import ValidationMixin
 
 
@@ -24,7 +24,17 @@ class Transform:
         return self.fn(*data)
 
 
-KeySpec = namedtuple("KeySpec", "input_name output_mode", defaults=[None, "replace"])
+KeySpec = namedtuple(
+    "KeySpec", 
+    "input_name output_mode", 
+    defaults=[None, "replace"]
+    )
+
+MultiSpec = namedtuple(
+    "MultiSpec", 
+    "match_on collection_policy map_policy", 
+    defaults=[None, "exactly_one", "exact_keys"]
+    )
 
 
 class Transformer(ValidationMixin):
@@ -35,27 +45,63 @@ class Transformer(ValidationMixin):
     has a DatasetSchema."""
 
     fixed_output_class = None
+    arity = "one"
 
-    def __call__(self, input, key=None, key_output_mode=None):
+    def __call__(
+        self, 
+        *inputs, 
+        key=None, 
+        key_output_mode=None, 
+        match_on = None,
+        multi_input_collection_policy="exactly_one", 
+        multi_input_map_policy="exact_keys",
+        ):
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
-        if isinstance(input, type_registry.CollectionMap):
-            return self._call_on_collection_map(input, key_spec)
+        multi_spec = MultiSpec(
+            match_on=match_on, 
+            collection_policy=multi_input_collection_policy, 
+            map_policy=multi_input_map_policy
+            )
 
-        if isinstance(input, type_registry.Collection):
-            return self._call_on_collection(input, key_spec)
+        input = inputs[0]
 
-        if isinstance(input, type_registry.DataIdentity):
-            return self._call_on_data_identity(input, key_spec)
+        if len(inputs) == 1:
 
-        return self._call_on_signal(input, key_spec)
+            if isinstance(input, tr.CollectionMap):
+                return self._call_on_collection_map(input, key_spec=key_spec)
+
+            if isinstance(input, tr.Collection):
+                return self._call_on_collection(input, key_spec=key_spec)
+
+            if isinstance(input, tr.DataIdentity):
+                return self._call_on_data_identity(input, key_spec=key_spec)
+
+            return self._call_on_signal(input, key_spec=key_spec)
+
+        else:
+            if isinstance(input, tr.CollectionMap):
+                return self._multi_input_call_on_collection_map(
+                    *inputs, key_spec=key_spec, multi_spec=multi_spec
+                    )
+            
+            if isinstance(input, tr.Collection):
+                return self._multi_input_call_on_collection(
+                    *inputs, key_spec=key_spec, multi_spec=multi_spec
+                    )
+
+            if isinstance(input, tr.DataIdentity):
+                return self._multi_input_call_on_data_identity(*inputs, key_spec=key_spec)
+
+            return self._multi_input_call_on_signal(*inputs, key_spec=key_spec)
+
 
     def _call_on_collection_map(self, collection_map, key_spec):
 
         group_on = getattr(collection_map, "group_on", None)
 
-        return type_registry.CollectionMap(
+        return tr.CollectionMap(
             groups={
                 k: self._call_on_collection(v, key_spec)
                 for k, v in collection_map.items()
@@ -63,17 +109,47 @@ class Transformer(ValidationMixin):
             group_on=group_on,
         )
 
-    def _call_on_collection(self, collection, key_spec):
-        if isinstance(collection.members[0], type_registry.Signal):
-            return type_registry.Collection(
-                [self._call_on_signal(signal, key_spec) for signal in collection]
+    def _multi_input_call_on_collection_map(self, *inputs, key_spec=None, multi_spec=None):
+        if not all(isinstance(input, tr.CollectionMap) for input in inputs):
+            raise ValueError(
+                f"{self.format_call()}: received a CollectionMap and another input "
+                " type as arguments."
+                )
+        if multi_spec.map_policy == "exact_keys":
+            if not all(input.keys() == inputs[0].keys() for input in inputs[1:]):
+                raise ValueError(
+                    f"{self.format_call()} was called with multi_input_map_policy 'exact_keys' but "
+                    "inputs' keys do not match."
+                )
+
+            return tr.CollectionMap(
+                groups={
+                    k: self._multi_input_call_on_collection(
+                        *(input[k] for input in inputs), key_spec=key_spec, multi_spec=multi_spec
+                        )
+                    for k in inputs[0]
+                }
             )
-        elif isinstance(collection.members[0], type_registry.DataIdentity):
-            return type_registry.Collection(
+            
+
+        else:
+            raise NotImplementedError(
+                f"{self.format_call()} was called with multi_input_map_policy " 
+                "{self.multi_input_map_policy} but this policy has not been implemented. "
+                "Use 'exact_keys'."
+            )  
+
+    def _call_on_collection(self, collection, key_spec=None):
+        if isinstance(collection.members[0], tr.Signal):
+            return tr.Collection(
+                [self._call_on_signal(signal, key_spec=key_spec) for signal in collection]
+            )
+        elif isinstance(collection.members[0], tr.DataIdentity):
+            return tr.Collection(
                 [self._call_on_data_identity(di, key_spec) for di in collection.members]
             )
-        elif isinstance(collection.members[0], type_registry.Collection):
-            return type_registry.Collection(
+        elif isinstance(collection.members[0], tr.Collection):
+            return tr.Collection(
                 [
                     self._call_on_collection(member, key_spec)
                     for member in collection.members
@@ -82,24 +158,113 @@ class Transformer(ValidationMixin):
         else:
             raise ValueError("What did you put in this collection, bro?")
 
-    def _call_on_data_identity(self, data_identity, key_spec):
-        return type_registry.Collection(
+    def _multi_input_call_on_collection(self, *inputs, key_spec=None, multi_spec=None):
+
+        if multi_spec.collection_policy != "exactly_one":
+            raise NotImplementedError(
+                f"{self.format_call()} was called with multi_input_collection_policy " 
+                "{multi_spec.collection_policy} but this policy has not been implemented. "
+                    "Use 'exactly_one'."
+                )  
+
+        first_member = inputs[0].members[0]
+        
+        return tr.Collection(
             [
-                self._call_on_signal(component.to_signal(), key_spec)
+                self._call_on_collection_members(member, inputs, first_member, key_spec, multi_spec) 
+                for member in inputs[0].members
+                ]
+        )
+
+    def _construct_conditions(self, signal, multi_spec):
+        if multi_spec.match_on is not None:
+            return {
+                condition: getattr(signal, condition, None) 
+                for condition in multi_spec.match_on
+                }
+        else:
+            return {
+                "subject": getattr(signal, "subject", None),
+                "data_identity": getattr(signal, "data_identity", "None")
+                }
+
+    def _call_on_collection_members(self, member, collections, first_member, key_spec, multi_spec):
+        inputs = [member]
+        for collection in collections[1:]:
+            matching_members = collection.where(condition=self._construct_conditions(member, multi_spec))
+        
+            if len(matching_members) != 1:
+                raise ValueError(
+                    f"{self.format_call()}: found {len(matching_members)} for "
+                    "{member.display_id} but the match policy is exactly_one."
+                )
+                
+            else:
+                inputs.extend(matching_members)
+
+        if isinstance(first_member, tr.Collection):
+            return self._multi_input_call_on_collection(
+                *inputs, key_spec=key_spec, multi_spec=multi_spec
+                )
+            
+        elif isinstance(first_member, tr.DataIdentity):
+            return self._multi_input_call_on_data_identity(*inputs, key_spec=key_spec)
+        
+        else:
+            return self._multi_input_call_on_signal(*inputs, key_spec=key_spec)
+
+    def _call_on_data_identity(self, data_identity, key_spec=None):
+        return tr.Collection(
+            [
+                self._call_on_signal(component.to_signal(), key_spec=key_spec)
                 for component in data_identity.data_components
             ]
         )
 
-    def _call_on_signal(self, signal, key_spec):
+    def _multi_input_call_on_data_identity(self, *data_identities, key_spec=None):
+        if any(len(di.data_components) > 1 for di in data_identities):
+            raise ValueError(
+                f"{self.format_call()} mult input operations on data identities are ambiguous " \
+                "when they have multiple components. Aggregate the data components within identities" \
+                " first."
+                )
+        return tr.Collection([
+            self._multi_input_call_on_signal(
+                *[di.data_components[0].to_signal() for di in data_identities], key_spec=key_spec
+                )
+            ])
+
+    def _call_on_signal(self, signal, key_spec=None):
         self._validate_input(signal, key_spec=key_spec)
-        if isinstance(signal, type_registry.DataComponent):
+        if isinstance(signal, tr.DataComponent):
             signal = signal.to_signal()
         output_class = self.resolve_output_class(signal)
-        if isinstance(signal.data_schema, type_registry.DatasetSchema):
+        if isinstance(signal.data_schema, tr.DatasetSchema):
             key_spec = self.resolve_dataset_defaults(key_spec, signal, output_class)
     
         return output_class(
             inputs=(signal,),
+            transformer=self,
+            key_spec=key_spec,
+            data_schema=None,
+            transform=None
+        )
+
+    def _multi_input_call_on_signal(self, *signals, key_spec=None):
+        self._validate_input(*signals, key_spec=key_spec)
+        signals = [
+            signal.to_signal() 
+            if isinstance(signal, tr.DataComponent) 
+            else signal 
+            for signal in signals
+            ]
+
+        output_class = self.resolve_output_class(signals[0])
+        if isinstance(signals[0].data_schema, tr.DatasetSchema):
+            key_spec = self.resolve_dataset_defaults(key_spec, signals[0], output_class)
+
+        return output_class(
+            inputs=signals,
             transformer=self,
             key_spec=key_spec,
             data_schema=None,
@@ -155,42 +320,73 @@ class Transformer(ValidationMixin):
 
     def _infer_output_class(self, entity):
         return getattr(entity, "output_class", type(entity))
+
+    def _validate_input(self, *inputs, **kwargs):
+        if (self.arity in [1, "1", "one"] and len(inputs) != 1 or
+            self.arity in [2, "2", "two"] and len(inputs) != 2 or
+            self.arity in ["one_or_more", ">=1"] and len(inputs) < 1 or
+            self.arity in ["two_or_more", ">=2"] and len(inputs) < 2 
+            ):
+                raise ValueError(f"{self.format_call()}: takes {self.arity} inputs.")
+
+        if "key_spec" in kwargs and kwargs["key_spec"].input_name is not None:
+            if not any(isinstance(input.data_schema, tr.DatasetSchema) for input in inputs):
+                raise ValueError(
+                    f"{self.format_call()} received key but none of the inputs are Datasets."
+                )
     
-    def _validate_data_schema(self, input_schema):
+    def _validate_data_schema(self, *input_schemas):
         return True
 
-    def make_output_schema(self, *input_schemas, key_spec, **schema_kwargs):
+    def make_output_schema(self, *input_schemas, key_spec=None, **schema_kwargs):
         """Compute the output schema."""
 
-        input_schema = input_schemas[0]
         key = key_spec.input_name if key_spec is not None else None
+
+        if (
+            key is not None 
+            and not any(isinstance(schema, tr.DatasetSchema) for schema in input_schemas)
+            ):
+            raise ValueError(
+                f"{self.format_call()}: key was provided but none of the inputs are Datasets."
+                )
+
         output_mode = (
             key_spec.output_mode
             if key_spec is not None and key_spec.output_mode is not None
             else getattr(self, "key_mode", "replace")
         )
 
-        if isinstance(input_schema, DatasetSchema) and key is not None:
-            key_schema = input_schema[key]
-            self._validate_data_schema(key_schema)
-            new_key_schema = self.output_schema(key_schema)
+        schemas = []
+
+        for input_schema in input_schemas:
+            if isinstance(input_schema, tr.DatasetSchema) and key is not None:
+                key_schema = input_schema[key]
+                self._validate_data_schema(key_schema)
+                schemas.append(key_schema)
+            else:
+                self._validate_data_schema(input_schema)
+                schemas.append(input_schema)
+
+        
+        new_key_schema = self.output_schema(*schemas)
+        primary_input_schema = input_schemas[0]
+
+        if isinstance(primary_input_schema, tr.DatasetSchema) and key is not None:
             if output_mode == "standalone":
                 return new_key_schema
             elif output_mode == "rename":  
-                return input_schema.replace_key(self.name, new_key_schema)
+                return primary_input_schema.replace_key(self.name, new_key_schema)
             elif output_mode == "replace":
-                return input_schema.replace_key(key_spec.input_name, new_key_schema)
+                return primary_input_schema.replace_key(key_spec.input_name, new_key_schema)
             elif output_mode == "append":
-                return input_schema.add_key(self.name, new_key_schema)
-
+                return primary_input_schema.add_key(self.name, new_key_schema)
         else:
-            # Plain Schema input
-            self._validate_data_schema(input_schema)
-            return self.output_schema(*input_schemas)
+            return new_key_schema
 
     # this gets overridden
-    def output_schema(self, input_schema):
-        return input_schema
+    def output_schema(self, *input_schemas):
+        return input_schemas[0].copy()
     
     def resolve_target_data(self, data, key):
         if key is None:
@@ -255,32 +451,80 @@ class Calculator(Transformer):
     require_all_finite = False
     allow_empty = False
 
-    def _validate_input(self, input, **kwargs):
+    def _validate_input(self, *inputs, **kwargs):
+        super()._validate_input(*inputs, **kwargs)
         acceptable_types = [
-            type_registry.Signal,
-            type_registry.SignalStack,
-            type_registry.Collection,
-            type_registry.CollectionMap,
-            type_registry.DataIdentity,
+            tr.Signal,
+            tr.SignalStack,
+            tr.Collection,
+            tr.CollectionMap,
+            tr.DataIdentity,
         ]
-        if not any([isinstance(input, typ) for typ in acceptable_types]):
-            raise ValueError(f"Calculators can't operate on type {type(input)}")
+        for input in inputs:
+            if not any([isinstance(input, typ) for typ in acceptable_types]):
+                raise ValueError(
+                    f"{self.format_call()}: Calculators can't operate on type {type(input)}"
+                    )
     
-    def _get_apply_kwargs(self, input, key_spec):
-        schema = input.data_schema
+    def _get_apply_kwargs(self, *inputs, key_spec):
+        schema = inputs[0].data_schema
          
         if (
             key_spec and 
             key_spec.input_name and 
-            isinstance(schema, type_registry.DatasetSchema)
+            isinstance(schema, tr.DatasetSchema)
             ):
             schema = schema[key_spec.input_name]
 
-        result = {"key_spec": key_spec, "data_schema": schema}
-        result.update(self._get_extra_apply_kwargs(input))
+        result = {
+            "key_spec": key_spec,
+            "data_schema": schema,
+            "diagnostic_context": self._build_diagnostic_context(inputs[0], key_spec),
+        }
+        result.update(self._get_extra_apply_kwargs(*inputs))
         return result
 
-    def _get_transform_kwargs(self, input, apply_kwargs):
+    @staticmethod
+    def _diagnostic_identifier(entity):
+        if entity is None:
+            return None
+
+        for attribute in ("display_id", "label", "id", "uid"):
+            value = getattr(entity, attribute, None)
+            if value is not None:
+                return str(value)
+        return type(entity).__name__
+
+    def _build_diagnostic_context(self, input, key_spec):
+        context = {"signal": type(input).__name__}
+        entities = {
+            "data identity": getattr(input, "data_identity", None),
+            "origin": getattr(input, "origin", None),
+            "subject": getattr(input, "subject", None),
+            "session": getattr(input, "session", None),
+        }
+        for name, entity in entities.items():
+            identifier = self._diagnostic_identifier(entity)
+            if identifier is not None:
+                context[name] = identifier
+
+        conditions = getattr(input, "conditions", None)
+        if conditions:
+            context["conditions"] = repr(conditions)
+        if key_spec is not None and key_spec.input_name is not None:
+            context["key"] = key_spec.input_name
+
+        return context
+
+    @staticmethod
+    def _format_diagnostic_context(context, data):
+        details = [f"{name}={value}" for name, value in context.items()]
+        if isinstance(data, (xr.DataArray, xr.Dataset)):
+            details.append(f"dimensions={dict(data.sizes)}")
+        return ", ".join(details)
+
+    def _get_transform_kwargs(self, *inputs, apply_kwargs):
+        input = inputs[0]
         if getattr(input, "is_stack", None):
             signal_class = self.fixed_output_class or self._infer_output_class(
                 input.signals[0]
@@ -289,66 +533,84 @@ class Calculator(Transformer):
             signal_class = None
 
         kwargs = {"signal_class": signal_class}
-        kwargs.update(self._get_extra_transform_kwargs(input, apply_kwargs))
+        kwargs.update(self._get_extra_transform_kwargs(*inputs, apply_kwargs=apply_kwargs))
 
         return kwargs
 
     # These two methods get overridden
-    def _get_extra_apply_kwargs(self, input):
+    def _get_extra_apply_kwargs(self, *inputs):
         return {}
 
-    def _get_extra_transform_kwargs(self, input, apply_kwargs):
+    def _get_extra_transform_kwargs(self, *inputs, apply_kwargs=None):
+        apply_kwargs = apply_kwargs or {}
         return deepcopy(apply_kwargs)
 
-    def _apply(self, data, *args, key_spec=None, **kwargs):
+    def _apply(self, *input_data, key_spec=None, diagnostic_context=None, **kwargs):
        
         if key_spec is not None and key_spec.input_name is not None:
-            data_for_apply = self.resolve_target_data(data, key_spec.input_name)
+            data_for_apply = tuple(
+                data if not isinstance(data, xr.Dataset) 
+                else self.resolve_target_data(data, key=key_spec.input_name) 
+                for data in input_data 
+                )
         else:
-            data_for_apply = data
+            data_for_apply = input_data
 
-        self._validate_data(data_for_apply, **kwargs)
+        self._validate_data(*data_for_apply, **kwargs)
 
-        result = self._apply_inner(data_for_apply, *args, **kwargs)
+        try:
+            result = self._apply_inner(*data_for_apply, **kwargs)
+        except ZeroDivisionError as error:
+            if diagnostic_context:
+                context = self._format_diagnostic_context(
+                    diagnostic_context, *data_for_apply
+                )
+                raise ZeroDivisionError(
+                    f"{error}\nInput context: {context}"
+                ) from None
+            raise
 
         if isinstance(result, tuple):
             result, wrap_kwargs = result
         else:
             wrap_kwargs = {}
 
-        result = self._wrap_result(result, data_for_apply, **wrap_kwargs)
+        result = self._wrap_result(result, *data_for_apply, **wrap_kwargs)
         
         if key_spec is not None and key_spec.input_name is not None:
-            result = self.merge_keys(data, result, key_spec)
+            result = self.merge_keys(input_data[0], result, key_spec)
 
         return result
 
-    def _validate_data(self, data, **kwargs):
-        if not isinstance(data, (xr.DataArray, xr.Dataset)):
-            raise ValueError("data must be an xarray DataArray or Dataset.")
-
-        if hasattr(data, "data_vars") and len(data.data_vars) == 0:
-            raise ValueError(f"{type(self)}: Event dataset has no variables.")
+    def _validate_data(self, *input_data, **kwargs):
 
         def get_magnitude(arr):
-            try:
-                mag = arr.pint.magnitude  # preferred for pint-aware arrays
-            except Exception:
-                mag = arr
-            return np.asarray(mag)
+                try:
+                    mag = arr.pint.magnitude  # preferred for pint-aware arrays
+                except Exception:
+                    mag = arr
+                return np.asarray(mag)
 
-        if isinstance(data, xr.Dataset):
-            arrays = [get_magnitude(arr) for arr in data.data_vars.values()]
-        else:
-            arrays = [get_magnitude(data)]
+        for data in input_data:
 
-        for arr in arrays:
-            if not self.allow_empty and arr.size == 0:
-                raise ValueError(f"{type(self)}: An empty data array is not allowed.")
-            if self.require_all_finite and not np.isfinite(arr).all():
-                raise ValueError(f"{type(self)}: All values must be finite.")
-            if self.require_some_finite and not np.isfinite(arr).any():
-                raise ValueError(f"{type(self)}: The data contains no finite values.")
+            if not isinstance(data, (xr.DataArray, xr.Dataset)):
+                raise ValueError("data must be an xarray DataArray or Dataset.")
+
+            if hasattr(data, "data_vars") and len(data.data_vars) == 0:
+                raise ValueError(f"{type(self)}: Event dataset has no variables.")
+
+            if isinstance(data, xr.Dataset):
+                arrays = [get_magnitude(arr) for arr in data.data_vars.values()]
+            else:
+                arrays = [get_magnitude(data)]
+
+            for arr in arrays:
+                if not self.allow_empty and arr.size == 0:
+                    raise ValueError(f"{type(self)}: An empty data array is not allowed.")
+                if self.require_all_finite and not np.isfinite(arr).all():
+                    raise ValueError(f"{type(self)}: All values must be finite.")
+                if self.require_some_finite and not np.isfinite(arr).any():
+                    raise ValueError(f"{type(self)}: The data contains no finite values.")
 
     # This method gets overridden by every Calculator.
     def _apply_inner(self, data, *args, **kwargs):

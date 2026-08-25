@@ -1,7 +1,7 @@
 import pytest
 
 from k_onda.central import AxisInfo, AxisKind, Schema
-from k_onda.transformers import ReduceDim, Scale
+from k_onda.transformers import ReduceDim, Add
 from tests.fakes import FakeDataComponent, make_lineage
 
 
@@ -18,7 +18,7 @@ experiment, subject, session, data_source, data_identity, _ = make_lineage()
 
 class TestCalculatorSignalConstruction:
     def test_calculator_constructs_child_signal(self, parent_signal):
-        calculator = Scale(2)
+        calculator = Add(2)
         
         child = calculator(parent_signal)
 

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Mapping, Callable
 from operator import attrgetter
 from pathlib import Path
 import uuid
@@ -277,6 +278,31 @@ class Collection(
 
     def group_by(self, group_on, strict=True):
         return CollectionMap(self.members, group_on, strict=strict)
+
+    def where(self, condition=None, *, conditions=None):
+        if condition is not None and conditions is not None:
+            raise ValueError("where should receive only one of condition or conditions")
+        if not conditions:
+            conditions = [condition]
+        return Collection(
+            members=[
+                member for member in self.members 
+                if all(self._evaluate_condition(member, condition) for condition in conditions)
+                ],
+            origin=self.origin
+        )
+
+    def _evaluate_condition(self, member, condition):
+        if isinstance(condition, Mapping):
+            for key in condition:
+                if condition.get(key) != getattr(member, key):
+                    return False
+        elif isinstance(condition, Callable):
+            if not condition(member):
+                return False
+        else:
+            raise ValueError(f"Unknown type {type(condition)} for condition")
+        return True
 
     def classify(
             self, 

@@ -9,6 +9,22 @@ from .core import Transformer, KeySpec, Calculator
 from k_onda.central import type_registry, AxisInfo, AxisKind, CoordInfo
 
 
+REDUCTION_METHODS = {
+    "all",
+    "any",
+    "count",
+    "max",
+    "mean",
+    "median",
+    "min",
+    "prod",
+    "std",
+    "sum",
+    "var",
+}
+WEIGHTED_REDUCTION_METHODS = {"mean", "std", "sum", "var"}
+
+
 @type_registry.register
 class AssembleArray(Transformer):
     def __init__(self, collection_coords=None, preserve_groups=False, planned_input_schema=None):
@@ -33,7 +49,7 @@ class AssembleArray(Transformer):
 
         else:
             raise ValueError(
-                "Aggregator must be called on a Collection or a Grouped_Collection "
+                "AssembleArray must be called on a Collection or a Grouped_Collection "
             )
         
     def _call_on_collection_map(self, collection_map, key_spec):
@@ -81,13 +97,9 @@ class AssembleArray(Transformer):
             input_schema, key_spec=key_spec, coord_infos=coord_infos
             )
         
-        schema_kwargs = {
-            "coord_infos": coord_infos
-        }
+        schema_kwargs = {"coord_infos": coord_infos}
         
-        apply_kwargs = {
-            "labels_and_factors": labels_and_factors
-        }
+        apply_kwargs = {"labels_and_factors": labels_and_factors}
 
         return type_registry.AggregatedSignal(
             inputs=inputs,
@@ -364,13 +376,65 @@ class ReduceDim(Calculator):
     name = "reduce_dim"
 
     def __init__(self, dims, method="mean", weights=None):
-        self.dims = dims if not isinstance(dims, str) else [dims]
+        normalized_dims = self._normalize_dims(dims)
+        self._validate_configuration(normalized_dims, method, weights)
+
+        self.dims = normalized_dims
         self.method = method
         self.weights = weights
 
+    def _normalize_dims(self, dims):
+        if dims is None:
+            return None
+        if isinstance(dims, str):
+            return [dims]
+
+        try:
+            return list(dims)
+        except TypeError:
+            raise TypeError(
+                f"{self.format_call()}: dims must be None, a string, or an "
+                "iterable of strings."
+            ) from None
+
+    def _validate_configuration(self, dims, method, weights):
+        if dims is not None:
+            if not dims:
+                raise ValueError(
+                    f"{self.format_call()}: dims cannot be an empty collection."
+                )
+            if any(not isinstance(dim, str) or not dim for dim in dims):
+                raise TypeError(
+                    f"{self.format_call()}: every dimension must be a non-empty "
+                    "string."
+                )
+            if len(set(dims)) != len(dims):
+                raise ValueError(
+                    f"{self.format_call()}: dimensions cannot be repeated."
+                )
+
+        if not isinstance(method, str):
+            raise TypeError(f"{self.format_call()}: method must be a string.")
+        if method not in REDUCTION_METHODS:
+            known_methods = ", ".join(sorted(REDUCTION_METHODS))
+            raise ValueError(
+                f"{self.format_call()}: unknown reduction method {method!r}. "
+                f"Available methods: {known_methods}."
+            )
+        if weights is not None and not isinstance(weights, xr.DataArray):
+            raise TypeError(
+                f"{self.format_call()}: weights must be an xarray DataArray."
+            )
+        if weights is not None and method not in WEIGHTED_REDUCTION_METHODS:
+            known_methods = ", ".join(sorted(WEIGHTED_REDUCTION_METHODS))
+            raise ValueError(
+                f"{self.format_call()}: method {method!r} does not support weights. "
+                f"Weighted methods: {known_methods}."
+            )
+
     def _apply_inner(self, data, *args, **kwargs):
         if self.weights is not None:
-            data = data.weighted(self.weights, keep_attrs=True)
+            data = data.weighted(self.weights)
         return getattr(data, self.method)(dim=self.dims, keep_attrs=True)
 
     def output_schema(self, input_schema):
@@ -381,7 +445,8 @@ class ReduceDim(Calculator):
     
     def _reduce_schema(self, schema):
         output_schema = schema
-        for dim in self.dims:
+        dims = list(schema.dim_names) if self.dims is None else self.dims
+        for dim in dims:
             axis = schema.axis_by_name(dim)
             if axis is None:
                 continue
@@ -402,19 +467,47 @@ class ReduceDim(Calculator):
 
     
     def _validate_data_schema(self, input_schema):
+        if self.dims is None:
+            return
+
         missing = [
             dim for dim in self.dims
             if not input_schema.has_dim(dim)
         ]
         if missing:
-            raise ValueError(f"Cannot reduce missing dim(s): {missing}")
+            raise ValueError(
+                f"{self.format_call()}: cannot reduce missing dimensions: {missing}."
+            )
         
     def _validate_data(self, data, **kwargs):
         if not isinstance(data, (xr.DataArray, xr.Dataset, DataArrayGroupBy)):
-            raise ValueError("data must be an xarray DataArray or Dataset.")
+            raise TypeError(
+                f"{self.format_call()}: data must be an xarray DataArray, Dataset, "
+                "or DataArrayGroupBy."
+            )
 
         if hasattr(data, "data_vars") and len(data.data_vars) == 0:
-            raise ValueError(f"{type(self)}: Event dataset has no variables.")
+            raise ValueError(f"{self.format_call()}: dataset has no variables.")
+
+        if self.weights is not None:
+            if isinstance(data, DataArrayGroupBy):
+                raise TypeError(
+                    f"{self.format_call()}: weighted reduction is not supported "
+                    "for grouped data."
+                )
+
+            missing_weight_dims = [
+                dim for dim in self.weights.dims if dim not in data.dims
+            ]
+            if missing_weight_dims:
+                raise ValueError(
+                    f"{self.format_call()}: weight dimensions are not present in "
+                    f"the data: {missing_weight_dims}."
+                )
+            if bool(self.weights.isnull().any()):
+                raise ValueError(
+                    f"{self.format_call()}: weights cannot contain missing values."
+                )
 
     def resolve_output_class(self, input):
         # If we're operating on a StackedSignal, preserve the stack type.
@@ -425,16 +518,20 @@ class ReduceDim(Calculator):
         return self.fixed_output_class or self._infer_output_class(input)
 
     def _infer_output_class(self, input):
+        if isinstance(input.data_schema, type_registry.Schema):
+            output_schema = self.output_schema(input.data_schema)
+            if not output_schema.axes:
+                return type_registry.ScalarSignal
 
-        if (
-            isinstance(input.data_schema, type_registry.Schema)
-            and len(input.data_schema.axes) == 1
-        ):
-            return type_registry.ScalarSignal
         if input.data_schema.is_point_process():
+            dims = (
+                input.data_schema.dim_names
+                if self.dims is None
+                else self.dims
+            )
             reduces_essential = any(
                 input.data_schema.is_point_process_essential(dim)
-                for dim in self.dims
+                for dim in dims
             )
             if not reduces_essential:
                 return type_registry.PointProcessSignal
@@ -444,5 +541,3 @@ class ReduceDim(Calculator):
                 else:
                     return type_registry.Signal
         return super()._infer_output_class(input)
-   
-        

@@ -1,5 +1,8 @@
 # K-Onda Roadmap
 
+For granular ideas that are not yet prioritized or promised, see the
+[wishlist](../wishlist.md).
+
 ## Phase -1 - What's Done
 
 - Pipelines to preprocess LFP data and compute a spectrogram established immutable `Signal`/pure-at-execution `Transformer` architecture.

@@ -3,7 +3,7 @@ from functools import partial
 import xarray as xr
 
 from .core import Transformer, Transform, KeySpec
-from k_onda.central import DatasetSchema, AxisInfo, AxisKind, type_registry
+from k_onda.central import DatasetSchema, AxisInfo, AxisKind, type_registry as tr
 
 
 class StackSignals(Transformer):
@@ -12,11 +12,11 @@ class StackSignals(Transformer):
     """Concatenate component signals so downstream calculations can be vectorized."""
 
     def __init__(self, dim=None):
-        self.dim = dim
+        self.adds_member_dim = dim is None
+        self.dim = dim or "member"
 
     def output_schema(self, *input_schemas):
-        stacking_dim = self.dim or "members"
-        axis = AxisInfo(name=stacking_dim, kind=AxisKind.AXIS)
+        axis = AxisInfo(name=self.dim, kind=AxisKind.AXIS)
         
         def stack_schema(schema):
             return schema.with_axis(axis)
@@ -40,12 +40,14 @@ class StackSignals(Transformer):
         input_schemas = [s.data_schema for s in collection.signals]
         output_schema = self.output_schema(*input_schemas)
         transform = self._get_transform()
-        return type_registry.SignalStack(
+        return tr.SignalStack(
             collection, 
             data_schema=output_schema, 
             transform=transform, 
             key_spec=key_spec,
-            transformer=self
+            transformer=self,
+            stack_dim=self.dim,
+            stack_dim_was_added=self.adds_member_dim,
             )
 
     def _get_transform(self, *args, **kwargs):
@@ -61,17 +63,18 @@ class StackSignals(Transformer):
             for dataset in data:
                 arr = dataset[key]
                 arrays.append(arr)
-                increment = arr.sizes[self.dim] if self.dim else 1
+                increment = arr.sizes[self.dim] if self.dim in arr.dims else 1
                 if i == 0:
                     boundaries.append(boundaries[-1] + increment)
 
             gathered_data[key] = xr.concat(
-                arrays, dim=self.dim or "members", combine_attrs="no_conflicts"
+                arrays, dim=self.dim, combine_attrs="no_conflicts"
             )
 
         dataset = xr.Dataset(gathered_data)
         dataset.attrs["boundaries"] = boundaries
         dataset.attrs["stack_dim"] = self.dim
+        dataset.attrs["stack_dim_was_added"] = self.adds_member_dim
 
         return dataset
 
@@ -81,15 +84,16 @@ class StackSignals(Transformer):
 
         for arr in data:
             arrays.append(arr)
-            increment = arr.sizes[self.dim] if self.dim else 1
+            increment = arr.sizes[self.dim] if self.dim in arr.dims else 1
             boundaries.append(boundaries[-1] + increment)
 
         gathered_data = xr.concat(
-            arrays, dim=self.dim or "members", combine_attrs="no_conflicts"
+            arrays, dim=self.dim, combine_attrs="no_conflicts"
         )
 
         gathered_data.attrs["boundaries"] = boundaries
         gathered_data.attrs["stack_dim"] = self.dim
+        gathered_data.attrs["stack_dim_was_added"] = self.adds_member_dim
 
         return gathered_data
 
@@ -101,11 +105,10 @@ class StackSignals(Transformer):
 
 
 class UnstackSignals(Transformer):
-    def __init__(self, dim=None):
-        self.dim = dim
+    def output_schema(self, input_schema, stacking_dim, stack_dim_was_added):
+        if not stack_dim_was_added:
+            return input_schema
 
-    def output_schema(self, input_schema):
-        stacking_dim = self.dim or "members"
         if isinstance(input_schema, DatasetSchema):
             return DatasetSchema(
                 {
@@ -123,7 +126,11 @@ class UnstackSignals(Transformer):
 
     def __call__(self, signal_stack):
         signals = []
-        output_schema = self.output_schema(signal_stack.data_schema)
+        output_schema = self.output_schema(
+            signal_stack.data_schema,
+            signal_stack.stack_dim,
+            signal_stack.stack_dim_was_added,
+        )
 
         for i in range(len(signal_stack.signals)):
             signal_class = (
@@ -164,10 +171,11 @@ class UnstackSignals(Transformer):
     def _apply(self, data, idx):
         attrs = deepcopy(data.attrs)
         boundaries = attrs.pop("boundaries")
-        stack_dim = attrs.pop("stack_dim")
+        dim = attrs.pop("stack_dim")
+        stack_dim_was_added = attrs.pop("stack_dim_was_added")
 
-        dim = self.dim or stack_dim
         start, end = boundaries[idx], boundaries[idx + 1]
-        selected_data = data.isel({dim: slice(start, end)})
+        selection = start if stack_dim_was_added else slice(start, end)
+        selected_data = data.isel({dim: selection})
         selected_data.attrs = attrs
         return selected_data

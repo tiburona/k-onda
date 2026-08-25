@@ -1,4 +1,4 @@
-from k_onda.central import type_registry
+from k_onda.central import type_registry as tr
 
 
 def classify_neurons(
@@ -9,23 +9,23 @@ def classify_neurons(
         labels=None,
         sort_by=None,
         ):
-    if not isinstance(neuron_collection, type_registry.Collection):
+    if not isinstance(neuron_collection, tr.Collection):
         raise ValueError("`neuron_collection` must be a Collection")
     if not len(neuron_collection):
         raise ValueError("No neurons to classify!")
-    if not all([isinstance(neuron, type_registry.Neuron) for neuron in neuron_collection]):
+    if not all([isinstance(neuron, tr.Neuron) for neuron in neuron_collection]):
         raise ValueError("There's a non-neuron in `neuron_collection`.")
     
-    stacked_signals = neuron_collection.stack_signals(dim="spikes")
+    stacked_signals = neuron_collection.stack_signals(dim="spike")
 
-    if stacked_signals.data_schema.has_dim("electrodes"):
-        stacked_signals = stacked_signals.reduce(key="waveforms", dim="electrodes", method="mean")
+    if stacked_signals.data_schema.has_dim("electrode"):
+        stacked_signals = stacked_signals.reduce(key="waveforms", dim="electrode", method="mean")
 
 
 
     classified_neurons = (
         stacked_signals
-        .median_filter(key="waveforms", kernel_sizes={"samples": 5})
+        .median_filter(key="waveforms", kernel_sizes={"sample": 5})
         .unstack_signals()
         .extract_features("fwhm", "firing_rate", group_by="neuron")
         .normalize(method="zscore", dim="index")

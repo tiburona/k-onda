@@ -12,39 +12,48 @@ class FWHM(Calculator):
 
     def __init__(
         self,
-        dim="samples",
+        *,
+        dim="sample",
         include_valleys=True,
-        permissible_distance=75,
-        distance_unit=None,
+        peak_selection="prominence",
     ):
+        if peak_selection not in {"prominence", "height"}:
+            raise ValueError(
+                f"{self.format_call()}: peak_selection must be 'prominence' or "
+                "'height'."
+            )
+
         self.dim = dim
         self.include_valleys = include_valleys
-        self.distance_unit = distance_unit or pint.application_registry.raw_sample
-        self.permissible_distance = permissible_distance * self.distance_unit
+        self.peak_selection = peak_selection
 
     def fwhm(self, data):
         def find_max_peak(values):
-            peaks, properties = find_peaks(values, height=0)
+            find_kwargs = {"height": 0}
+            if self.peak_selection == "prominence":
+                find_kwargs["prominence"] = 0
+
+            peaks, properties = find_peaks(values, **find_kwargs)
             if len(peaks) == 0:
                 return None, None
-            heights = properties["peak_heights"]
-            peak_pos = int(np.argmax(heights))
-            return int(peaks[peak_pos]), float(heights[peak_pos])
+
+            property_name = (
+                "prominences"
+                if self.peak_selection == "prominence"
+                else "peak_heights"
+            )
+            strengths = properties[property_name]
+            peak_pos = int(np.argmax(strengths))
+            return int(peaks[peak_pos]), float(strengths[peak_pos])
 
         values = np.asarray(data)
-        trim = int(
-            getattr(self.permissible_distance, "magnitude", self.permissible_distance)
-        )
-        if trim > 0 and values.size > 2 * trim:
-            values = values[trim:-trim]
-
-        peak_idx, peak_height = find_max_peak(values)
+        peak_idx, peak_strength = find_max_peak(values)
         signal_for_width = values
 
         if self.include_valleys:
-            valley_idx, valley_height = find_max_peak(-values)
+            valley_idx, valley_strength = find_max_peak(-values)
             if valley_idx is not None and (
-                peak_idx is None or valley_height > peak_height  # pyright: ignore[reportOperatorIssue]
+                peak_idx is None or valley_strength > peak_strength  # pyright: ignore[reportOperatorIssue]
             ):
                 peak_idx = valley_idx
                 signal_for_width = -values
@@ -68,7 +77,9 @@ class FWHM(Calculator):
         return self.fwhm(data.values)
 
     def _wrap_result(self, result, *args):
-        result = xr.DataArray(result).pint.quantify(self.distance_unit)
+        result = xr.DataArray(result).pint.quantify(
+            pint.application_registry.raw_sample
+        )
         return super()._wrap_result(result)
 
     def output_schema(self, input_schema):

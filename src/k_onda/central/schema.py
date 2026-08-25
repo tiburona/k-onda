@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections.abc import MutableMapping
 from functools import reduce
+import numpy as np
 from .registry import type_registry
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
@@ -24,6 +25,82 @@ class CoordInfo:
     is_condition: bool = False
     scale: str | None = None
     levels: tuple[str, ...] | None = None
+    ndim: int = 1
+    ordering: str | None = None
+    is_unique: bool | None = None
+
+    def __post_init__(self):
+        ordering = self.ordering
+        if ordering is None:
+            ordering = "increasing" if self.metadim == "time" else "unordered"
+        object.__setattr__(self, "ordering", ordering)
+
+        is_unique = self.is_unique
+        if is_unique is None:
+            is_unique = not self.is_condition
+        object.__setattr__(self, "is_unique", is_unique)
+
+        self._validate_coordinate_contract()
+
+    def _validate_coordinate_contract(self):
+        if isinstance(self.ndim, bool) or not isinstance(self.ndim, int):
+            raise TypeError("CoordInfo.ndim must be an integer.")
+        if self.ndim < 1:
+            raise ValueError("CoordInfo.ndim must be at least 1.")
+
+        valid_orderings = {"increasing", "decreasing", "unordered"}
+        if self.ordering not in valid_orderings:
+            raise ValueError(
+                "CoordInfo.ordering must be 'increasing', 'decreasing', or "
+                "'unordered'."
+            )
+        if self.ndim > 1 and self.ordering in {"increasing", "decreasing"}:
+            raise NotImplementedError(
+                "Ordering contracts for multidimensional coordinates are not yet "
+                "supported."
+            )
+        if not isinstance(self.is_unique, bool):
+            raise TypeError("CoordInfo.is_unique must be a boolean.")
+
+    @property
+    def is_monotonic(self):
+        return self.ordering in {"increasing", "decreasing"}
+
+    def validate_data(self, coord):
+        try:
+            units = coord.pint.units
+        except AttributeError:
+            units = None
+        values = np.asarray(coord.pint.magnitude if units is not None else coord)
+
+        if values.ndim != self.ndim:
+            raise ValueError(
+                f"Coordinate {self.name!r} declares ndim={self.ndim}, but its "
+                f"data has ndim={values.ndim}."
+            )
+
+        if self.ordering != "unordered" and values.size > 1:
+            try:
+                if self.ordering == "increasing":
+                    ordered = np.all(values[1:] >= values[:-1])
+                else:
+                    ordered = np.all(values[1:] <= values[:-1])
+            except TypeError as error:
+                raise ValueError(
+                    f"Coordinate {self.name!r} declares ordering={self.ordering!r}, "
+                    "but its values cannot be compared in that order."
+                ) from error
+            if not ordered:
+                raise ValueError(
+                    f"Coordinate {self.name!r} declares ordering={self.ordering!r}, "
+                    "but its values do not satisfy that ordering."
+                )
+
+        if self.is_unique and np.unique(values).size != values.size:
+            raise ValueError(
+                f"Coordinate {self.name!r} declares is_unique=True, but its data "
+                "contains repeated values."
+            )
 
 
 @dataclass(frozen=True)
@@ -40,10 +117,17 @@ class AxisInfo:
         coords = tuple(self.coords)
         if not any(c.name == self.name for c in coords):
             coords = (self._default_coord_for_axis(), *coords)
+        axis_coord = next(c for c in coords if c.name == self.name)
+        if self.kind == AxisKind.ORDINAL_INDEX and not axis_coord.is_monotonic:
+            raise ValueError(
+                f"Ordinal axis {self.name!r} must declare increasing or "
+                "decreasing coordinate order."
+            )
         object.__setattr__(self, "coords", coords)
 
     def _default_coord_for_axis(self):
         scale = None
+        ordering = None
 
         if self.kind == AxisKind.AXIS and self.metadim in {"time", "frequency"}:
             scale = "continuous"
@@ -53,8 +137,15 @@ class AxisInfo:
             AxisKind.POINT_PROCESS_INDEX
             ):
             scale = "ordinal"
+        if self.kind == AxisKind.ORDINAL_INDEX:
+            ordering = "increasing"
 
-        return CoordInfo(name = self.name, metadim=self.metadim, scale=scale)
+        return CoordInfo(
+            name=self.name,
+            metadim=self.metadim,
+            scale=scale,
+            ordering=ordering,
+        )
         
 
 
@@ -67,6 +158,20 @@ class Schema:
 
     axes: list[AxisInfo] = field(default_factory=list)
     value_metadim: str | None = None
+
+    def validate_data(self, data):
+        if self.coords and not hasattr(data, "coords"):
+            raise TypeError(
+                "Schema coordinate contracts can only validate data with coordinates."
+            )
+
+        for coord_info in self.coords:
+            if coord_info.name not in data.coords:
+                raise ValueError(
+                    f"Schema declares coordinate {coord_info.name!r}, but the data "
+                    "does not contain it."
+                )
+            coord_info.validate_data(data.coords[coord_info.name])
 
     def has_axis_kind(self, kind) -> bool:
         return any(ax.kind == kind for ax in self.axes)
@@ -359,7 +464,13 @@ class Schema:
     
     def ordinal_axes_created_from(self, metadim):
         return [ax for ax in self.axes if ax.created_from_metadim == metadim]
-            
+
+    def is_superset_of(self, other):
+        for their_axis in other.axes:
+            if not any(our_axis == their_axis for our_axis in self.axes):
+                return False
+        return True
+         
 
 @type_registry.register
 class DatasetSchema(MutableMapping):
@@ -380,6 +491,18 @@ class DatasetSchema(MutableMapping):
 
     def __len__(self):
         return len(self.key_schemas)
+
+    def validate_data(self, data):
+        if not hasattr(data, "data_vars"):
+            raise TypeError("DatasetSchema can only validate an xarray Dataset.")
+
+        for key, schema in self.key_schemas.items():
+            if key not in data.data_vars:
+                raise ValueError(
+                    f"DatasetSchema declares variable {key!r}, but the data does "
+                    "not contain it."
+                )
+            schema.validate_data(data[key])
 
     @property
     def dim_names(self):
@@ -563,8 +686,10 @@ class DatasetSchema(MutableMapping):
             lambda s: s.with_coord_grouping(coord_name, is_grouping=is_grouping)
             )
 
-
-    
-
-            
-       
+    def is_superset_of(self, other):
+        for key in other:
+            if key not in self:
+                return False
+            if not self[key].is_superset_of(other[key]):
+                return False
+        return True

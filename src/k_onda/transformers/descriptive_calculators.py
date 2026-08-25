@@ -22,6 +22,7 @@ class Histogram(Calculator):
 
     def __init__(
         self,
+        *,
         bins=None,
         bin_size=None,
         hist_range=None,
@@ -31,6 +32,31 @@ class Histogram(Calculator):
         range_source="data",
         bin_coord="left",
     ):
+        if bins is None and bin_size is None:
+            bins = 10
+        elif bins is not None and bin_size is not None:
+            raise ValueError(
+                f"{self.format_call()}: provide at most one of bins and bin_size."
+            )
+        if stat not in {"count", "rate"}:
+            raise ValueError(
+                f"{self.format_call()}: stat must be 'count' or 'rate'."
+            )
+        if range_source not in {"data", "coords", "session"}:
+            raise ValueError(
+                f"{self.format_call()}: range_source must be 'data', 'coords', or "
+                "'session'."
+            )
+        if bin_coord not in {"left", "center"}:
+            raise ValueError(
+                f"{self.format_call()}: bin_coord must be 'left' or 'center'."
+            )
+        if density and stat == "rate":
+            raise ValueError(
+                f"{self.format_call()}: density=True cannot be combined with "
+                "stat='rate'."
+            )
+
         # bins int, None, or callable that operates on parent.data
         # bin_size float, None, or callable that operates on parent.data
         # range tuple or callable that operates on parent.data
@@ -44,11 +70,6 @@ class Histogram(Calculator):
         self.bin_size = None if bin_size is None else w_units(bin_size, dim=self.dim)
         self.range_source = range_source
         self.bin_coord = bin_coord
-
-        if self.bins is None and self.bin_size is None:
-            raise ValueError("One of `bins` or `bin_size` must not be None.")
-        if self.bins and self.bin_size:
-            raise ValueError("Provide `bins` or `bin_size`, not both.")
 
     @property
     def fixed_output_class(self):

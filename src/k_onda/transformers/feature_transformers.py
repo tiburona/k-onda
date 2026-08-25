@@ -2,7 +2,7 @@ import xarray as xr
 import numpy as np
 
 from .feature_registry import feature_registry
-from k_onda.central import Schema, type_registry, AxisInfo, AxisKind
+from k_onda.central import CoordInfo, Schema, type_registry as tr, AxisInfo, AxisKind
 from .core import Transformer
 from k_onda.utils import np_from_xr
 
@@ -19,13 +19,13 @@ class ExtractFeatures(Transformer):
         input = inputs[0]
         self._validate_input(input)
 
-        if isinstance(input, type_registry.Collection):
+        if isinstance(input, tr.Collection):
             input = input.group_by(self.group_by)
 
         rows = [[func(val) for func in self.funcs] for val in input.values()]
         flat_inputs = tuple(sig for row in rows for sig in row)
 
-        return type_registry.IndexedSignal(
+        return tr.IndexedSignal(
             inputs=flat_inputs,
             transform=None,
             transformer=self,
@@ -38,7 +38,17 @@ class ExtractFeatures(Transformer):
         return Schema(
             axes=[
                 AxisInfo(name="index", kind=AxisKind.OBSERVATION_INDEX),
-                AxisInfo(name="feature", kind=AxisKind.ORDINAL_INDEX),
+                AxisInfo(
+                    name="feature",
+                    kind=AxisKind.AXIS,
+                    coords=(
+                        CoordInfo(
+                            name="feature",
+                            scale="nominal",
+                            ordering="unordered",
+                        ),
+                    ),
+                ),
             ]
             )
 
@@ -51,13 +61,13 @@ class ExtractFeatures(Transformer):
 
     def _validate_input(self, input):
 
-        if isinstance(input, type_registry.Collection) and self.group_by is None:
+        if isinstance(input, tr.Collection) and self.group_by is None:
             raise ValueError(
                 "If ExtractFeatures is called on Collection, group_by mustbe defined."
             )
 
         if not isinstance(
-            input, (type_registry.SignalMap, type_registry.CollectionMap, type_registry.Collection)
+            input, (tr.SignalMap, tr.CollectionMap, tr.Collection)
         ):
             raise ValueError(
                 "ExtractFeatures is only defined on SignalMap, CollectionMap,"

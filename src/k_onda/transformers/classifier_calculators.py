@@ -1,17 +1,84 @@
 from sklearn.cluster import KMeans as k_means
+import numpy as np
 import xarray as xr
 
 from .core import Calculator
 
 
 class KMeans(Calculator):
+    require_all_finite = True
+
     def __init__(self, n_clusters=8, **kwargs):
+        self._validate_configuration(n_clusters)
         self.n_clusters = n_clusters
         self.kmeans_kwargs = kwargs
 
+    def _validate_configuration(self, n_clusters):
+        if isinstance(n_clusters, bool) or not isinstance(n_clusters, int):
+            raise TypeError(
+                f"{self.format_call()}: n_clusters must be an integer."
+            )
+        if n_clusters < 1:
+            raise ValueError(
+                f"{self.format_call()}: n_clusters must be at least 1."
+            )
+
+    def _validate_data_schema(self, input_schema):
+        expected_dims = {"index", "feature"}
+        actual_dims = set(input_schema.dim_names)
+        if actual_dims != expected_dims:
+            raise ValueError(
+                f"{self.format_call()}: input schema dimensions must be exactly "
+                f"{sorted(expected_dims)!r}; received {sorted(actual_dims)!r}."
+            )
+
+    def _validate_data(self, data, **kwargs):
+        if not isinstance(data, xr.DataArray):
+            raise TypeError(
+                f"{self.format_call()}: input data must be an xarray DataArray."
+            )
+        if set(data.dims) != {"index", "feature"} or data.ndim != 2:
+            raise ValueError(
+                f"{self.format_call()}: input data must have exactly the dimensions "
+                "'index' and 'feature'."
+            )
+
+        missing_coords = [name for name in data.dims if name not in data.coords]
+        if missing_coords:
+            raise ValueError(
+                f"{self.format_call()}: input data is missing coordinates for "
+                f"{missing_coords!r}."
+            )
+
+        units = data.pint.units
+        values = np.asarray(data.pint.magnitude if units is not None else data)
+        if not np.issubdtype(values.dtype, np.number):
+            raise TypeError(
+                f"{self.format_call()}: feature values must be numeric."
+            )
+
+        super()._validate_data(data, **kwargs)
+
+        if data.sizes["index"] < self.n_clusters:
+            raise ValueError(
+                f"{self.format_call()}: n_clusters={self.n_clusters} requires at "
+                f"least {self.n_clusters} observations; received "
+                f"{data.sizes['index']}."
+            )
+
+    def output_schema(self, input_schema):
+        return input_schema.without("feature")
+
     def _apply_inner(self, data, *args, **kwargs):
+        feature_matrix = data.transpose("index", "feature")
+        units = feature_matrix.pint.units
+        values = (
+            feature_matrix.pint.magnitude
+            if units is not None
+            else feature_matrix.values
+        )
         kmeans = k_means(n_clusters=self.n_clusters, **self.kmeans_kwargs)
-        kmeans.fit(data)
+        kmeans.fit(values)
         labels = kmeans.labels_
         centers = kmeans.cluster_centers_
         return labels, {"centers": centers}

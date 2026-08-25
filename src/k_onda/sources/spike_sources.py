@@ -215,7 +215,7 @@ class SpikeCluster(DataComponent):
         spike_times_schema = Schema(
             axes=[
                 AxisInfo(
-                    "spikes",
+                    "spike",
                     kind=AxisKind.POINT_PROCESS_INDEX,
                     coords=(CoordInfo(name="spike", scale="ordinal"),),
                     item_unit=ureg.spike
@@ -227,17 +227,24 @@ class SpikeCluster(DataComponent):
 
         axes=[
                 AxisInfo(
-                    "spikes",
+                    "spike",
                     AxisKind.POINT_PROCESS_INDEX,
                     metadim=None,
                     coords=(CoordInfo(name="spike", scale="ordinal"),),
                     item_unit=ureg.spike
                 ),
-                AxisInfo("samples", AxisKind.AXIS, metadim="time"),
+                AxisInfo("sample", AxisKind.AXIS, metadim="time"),
             ]
         
         if self.has_electrode_dim:
-            axes.append(AxisInfo("electrodes", AxisKind.AXIS, metadim=None))
+            axes.append(
+                AxisInfo(
+                    "electrode", 
+                    AxisKind.AXIS, 
+                    metadim=None,
+                    coords=(CoordInfo(name="electrode", scale="ordinal"),)
+                    )
+                )
         
         waveforms_schema = Schema(axes=axes, value_metadim="voltage")
 
@@ -256,15 +263,27 @@ class SpikeCluster(DataComponent):
 
     def data_loader(self):
         spike_times = self.data_source.spike_times_from_cluster(self.cluster_id)
+        spike_coord =  ("spike", np.arange(len(spike_times)))
         spike_times = xr.DataArray(
-            spike_times * pint.application_registry.s, dims=("spikes",)
+            spike_times * pint.application_registry.s, 
+            dims=("spike",), 
+            coords={"spike": spike_coord}
         )
-        waveforms = self.data_source.waveforms_from_cluster(self.cluster_id)
-        waveform_dims = ("spikes", "samples")
-        if self.has_electrode_dim:
-            waveform_dims += ("electrodes",)
 
-        waveforms = xr.DataArray(waveforms, dims=waveform_dims)
+        waveforms = self.data_source.waveforms_from_cluster(self.cluster_id)
+        waveform_dims = ("spike", "sample")
+        waveform_coords = {
+            "spike": spike_coord,
+            "sample": ("sample", np.arange(waveforms.shape[1]))
+        }
+
+        if self.has_electrode_dim:
+            waveform_dims += ("electrode",)
+            waveform_coords["electrode"] = (
+                "electrode", np.arange(waveforms.shape[2])
+            )
+
+        waveforms = xr.DataArray(waveforms, dims=waveform_dims, coords=waveform_coords)
 
         return xr.Dataset({"spike_times": spike_times, "waveforms": waveforms})
 

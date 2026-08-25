@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 import inspect
@@ -134,19 +135,96 @@ class Filter(PaddingCalculator):
 
 class MedianFilter(Calculator):
     name = "median_filter"
+    require_all_finite = True
 
     def __init__(self, kernel_sizes):
-        self.kernel_sizes = kernel_sizes
+        self._validate_configuration(kernel_sizes)
+        self.kernel_sizes = dict(kernel_sizes)
 
-    def _apply_inner(self, data, *args, **kwargs):
-        # kernel_sizes is a dictionary like {'samples': 5}
-        kernel_size = tuple(self.kernel_sizes.get(dim, 1) for dim in data.dims)
-        result = medfilt(data, kernel_size=kernel_size)
-        return result
+    def _validate_configuration(self, kernel_sizes):
+        if not isinstance(kernel_sizes, Mapping):
+            raise TypeError(
+                f"{self.format_call()}: kernel_sizes must be a mapping from "
+                "dimensions to kernel sizes."
+            )
+        if not kernel_sizes:
+            raise ValueError(
+                f"{self.format_call()}: kernel_sizes cannot be empty."
+            )
+
+        for dim, size in kernel_sizes.items():
+            if not isinstance(dim, str):
+                raise TypeError(
+                    f"{self.format_call()}: kernel dimension names must be strings; "
+                    f"received {dim!r}."
+                )
+            if isinstance(size, bool) or not isinstance(size, int):
+                raise TypeError(
+                    f"{self.format_call()}: kernel size for {dim!r} must be an "
+                    "integer."
+                )
+            if size < 1 or size % 2 == 0:
+                raise ValueError(
+                    f"{self.format_call()}: kernel size for {dim!r} must be a "
+                    "positive odd integer."
+                )
+
+    def _resolved_kernel_sizes(self, data_schema):
+        resolved = {}
+        supplied_names = {}
+        for dim, size in self.kernel_sizes.items():
+            concrete_dim = data_schema.concrete_dim_from(dim)
+            if concrete_dim is None:
+                raise ValueError(
+                    f"{self.format_call()}: kernel dimension {dim!r} was not found "
+                    "in the input schema."
+                )
+            if concrete_dim in resolved:
+                raise ValueError(
+                    f"{self.format_call()}: kernel dimensions "
+                    f"{supplied_names[concrete_dim]!r} and {dim!r} both resolve to "
+                    f"{concrete_dim!r}."
+                )
+            resolved[concrete_dim] = size
+            supplied_names[concrete_dim] = dim
+        return resolved
+
+    def _validate_data_schema(self, input_schema):
+        self._resolved_kernel_sizes(input_schema)
+
+    def _validate_data(self, data, **kwargs):
+        if not isinstance(data, xr.DataArray):
+            raise TypeError(
+                f"{self.format_call()}: input data must be an xarray DataArray."
+            )
+
+        units = data.pint.units
+        values = np.asarray(data.pint.magnitude if units is not None else data)
+        is_real_numeric = np.issubdtype(
+            values.dtype, np.number
+        ) and not np.issubdtype(values.dtype, np.complexfloating)
+        if not is_real_numeric:
+            raise TypeError(
+                f"{self.format_call()}: input values must be real numbers."
+            )
+
+        super()._validate_data(data, **kwargs)
+
+    def _apply_inner(self, data, data_schema=None, *args, **kwargs):
+        resolved_sizes = self._resolved_kernel_sizes(data_schema)
+        for dim, size in resolved_sizes.items():
+            if size > data.sizes[dim]:
+                raise ValueError(
+                    f"{self.format_call()}: kernel size {size} for dimension {dim!r} "
+                    f"exceeds its length of {data.sizes[dim]}."
+                )
+
+        kernel_size = tuple(resolved_sizes.get(dim, 1) for dim in data.dims)
+        units = data.pint.units
+        values = data.pint.magnitude if units is not None else data.values
+        filtered = medfilt(values, kernel_size=kernel_size)
+        filtered = filtered * units if units is not None else filtered
+        return data.copy(data=filtered)
 
     def _wrap_result(self, result, data):
-        result = xr.DataArray(
-            result, coords=data.coords, dims=data.dims, attrs=data.attrs
-        )
-        result = super()._wrap_result(result)
-        return result
+        return super()._wrap_result(result)

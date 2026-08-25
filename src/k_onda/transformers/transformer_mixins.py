@@ -1,29 +1,188 @@
+import xarray as xr
+import numpy as np
+import pint
 
-from k_onda.central import type_registry
+from k_onda.central import type_registry as tr
+
+
+MAX_CONCRETE_OPERAND_VALUES = 1_000
+
+
+
+def _validate_concrete_operand_size(input):
+    size = input.size if isinstance(input, np.ndarray) else np.array(input.magnitude).size
+    if size > MAX_CONCRETE_OPERAND_VALUES:
+        raise ValueError(
+            "Concrete arithmetic operands may contain at most "
+            f"{MAX_CONCRETE_OPERAND_VALUES} values; received "
+            f"{type(input).__name__} with {size} values. Convert the data to a "
+            "Signal and pass it as a signal operand instead."
+        )
+
+
+def _operand_kind(input):
+    if any(
+        isinstance(input, typ) 
+        for typ in [tr.Signal, tr.DataIdentity, tr.Collection, tr.CollectionMap, tr.SignalStack]
+        ):
+        return "signal_operand"
+    if isinstance(input, (int, float, np.number)):
+        return "concrete_operand"
+
+    if isinstance(input, (np.ndarray, pint.Quantity)):
+        _validate_concrete_operand_size(input)
+        return "concrete_operand"
+
+    raise TypeError(
+        "Arithmetic operands must be a Signal, SignalStack, Collection, "
+        "CollectionMap, DataIdentity, or supported concrete numerical value; "
+        f"received {type(input).__name__}."
+    )
 
 
 class CalculateMixin:
-    def add(self, other, *, key=None, key_output_mode=None):
-        return self.shift(other, key=key, key_output_mode=key_output_mode)
 
-    def subtract(self, other, *, key=None, key_output_mode=None):
-        return self.shift(-other, key=key, key_output_mode=key_output_mode)
+    def _arithmetic(
+        self,
+        calculator_class,
+        other,
+        *others,
+        alignment="exact",
+        key=None,
+        key_output_mode=None,
+        match_on=None,
+        multi_input_collection_policy="exactly_one",
+        multi_input_map_policy="exact_keys",
+    ):
+        
+        operands = (other, *others)
 
-    def multiply_by(self, other, *, key=None, key_output_mode=None):
-        return self.scale(other, key=key, key_output_mode=key_output_mode)
+        if all(_operand_kind(operand) == "signal_operand" for operand in operands):
+            calculator = calculator_class(alignment=alignment)
+            inputs = (self, *operands)
 
-    def divide_by(self, other, *, key=None, key_output_mode=None):
-        return self.scale(1 / other, key=key, key_output_mode=key_output_mode)
+        elif all(_operand_kind(operand) == "concrete_operand" for operand in operands):
+            if len(operands) > 1:
+                raise ValueError("Received multiple concrete operands; you can only pass one.")
 
-    def scale(self, factor, *, key=None, key_output_mode=None):
-        from . import Scale
+            calculator = calculator_class(operand=other, alignment=alignment)
+            inputs = (self,)
 
-        return Scale(factor)(self, key=key, key_output_mode=key_output_mode)
+        else:
+            raise ValueError("Signal operands and concrete operands cannot be mixed.")
 
-    def shift(self, offset, *, key=None, key_output_mode=None):
-        from . import Shift
+        return calculator(
+            *inputs,
+            key=key,
+            key_output_mode=key_output_mode,
+            match_on=match_on,
+            multi_input_collection_policy=multi_input_collection_policy,
+            multi_input_map_policy=multi_input_map_policy
+        )
 
-        return Shift(offset)(self, key=key, key_output_mode=key_output_mode)
+    def add(
+        self,
+        other,
+        *others,
+        alignment="exact",
+        key=None,
+        key_output_mode=None,
+        match_on=None,
+        multi_input_collection_policy="exactly_one",
+        multi_input_map_policy="exact_keys",
+    ):
+
+        from . import Add
+
+        return self._arithmetic(
+            Add,
+            other,
+            *others,
+            alignment=alignment,
+            key=key,
+            key_output_mode=key_output_mode,
+            match_on=match_on,
+            multi_input_collection_policy=multi_input_collection_policy,
+            multi_input_map_policy=multi_input_map_policy,
+        )
+
+    def subtract(
+        self,
+        other,
+        *others,
+        alignment="exact",
+        key=None,
+        key_output_mode=None,
+        match_on=None,
+        multi_input_collection_policy="exactly_one",
+        multi_input_map_policy="exact_keys",
+        ):
+    
+        from . import Subtract
+
+        return self._arithmetic(
+            Subtract,
+            other,
+            *others,
+            alignment=alignment,
+            key=key,
+            key_output_mode=key_output_mode,
+            match_on=match_on,
+            multi_input_collection_policy=multi_input_collection_policy,
+            multi_input_map_policy=multi_input_map_policy,
+        )
+
+    def multiply_by(
+        self,
+        other,
+        *others,
+        alignment="exact",
+        key=None,
+        key_output_mode=None,
+        match_on=None,
+        multi_input_collection_policy="exactly_one",
+        multi_input_map_policy="exact_keys",
+        ):
+    
+        from . import Multiply
+
+        return self._arithmetic(
+            Multiply,
+            other,
+            *others,
+            alignment=alignment,
+            key=key,
+            key_output_mode=key_output_mode,
+            match_on=match_on,
+            multi_input_collection_policy=multi_input_collection_policy,
+            multi_input_map_policy=multi_input_map_policy,
+        )
+
+    def divide_by(
+        self,
+        other,
+        *others,
+        alignment="exact",
+        key=None,
+        key_output_mode=None,
+        match_on=None,
+        multi_input_collection_policy="exactly_one",
+        multi_input_map_policy="exact_keys",
+        ):
+    
+        from . import Divide
+
+        return self._arithmetic(
+            Divide,
+            other,
+            *others,
+            alignment=alignment,
+            key=key,
+            key_output_mode=key_output_mode,
+            match_on=match_on,
+            multi_input_collection_policy=multi_input_collection_policy,
+            multi_input_map_policy=multi_input_map_policy,
+        )
 
     def reduce(self, dim, method="mean", key=None, key_output_mode=None):
         from . import ReduceDim
@@ -53,7 +212,10 @@ class CalculateMixin:
         )
 
     def filter(self, method, **kwargs):
-        methods = {"iir_notch": self.iir_notch}
+        methods = {
+            "iir_notch": self.iir_notch,
+            "median": self.median_filter,
+        }
         try:
             filter_method = methods[method]
         except KeyError:
@@ -137,30 +299,49 @@ class CalculateMixin:
             self, mask, key=key, key_output_mode=key_output_mode
         )
 
-    def fwhm(self,  
-            dim="samples",
-            include_valleys=True,
-            permissible_distance=75,
-            distance_unit=None,
-            key=None, 
-            key_output_mode=None):
+    def fwhm(
+        self,
+        *,
+        dim="sample",
+        include_valleys=True,
+        peak_selection="prominence",
+        key=None,
+        key_output_mode=None,
+    ):
         from . import FWHM
 
-    
         return FWHM(
-            dim=dim, 
-            include_valleys=include_valleys, 
-            permissible_distance=permissible_distance, 
-            distance_unit=distance_unit
-            )(self, key=key, key_output_mode=key_output_mode)
+            dim=dim,
+            include_valleys=include_valleys,
+            peak_selection=peak_selection,
+        )(self, key=key, key_output_mode=key_output_mode)
 
-    def count(self, config=None, key=None, key_output_mode=None, **kwargs):
+    def count(
+        self,
+        *,
+        bins=None,
+        bin_size=None,
+        hist_range=None,
+        stat="count",
+        density=False,
+        dim="time",
+        range_source="data",
+        bin_coord="left",
+        key=None,
+        key_output_mode=None,
+    ):
         from . import Histogram
 
-        config = config or {} | kwargs
-        if config.get("bins") is None and config.get("bin_size") is None:
-            config["bins"] = 10
-        return Histogram(**config)(self, key=key, key_output_mode=key_output_mode)
+        return Histogram(
+            bins=bins,
+            bin_size=bin_size,
+            hist_range=hist_range,
+            stat=stat,
+            density=density,
+            dim=dim,
+            range_source=range_source,
+            bin_coord=bin_coord,
+        )(self, key=key, key_output_mode=key_output_mode)
 
 
 
@@ -173,7 +354,12 @@ class IntersectionMixin:
 
 class PointProcessMixin:
     def rate(
-        self, intervals=None, exclude_initial=None, key=None, key_output_mode=None
+        self,
+        *,
+        intervals=None,
+        exclude_initial=None,
+        key=None,
+        key_output_mode=None,
     ):
         from . import Rate
 
@@ -190,15 +376,35 @@ class StackMixin:
 
 
 class UnstackMixin:
-    def unstack_signals(self, dim=None):
+    def unstack_signals(self):
         from . import UnstackSignals
 
-        return UnstackSignals(dim=dim)(self)
+        return UnstackSignals()(self)
+
+
+class SignalMeanMixin:
+    def mean(self, dim=None, *, key=None, key_output_mode=None):
+        from . import ReduceDim
+
+        return ReduceDim(dim, method="mean")(
+            self, key=key, key_output_mode=key_output_mode
+        )
 
 
 class AggregateMixin:    
 
-    def mean(self, across=None, group_by=None, preserve_groups=False, order='sequential'):
+    def mean(
+        self,
+        across=None,
+        *,
+        group_by=None,
+        preserve_groups=False,
+        order="sequential",
+    ):
+        if order not in {"sequential", "simultaneous"}:
+            raise ValueError(
+                "mean() order must be 'sequential' or 'simultaneous'."
+            )
         
         planned_data_schema = self.get_planned_data_schema()
 
@@ -220,8 +426,8 @@ class AggregateMixin:
 
         # Collect any of these dims and turn them into coords on a single long 
         # dim in the xarray data.
-        if not isinstance(self, type_registry.Signal):
-            signal = type_registry.AssembleArray(
+        if not isinstance(self, tr.Signal):
+            signal = tr.AssembleArray(
                 collection_coords=collection_coords,
                 preserve_groups = preserve_groups, 
                 planned_input_schema = planned_data_schema
@@ -304,32 +510,32 @@ class AggregateMixin:
 
         for stage in stages:
             if stage.get("group_by"):
-                signal = type_registry.GroupBy(coords=stage["group_by"])(signal)
-            signal = type_registry.ReduceDim(stage["reduce_dim"])(signal)
+                signal = tr.GroupBy(coords=stage["group_by"])(signal)
+            signal = tr.ReduceDim(stage["reduce_dim"])(signal)
         
         return signal
     
     def get_planned_data_schema(self):
         planned_obj = self.planned_for_schema(self)
 
-        if isinstance(planned_obj, type_registry.Collection):
+        if isinstance(planned_obj, tr.Collection):
             return planned_obj.signals[0].data_schema
-        elif isinstance(planned_obj, type_registry.CollectionMap):
+        elif isinstance(planned_obj, tr.CollectionMap):
             return next(iter(planned_obj.values()))[0].data_schema 
         else:
             return planned_obj.data_schema
 
     def planned_for_schema(self, obj):
-        if isinstance(obj, type_registry.Signal):
+        if isinstance(obj, tr.Signal):
             return obj.plan_on_signal()
-        if isinstance(obj, type_registry.Collection):
-            return type_registry.Collection([self.planned_for_schema(member) for member in obj])
-        if isinstance(obj, type_registry.CollectionMap):
-            return type_registry.CollectionMap(
+        if isinstance(obj, tr.Collection):
+            return tr.Collection([self.planned_for_schema(member) for member in obj])
+        if isinstance(obj, tr.CollectionMap):
+            return tr.CollectionMap(
                 groups={k: self.planned_for_schema(v) for k, v in obj.items()}
                 )
-        if isinstance(obj, type_registry.DataIdentity):
-            return type_registry.Collection([
+        if isinstance(obj, tr.DataIdentity):
+            return tr.Collection([
                 self.planned_for_schema(component) for component in obj.data_components
             ])
         

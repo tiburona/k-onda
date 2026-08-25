@@ -11,7 +11,7 @@ from k_onda.graph import list_nodes, rebuild_tree, walk_graph
 from k_onda.central import (
     Schema,
     DatasetSchema,
-    type_registry as tr,
+    type_registry,
     DimBounds,
     DimBoundsArray,
     AxisInfo,
@@ -34,7 +34,7 @@ from k_onda.utils import is_monotonic_increasing, is_one_dimensional
 # The third, SliceSelection, actually performs select operations on the data array.
 
 
-@tr.register
+@type_registry.register
 class SpecifySelection(Transformer):
     name = "selector"
 
@@ -55,7 +55,7 @@ class SpecifySelection(Transformer):
 
     @property
     def fixed_output_class(self):
-        return tr.SelectorSignal
+        return type_registry.SelectorSignal
 
     def _validate_input(self, signal, key_spec=None):
 
@@ -64,7 +64,7 @@ class SpecifySelection(Transformer):
                 "Use signal.payload(key).select(...) or signal[key].select"
             )
         if signal.data_schema.is_point_process() and isinstance(
-            self.locus, tr.LocusSet
+            self.locus, type_registry.LocusSet
         ):
             raise NotImplementedError(
                 "This operation will result in a ragged array and "
@@ -75,7 +75,7 @@ class SpecifySelection(Transformer):
 class PlanSelection(Transformer):
     @property
     def fixed_output_class(self):
-        return tr.SelectorSignal
+        return type_registry.SelectorSignal
 
     def _call_on_signal(self, signal, key_spec=None):
 
@@ -334,7 +334,7 @@ class SliceSelection(Calculator):
                 created_from_dim=self.locus.dim,
                 created_from_metadim=metadim,
                 coords=(
-                    CoordInfo(name=self.new_dim), 
+                    CoordInfo(name=self.new_dim, ordering="increasing"),
                     CoordInfo(f"{self.new_dim}_start_{metadim}", metadim=metadim),
                     CoordInfo(f"{self.new_dim}_stop_{metadim}", metadim=metadim),
                     *[CoordInfo(
@@ -403,7 +403,7 @@ class SliceSelection(Calculator):
 
     def _apply(self, data, data_schema=None):
 
-        if isinstance(data_schema, tr.DatasetSchema):
+        if isinstance(data_schema, type_registry.DatasetSchema):
             if data_schema.is_point_process(require_all=True):
                 return self.select_point_process(data, data_schema)
             else:
@@ -1010,7 +1010,7 @@ class SliceSelection(Calculator):
 
         for dim in self.selection_bounds:
             if data_schema.is_value_metadim(dim):
-                if isinstance(data_schema, tr.DatasetSchema):
+                if isinstance(data_schema, type_registry.DatasetSchema):
                     source = data[data_schema.variable_for_metadim(dim)]
                 else:
                     source = data
@@ -1078,4 +1078,3 @@ class SliceSelection(Calculator):
         # just hold off implementing this until then
 
         pass
-

@@ -4,14 +4,20 @@ import xarray as xr
 import pint
 from .core import Calculator
 
-from k_onda.central import type_registry
+from k_onda.central import type_registry as tr
 
 
 class Rate(Calculator):
     name = "rate"
     key_mode = "standalone"
 
-    def __init__(self, intervals=None, exclude_initial=None):
+    def __init__(self, *, intervals=None, exclude_initial=None):
+        if intervals is not None and exclude_initial is not None:
+            raise ValueError(
+                f"{self.format_call()}: provide at most one of intervals and "
+                "exclude_initial."
+            )
+
         self.intervals = intervals
         self.exclude_initial = exclude_initial
 
@@ -25,12 +31,13 @@ class Rate(Calculator):
         from ..signals import BinarySignal
 
         return {
+            "start": parent.start,
             "duration": parent.duration,
             "is_binary": isinstance(parent, BinarySignal),
         }
     
     def output_schema(self, input_schema):
-        return type_registry.Schema()   
+        return tr.Schema()   
 
     def _validate_input(self, input, **kwargs):
         from ..signals import BinarySignal, PointProcessSignal
@@ -39,7 +46,7 @@ class Rate(Calculator):
             raise ValueError("Rate can only operate on EventSignal or BinarySignal.")
 
     def _prepare_rate_inputs(self, data, data_schema, intervals, exclude_initial):
-        if isinstance(data_schema, type_registry.DatasetSchema):
+        if isinstance(data_schema, tr.DatasetSchema):
             time_key = data_schema.default_variable_for("time")
             data = data[time_key]
             data_schema = data_schema[time_key]
@@ -75,7 +82,14 @@ class Rate(Calculator):
         return int(arr[0]) + np.count_nonzero(arr[1:] & ~arr[:-1])
 
     def _apply_inner(
-        self, data, duration=None, is_binary=False, data_schema=None, *args, **kwargs
+        self,
+        data,
+        start=None,
+        duration=None,
+        is_binary=False,
+        data_schema=None,
+        *args,
+        **kwargs,
     ):
 
         if is_binary:
@@ -90,21 +104,32 @@ class Rate(Calculator):
                 data, data_schema, self.intervals, self.exclude_initial
             )
         )
+        search_data = (
+            selected_data.data
+            if isinstance(selected_data, xr.DataArray)
+            else selected_data
+        )
 
-        if exclude_initial:
-            index = np.searchsorted(selected_data, exclude_initial)
+        if exclude_initial is not None:
+            if start is None:
+                raise ValueError(
+                    "Rate cannot apply exclude_initial because the input has no "
+                    "start time."
+                )
+            cutoff = start + exclude_initial
+            index = np.searchsorted(search_data, cutoff)
             selected_data = selected_data[index:]
             num_events = len(selected_data)
             duration = duration - exclude_initial
             return num_events / duration
 
-        if intervals:
+        if intervals is not None:
             ureg = pint.get_application_registry()
             starts = np.searchsorted(
-                selected_data, [interval[0] for interval in intervals]
+                search_data, [interval[0] for interval in intervals]
             )
             stops = np.searchsorted(
-                selected_data,
+                search_data,
                 [interval[1] + 10 ** (-9) * ureg.s for interval in intervals],
             )
             num_events = sum(

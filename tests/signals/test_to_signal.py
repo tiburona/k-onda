@@ -1,7 +1,7 @@
 import pytest
 
 from k_onda.sources import DataComponent
-from k_onda.central import type_registry
+from k_onda.central import type_registry as tr
 
 from tests.fakes import make_lineage
 
@@ -15,7 +15,7 @@ def test_calling_to_signal_on_data_component_returns_signal():
 
     signal = component.to_signal()
 
-    assert isinstance(signal, type_registry.Signal)
+    assert isinstance(signal, tr.Signal)
     
     with pytest.raises(ValueError, match=r"You must call \.compile\(\)"):
         signal.data
@@ -26,7 +26,6 @@ def test_calling_to_signal_on_data_component_returns_signal():
 
     assert signal.data_schema == component.data_schema
 
-    assert isinstance(signal.context, type_registry.ProvenanceContext)
+    assert isinstance(signal.context, tr.ProvenanceContext)
     assert signal.context.component is None
     assert signal.context.component_id == component.uid
-

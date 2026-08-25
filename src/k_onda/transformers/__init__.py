@@ -1,4 +1,4 @@
-from .magnitude_calculators import Normalize, Scale, Shift
+from .magnitude_calculators import Normalize, Add, Subtract, Multiply, Divide
 from .core import Calculator, PaddingCalculator, Transform, Transformer
 from .data_shape_transformers import StackSignals, UnstackSignals
 from .descriptive_calculators import Histogram
@@ -18,8 +18,10 @@ __all__ = [
     "Transformer",
     "Calculator",
     "PaddingCalculator",
-    "Shift",
-    "Scale",
+    "Add",
+    "Subtract",
+    "Multiply",
+    "Divide",
     "ReduceDim",
     "Normalize",
     "Filter",

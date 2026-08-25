@@ -25,6 +25,7 @@ loci.where(conditions={"treatment": "drug"})
 3. For operations that are complex enough to potentially require nesting (for now, examples of this are several methods of the plotting API and .classify()), accept either a dictionary specification as a keyword arg, or a flat set of keyword args for the simple case.  Raise if you get the dictionary spec and any other keyword arg that shares the responsibilities of the dictionary spec.  Raise if there are unknown fields in the dictionary spec.  
 
 
-4. A transformer's constructor should mirror its fluent method's parameters (excluding parameters that control how the transformer is applied).
+4. A transformer's constructor should mirror its fluent method's parameters (excluding parameters that control how the transformer is applied).  Additional data inputs mirror parameters to the transformer's
+`__call__`
 
 

@@ -5,7 +5,7 @@ import pint
 import inspect
 from dataclasses import dataclass
 
-from k_onda.central import DimBounds, DimPair, AxisInfo, AxisKind, type_registry
+from k_onda.central import DimBounds, DimPair, AxisInfo, AxisKind, type_registry as tr
 from .core import PaddingCalculator
 from ..utils import scalar
 
@@ -93,7 +93,7 @@ class Spectrogram(PaddingCalculator):
 
     @property
     def fixed_output_class(self):
-        return type_registry.TimeFrequencySignal
+        return tr.TimeFrequencySignal
 
     def output_schema(self, input_schema):
         new_axis = AxisInfo(name="frequency", metadim="frequency", kind=AxisKind.AXIS)
