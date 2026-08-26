@@ -1,9 +1,8 @@
 import numpy as np
 import xarray as xr
 
-from .core import Calculator, KeySpec
+from .core import Calculator
 from k_onda.utils import np_from_xr
-from k_onda.central import type_registry as tr
 
 
 class Arithmetic(Calculator):
