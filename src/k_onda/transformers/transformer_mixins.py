@@ -292,11 +292,14 @@ class CalculateMixin:
             self, key=key, key_output_mode=key_output_mode
         )
 
-    def apply_mask(self, mask, *, key=None, key_output_mode=None):
+    def apply_mask(self, mask, *, tolerance_decimals=9, key=None, key_output_mode=None):
         from . import ApplyMask
 
-        return ApplyMask()(
-            self, mask, key=key, key_output_mode=key_output_mode
+        return ApplyMask(tolerance_decimals=tolerance_decimals)(
+            self, 
+            mask, 
+            key=key, 
+            key_output_mode=key_output_mode
         )
 
     def fwhm(
@@ -346,10 +349,10 @@ class CalculateMixin:
 
 
 class IntersectionMixin:
-    def intersection(self, other, *, tolerance_decimals=9):
+    def intersection(self, *others, tolerance_decimals=9):
         from . import Intersection
 
-        return Intersection(tolerance_decimals=tolerance_decimals)(self, other)
+        return Intersection(tolerance_decimals=tolerance_decimals)(self, *others)
 
 
 class PointProcessMixin:

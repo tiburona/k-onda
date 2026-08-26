@@ -1,10 +1,23 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
-from functools import partial
 import numpy as np
 import pandas as pd
 import pint
+from collections.abc import Sequence
+import xarray as xr
 
-from .core import Calculator, Transform, KeySpec
+
+from .core import Calculator
+from k_onda.central import Schema, DatasetSchema, CoordInfo
+from k_onda.central import type_registry as tr
+ 
+
+XrData = xr.DataArray | xr.Dataset
+Indexers = dict[str, np.ndarray]
+
+if TYPE_CHECKING:
+    from k_onda.signals import Signal
 
 
 class Threshold(Calculator):
@@ -50,19 +63,35 @@ class Threshold(Calculator):
 
 
 class BinaryCalculatorMixin:
+
+    def _validate_configuration(self, tolerance_decimals):
+        if isinstance(tolerance_decimals, bool) or not isinstance(
+            tolerance_decimals, int
+        ):
+            raise TypeError(
+                f"{self.format_call()}: tolerance_decimals must be an integer."
+            )
+        if tolerance_decimals < 0:
+            raise ValueError(
+                f"{self.format_call()}: tolerance_decimals cannot be negative."
+            )
+    
     @staticmethod
-    def _coord_values(coord):
+    def _coord_values(coord: xr.DataArray) -> tuple[np.ndarray, pint.Unit]:
         units = coord.pint.units
         values = np.asarray(coord.pint.magnitude if units is not None else coord)
         return values, units
 
-    def _mismatched_grid_error(self, dim, detail):
+    def _mismatched_grid_error(self, dim: str, detail: str) -> NotImplementedError:
         return NotImplementedError(
             f"{self.format_call()}: matching these coordinate grids is not "
             f"implemented yet on dimension {dim!r}: {detail}."
         )
 
-    def _coordinates_in_common_units(self, parent_coord, other_coord, dim):
+    def _coordinates_in_common_units(
+            self, parent_coord: xr.DataArray, other_coord: xr.DataArray, dim: str
+            ) -> tuple[np.ndarray, np.ndarray]:
+        
         parent_values, parent_units = self._coord_values(parent_coord)
         other_values, other_units = self._coord_values(other_coord)
 
@@ -84,7 +113,7 @@ class BinaryCalculatorMixin:
 
         return parent_values, np.asarray(converted_other.magnitude)
 
-    def _coord_contract(self, schema, dim):
+    def _coord_contract(self, schema: Schema, dim: str) -> CoordInfo:
         contract = schema.coord_by_name(dim)
         if contract is None:
             raise ValueError(
@@ -95,12 +124,13 @@ class BinaryCalculatorMixin:
 
     def _ordered_overlap_indices(
         self,
-        parent_values,
-        other_values,
-        dim,
-        parent_ordering,
-        other_ordering,
-    ):
+        parent_values: np.ndarray,
+        other_values: np.ndarray,
+        dim: str,
+        parent_ordering: str,
+        other_ordering: str,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        
         # searchsorted requires increasing values. Keep the original positions
         # so the selected data can be restored to the parent coordinate's order.
         parent_positions = np.arange(len(parent_values))
@@ -147,72 +177,75 @@ class BinaryCalculatorMixin:
             other_indices = other_indices[::-1]
         return parent_indices, other_indices
 
-    def _unique_overlap_indices(self, parent_values, other_values, dim):
-        # get_indexer returns each parent value's position in the other coordinate,
+    def _unique_overlap_indices(
+        self, reference_values: np.ndarray, other_values: np.ndarray, dim: str
+        ) -> tuple[np.ndarray, np.ndarray]:
+
+        # get_indexer returns each reference value's position in the other coordinate,
         # or -1 when that value is absent.
-        parent_index = pd.Index(parent_values)
+        reference_index = pd.Index(reference_values)
         other_index = pd.Index(other_values)
-        if not parent_index.is_unique or not other_index.is_unique:
+        if not reference_index.is_unique or not other_index.is_unique:
             raise self._mismatched_grid_error(
                 dim,
                 "coordinate values are not unique at the selected matching precision",
             )
 
         try:
-            other_positions = other_index.get_indexer(parent_index)
+            other_positions = other_index.get_indexer(reference_index)
         except pd.errors.InvalidIndexError as error:
             raise self._mismatched_grid_error(
                 dim, "coordinate matching is ambiguous"
             ) from error
 
-        parent_indices = np.flatnonzero(other_positions >= 0)
-        if not len(parent_indices):
+        reference_indices = np.flatnonzero(other_positions >= 0)
+        if not len(reference_indices):
             raise ValueError(
                 f"{self.format_call()}: coordinates do not overlap on dimension "
                 f"{dim!r}."
             )
-        return parent_indices, other_positions[parent_indices]
+        return reference_indices, other_positions[reference_indices]
 
     def _overlap_indices(
         self,
-        parent_values,
-        other_values,
-        dim,
-        parent_contract,
-        other_contract,
-    ):
-        if np.array_equal(parent_values, other_values):
-            indices = np.arange(len(parent_values))
+        reference_values: np.ndarray,
+        other_values: np.ndarray,
+        dim: str,
+        reference_contract: CoordInfo,
+        other_contract: CoordInfo,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        
+        if np.array_equal(reference_values, other_values):
+            indices = np.arange(len(reference_values))
             return indices, indices
 
-        if parent_contract.is_monotonic and other_contract.is_monotonic:
+        if reference_contract.is_monotonic and other_contract.is_monotonic:
             return self._ordered_overlap_indices(
-                parent_values,
+                reference_values,
                 other_values,
                 dim,
-                parent_contract.ordering,
+                reference_contract.ordering,
                 other_contract.ordering,
             )
 
-        if parent_contract.is_unique and other_contract.is_unique:
-            return self._unique_overlap_indices(
-                parent_values, other_values, dim
-            )
+        if reference_contract.is_unique and other_contract.is_unique:
+            return self._unique_overlap_indices(reference_values, other_values, dim)
 
         raise self._mismatched_grid_error(
             dim, "matching coordinates that may contain repeats is ambiguous"
         )
 
-    def _align_overlapping_data(
+    def _matching_coordinate_indices(
         self,
-        parent_data,
-        other_data,
-        parent_schema,
-        other_schema,
-        dims=None,
-        tolerance_decimals=None,
-    ):
-        shared_dims = [dim for dim in parent_data.dims if dim in other_data.dims]
+        reference_data: XrData,
+        other_data: XrData,
+        reference_schema: Schema,
+        other_schema: Schema,
+        dims: str | Sequence[str] | None = None,
+        tolerance_decimals: int | None = None 
+    ) -> tuple[Indexers, Indexers]:
+        
+        shared_dims = [dim for dim in reference_data.dims if dim in other_data.dims]
         if dims is None:
             dims = shared_dims
         else:
@@ -229,156 +262,145 @@ class BinaryCalculatorMixin:
                 f"{self.format_call()}: signals have no shared dimensions to align."
             )
 
-        parent_indices = {}
+        reference_indices = {}
         other_indices = {}
         for dim in dims:
-            parent_contract = self._coord_contract(parent_schema, dim)
+            reference_contract = self._coord_contract(reference_schema, dim)
             other_contract = self._coord_contract(other_schema, dim)
-            if parent_contract.ndim != 1 or other_contract.ndim != 1:
+            if reference_contract.ndim != 1 or other_contract.ndim != 1:
                 raise self._mismatched_grid_error(
                     dim, "matching multidimensional coordinates is not supported"
                 )
 
-            parent_values, other_values = self._coordinates_in_common_units(
-                parent_data.coords[dim], other_data.coords[dim], dim
+            reference_values, other_values = self._coordinates_in_common_units(
+                reference_data.coords[dim], other_data.coords[dim], dim
             )
 
-            parent_is_numeric = np.issubdtype(parent_values.dtype, np.number)
+            reference_is_numeric = np.issubdtype(reference_values.dtype, np.number)
             other_is_numeric = np.issubdtype(other_values.dtype, np.number)
-            if parent_is_numeric != other_is_numeric:
+            if reference_is_numeric != other_is_numeric:
                 raise self._mismatched_grid_error(
                     dim, "one coordinate is numeric and the other is not"
                 )
-            if parent_is_numeric and tolerance_decimals is not None:
-                parent_values = parent_values.round(tolerance_decimals)
+            if reference_is_numeric and tolerance_decimals is not None:
+                reference_values = reference_values.round(tolerance_decimals)
                 other_values = other_values.round(tolerance_decimals)
 
             indices = self._overlap_indices(
-                parent_values,
+                reference_values,
                 other_values,
                 dim,
-                parent_contract,
+                reference_contract,
                 other_contract,
             )
 
-            parent_indices[dim], other_indices[dim] = indices
+            reference_indices[dim], other_indices[dim] = indices
 
-        parent_overlap = parent_data.isel(parent_indices)
+        return reference_indices, other_indices
+
+    def _align_overlapping_data(
+        self,
+        reference_data: XrData,
+        other_data: XrData,
+        reference_schema: Schema,
+        other_schema: Schema,
+        dims: str | Sequence[str] | None = None,
+        tolerance_decimals: int | None = None
+    ) -> tuple[XrData, XrData]:
+
+        reference_indices, other_indices = self._matching_coordinate_indices(
+            reference_data, other_data, reference_schema, other_schema, dims, tolerance_decimals
+        )
+
+        dims = reference_indices.keys()
+
+        reference_overlap = reference_data.isel(reference_indices)
         other_overlap = other_data.isel(other_indices)
-        aligned_coords = {dim: parent_overlap.coords[dim] for dim in dims}
+        aligned_coords = {dim: reference_overlap.coords[dim] for dim in dims}
         other_overlap = other_overlap.assign_coords(aligned_coords)
         aligned_units = {
-            dim: parent_overlap.coords[dim].pint.units
+            dim: reference_overlap.coords[dim].pint.units
             for dim in dims
-            if parent_overlap.coords[dim].pint.units is not None
+            if reference_overlap.coords[dim].pint.units is not None
         }
         if aligned_units:
             other_overlap = other_overlap.pint.quantify(aligned_units)
-        return parent_overlap, other_overlap
+        return reference_overlap, other_overlap
 
-    def validate_sig_types(self, signals):
-
-        from ..signals import BinarySignal
+    def validate_sig_types(self, signals: Sequence[Signal]) -> None:
 
         for signal in signals:
-            if not isinstance(signal, BinarySignal):
+            if not isinstance(signal, tr.BinarySignal):
                 raise TypeError(f"{signal} is not of type BinarySignal.")
 
+    def _get_extra_apply_kwargs(self, *inputs):
+        apply_kwargs = super()._get_extra_apply_kwargs(*inputs)
+        apply_kwargs["data_schemas"] = [input.data_schema for input in inputs]
+        return apply_kwargs
 
-class Intersection(Calculator, BinaryCalculatorMixin):
+
+class Intersection(BinaryCalculatorMixin, Calculator):
     name = "intersection"
+    arity = "two_or_more"
 
     def __init__(self, *, tolerance_decimals=9):
         self._validate_configuration(tolerance_decimals)
         self.tolerance_decimals = tolerance_decimals
 
-    def _validate_configuration(self, tolerance_decimals):
-        if isinstance(tolerance_decimals, bool) or not isinstance(
-            tolerance_decimals, int
-        ):
-            raise TypeError(
-                f"{self.format_call()}: tolerance_decimals must be an integer."
+    def _validate_input(self, *inputs, **kwargs):
+        super()._validate_input(*inputs, **kwargs)
+
+        if any(not isinstance(input, tr.BinarySignal) for input in inputs):
+            raise TypeError(f"{self.format_call()}: all inputs must be of type BinarySignal.")
+        
+        if any(isinstance(input.data_schema, DatasetSchema) for input in inputs):
+            raise NotImplementedError(
+                f"{self.format_call()}: Datasets are not yet supported for BinaryCalculators."
+                )
+
+
+    def _apply_inner(self, *input_data, data_schemas, data_schema=None):
+
+        a_data = input_data[0]
+        a_data_schema = data_schemas[0]
+
+        for b_data, b_data_schema in zip(input_data[1:], data_schemas[1:]):
+            a_overlap, b_overlap = self._align_overlapping_data(
+                a_data,
+                b_data,
+                a_data_schema,
+                b_data_schema,
+                tolerance_decimals=self.tolerance_decimals,
             )
-        if tolerance_decimals < 0:
-            raise ValueError(
-                f"{self.format_call()}: tolerance_decimals cannot be negative."
-            )
 
-    def __call__(self, a, b, key=None, key_output_mode=None):
+            a_data = a_overlap.copy(data=a_overlap.data & b_overlap.data)
 
-        if key is not None or key_output_mode is not None:
-            raise NotImplementedError("Key access is not yet implemented for Intersection")
-
-        key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
-
-        self.validate_sig_types([a, b])
-
-        output_signal_class = self.resolve_output_class(a)
-
-        return output_signal_class(
-            inputs=(a, b),
-            transform=None,
-            data_schema=None,
-            key_spec=key_spec,
-            origin=a.origin,
-            transformer=self,
-            apply_kwargs={"data_schemas": (a.data_schema, b.data_schema)},
-        )
-
-    def _apply_inner(self, a_data, b_data, *, data_schemas):
-        a_overlap, b_overlap = self._align_overlapping_data(
-            a_data,
-            b_data,
-            *data_schemas,
-            tolerance_decimals=self.tolerance_decimals,
-        )
-        return a_overlap.copy(data=a_overlap.data & b_overlap.data)
-    
-    def _get_transform(self, *args, apply_kwargs=None, **kwargs):
-        return Transform(partial(self._apply, **(apply_kwargs or {})))
+        return a_data
 
 
-class ApplyMask(Calculator, BinaryCalculatorMixin):
+class ApplyMask(BinaryCalculatorMixin, Calculator):
     name = "apply_mask"
+    arity = "two"
 
-    def __call__(self, input, mask, *, key=None, key_output_mode=None):
-        
-        if key is not None or key_output_mode is not None:
-            raise NotImplementedError("Key access is not yet implemented for ApplyMask")
+    def __init__(self, *, tolerance_decimals=9):
+        self._validate_configuration(tolerance_decimals)
+        self.tolerance_decimals = tolerance_decimals
 
-        key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
+    def _validate_input(self, *inputs, **kwargs):
+        super()._validate_input(*inputs, **kwargs)
+        if not isinstance(inputs[1], tr.BinarySignal):
+            raise TypeError(
+                f"{self.format_call()}: second signal input must be of type BinarySignal. "
+                f"Received {type(inputs[1])}"
+            )
+        if any(isinstance(input.data_schema, DatasetSchema) for input in inputs):
+            raise NotImplementedError(
+                f"{self.format_call()}: Datasets are not yet supported for BinaryCalculators."
+                )
 
-        self.validate_sig_types([mask])
-        output_class = self.resolve_output_class(input)
-
-        return output_class(
-            inputs=(input, mask),
-            transformer=self,
-            transform=None,
-            data_schema=None,
-            key_spec=key_spec,
-            origin=input.origin,
-            apply_kwargs={"data_schemas": (input.data_schema, mask.data_schema)},
-        )
-    
-    def _get_transform(self, *args, apply_kwargs=None, **kwargs):
-        return Transform(partial(self._apply, **(apply_kwargs or {})))
-
-    def _apply(self, sig_data, mask_data, *args, data_schemas, **kwargs):
-        if kwargs.get("key_spec") is not None:
-            raise NotImplementedError("ApplyMask can't extract a keyed result from a Dataset" \
-            "Signal yet")
-        
-        result = self._apply_inner(
-            sig_data, mask_data, data_schemas=data_schemas
-        )
-        result = self._wrap_result(result, sig_data)
-
-        return result
-
-    def _apply_inner(self, sig_data, mask_data, *, data_schemas):
+    def _apply_inner(self, sig_data, mask_data, *, data_schemas, data_schema=None):
         _, mask_overlap = self._align_overlapping_data(
-            sig_data, mask_data, *data_schemas
+            sig_data, mask_data, *data_schemas, tolerance_decimals=self.tolerance_decimals
         )
         # PintIndex does not implement reindexing, so temporarily expose its
         # magnitudes while filling the part of the signal outside the mask.
