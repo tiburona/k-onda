@@ -84,7 +84,6 @@ __all__ = [
     "AxisResolver",
     "PlotSource",
     "Render",
-    "PlotDirective",
     "SetLayout",
     "SetPlotType",
     "StyleMixin",

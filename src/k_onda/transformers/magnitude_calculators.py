@@ -167,6 +167,7 @@ class Normalize(Calculator):
             )
 
     def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
         if not input_schema.dim_names:
             raise ValueError(
                 f"{self.format_call()}: normalization requires at least one "

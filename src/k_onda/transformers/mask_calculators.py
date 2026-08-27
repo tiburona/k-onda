@@ -9,7 +9,7 @@ import xarray as xr
 
 
 from .core import Calculator
-from k_onda.central import Schema, DatasetSchema, CoordInfo
+from k_onda.central import Schema, CoordInfo
 from k_onda.central import type_registry as tr
  
 
@@ -63,6 +63,7 @@ class Threshold(Calculator):
 
 
 class BinaryCalculatorMixin:
+    accepted_data_types = (xr.DataArray,)
 
     def _validate_configuration(self, tolerance_decimals):
         if isinstance(tolerance_decimals, bool) or not isinstance(
@@ -353,12 +354,6 @@ class Intersection(BinaryCalculatorMixin, Calculator):
         if any(not isinstance(input, tr.BinarySignal) for input in inputs):
             raise TypeError(f"{self.format_call()}: all inputs must be of type BinarySignal.")
         
-        if any(isinstance(input.data_schema, DatasetSchema) for input in inputs):
-            raise NotImplementedError(
-                f"{self.format_call()}: Datasets are not yet supported for BinaryCalculators."
-                )
-
-
     def _apply_inner(self, *input_data, data_schemas, data_schema=None):
 
         a_data = input_data[0]
@@ -393,11 +388,6 @@ class ApplyMask(BinaryCalculatorMixin, Calculator):
                 f"{self.format_call()}: second signal input must be of type BinarySignal. "
                 f"Received {type(inputs[1])}"
             )
-        if any(isinstance(input.data_schema, DatasetSchema) for input in inputs):
-            raise NotImplementedError(
-                f"{self.format_call()}: Datasets are not yet supported for BinaryCalculators."
-                )
-
     def _apply_inner(self, sig_data, mask_data, *, data_schemas, data_schema=None):
         _, mask_overlap = self._align_overlapping_data(
             sig_data, mask_data, *data_schemas, tolerance_decimals=self.tolerance_decimals

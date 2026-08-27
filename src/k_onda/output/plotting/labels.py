@@ -1,26 +1,91 @@
 from dataclasses import dataclass, field, replace
 
-from k_onda.utils import is_unitful
+from k_onda.utils import (
+    is_unitful,
+    validate_types,
+    ValidationMixin,
+)
 
 from .core import PlotDirective, replace_plot_node
+from .utils import UNSET, UnsetType
 
 
 class LabelMixin:
     def label(self):
         raise NotImplementedError("Default label method not yet implemented.")
 
-    def plot_labels(self, x=None, y=None, units="auto"):
+    def _normalize_label_input(
+        self,
+        method_name,
+        location,
+        value,
+        *,
+        fixed,
+        shared,
+    ):
+        shared_values = {
+            name: default if supplied is UNSET else supplied
+            for name, (supplied, default) in shared.items()
+        }
+        if isinstance(value, str):
+            return shared_values | {"text": value} | fixed
+
+        if not value:
+            raise ValueError(
+                f"{method_name}(): the {location} label specification cannot be "
+                "empty."
+            )
+
+        allowed_fields = {"text", "kwargs", *shared}
+        unknown_fields = set(value) - allowed_fields
+        if unknown_fields:
+            raise ValueError(
+                f"{method_name}(): unknown fields in the {location} label "
+                f"specification: {sorted(unknown_fields)!r}."
+            )
+        if "text" not in value:
+            raise ValueError(
+                f"{method_name}(): the {location} label specification requires "
+                "text."
+            )
+
+        conflicts = {
+            name
+            for name, (supplied, _) in shared.items()
+            if supplied is not UNSET and name in value
+        }
+        if conflicts:
+            raise ValueError(
+                f"{method_name}(): pass {sorted(conflicts)!r} either as shared "
+                "keywords or inside a label specification, not both."
+            )
+
+        return shared_values | value | fixed
+
+    @validate_types
+    def plot_labels(
+        self,
+        *,
+        x: str | dict[str, object] | None = None,
+        y: str | dict[str, object] | None = None,
+        units: str | None | UnsetType = UNSET,
+    ):
+        if x is None and y is None:
+            raise ValueError("plot_labels(): provide an x or y label.")
+
         labels = []
 
-        for ax_param, ax_string in zip([x, y], ["x", "y"]):
-            if ax_param:
-                if isinstance(ax_param, str):
-                    labels.append(Label(scope="figure", axis=ax_string, text=ax_param, units=units))
-                elif isinstance(ax_param, dict):
-                    params = {"scope":"figure", "axis":ax_string, "units":units} | ax_param
-                    labels.append(Label(**params))
-                else:
-                    raise TypeError(f"Unknown type {type(ax_param)} for `{ax_string}`")
+        for axis_value, axis_name in zip((x, y), ("x", "y")):
+            if axis_value is None:
+                continue
+            params = self._normalize_label_input(
+                "plot_labels",
+                axis_name,
+                axis_value,
+                fixed={"scope": "figure", "axis": axis_name},
+                shared={"units": (units, "auto")},
+            )
+            labels.append(Label(**params))
                 
         node = self
         for label in labels:
@@ -28,24 +93,36 @@ class LabelMixin:
 
         return node
     
-    def panel_labels(self, top=None, left=None, right=None, bottom=None, where="all", units=None):
+    @validate_types
+    def panel_labels(
+        self,
+        *,
+        top: str | dict[str, object] | None = None,
+        left: str | dict[str, object] | None = None,
+        right: str | dict[str, object] | None = None,
+        bottom: str | dict[str, object] | None = None,
+        where: str | UnsetType = UNSET,
+        units: str | None | UnsetType = UNSET,
+    ):
+        if all(value is None for value in (top, left, right, bottom)):
+            raise ValueError(
+                "panel_labels(): provide a top, left, right, or bottom label."
+            )
+
         labels = []
-        ax_params = [top, left, right, bottom]
-        ax_strings = ["top", "left", "right", "bottom"]
-        for ax_param, ax_string in zip(ax_params, ax_strings):
-            if isinstance(ax_param, str):
-                labels.append(
-                    Label(scope="panel", side=ax_string, text=ax_param, where=where, units=units)
-                    )
-            elif isinstance(ax_param, dict):
-                params = {
-                    "scope": "panel", "side": ax_string, "where": where, "units":units
-                    } | ax_param
-                labels.append(Label(**params))
-            elif ax_param is None:
+        side_values = (top, left, right, bottom)
+        side_names = ("top", "left", "right", "bottom")
+        for side_value, side_name in zip(side_values, side_names):
+            if side_value is None:
                 continue
-            else:
-                raise TypeError(f"Unknown type {type(ax_param)} for `{ax_string}`")
+            params = self._normalize_label_input(
+                "panel_labels",
+                side_name,
+                side_value,
+                fixed={"scope": "panel", "side": side_name},
+                shared={"where": (where, "all"), "units": (units, None)},
+            )
+            labels.append(Label(**params))
                 
         node = self
         for label in labels:
@@ -55,34 +132,96 @@ class LabelMixin:
 
 
 @dataclass
-class Label:
+class Label(ValidationMixin):
     text: str
     scope: str = "figure"
-    axis: str = None
-    side: str = None
+    axis: str | None = None
+    side: str | None = None
     where: str = "all"
-    units: str = "auto"
-    kwargs: dict = field(default_factory=dict)
+    units: str | None = "auto"
+    kwargs: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.validate_type_hints()
+        self.validate_parameter("text", self.text, nonempty_string=True)
+        self.validate_parameter(
+            "scope", self.scope, choices=("figure", "panel")
+        )
+        self.validate_parameter(
+            "axis", self.axis, choices=("x", "y"), allow_none=True
+        )
+        self.validate_parameter(
+            "side",
+            self.side,
+            choices=("top", "left", "right", "bottom"),
+            allow_none=True,
+        )
+        self.validate_parameter(
+            "where",
+            self.where,
+            choices=("all", "top", "left", "right", "bottom"),
+        )
+        if self.units not in (None, "auto"):
+            raise NotImplementedError(
+                f"{self.format_call()}: explicit label-unit formatting is not "
+                "implemented; use 'auto' or None."
+            )
+        if self.scope == "figure":
+            if self.axis is None:
+                raise ValueError(
+                    f"{self.format_call()}: a figure label requires axis='x' or "
+                    "axis='y'."
+                )
+            if self.side is not None:
+                raise NotImplementedError(
+                    f"{self.format_call()}: positioning a figure label by side is "
+                    "not yet implemented; use axis='x' or axis='y'."
+                )
+            if self.where != "all":
+                raise ValueError(
+                    f"{self.format_call()}: where applies only to panel labels."
+                )
+        else:
+            if self.side is None:
+                raise ValueError(
+                    f"{self.format_call()}: a panel label requires side."
+                )
+            if self.axis is not None:
+                raise ValueError(
+                    f"{self.format_call()}: a panel label cannot specify axis."
+                )
 
 
 @dataclass
-class LabelPlan:
+class LabelPlan(ValidationMixin):
     explicit: list[Label] = field(default_factory=list)
     infer_missing: bool = False
+
+    def __post_init__(self):
+        self.validate_type_hints()
 
 
 class AddLabel(PlotDirective):
 
-    def __init__(self, label, infer_missing=False):
+    def __init__(self, label: Label | None, infer_missing: bool = False):
+        self._validate_configuration(label, infer_missing)
+
         self.label = label 
         self.infer_missing = infer_missing
-       
+
+    def _validate_configuration(self, label, infer_missing):
+        self.validate_type_hints()
+        if label is None and not infer_missing:
+            raise ValueError(
+                f"{self.format_call()}: label cannot be None unless infer_missing "
+                "is True."
+            )
 
     def direct(self, input):
         self.validate_label(input)
 
         if input.label_plan is None:
-            explicit = [self.label] or []
+            explicit = [self.label] if self.label is not None else []
             infer_missing = self.infer_missing
         else:
             if self.label:
@@ -96,7 +235,7 @@ class AddLabel(PlotDirective):
         return replace_plot_node(input, label_plan=label_plan)
 
     def validate_label(self, input):
-        if input.label_plan is None:
+        if input.label_plan is None or self.label is None:
             return
         existing_labels = input.label_plan.explicit or []
         if self.label.scope == "figure":
@@ -107,17 +246,23 @@ class AddLabel(PlotDirective):
     def check_figure_labels(self, existing_labels):
         for label in existing_labels:
             if label.axis == "x" and self.label.axis == "x":
-                raise ValueError("You are trying to set an x axis figure label" \
-                "but the figure already has one.")
+                raise NotImplementedError(
+                    f"{self.format_call()}: multiple x-axis figure labels are not "
+                    "yet implemented."
+                )
             elif label.axis == "y" and self.label.axis == "y":
-                raise ValueError("You are trying to set an y axis figure label" \
-                "but the figure already has one.")
+                raise NotImplementedError(
+                    f"{self.format_call()}: multiple y-axis figure labels are not "
+                    "yet implemented."
+                )
             
     def check_panel_labels(self, existing_labels):
         panel_labels = [el for el in existing_labels if el.scope == "panel"]
         if any([self._is_conflicting(panel_label, self.label) for panel_label in panel_labels]):
-            raise ValueError("You are setting a panel label on a panel and axis that already has" \
-            "one.")
+            raise NotImplementedError(
+                f"{self.format_call()}: multiple panel labels at the same placement "
+                "are not yet implemented."
+            )
 
     def _is_conflicting(self, panel_label_1, panel_label_2):
         if not panel_label_1.side == panel_label_2.side:

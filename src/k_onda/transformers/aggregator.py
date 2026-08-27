@@ -2,6 +2,7 @@ import xarray as xr
 from pint_xarray import PintIndex
 import numpy as np
 import math
+from collections.abc import Mapping
 from xarray.core.groupby import DataArrayGroupBy
 from dataclasses import replace
 
@@ -27,60 +28,120 @@ WEIGHTED_REDUCTION_METHODS = {"mean", "std", "sum", "var"}
 
 @type_registry.register
 class AssembleArray(Transformer):
-    def __init__(self, collection_coords=None, preserve_groups=False, planned_input_schema=None):
-        self.collection_coords = collection_coords or []
-        if isinstance(self.collection_coords, str):
-            self.collection_coords = [self.collection_coords]
+    def __init__(self, collection_coords=None, preserve_groups=False):
+        collection_coords = self._normalize_collection_coords(collection_coords)
+        self._validate_configuration(collection_coords, preserve_groups)
+
+        self.collection_coords = collection_coords
         self.preserve_groups = preserve_groups
-        self.planned_input_schema = planned_input_schema
-        
-    def __call__(self, input, key=None, key_output_mode=None):
+
+    def _normalize_collection_coords(self, collection_coords):
+        if collection_coords is None:
+            return []
+        if isinstance(collection_coords, str):
+            return [collection_coords]
+        if callable(collection_coords):
+            return collection_coords
+
+        try:
+            return list(collection_coords)
+        except TypeError:
+            raise TypeError(
+                f"{self.format_call()}: collection_coords must be a string, a "
+                "callable, or an iterable of strings."
+            ) from None
+
+    def _validate_configuration(self, collection_coords, preserve_groups):
+        if not callable(collection_coords):
+            if any(
+                not isinstance(coord, str) or not coord
+                for coord in collection_coords
+            ):
+                raise TypeError(
+                    f"{self.format_call()}: every collection coordinate must be "
+                    "a non-empty string."
+                )
+            if len(set(collection_coords)) != len(collection_coords):
+                raise ValueError(
+                    f"{self.format_call()}: collection coordinates cannot be "
+                    "repeated."
+                )
+        if not isinstance(preserve_groups, bool):
+            raise TypeError(
+                f"{self.format_call()}: preserve_groups must be a boolean."
+            )
+
+    def __call__(self, input, *, planned_input_schema=None, key=None, key_output_mode=None):
 
         if key is not None or key_output_mode is not None:
-            raise NotImplementedError("Key access is not yet implemented for AssembleArray.")
+            raise NotImplementedError(
+                f"{self.format_call()}: key access is not yet implemented."
+            )
+
+        if planned_input_schema is not None:
+            if not isinstance(
+                planned_input_schema, (type_registry.Schema, type_registry.DatasetSchema)
+                ):
+                raise TypeError(
+                    f"{self.format_call()}: planned_input_schema must be a Schema, a DatasetSchema "
+                    f"or None. Received type {type(planned_input_schema).__name__}."
+                )
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
         if isinstance(input, type_registry.CollectionMap):
-            return self._call_on_collection_map(input, key_spec=key_spec)
+            return self._call_on_collection_map(input, planned_input_schema, key_spec=key_spec)
 
         elif isinstance(input, type_registry.Collection):
-            return self._call_on_collection(input, key_spec=key_spec)
+            return self._call_on_collection(input, planned_input_schema, key_spec=key_spec)
 
         else:
-            raise ValueError(
-                "AssembleArray must be called on a Collection or a Grouped_Collection "
+            raise TypeError(
+                f"{self.format_call()}: input must be a Collection or "
+                "CollectionMap."
             )
         
-    def _call_on_collection_map(self, collection_map, key_spec):
+    def _call_on_collection_map(self, collection_map, planned_input_schema, key_spec):
+
+        if not len(collection_map):
+            raise ValueError(
+                f"{self.format_call()}: cannot assemble an empty CollectionMap."
+            )
 
         if self.preserve_groups:
             group_on = getattr(collection_map, "group_on", None)
             return type_registry.CollectionMap(
                 groups={
-                    k: self._call_on_collection(v, key_spec=key_spec)
+                    k: self._call_on_collection(v, planned_input_schema, key_spec=key_spec)
                     for k, v in collection_map.items()
                 },
                 group_on=group_on
             )
         
-        return self._call_on_collection(collection_map.as_collection(), key_spec=key_spec)
+        return self._call_on_collection(
+            collection_map.as_collection(), planned_input_schema, key_spec=key_spec
+            )
         
-    def _call_on_collection(self, collection, key_spec=None):
+    def _call_on_collection(self, collection, planned_input_schema, key_spec=None):
 
-        inputs = tuple(collection.signals)
-        
+        inputs = self._validate_collection(collection, planned_input_schema)
+
         if self.collection_coords: 
             if callable(self.collection_coords):
                 grouping_func = self.collection_coords
             else:
                 grouping_func = self.build_grouping_func(self.collection_coords)
             labels_and_factors = [grouping_func(sig) for sig in collection.signals]
+            if any(not isinstance(factors, Mapping) for factors in labels_and_factors):
+                raise TypeError(
+                    f"{self.format_call()}: a collection_coords callable must "
+                    "return a mapping for every signal."
+                )
         else:
             labels_and_factors = []
              
-        input_schema = self.planned_input_schema or inputs[0].data_schema
-        
+        input_schema = planned_input_schema or inputs[0].data_schema
+
         coord_levels = {}
 
         for factors in labels_and_factors:
@@ -88,17 +149,20 @@ class AssembleArray(Transformer):
                 coord_levels.setdefault(coord_name, [])
                 if level not in coord_levels[coord_name]:
                     coord_levels[coord_name].append(level)
-        
+
         coord_infos = tuple(
             CoordInfo(name=name, scale="nominal", is_condition=True, levels=tuple(levels))
                       for name, levels in coord_levels.items())
-        
+
+        schema_kwargs = {
+            "coord_infos": coord_infos,
+            "planned_input_schema": planned_input_schema
+        }
+
         data_schema = self.make_output_schema(
-            input_schema, key_spec=key_spec, coord_infos=coord_infos
+            input_schema, key_spec=key_spec, **schema_kwargs
             )
-        
-        schema_kwargs = {"coord_infos": coord_infos}
-        
+
         apply_kwargs = {"labels_and_factors": labels_and_factors}
 
         return type_registry.AggregatedSignal(
@@ -110,6 +174,29 @@ class AssembleArray(Transformer):
             apply_kwargs=apply_kwargs,
             schema_kwargs=schema_kwargs
         )
+
+    def _validate_collection(self, collection, planned_input_schema):
+        inputs = tuple(collection.signals)
+        if not inputs:
+            raise ValueError(
+                f"{self.format_call()}: cannot assemble an empty Collection."
+            )
+
+        reference_schema = inputs[0].data_schema
+        if any(signal.data_schema != reference_schema for signal in inputs[1:]):
+            raise ValueError(
+                f"{self.format_call()}: all assembled signals must have matching "
+                "data schemas."
+            )
+
+        if planned_input_schema is not None and isinstance(
+            planned_input_schema, type_registry.DatasetSchema
+        ) != isinstance(reference_schema, type_registry.DatasetSchema):
+            raise TypeError(
+                f"{self.format_call()}: planned_input_schema and the assembled "
+                "signals must describe the same data type."
+            )
+        return inputs
     
     @staticmethod
     def build_grouping_func(groupings, strict=False):
@@ -153,7 +240,8 @@ class AssembleArray(Transformer):
         # This method and the next might seem a bit roundabout, but parent's make_output_schema
         # assumes the existence of output_schema, and does a lot of key validation it's best to 
         # leave there.
-        output_schema = super().make_output_schema(*input_schemas, key_spec=key_spec)
+        input_schema = schema_kwargs.get("planned_input_schema") or input_schemas[0]
+        output_schema = super().make_output_schema(input_schema, key_spec=key_spec)
 
         coord_infos = schema_kwargs.get("coord_infos", tuple())
         
@@ -161,8 +249,7 @@ class AssembleArray(Transformer):
         return output_schema
 
     def output_schema(self, input_schema): 
-        # TODO where did `group_dim` every come from and how am I going to get it in here?
-        input_schema = self.planned_input_schema or input_schema
+        # TODO where did `group_dim` ever come from and how am I going to get it in here?
         schema = input_schema.with_axis(AxisInfo("signal", kind=AxisKind.OBSERVATION_INDEX))
         return schema
 
@@ -352,10 +439,46 @@ class AssembleArray(Transformer):
 class GroupBy(Transformer):
   
     def __init__(self, coords):
-        self.coords = [coords] if isinstance(coords, str) else coords
+        coords = self._normalize_coords(coords)
+        self._validate_configuration(coords)
+        self.coords = coords
 
-    def _validate_input(self, input, key_spec):
-        return True
+    def _normalize_coords(self, coords):
+        if isinstance(coords, str):
+            return [coords]
+        try:
+            return list(coords)
+        except TypeError:
+            raise TypeError(
+                f"{self.format_call()}: coords must be a string or an iterable "
+                "of strings."
+            ) from None
+
+    def _validate_configuration(self, coords):
+        if not coords:
+            raise ValueError(f"{self.format_call()}: coords cannot be empty.")
+        if any(not isinstance(coord, str) or not coord for coord in coords):
+            raise TypeError(
+                f"{self.format_call()}: every coordinate must be a non-empty "
+                "string."
+            )
+        if len(set(coords)) != len(coords):
+            raise ValueError(
+                f"{self.format_call()}: coordinates cannot be repeated."
+            )
+
+    def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
+        missing = [
+            coord
+            for coord in self.coords
+            if coord not in input_schema.collectable_coords
+        ]
+        if missing:
+            raise ValueError(
+                f"{self.format_call()}: grouping coordinates are not available "
+                f"across the input schema: {missing!r}."
+            )
     
     def output_schema(self, input_schema):
 
@@ -431,6 +554,10 @@ class ReduceDim(Calculator):
                 f"{self.format_call()}: method {method!r} does not support weights. "
                 f"Weighted methods: {known_methods}."
             )
+        if weights is not None and bool(weights.isnull().any()):
+            raise ValueError(
+                f"{self.format_call()}: weights cannot contain missing values."
+            )
 
     def _apply_inner(self, data, *args, **kwargs):
         if self.weights is not None:
@@ -467,25 +594,26 @@ class ReduceDim(Calculator):
 
     
     def _validate_data_schema(self, input_schema):
-        if self.dims is None:
-            return
+        super()._validate_data_schema(input_schema)
+        if self.dims is not None:
+            missing = [dim for dim in self.dims if not input_schema.has_dim(dim)]
+            if missing:
+                raise ValueError(
+                    f"{self.format_call()}: cannot reduce missing dimensions: "
+                    f"{missing}."
+                )
 
-        missing = [
-            dim for dim in self.dims
-            if not input_schema.has_dim(dim)
-        ]
-        if missing:
-            raise ValueError(
-                f"{self.format_call()}: cannot reduce missing dimensions: {missing}."
-            )
+        if self.weights is not None:
+            missing_weight_dims = [
+                dim for dim in self.weights.dims if not input_schema.has_dim(dim)
+            ]
+            if missing_weight_dims:
+                raise ValueError(
+                    f"{self.format_call()}: weight dimensions are not present in "
+                    f"the input schema: {missing_weight_dims}."
+                )
         
     def _validate_data(self, data, **kwargs):
-        if not isinstance(data, (xr.DataArray, xr.Dataset, DataArrayGroupBy)):
-            raise TypeError(
-                f"{self.format_call()}: data must be an xarray DataArray, Dataset, "
-                "or DataArrayGroupBy."
-            )
-
         if hasattr(data, "data_vars") and len(data.data_vars) == 0:
             raise ValueError(f"{self.format_call()}: dataset has no variables.")
 
@@ -496,18 +624,6 @@ class ReduceDim(Calculator):
                     "for grouped data."
                 )
 
-            missing_weight_dims = [
-                dim for dim in self.weights.dims if dim not in data.dims
-            ]
-            if missing_weight_dims:
-                raise ValueError(
-                    f"{self.format_call()}: weight dimensions are not present in "
-                    f"the data: {missing_weight_dims}."
-                )
-            if bool(self.weights.isnull().any()):
-                raise ValueError(
-                    f"{self.format_call()}: weights cannot contain missing values."
-                )
 
     def resolve_output_class(self, input):
         # If we're operating on a StackedSignal, preserve the stack type.

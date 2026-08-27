@@ -3,9 +3,11 @@ from dataclasses import dataclass, replace, field
 from collections.abc import Hashable
 from typing import TYPE_CHECKING
 
+from k_onda.utils import validate_types, ValidationMixin
+
 from .core import PlotSource, PlotDirective, replace_plot_node
 from .layout import Panel, Layout
-from .utils import merge_dataclasses, UNSET
+from .utils import merge_dataclasses, UNSET, UnsetType
 
 if TYPE_CHECKING:
     from .node import PlotNode
@@ -15,18 +17,24 @@ Cell = tuple[int, int]
 
 class AxisMixin:
 
+    @validate_types
     def axes(
         self,
-        share_x=UNSET,
-        share_y=UNSET,
-        x_ticks=UNSET,
-        y_ticks=UNSET,
-        x_tick_labels=UNSET,
-        y_tick_labels=UNSET,
-        x_spines=UNSET,
-        y_spines=UNSET
+        *,
+        share_x: str | bool | None | UnsetType = UNSET,
+        share_y: str | bool | None | UnsetType = UNSET,
+        x_ticks: bool | UnsetType = UNSET,
+        y_ticks: bool | UnsetType = UNSET,
+        x_tick_labels: str | bool | UnsetType = UNSET,
+        y_tick_labels: str | bool | UnsetType = UNSET,
+        x_spines: bool | UnsetType = UNSET,
+        y_spines: bool | UnsetType = UNSET,
     ):
-        share_x, share_y = self.validate_and_normalize_share_args(share_x, share_y)
+        share_x, share_y = self._normalize_share_args(
+            share_x,
+            share_y,
+            method_name="axes",
+        )
 
         return ConfigureAxes(
             x = AxisSpec(
@@ -43,14 +51,11 @@ class AxisMixin:
             )
         )(self)
 
-    def validate_and_normalize_share_args(self, share_x, share_y):
-        for axis_val in (share_x, share_y):
-            if (axis_val not in [True, False, None, "all", "row", "col", UNSET] and
-                axis_val not in self.data_source.data_schema.condition_coord_names):
-                raise ValueError(
-                    f"You have passed {axis_val} to share_axes but this is neither a "
-                    "known value for x or y or a condition coord on the data_schema."
-                    )
+    def _normalize_share_args(self, share_x, share_y, *, method_name):
+        for name, value in (("share_x", share_x), ("share_y", share_y)):
+            if isinstance(value, str) and not value.strip():
+                raise ValueError(f"{method_name}(): {name} cannot be empty.")
+
         def normalize(value):
             if value is True:
                 return "all"
@@ -60,41 +65,96 @@ class AxisMixin:
 
         return normalize(share_x), normalize(share_y)
 
-    def share_axes(self, x="all", y="all"):
-        share_x, share_y = self.validate_and_normalize_share_args(x, y)
+    @validate_types
+    def share_axes(
+        self,
+        *,
+        x: str | bool | None | UnsetType = "all",
+        y: str | bool | None | UnsetType = "all",
+    ):
+        share_x, share_y = self._normalize_share_args(
+            x,
+            y,
+            method_name="share_axes",
+        )
         node = ConfigureAxes(x=AxisSpec(sharing=share_x), y=AxisSpec(sharing=share_y))(self)
         return node
 
 
 @dataclass
-class AxisSpec:
-    sharing: str | bool | object = UNSET
+class AxisSpec(ValidationMixin):
+    sharing: str | bool | None | UnsetType = UNSET
 
-    spine_visibility: str | bool | object = UNSET
-    tick_visibility: str | bool | object = UNSET
-    tick_label_visibility: str | bool | object = UNSET
+    spine_visibility: bool | UnsetType = UNSET
+    tick_visibility: bool | UnsetType = UNSET
+    tick_label_visibility: str | bool | UnsetType = UNSET
 
-    scale: str | None | object = UNSET
-    limits: tuple | None | object = UNSET
-    formatter: object | None = UNSET
+    scale: str | None | UnsetType = UNSET
+    limits: tuple[object, object] | None | UnsetType = UNSET
+    formatter: object | None | UnsetType = UNSET
+
+    def __post_init__(self):
+        if self.sharing is True:
+            self.sharing = "all"
+        elif self.sharing is None:
+            self.sharing = False
+
+        self.validate_type_hints()
+        if isinstance(self.sharing, str):
+            self.validate_parameter(
+                "sharing", self.sharing, nonempty_string=True
+            )
+        if isinstance(self.scale, str):
+            self.validate_parameter("scale", self.scale, nonempty_string=True)
+        self.validate_parameter(
+            "tick_label_visibility",
+            self.tick_label_visibility,
+            types=bool,
+            choices=("auto",),
+            ignored_values=(UNSET,),
+        )
 
 
 @dataclass
-class AxesSpec:
+class AxesSpec(ValidationMixin):
     x: AxisSpec = field(default_factory=AxisSpec)
     y: AxisSpec = field(default_factory=AxisSpec)
 
+    def __post_init__(self):
+        self.validate_type_hints()
 
 
 
 
 class ConfigureAxes(PlotDirective):
     def __init__(
-        self, *, x: AxisSpec = AxisSpec(), y: AxisSpec = AxisSpec()):
-            self.x = x
-            self.y = y
+        self,
+        *,
+        x: AxisSpec | None = None,
+        y: AxisSpec | None = None,
+    ):
+        self.validate_type_hints()
+        x = AxisSpec() if x is None else x
+        y = AxisSpec() if y is None else y
+
+        self.x = x
+        self.y = y
+
+    def _validate_sharing_for_schema(self, input):
+        for name, spec in (("x", self.x), ("y", self.y)):
+            if (
+                isinstance(spec.sharing, str)
+                and spec.sharing not in {"all", "row", "col"}
+            ):
+                self._validate_coord_names(
+                    input,
+                    (spec.sharing,),
+                    parameter=f"{name} sharing",
+                    conditions_only=True,
+                )
 
     def direct(self, input):
+        self._validate_sharing_for_schema(input)
         current = input.axes_spec or AxesSpec()
         updated = AxesSpec(
             x=merge_dataclasses(current.x, self.x),

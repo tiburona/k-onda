@@ -217,7 +217,7 @@ class FeatureMixin:
     def extract_features(self, *features, registry=feature_registry, group_by=None):
         from k_onda.transformers import ExtractFeatures
 
-        return ExtractFeatures(*features, registry=registry, group_by=group_by)((self,))
+        return ExtractFeatures(*features, registry=registry, group_by=group_by)(self)
 
 
 @type_registry.register
@@ -256,9 +256,22 @@ class Collection(
         return compiled
 
     def collect_base_components(self):
+        if not self.members:
+            return []
+
         if isinstance(self.members[0], DataIdentity):
+            if not all(isinstance(member, DataIdentity) for member in self.members):
+                raise TypeError(
+                    "A Collection cannot mix DataIdentity members with other "
+                    "member types."
+                )
             components = [c for m in self.members for c in m.data_components]
         elif isinstance(self.members[0], Collection):
+            if not all(isinstance(member, Collection) for member in self.members):
+                raise TypeError(
+                    "A Collection cannot mix nested Collections with other "
+                    "member types."
+                )
             components = [
                 m for mem in self.members for m in mem.collect_base_components()
             ]
@@ -270,11 +283,27 @@ class Collection(
     def collect_signals(self):
         base_components = self.collect_base_components()
 
-        # If components aren't yet signals they need to be made into them.
-        if isinstance(base_components[0], DataComponent):
-            return [component.signal for component in base_components]
+        signals = [
+            component.signal
+            if isinstance(component, DataComponent)
+            else component
+            for component in base_components
+        ]
 
-        return base_components
+        invalid_types = sorted(
+            {
+                type(signal).__name__
+                for signal in signals
+                if not isinstance(signal, Signal)
+            }
+        )
+        if invalid_types:
+            raise TypeError(
+                "Collection.signals could not resolve every member to a Signal; "
+                f"unresolved member types: {invalid_types!r}."
+            )
+
+        return signals
 
     def group_by(self, group_on, strict=True):
         return CollectionMap(self.members, group_on, strict=strict)

@@ -23,25 +23,53 @@ class Render(PlotDirective):
 
     def __init__(
         self,
-        axis_resolver=None,
-        label_resolver=None,
-        layout_resolver=None,
-        legend_resolver=None,
-        bar_renderer=None,
-        axis_renderer=None,
-        label_renderer=None,
-        legend_renderer=None,
-        band_renderer=None
+        *,
+        axis_resolver: AxisResolver | None = None,
+        label_resolver: LabelResolver | None = None,
+        layout_resolver: LayoutResolver | None = None,
+        legend_resolver: LegendResolver | None = None,
+        bar_renderer: BarRenderer | None = None,
+        axis_renderer: AxisRenderer | None = None,
+        label_renderer: LabelRenderer | None = None,
+        legend_renderer: LegendRenderer | None = None,
+        band_renderer: BandRenderer | None = None,
     ):
-        self.axis_resolver = axis_resolver or AxisResolver()
-        self.label_resolver = label_resolver or LabelResolver()
-        self.layout_resolver = layout_resolver or LayoutResolver()
-        self.legend_resolver = legend_resolver or LegendResolver()
-        self.bar_renderer = bar_renderer or BarRenderer()
-        self.axis_renderer = axis_renderer or AxisRenderer()
-        self.label_renderer = label_renderer or LabelRenderer()
-        self.legend_renderer = legend_renderer or LegendRenderer()
-        self.band_renderer = band_renderer or BandRenderer()
+        self.validate_type_hints()
+        self.axis_resolver = (
+            axis_resolver if axis_resolver is not None else AxisResolver()
+        )
+        self.label_resolver = (
+            label_resolver if label_resolver is not None else LabelResolver()
+        )
+        self.layout_resolver = (
+            layout_resolver if layout_resolver is not None else LayoutResolver()
+        )
+        self.legend_resolver = (
+            legend_resolver if legend_resolver is not None else LegendResolver()
+        )
+        self.bar_renderer = (
+            bar_renderer if bar_renderer is not None else BarRenderer()
+        )
+        self.axis_renderer = (
+            axis_renderer if axis_renderer is not None else AxisRenderer()
+        )
+        self.label_renderer = (
+            label_renderer if label_renderer is not None else LabelRenderer()
+        )
+        self.legend_renderer = (
+            legend_renderer if legend_renderer is not None else LegendRenderer()
+        )
+        self.band_renderer = (
+            band_renderer if band_renderer is not None else BandRenderer()
+        )
+
+    def _validate_input(self, input):
+        super()._validate_input(input)
+        if input.plot_type not in self.bar_renderer.supported_plot_types:
+            raise NotImplementedError(
+                f"{self.format_call()}: renderer does not support plot type "
+                f"{input.plot_type!r}."
+            )
 
     def direct(self, input: PlotNode) -> Figure:
         figsize = getattr(input, "figsize", (8, 8))

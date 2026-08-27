@@ -46,6 +46,7 @@ class Transformer(ValidationMixin):
 
     fixed_output_class = None
     arity = "one"
+    accepted_data_types = (xr.DataArray, xr.Dataset)
 
     def __call__(
         self, 
@@ -336,7 +337,27 @@ class Transformer(ValidationMixin):
                 )
     
     def _validate_data_schema(self, *input_schemas):
-        return True
+        for input_schema in input_schemas:
+            if isinstance(input_schema, tr.DatasetSchema):
+                data_type = xr.Dataset
+            elif isinstance(input_schema, tr.Schema):
+                data_type = xr.DataArray
+            else:
+                raise TypeError(
+                    f"{self.format_call()}: expected a Schema or DatasetSchema, "
+                    f"not {type(input_schema).__name__}."
+                )
+
+            if data_type not in self.accepted_data_types:
+                accepted = ", ".join(
+                    accepted_type.__name__
+                    for accepted_type in self.accepted_data_types
+                )
+                raise TypeError(
+                    f"{self.format_call()}: input schema describes "
+                    f"{data_type.__name__} data, but this transformer accepts "
+                    f"{accepted} data."
+                )
 
     def make_output_schema(self, *input_schemas, key_spec=None, **schema_kwargs):
         """Compute the output schema."""
@@ -592,10 +613,6 @@ class Calculator(Transformer):
                 return np.asarray(mag)
 
         for data in input_data:
-
-            if not isinstance(data, (xr.DataArray, xr.Dataset)):
-                raise ValueError("data must be an xarray DataArray or Dataset.")
-
             if hasattr(data, "data_vars") and len(data.data_vars) == 0:
                 raise ValueError(f"{type(self)}: Event dataset has no variables.")
 

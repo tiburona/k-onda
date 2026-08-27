@@ -39,6 +39,25 @@ class Rate(Calculator):
     def output_schema(self, input_schema):
         return tr.Schema()   
 
+    def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
+        if isinstance(input_schema, tr.DatasetSchema):
+            time_key = input_schema.default_variable_for("time")
+            if time_key is None:
+                raise NotImplementedError(
+                    f"{self.format_call()}: the DatasetSchema has no variable "
+                    "representing time, and rates over other dimensions are not "
+                    "implemented yet."
+                )
+            input_schema = input_schema[time_key]
+
+        if input_schema.concrete_dim_from("time") is None:
+            raise NotImplementedError(
+                f"{self.format_call()}: the input schema has no dimension "
+                "representing time, and rates over other dimensions are not "
+                "implemented yet."
+            )
+
     def _validate_input(self, input, **kwargs):
         from ..signals import BinarySignal, PointProcessSignal
 
@@ -52,12 +71,6 @@ class Rate(Calculator):
             data_schema = data_schema[time_key]
 
         concrete_dim = data_schema.concrete_dim_from("time")
-
-        if not concrete_dim:
-            raise ValueError(
-                "Right now Rate only works on time dims and no dim in your DataSchema "
-                "represents time."
-            )
 
         intervals = intervals(data) if callable(intervals) else intervals
         exclude_initial = (

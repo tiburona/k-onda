@@ -19,6 +19,7 @@ DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
 class Histogram(Calculator):
     name = "histogram"
     key_mode = "standalone"
+    accepted_data_types = (xr.DataArray,)
 
     def __init__(
         self,
@@ -75,6 +76,14 @@ class Histogram(Calculator):
     def fixed_output_class(self):
         return type_registry.DistributionSignal
 
+    def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
+        if input_schema.concrete_dim_from(self.dim) is None:
+            raise ValueError(
+                f"{self.format_call()}: input schema does not contain a dimension "
+                f"representing {self.dim!r}."
+            )
+
     def output_schema(self, input_schema):
         schema = input_schema.without_dim(self.dim)
         metadim = input_schema.metadim_from(self.dim) or input_schema.value_metadim
@@ -106,12 +115,6 @@ class Histogram(Calculator):
         return extra_kwargs
 
     def _prepare_hist_inputs(self, data, hist_range, data_schema):
-
-        if isinstance(data, xr.Dataset):
-            key = data_schema.default_variable_for(self.dim)
-            data = data[key]
-            data_schema = data_schema[key]
-
         dim = data_schema.concrete_dim_from(self.dim)
         axis = data_schema.axis_position_from(dim)
 

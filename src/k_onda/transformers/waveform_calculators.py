@@ -9,6 +9,7 @@ from .core import Calculator
 class FWHM(Calculator):
     name = "fwhm"
     key_mode = "append"
+    accepted_data_types = (xr.DataArray,)
 
     def __init__(
         self,
@@ -26,6 +27,14 @@ class FWHM(Calculator):
         self.dim = dim
         self.include_valleys = include_valleys
         self.peak_selection = peak_selection
+
+    def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
+        if input_schema.concrete_dim_from(self.dim) is None:
+            raise ValueError(
+                f"{self.format_call()}: input schema does not contain dimension "
+                f"{self.dim!r}."
+            )
 
     def fwhm(self, data):
         def find_max_peak(values):
@@ -64,13 +73,15 @@ class FWHM(Calculator):
         widths = peak_widths(signal_for_width, [peak_idx], rel_height=0.5)[0]
         return widths[0]
 
-    def _apply_inner(self, data, *args, **kwargs):
+    def _apply_inner(self, data, data_schema=None, *args, **kwargs):
+
+        concrete_dim = data_schema.concrete_dim_from(self.dim)
 
         if data.ndim > 1:
             return xr.apply_ufunc(
                 self.fwhm,
                 data,
-                input_core_dims=[[self.dim]],
+                input_core_dims=[[concrete_dim]],
                 vectorize=True,
             )
 
@@ -83,4 +94,4 @@ class FWHM(Calculator):
         return super()._wrap_result(result)
 
     def output_schema(self, input_schema):
-        return input_schema.without(self.dim)
+        return input_schema.without_dim(self.dim)

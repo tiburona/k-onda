@@ -7,6 +7,7 @@ from .core import Calculator
 
 class KMeans(Calculator):
     require_all_finite = True
+    accepted_data_types = (xr.DataArray,)
 
     def __init__(self, n_clusters=8, **kwargs):
         self._validate_configuration(n_clusters)
@@ -24,6 +25,8 @@ class KMeans(Calculator):
             )
 
     def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
+
         expected_dims = {"index", "feature"}
         actual_dims = set(input_schema.dim_names)
         if actual_dims != expected_dims:
@@ -33,23 +36,6 @@ class KMeans(Calculator):
             )
 
     def _validate_data(self, data, **kwargs):
-        if not isinstance(data, xr.DataArray):
-            raise TypeError(
-                f"{self.format_call()}: input data must be an xarray DataArray."
-            )
-        if set(data.dims) != {"index", "feature"} or data.ndim != 2:
-            raise ValueError(
-                f"{self.format_call()}: input data must have exactly the dimensions "
-                "'index' and 'feature'."
-            )
-
-        missing_coords = [name for name in data.dims if name not in data.coords]
-        if missing_coords:
-            raise ValueError(
-                f"{self.format_call()}: input data is missing coordinates for "
-                f"{missing_coords!r}."
-            )
-
         units = data.pint.units
         values = np.asarray(data.pint.magnitude if units is not None else data)
         if not np.issubdtype(values.dtype, np.number):

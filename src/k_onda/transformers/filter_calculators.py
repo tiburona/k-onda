@@ -65,14 +65,35 @@ class IIRNotchDesigner:
 
 class Filter(PaddingCalculator):
     name = "filter"
+    accepted_data_types = (xr.DataArray,)
 
     def __init__(self, method, *, dim="time", **kwargs):
+        if not isinstance(dim, str):
+            raise TypeError(f"{self.format_call()}: dim must be a string.")
+        if not dim:
+            raise ValueError(
+                f"{self.format_call()}: dim cannot be an empty string."
+            )
+        if dim != "time":
+            raise NotImplementedError(
+                f"{self.format_call()}: filtering is currently implemented only "
+                "for the time dimension."
+            )
+
         self.method = method
         try:
             self.filter_designer = filter_registry.create_designer(method, **kwargs)
         except (TypeError, ValueError) as error:
             raise type(error)(f"{self.format_call()}: {error}") from None
         self.dim = dim
+
+    def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
+        if input_schema.concrete_dim_from(self.dim) is None:
+            raise ValueError(
+                f"{self.format_call()}: input schema does not contain a dimension "
+                f"representing {self.dim!r}."
+            )
 
     def _get_extra_apply_kwargs(self, parent_signal):
         designed_filter = self.design_filter(parent_signal)
@@ -110,17 +131,6 @@ class Filter(PaddingCalculator):
             else self.dim
         )
 
-        if self.dim != "time":
-            raise NotImplementedError(
-                "You can currently only filter along the time dimension."
-            )
-
-        if concrete_dim not in data.dims:
-            raise ValueError(
-                f"Filter expected a {self.dim} axis, resolved to {concrete_dim}"
-                f"but data dims are {data.dims}"
-            )
-        
         axis = data.get_axis_num(concrete_dim)
         result = sosfiltfilt(designed_filter, data, axis=axis)
         return result
@@ -136,6 +146,7 @@ class Filter(PaddingCalculator):
 class MedianFilter(Calculator):
     name = "median_filter"
     require_all_finite = True
+    accepted_data_types = (xr.DataArray,)
 
     def __init__(self, kernel_sizes):
         self._validate_configuration(kernel_sizes)
@@ -190,14 +201,10 @@ class MedianFilter(Calculator):
         return resolved
 
     def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
         self._resolved_kernel_sizes(input_schema)
 
     def _validate_data(self, data, **kwargs):
-        if not isinstance(data, xr.DataArray):
-            raise TypeError(
-                f"{self.format_call()}: input data must be an xarray DataArray."
-            )
-
         units = data.pint.units
         values = np.asarray(data.pint.magnitude if units is not None else data)
         is_real_numeric = np.issubdtype(

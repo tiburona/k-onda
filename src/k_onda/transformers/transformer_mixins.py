@@ -432,8 +432,7 @@ class AggregateMixin:
             signal = tr.AssembleArray(
                 collection_coords=collection_coords,
                 preserve_groups = preserve_groups, 
-                planned_input_schema = planned_data_schema
-                )(self)
+                )(self, planned_input_schema=planned_data_schema)
             
             if not len(across):
                 across = ["signal"]
@@ -518,7 +517,10 @@ class AggregateMixin:
         return signal
     
     def get_planned_data_schema(self):
-        planned_obj = self.planned_for_schema(self)
+
+        from .selector import PlanSelection
+        
+        planned_obj = PlanSelection()(self)
 
         if isinstance(planned_obj, tr.Collection):
             return planned_obj.signals[0].data_schema
@@ -527,19 +529,6 @@ class AggregateMixin:
         else:
             return planned_obj.data_schema
 
-    def planned_for_schema(self, obj):
-        if isinstance(obj, tr.Signal):
-            return obj.plan_on_signal()
-        if isinstance(obj, tr.Collection):
-            return tr.Collection([self.planned_for_schema(member) for member in obj])
-        if isinstance(obj, tr.CollectionMap):
-            return tr.CollectionMap(
-                groups={k: self.planned_for_schema(v) for k, v in obj.items()}
-                )
-        if isinstance(obj, tr.DataIdentity):
-            return tr.Collection([
-                self.planned_for_schema(component) for component in obj.data_components
-            ])
         
    
         

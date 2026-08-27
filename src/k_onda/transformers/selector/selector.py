@@ -39,10 +39,44 @@ class SpecifySelection(Transformer):
     name = "selector"
 
     def __init__(self, mode="local", locus=None, new_dim=None, window=None):
+        mode = "local" if mode is None else mode
+        self._validate_configuration(mode, locus, new_dim, window)
+
         self.mode = mode
         self.locus = locus
         self.new_dim = new_dim
         self.window = window
+
+    def _validate_configuration(self, mode, locus, new_dim, window):
+        if mode not in ("local", "pushdown"):
+            raise ValueError(
+                f"{self.format_call()}: mode must be 'local' or 'pushdown'."
+            )
+        if not isinstance(locus, (type_registry.Locus, type_registry.LocusSet)):
+            raise TypeError(
+                f"{self.format_call()}: locus must be a Locus or LocusSet."
+            )
+        if not hasattr(locus, "dim_bounds"):
+            raise NotImplementedError(
+                f"{self.format_call()}: selection of a point locus without a "
+                "window is not implemented."
+            )
+        if new_dim is not None and (
+            not isinstance(new_dim, str) or not new_dim.strip()
+        ):
+            raise TypeError(
+                f"{self.format_call()}: new_dim must be a non-empty string or "
+                "None."
+            )
+        if new_dim is not None and not isinstance(locus, type_registry.LocusSet):
+            raise ValueError(
+                f"{self.format_call()}: new_dim requires a LocusSet whose members "
+                "supply the values along the new dimension."
+            )
+        if window is not None and not isinstance(window, DimBounds):
+            raise TypeError(
+                f"{self.format_call()}: window must be DimBounds or None."
+            )
 
     def _call_on_signal(self, signal, key_spec):
         output = super()._call_on_signal(signal, key_spec)
@@ -59,15 +93,28 @@ class SpecifySelection(Transformer):
 
     def _validate_input(self, signal, key_spec=None):
 
+        super()._validate_input(signal, key_spec=key_spec)
+
         if key_spec and key_spec.input_name is not None:
             raise NotImplementedError(
-                "Use signal.payload(key).select(...) or signal[key].select"
+                f"{self.format_call()}: Dataset key selection is not implemented; "
+                "select a payload before calling select()."
             )
-        if signal.data_schema.is_point_process() and isinstance(
+
+    def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
+
+        if not input_schema.is_selectable(self.locus.dim):
+            raise ValueError(
+                f"{self.format_call()}: input schema cannot be selected on "
+                f"{self.locus.dim!r}."
+            )
+        if input_schema.is_point_process() and isinstance(
             self.locus, type_registry.LocusSet
         ):
             raise NotImplementedError(
-                "This operation will result in a ragged array and "
+                f"{self.format_call()}: this operation would produce a ragged "
+                "array, and "
                 "support for that is not yet implemented."
             )
 
@@ -289,15 +336,86 @@ class SliceSelection(Calculator):
             is_trim=False,
             trim_bounds=None
             ):
+        self._validate_configuration(
+            mode,
+            locus,
+            new_dim,
+            window,
+            padlen,
+            is_trim,
+            trim_bounds,
+        )
+
         self.mode = mode
         self.locus = locus
         self.new_dim = new_dim
         self.window = window
-        self.padlen=padlen
+        self.padlen = padlen
         self.is_trim = is_trim
         self.trim_bounds = trim_bounds
         self.multi_select = isinstance(locus, IntervalSet)
         self.selection_bounds = self.compute_selection_bounds()
+
+    def _validate_configuration(
+        self,
+        mode,
+        locus,
+        new_dim,
+        window,
+        padlen,
+        is_trim,
+        trim_bounds,
+    ):
+        if mode not in ("local", "pushdown"):
+            raise ValueError(
+                f"{self.format_call()}: mode must be 'local' or 'pushdown'."
+            )
+        if not isinstance(locus, (type_registry.Locus, type_registry.LocusSet)):
+            raise TypeError(
+                f"{self.format_call()}: locus must be a Locus or LocusSet."
+            )
+        if not hasattr(locus, "dim_bounds"):
+            raise NotImplementedError(
+                f"{self.format_call()}: selection of a point locus without a "
+                "window is not implemented."
+            )
+        if new_dim is not None and (
+            not isinstance(new_dim, str) or not new_dim.strip()
+        ):
+            raise TypeError(
+                f"{self.format_call()}: new_dim must be a non-empty string or "
+                "None."
+            )
+        if new_dim is not None and not isinstance(locus, type_registry.LocusSet):
+            raise ValueError(
+                f"{self.format_call()}: new_dim requires a LocusSet whose members "
+                "supply the values along the new dimension."
+            )
+        for name, bounds in (
+            ("window", window),
+            ("padlen", padlen),
+            ("trim_bounds", trim_bounds),
+        ):
+            if bounds is not None and not isinstance(bounds, DimBounds):
+                raise TypeError(
+                    f"{self.format_call()}: {name} must be DimBounds or None."
+                )
+        if not isinstance(is_trim, bool):
+            raise TypeError(f"{self.format_call()}: is_trim must be a boolean.")
+        if is_trim and trim_bounds is None:
+            raise ValueError(
+                f"{self.format_call()}: trim_bounds is required when is_trim is True."
+            )
+        if not is_trim and trim_bounds is not None:
+            raise ValueError(
+                f"{self.format_call()}: trim_bounds can only be provided when "
+                "is_trim is True."
+            )
+        if is_trim and (window is not None or padlen is not None):
+            raise ValueError(
+                f"{self.format_call()}: a trim selection cannot also receive "
+                "window or padlen."
+            )
 
     def _call_on_signal(self, signal, key_spec=None):
         output_signal = super()._call_on_signal(signal, key_spec=key_spec)
@@ -305,6 +423,8 @@ class SliceSelection(Calculator):
         return output_signal
 
     def make_output_schema(self, data_schema, key_spec):
+        self._validate_data_schema(data_schema)
+
         if not self.new_dim or self.is_trim:
             return data_schema
 
@@ -392,10 +512,32 @@ class SliceSelection(Calculator):
 
         return signal
 
-    def _validate_input(self, signal, key_spec=None):
+    def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
+
         for dim in set(self.selection_bounds):
-            if not signal.data_schema.is_selectable(dim):
-                raise ValueError(f"Signal data can not be selected on dimension {dim}.")
+            if not input_schema.is_selectable(dim):
+                raise ValueError(
+                    f"{self.format_call()}: input schema cannot be selected on "
+                    f"{dim!r}."
+                )
+
+        if isinstance(input_schema, type_registry.DatasetSchema):
+            if input_schema.is_point_process(require_all=True):
+                return
+            if input_schema.is_point_process(require_all=False):
+                raise ValueError(
+                    f"{self.format_call()}: cannot select a Dataset containing "
+                    "both continuous and point-process variables; select a payload "
+                    "before calling select()."
+                )
+            # Dataset describes the data container, while point process describes
+            # the data. You should be able to select continuous Datasets. The need to disentangle 
+            # these concerns is described under "Graph and Signals" in docs/known_issues.md.
+            raise NotImplementedError(
+                f"{self.format_call()}: selection over a continuous Dataset is "
+                "not yet implemented."
+            )
 
     def _get_apply_kwargs(self, input, **kwargs):
 
@@ -404,19 +546,7 @@ class SliceSelection(Calculator):
     def _apply(self, data, data_schema=None):
 
         if isinstance(data_schema, type_registry.DatasetSchema):
-            if data_schema.is_point_process(require_all=True):
-                return self.select_point_process(data, data_schema)
-            else:
-                if data_schema.is_point_process(require_all=False):
-                    raise ValueError(
-                        "Can't select over datasets with both "
-                        "continuous and point process data.  You need to extract "
-                        "the keys. "
-                    )
-                else:
-                    raise NotImplementedError(
-                        "Selection over a continuous dataset is not yet implemented."
-                    )
+            return self.select_point_process(data, data_schema)
         else:
             if data_schema.is_point_process():
                 return self.select_point_process(data, data_schema)

@@ -12,28 +12,53 @@ class StackSignals(Transformer):
     """Concatenate component signals so downstream calculations can be vectorized."""
 
     def __init__(self, dim=None):
+        self._validate_configuration(dim)
         self.adds_member_dim = dim is None
         self.dim = dim or "member"
 
+    def _validate_configuration(self, dim):
+        if dim is not None and not isinstance(dim, str):
+            raise TypeError(f"{self.format_call()}: dim must be a string or None.")
+        if isinstance(dim, str) and not dim.strip():
+            raise ValueError(f"{self.format_call()}: dim cannot be an empty string.")
+
+    def _validate_input(self, collection):
+        if not isinstance(collection, tr.Collection):
+            raise TypeError(
+                f"{self.format_call()}: input must be a Collection, not "
+                f"{type(collection).__name__}."
+            )
+        if not len(collection):
+            raise ValueError(f"{self.format_call()}: cannot stack an empty Collection.")
+
+        signals = collection.signals
+        reference_schema = signals[0].data_schema
+        if any(signal.data_schema != reference_schema for signal in signals[1:]):
+            raise ValueError(
+                f"{self.format_call()}: all stacked signals must have matching "
+                "data schemas."
+            )
+
     def output_schema(self, *input_schemas):
         axis = AxisInfo(name=self.dim, kind=AxisKind.AXIS)
-        
+
         def stack_schema(schema):
             return schema.with_axis(axis)
-       
+
         if isinstance(input_schemas[0], DatasetSchema):
             return DatasetSchema(
-                {
-                    key: stack_schema(schema)
-                    for key, schema in input_schemas[0].items()
-                }
+                {key: stack_schema(schema) for key, schema in input_schemas[0].items()}
             )
         return stack_schema(input_schemas[0])
 
-    def __call__(self, collection, key=None, key_output_mode=None):
-        
+    def __call__(self, collection, *, key=None, key_output_mode=None):
+
         if key is not None or key_output_mode is not None:
-            raise NotImplementedError("Key access is not yet implemented for SignalStack")
+            raise NotImplementedError(
+                "Key access is not yet implemented for SignalStack"
+            )
+
+        self._validate_input(collection)
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
@@ -41,17 +66,22 @@ class StackSignals(Transformer):
         output_schema = self.output_schema(*input_schemas)
         transform = self._get_transform()
         return tr.SignalStack(
-            collection, 
-            data_schema=output_schema, 
-            transform=transform, 
+            collection,
+            data_schema=output_schema,
+            transform=transform,
             key_spec=key_spec,
             transformer=self,
             stack_dim=self.dim,
             stack_dim_was_added=self.adds_member_dim,
-            )
+        )
 
     def _get_transform(self, *args, **kwargs):
         return Transform(self._apply)
+
+    def _ensure_stack_coord(self, data):
+        if self.dim not in data.coords:
+            data = data.assign_coords({self.dim: range(data.sizes[self.dim])})
+        return data
 
     def _gather_datasets(self, data):
         keys = data[0].keys()
@@ -68,10 +98,13 @@ class StackSignals(Transformer):
                     boundaries.append(boundaries[-1] + increment)
 
             gathered_data[key] = xr.concat(
-                arrays, dim=self.dim, combine_attrs="no_conflicts"
+                arrays,
+                dim=self.dim,
+                combine_attrs="no_conflicts",
+                join="exact",
             )
 
-        dataset = xr.Dataset(gathered_data)
+        dataset = self._ensure_stack_coord(xr.Dataset(gathered_data))
         dataset.attrs["boundaries"] = boundaries
         dataset.attrs["stack_dim"] = self.dim
         dataset.attrs["stack_dim_was_added"] = self.adds_member_dim
@@ -88,8 +121,12 @@ class StackSignals(Transformer):
             boundaries.append(boundaries[-1] + increment)
 
         gathered_data = xr.concat(
-            arrays, dim=self.dim, combine_attrs="no_conflicts"
+            arrays,
+            dim=self.dim,
+            combine_attrs="no_conflicts",
+            join="exact",
         )
+        gathered_data = self._ensure_stack_coord(gathered_data)
 
         gathered_data.attrs["boundaries"] = boundaries
         gathered_data.attrs["stack_dim"] = self.dim
@@ -98,13 +135,32 @@ class StackSignals(Transformer):
         return gathered_data
 
     def _apply(self, *data, **kwargs):
-        
         if isinstance(data[0], xr.Dataset):
             return self._gather_datasets(data)
         return self._gather_arrays(data)
 
 
 class UnstackSignals(Transformer):
+    name = "unstack_signals"
+
+    def _validate_input(self, signal_stack):
+        if not isinstance(signal_stack, tr.SignalStack):
+            raise TypeError(
+                f"{self.format_call()}: input must be a SignalStack, not "
+                f"{type(signal_stack).__name__}."
+            )
+
+        schemas = (
+            signal_stack.data_schema.values()
+            if isinstance(signal_stack.data_schema, DatasetSchema)
+            else (signal_stack.data_schema,)
+        )
+        if any(not schema.has_name(signal_stack.stack_dim) for schema in schemas):
+            raise ValueError(
+                f"{self.format_call()}: input schema does not contain stacking "
+                f"dimension {signal_stack.stack_dim!r}."
+            )
+
     def output_schema(self, input_schema, stacking_dim, stack_dim_was_added):
         if not stack_dim_was_added:
             return input_schema
@@ -125,6 +181,8 @@ class UnstackSignals(Transformer):
         return Collection
 
     def __call__(self, signal_stack):
+        self._validate_input(signal_stack)
+
         signals = []
         output_schema = self.output_schema(
             signal_stack.data_schema,
@@ -136,7 +194,7 @@ class UnstackSignals(Transformer):
             signal_class = (
                 signal_stack.transform.signal_class or signal_stack.signal_class
             )
-        
+
             origin = signal_stack.signals[i].origin
             signal = signal_class(
                 inputs=[signal_stack],
@@ -147,12 +205,12 @@ class UnstackSignals(Transformer):
                 start=signal_stack.signals[i].start,
                 duration=signal_stack.signals[i].duration,
                 context=signal_stack.signals[i].context,
-                last_stack_index=i
+                last_stack_index=i,
             )
             signals.append(signal)
 
         return self.resolve_output_class()(signals)
-    
+
     def build_transform_for(self, signal):
         return self._get_transform(signal.last_stack_index)
 

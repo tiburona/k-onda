@@ -83,6 +83,7 @@ class MultitaperSpectrogram:
 
 class Spectrogram(PaddingCalculator):
     name = "spectrogram"
+    accepted_data_types = (xr.DataArray,)
 
     def __init__(self, method, **kwargs):
         self.method = method
@@ -94,6 +95,19 @@ class Spectrogram(PaddingCalculator):
     @property
     def fixed_output_class(self):
         return tr.TimeFrequencySignal
+
+    def _validate_data_schema(self, input_schema):
+        super()._validate_data_schema(input_schema)
+        if input_schema.concrete_dim_from("time") is None:
+            raise NotImplementedError(
+                f"{self.format_call()}: spectrograms over dimensions other than "
+                "time are not implemented yet."
+            )
+        if len(input_schema.dim_names) > 3:
+            raise NotImplementedError(
+                f"{self.format_call()}: spectrograms of inputs with more than "
+                "three dimensions are not implemented yet."
+            )
 
     def output_schema(self, input_schema):
         new_axis = AxisInfo(name="frequency", metadim="frequency", kind=AxisKind.AXIS)
@@ -118,8 +132,6 @@ class Spectrogram(PaddingCalculator):
             data_3d = data_np[:, np.newaxis, :]
         elif data_np.ndim == 3:
             data_3d = data_np
-        else:
-            raise ValueError("Spectrogram can not run on data with more than 3 dims.")
 
         power = self.spectrogram_calculator.compute_spectrogram(data_3d, fs)
         return (power, {"fs": fs, "data_schema": data_schema})

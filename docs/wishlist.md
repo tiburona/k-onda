@@ -32,3 +32,9 @@ prioritized or promised. Broad, prioritized directions belong in the
   dimensions, dtypes, and units without printing full data values. Avoid adding a
   materialization note for every downstream node unless a future verbose mode
   explicitly requests the complete graph path.
+
+## Plotting
+
+- Add a public figure-size specification. `Render` currently uses an 8-by-8
+  default and checks for an undocumented `PlotNode.figsize` attribute, but no
+  plotting method sets it.

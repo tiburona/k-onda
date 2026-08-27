@@ -1,33 +1,126 @@
 from dataclasses import dataclass, replace, field
+from numbers import Integral, Real
+
 import matplotlib.patches as patches
 
+from k_onda.utils import validate_types, ValidationMixin
 
 from .core import PlotDirective, replace_plot_node
 
 
+BandCell = tuple[Integral, Integral] | list[Integral]
+BandWhere = str | BandCell | tuple[BandCell, ...] | list[BandCell] | dict[str, object]
+
+
 class BandMixin:
 
-    def band(self, x=None, y=None, where="all", color=None, opacity=None, **kwargs):
+    @validate_types
+    def band(
+        self,
+        *,
+        x: tuple[object, object] | None = None,
+        y: tuple[object, object] | None = None,
+        where: BandWhere = "all",
+        color: str | None = None,
+        opacity: Real | None = None,
+        **kwargs: object,
+    ):
         band = Band(x=x, y=y, where=where, color=color, opacity=opacity, kwargs=kwargs)
         return AddBand(band)(self)
         
 
-@dataclass(frozen=True)
-class Band:
-    x: tuple | None = None
-    y: tuple | None = None
-    where: list | tuple | dict | str = "all"
+@dataclass(frozen=True, kw_only=True)
+class Band(ValidationMixin):
+    x: tuple[object, object] | None = None
+    y: tuple[object, object] | None = None
+    where: BandWhere = "all"
     color: str | None = None
-    opacity: float | None = None
-    kwargs: dict = field(default_factory=dict)
+    opacity: Real | None = None
+    kwargs: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.validate_type_hints()
+        self.validate_string_iterable("keyword name", self.kwargs)
+        self._validate_intervals()
+        self._validate_where()
+        self._validate_appearance()
+
+    def _validate_intervals(self):
+        if self.x is None and self.y is None:
+            raise ValueError(
+                f"{self.format_call()}: at least one of x and y is required."
+            )
+
+    def _validate_where(self):
+        if isinstance(self.where, str):
+            if self.where != "all":
+                raise ValueError(
+                    f"{self.format_call()}: string where must be 'all'."
+                )
+            return
+
+        if isinstance(self.where, dict):
+            self.validate_parameter("where", self.where, nonempty=True)
+            self.validate_string_iterable("where coordinate name", self.where)
+            return
+
+        self.validate_parameter("where", self.where, nonempty=True)
+        # Normalize one cell and a collection of cells to the same shape.
+        cells = (self.where,) if isinstance(self.where[0], Integral) else self.where
+
+        for cell in cells:
+            for value in cell:
+                self.validate_number(
+                    "panel cell coordinate",
+                    value,
+                    number_type=Integral,
+                    minimum=0,
+                )
+
+    def _validate_appearance(self):
+        self.validate_number(
+            "opacity",
+            self.opacity,
+            allow_none=True,
+            minimum=0,
+            maximum=1,
+        )
+
+        reserved_kwargs = set()
+        if self.color is not None:
+            reserved_kwargs.update(("color", "facecolor"))
+        if self.opacity is not None:
+            reserved_kwargs.add("alpha")
+        if self.x is not None and self.y is None:
+            reserved_kwargs.update(("ymin", "ymax"))
+        elif self.x is None and self.y is not None:
+            reserved_kwargs.update(("xmin", "xmax"))
+        else:
+            reserved_kwargs.update(("xy", "width", "height", "transform"))
+
+        conflicts = reserved_kwargs & set(self.kwargs)
+        if conflicts:
+            raise ValueError(
+                f"{self.format_call()}: renderer kwargs cannot override values "
+                f"managed by the band specification: {sorted(conflicts)!r}."
+            )
 
 
 class AddBand(PlotDirective):
 
-    def __init__(self, band):
+    def __init__(self, band: Band):
+        self.validate_type_hints()
         self.band = band
 
     def direct(self, input):
+        if isinstance(self.band.where, dict):
+            self._validate_coord_names(
+                input,
+                self.band.where,
+                parameter="where",
+                conditions_only=True,
+            )
+
         return replace_plot_node(input, overlays=(*input.overlays, self.band))
 
     
@@ -81,7 +174,12 @@ class BandRenderer:
         if band_spec.color is not None:
             new_kwargs["facecolor"] = band_spec.color
 
-        return replace(band_spec, kwargs=new_kwargs)
+        return replace(
+            band_spec,
+            color=None,
+            opacity=None,
+            kwargs=new_kwargs,
+        )
 
     def make_band(self, band_spec, ax):
         x = band_spec.x

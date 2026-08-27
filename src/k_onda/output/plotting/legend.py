@@ -3,6 +3,8 @@ from dataclasses import dataclass, field, replace
 
 from matplotlib.patches import Patch
 
+from k_onda.utils import validate_nonempty, validate_types, ValidationMixin
+
 from .bars import bar_kwargs_from_props
 from .core import PLOT_TYPE_TO_DEFAULTS, PlotDirective, replace_plot_node
 from .utils import candidate_matches_selector
@@ -10,20 +12,24 @@ from .utils import candidate_matches_selector
 
 class LegendMixin:
 
-    def legend(self, *args, position="upper right", title="", **kwargs):
-        if not args:
+    @validate_types
+    def legend(
+        self,
+        entries: dict[str, dict[str, object]] | None = None,
+        *,
+        position: str | int | tuple[float, float] = "upper right",
+        title: str | None = None,
+        **kwargs: object,
+    ):
+        validate_nonempty("legend", entries=entries)
+
+        if entries is None:
             infer_entries = True
             legend_entries = []
         else:
-            if len(args) > 1:
-                raise ValueError("`legend` accepts a maximum of one positional arg")
-            if not isinstance(args[0], dict):
-                raise ValueError(
-                    "Positional arg passed to `legend` must be of type `dict`."
-                )
             infer_entries = False
             legend_entries = self.construct_legend_entries_from_structured_input(
-                args[0]
+                entries
             )
 
         legend_spec = Legend(
@@ -51,27 +57,62 @@ class LegendMixin:
 
 
 @dataclass
-class LegendEntry:
+class LegendEntry(ValidationMixin):
     label: str
-    selector: dict = field(default_factory=dict)
+    selector: dict[str, object] = field(default_factory=dict)
     traits: list[str] | None = None
-    props: dict | None = None
+    props: dict[str, object] | None = None
+
+    def __post_init__(self):
+        self.validate_type_hints()
+        self.validate_parameter("label", self.label, nonempty_string=True)
+        self.validate_string_iterable("selector key", self.selector)
+        if self.traits is not None:
+            self.validate_string_iterable("trait", self.traits)
+        if self.props is not None:
+            self.validate_string_iterable("property name", self.props)
 
 
 @dataclass
-class Legend:
+class Legend(ValidationMixin):
     entries: list[LegendEntry] = field(default_factory=list)
     infer_entries: bool = False
-    position: str = "upper right"
+    position: str | int | tuple[float, float] = "upper right"
     title: str | None = None
-    kwargs: dict = field(default_factory=dict)
+    kwargs: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.validate_type_hints()
+        if isinstance(self.position, str):
+            self.validate_parameter(
+                "position", self.position, nonempty_string=True
+            )
+        self.validate_string_iterable("keyword name", self.kwargs)
+        reserved_kwargs = {"handles", "labels", "loc", "title"} & set(self.kwargs)
+        if reserved_kwargs:
+            raise ValueError(
+                f"{self.format_call()}: renderer kwargs cannot override values "
+                f"managed by the legend specification: {sorted(reserved_kwargs)!r}."
+            )
 
 
 class AddLegend(PlotDirective):
-    def __init__(self, legend_spec):
+    def __init__(self, legend_spec: Legend):
+        self.validate_type_hints()
         self.legend_spec = legend_spec
 
     def direct(self, input):
+        selector_coords = {
+            coord
+            for entry in self.legend_spec.entries
+            for coord in entry.selector
+        }
+        self._validate_coord_names(
+            input,
+            selector_coords,
+            parameter="legend selectors",
+        )
+
         return replace_plot_node(input, legend_spec=self.legend_spec)
 
 
@@ -114,7 +155,7 @@ class LegendResolver:
         #
         # 6. Construct one LegendEntry from each selector, label, and resolved props.
         if not input.style_rules:
-            raise ValueError("You have called `legend` with no arguments, but have added no styles " \
+            raise ValueError("You have called `legend` with no arguments, but have added no styles "
             "from which to build a legend")
         style_rules = input.style_rules
         data_schema = input.data_source.data_schema

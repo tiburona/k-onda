@@ -2,6 +2,7 @@ from __future__ import annotations
 from collections.abc import MutableMapping
 from functools import reduce
 import numpy as np
+import xarray as xr
 from .registry import type_registry
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
@@ -160,9 +161,18 @@ class Schema:
     value_metadim: str | None = None
 
     def validate_data(self, data):
-        if self.coords and not hasattr(data, "coords"):
+        if not isinstance(data, xr.DataArray):
             raise TypeError(
-                "Schema coordinate contracts can only validate data with coordinates."
+                f"Schema can only validate an xarray DataArray, not "
+                f"{type(data).__name__}."
+            )
+
+        expected_dims = tuple(self.dim_names)
+        actual_dims = tuple(data.dims)
+        if actual_dims != expected_dims:
+            raise ValueError(
+                f"Schema declares dimensions {expected_dims!r}, but the data has "
+                f"dimensions {actual_dims!r}."
             )
 
         for coord_info in self.coords:
@@ -493,15 +503,23 @@ class DatasetSchema(MutableMapping):
         return len(self.key_schemas)
 
     def validate_data(self, data):
-        if not hasattr(data, "data_vars"):
-            raise TypeError("DatasetSchema can only validate an xarray Dataset.")
+        if not isinstance(data, xr.Dataset):
+            raise TypeError(
+                f"DatasetSchema can only validate an xarray Dataset, not "
+                f"{type(data).__name__}."
+            )
+
+        expected_variables = set(self.key_schemas)
+        actual_variables = set(data.data_vars)
+        if actual_variables != expected_variables:
+            missing = sorted(expected_variables - actual_variables)
+            unexpected = sorted(actual_variables - expected_variables)
+            raise ValueError(
+                "Dataset variables do not match DatasetSchema: "
+                f"missing={missing!r}, unexpected={unexpected!r}."
+            )
 
         for key, schema in self.key_schemas.items():
-            if key not in data.data_vars:
-                raise ValueError(
-                    f"DatasetSchema declares variable {key!r}, but the data does "
-                    "not contain it."
-                )
             schema.validate_data(data[key])
 
     @property

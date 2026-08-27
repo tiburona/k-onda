@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal
 
 from k_onda.utils import ValidationMixin
 
@@ -14,15 +15,56 @@ PLOT_TYPE_TO_DEFAULTS = {
 }
 
 
+def validate_plot_node(input, call):
+    from .node import PlotNode
+
+    if not isinstance(input, PlotNode):
+        raise TypeError(
+            f"{call}: input must be a PlotNode; call plot() before applying a "
+            "plot directive."
+        )
+    if input.data_source is None or input.plot_type is None:
+        raise ValueError(
+            f"{call}: input must be a PlotNode created by calling plot() on a "
+            "Signal."
+        )
+
+
 class PlotDirective(ValidationMixin):
 
     def __call__(self, input):
+        self._validate_input(input)
         return self.direct(input)
+
+    def _validate_input(self, input):
+        validate_plot_node(input, self.format_call())
+
+    def _validate_coord_names(
+        self,
+        input,
+        names,
+        *,
+        parameter,
+        conditions_only=False,
+    ):
+        data_schema = input.data_source.data_schema
+        valid_names = (
+            data_schema.conditions_coord_names
+            if conditions_only
+            else data_schema.coord_names
+        )
+        unknown_names = set(names) - set(valid_names)
+        if unknown_names:
+            coord_kind = "condition coordinates" if conditions_only else "coordinates"
+            raise ValueError(
+                f"{self.format_call()}: unknown {coord_kind} in {parameter}: "
+                f"{sorted(unknown_names)!r}."
+            )
 
 
 @dataclass(frozen=True)
 class PlotSource:
-    kind: str
+    kind: Literal["coord", "values"]
     name: str | None = None
 
 

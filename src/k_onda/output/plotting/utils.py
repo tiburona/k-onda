@@ -22,7 +22,14 @@ def candidate_matches_selector(selector, candidate):
     return True
 
 
-UNSET = object()
+class UnsetType:
+    __slots__ = ()
+
+    def __repr__(self):
+        return "UNSET"
+
+
+UNSET = UnsetType()
 
 def merge_dataclasses(instance, patch_instance=None, **changes):
     if patch_instance is not None:

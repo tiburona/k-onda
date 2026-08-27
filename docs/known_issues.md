@@ -68,6 +68,11 @@ Check the behavior of the various key modes (particularly "rename") and make sur
 
 ## Selection
 
+`select()` needs validation. For most other fluent methods, the policy was to validate in the transformer,
+but select normalizes user input before passing object types the fluent method user won't recognize to
+the transformer, so it needs validation that reflect the inputs the user passes, while the transformer
+needs validation that reflect its configured inputs.
+
 `DimBounds` is written such that it could have multiple dims, but loci and the selector logic are not.  Multiple dim select should be restored. 
 
 You can't `select_point_process` yet because there's not yet support for ragged arrays.
@@ -82,7 +87,7 @@ In a true DAG (i.e., not a tree, with consumers that share an upstream node), `w
 
 `attach_condition_coords` only attaches coords if all loci have the condition (`conditions = reduce(and_, [set(l.conditions.keys()) for l in self.locus])`).  Should decide if that's the desired behavior.
 
-`SliceSelection` is in an intermediate state.  After building a set of more carefully organized methods using the intersection of masks approach, I realized this was unacceptably slow for cases with regular arrays that could be handled by a single isel call, so now there is a long, insufficiently general method that handles this for the case where you're selecting child intervals that have one parent, and child and parent intervals make perfectly rectangular data. I think it is not worth trying to reorganize and make this properly general until I am ready to tackle ragged arrays, because it's only then that I will see the true abstraction shape.
+`SliceSelection` is in an intermediate state.  After building a set of more carefully organized methods using the intersection of masks approach, I realized this was unacceptably slow for cases with regular arrays that could be handled by a single isel call, so now there is a long, insufficiently general method that handles this for the case where you're selecting child intervals that have one parent, and child and parent intervals make perfectly rectangular data. I think it is not worth trying to reorganize and make this properly general until I am ready to tackle ragged arrays, because it's only then that I will see the necessary abstraction.
 
 In the slow path attach_condition_coords is potentially wrong when the order of child conditions varies over levels of the parent locus set -- it should be a 2D coordinate.  
 
@@ -94,3 +99,12 @@ Right now, if you grouped the long axis (created by AssembleArray), you can't ca
 You should be able to calculate a simultaneous mean (i.e. unweighted by number of members of a group.)
 
 `reduce()` and `ReduceDim` knowingly violate the API constitution's constructor-mirroring rule. `ReduceDim` supports weighted reduction, but it hasn't been decided how to deal with weights in the fluent API.
+
+
+## Plotting
+
+The plot specification currently treats multiple x or y figure labels and overlapping labels on the same panel side as a conflict. The user should be able to specify multiple x or y axes on different positions, as well as major and minor axes on the same side.
+
+Automatic layout does not handle data with no condition coordinates. It should
+produce one panel, but `LayoutResolver` currently attempts to reduce an empty
+collection of condition levels.
