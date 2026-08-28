@@ -10,19 +10,22 @@ class FWHM(Calculator):
     name = "fwhm"
     key_mode = "append"
     accepted_data_types = (xr.DataArray,)
+    peak_selection_modes = ("prominence", "height")
 
     def __init__(
         self,
         *,
-        dim="sample",
-        include_valleys=True,
-        peak_selection="prominence",
+        dim: str = "sample",
+        include_valleys: bool = True,
+        peak_selection: str = "prominence",
     ):
-        if peak_selection not in {"prominence", "height"}:
-            raise ValueError(
-                f"{self.format_call()}: peak_selection must be 'prominence' or "
-                "'height'."
-            )
+        self.validate_type_hints()
+        self.validate_parameter("dim", dim, nonempty_string=True)
+        self.validate_parameter(
+            "peak_selection",
+            peak_selection,
+            choices=self.peak_selection_modes,
+        )
 
         self.dim = dim
         self.include_valleys = include_valleys
@@ -73,7 +76,7 @@ class FWHM(Calculator):
         widths = peak_widths(signal_for_width, [peak_idx], rel_height=0.5)[0]
         return widths[0]
 
-    def _apply_inner(self, data, data_schema=None, *args, **kwargs):
+    def _apply_inner(self, data, data_schema, *args, **kwargs):
 
         concrete_dim = data_schema.concrete_dim_from(self.dim)
 

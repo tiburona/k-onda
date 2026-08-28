@@ -5,9 +5,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from functools import wraps
 import inspect
+import math
 from numbers import Real
 import reprlib
 from typing import Any, get_type_hints, Self
+
+import numpy as np
+import pint
 
 from typeguard import (
     check_type,
@@ -43,6 +47,30 @@ def validate_nonempty(call_name: str, **parameters: Any) -> None:
     for name, value in parameters.items():
         if value is not None and len(value) == 0:
             raise ValueError(f"{call_name}(): {name} cannot be empty.")
+
+
+def validate_string_values(
+    call: str,
+    parameter: str,
+    values: Iterable[Any],
+    *,
+    item_name: str | None = None,
+    nonempty: bool = True,
+    unique: bool = False,
+) -> None:
+    """Validate the string values contained by one parameter."""
+    try:
+        items = tuple(values)
+    except TypeError:
+        raise TypeError(f"{call}: {parameter} must be iterable.") from None
+
+    item_name = item_name or f"value in {parameter}"
+    if any(not isinstance(value, str) for value in items):
+        raise TypeError(f"{call}: every {item_name} must be a string.")
+    if nonempty and any(not value.strip() for value in items):
+        raise ValueError(f"{call}: every {item_name} must be non-empty.")
+    if unique and len(set(items)) != len(items):
+        raise ValueError(f"{call}: {parameter} cannot contain repeated values.")
 
 
 class ValidationMixin:
@@ -160,23 +188,17 @@ class ValidationMixin:
         values: Iterable[Any],
         *,
         nonempty: bool = True,
+        unique: bool = False,
     ) -> None:
         """Validate that each item is a string, optionally excluding empty strings."""
-        try:
-            items = tuple(values)
-        except TypeError:
-            raise TypeError(
-                f"{self.format_call()}: {item_name} values must be iterable."
-            ) from None
-
-        if any(not isinstance(value, str) for value in items):
-            raise TypeError(
-                f"{self.format_call()}: every {item_name} must be a string."
-            )
-        if nonempty and any(not value.strip() for value in items):
-            raise ValueError(
-                f"{self.format_call()}: every {item_name} must be non-empty."
-            )
+        validate_string_values(
+            self.format_call(),
+            f"{item_name} values",
+            values,
+            item_name=item_name,
+            nonempty=nonempty,
+            unique=unique,
+        )
 
     def validate_number(
         self,
@@ -188,17 +210,31 @@ class ValidationMixin:
         minimum: Real | None = None,
         maximum: Real | None = None,
         nonzero: bool = False,
+        finite: bool = False,
+        allow_quantity: bool = False,
     ) -> None:
         """Validate a number and optional inclusive bounds."""
         if allow_none and value is None:
             return
+        is_quantity = allow_quantity and isinstance(value, pint.Quantity)
+        if is_quantity:
+            magnitude = np.asarray(value.magnitude)
+            if magnitude.ndim != 0:
+                raise ValueError(f"{self.format_call()}: {name} must be scalar.")
+            value = magnitude.item()
         if isinstance(value, bool) or not isinstance(value, number_type):
+            requirement = f"a non-boolean {number_type.__name__}"
+            if is_quantity:
+                requirement = (
+                    f"a scalar Quantity with a {number_type.__name__} magnitude"
+                )
             raise TypeError(
-                f"{self.format_call()}: {name} must be a non-boolean "
-                f"{number_type.__name__}."
+                f"{self.format_call()}: {name} must be {requirement}."
             )
         if nonzero and value == 0:
             raise ValueError(f"{self.format_call()}: {name} cannot be zero.")
+        if finite and not math.isfinite(value):
+            raise ValueError(f"{self.format_call()}: {name} must be finite.")
         if minimum is not None and value < minimum:
             raise ValueError(
                 f"{self.format_call()}: {name} must be at least {minimum!r}."

@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 import numpy as np
 import xarray as xr
 
@@ -8,8 +10,10 @@ from k_onda.utils import np_from_xr
 class Arithmetic(Calculator):
     name = "arithmetic"
     arity = "one_or_more"
+    alignment_modes = ("outer", "inner", "left", "right", "exact", "override")
 
-    def __init__(self, operand=None, alignment="exact"):
+    def __init__(self, operand: object | None = None, *, alignment: str = "exact"):
+        self.validate_type_hints()
         if operand is not None:
             from .transformer_mixins import _operand_kind
 
@@ -18,9 +22,11 @@ class Arithmetic(Calculator):
                     f"{self.format_call()}: operand must be a concrete numerical "
                     "value, not a signal operand."
                 )
-        alignment_values = {"outer", "inner", "left", "right", "exact", "override"}
-        if alignment not in alignment_values:
-            raise ValueError(f"{self.format_call()}: alignment must be one of {alignment_values}.")
+        self.validate_parameter(
+            "alignment",
+            alignment,
+            choices=self.alignment_modes,
+        )
         self.operand = operand
         self.alignment = alignment
 
@@ -49,11 +55,7 @@ class Arithmetic(Calculator):
         return input_schemas[0]
 
     def _apply_inner(self, *input_data, **kwargs):
-        data_to_align = [
-            data for data in input_data if isinstance(data, (xr.DataArray, xr.Dataset))
-            ]
-        data_to_align = xr.align(*data_to_align, join=self.alignment)
-        return data_to_align
+        return xr.align(*input_data, join=self.alignment)
   
 
 class Add(Arithmetic):
@@ -118,9 +120,15 @@ class Divide(Arithmetic):
 
 class Normalize(Calculator):
     name = "normalize"
-    methods = {"minmax", "rms", "zscore"}
+    methods = ("minmax", "rms", "zscore")
 
-    def __init__(self, method="rms", *, dim=None):
+    def __init__(
+        self,
+        method: str = "rms",
+        *,
+        dim: str | Iterable[str] | None = None,
+    ):
+        self.validate_type_hints()
         normalized_dim = self._normalize_dim(dim)
         self._validate_configuration(method, normalized_dim)
 
@@ -140,31 +148,13 @@ class Normalize(Calculator):
             ) from None
 
     def _validate_configuration(self, method, dim):
-        if not isinstance(method, str):
-            raise TypeError(f"{self.format_call()}: method must be a string.")
-        if method not in self.methods:
-            known_methods = ", ".join(sorted(self.methods))
-            raise ValueError(
-                f"{self.format_call()}: unknown normalization method {method!r}. "
-                f"Available methods: {known_methods}."
-            )
+        self.validate_parameter("method", method, choices=self.methods)
 
         if dim is None:
             return
         dims = [dim] if isinstance(dim, str) else dim
-        if not dims:
-            raise ValueError(
-                f"{self.format_call()}: dim cannot be an empty collection."
-            )
-        if any(not isinstance(item, str) or not item for item in dims):
-            raise TypeError(
-                f"{self.format_call()}: every dimension must be a non-empty "
-                "string."
-            )
-        if len(set(dims)) != len(dims):
-            raise ValueError(
-                f"{self.format_call()}: dimensions cannot be repeated."
-            )
+        self.validate_parameter("dim", dims, nonempty=True)
+        self.validate_string_iterable("dimension", dims, unique=True)
 
     def _validate_data_schema(self, input_schema):
         super()._validate_data_schema(input_schema)

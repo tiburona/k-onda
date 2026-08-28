@@ -1,15 +1,26 @@
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from numbers import Real
+from typing import Literal
+
 import numpy as np
 import pint
 
 from k_onda.central import type_registry as tr
+from k_onda.utils import validate_string_values, validate_types
 
 
 MAX_CONCRETE_OPERAND_VALUES = 1_000
 
 
 
-def _validate_concrete_operand_size(input):
-    size = input.size if isinstance(input, np.ndarray) else np.array(input.magnitude).size
+def _validate_concrete_operand_size(input: np.ndarray | pint.Quantity) -> None:
+    size = (
+        input.size
+        if isinstance(input, np.ndarray)
+        else np.array(input.magnitude).size
+    )
     if size > MAX_CONCRETE_OPERAND_VALUES:
         raise ValueError(
             "Concrete arithmetic operands may contain at most "
@@ -19,18 +30,30 @@ def _validate_concrete_operand_size(input):
         )
 
 
-def _operand_kind(input):
-    if any(
-        isinstance(input, typ) 
-        for typ in [tr.Signal, tr.DataIdentity, tr.Collection, tr.CollectionMap, tr.SignalStack]
-        ):
-        return "signal_operand"
-    if isinstance(input, (int, float, np.number)):
+def _operand_kind(
+    input: object,
+) -> Literal["signal_operand", "concrete_operand"]:
+    if not isinstance(input, bool) and isinstance(input, (int, float, np.number)):
         return "concrete_operand"
 
     if isinstance(input, (np.ndarray, pint.Quantity)):
         _validate_concrete_operand_size(input)
         return "concrete_operand"
+
+    signal_operand_types = []
+    for name in (
+        "Signal",
+        "DataIdentity",
+        "Collection",
+        "CollectionMap",
+        "SignalStack",
+    ):
+        operand_type = getattr(tr, name, None)
+        if operand_type is not None:
+            signal_operand_types.append(operand_type)
+
+    if isinstance(input, tuple(signal_operand_types)):
+        return "signal_operand"
 
     raise TypeError(
         "Arithmetic operands must be a Signal, SignalStack, Collection, "
@@ -53,7 +76,9 @@ class CalculateMixin:
         multi_input_collection_policy="exactly_one",
         multi_input_map_policy="exact_keys",
     ):
-        
+        if isinstance(match_on, str):
+            match_on = (match_on,)
+
         operands = (other, *others)
 
         if all(_operand_kind(operand) == "signal_operand" for operand in operands):
@@ -79,16 +104,17 @@ class CalculateMixin:
             multi_input_map_policy=multi_input_map_policy
         )
 
+    @validate_types
     def add(
         self,
-        other,
-        *others,
-        alignment="exact",
-        key=None,
-        key_output_mode=None,
-        match_on=None,
-        multi_input_collection_policy="exactly_one",
-        multi_input_map_policy="exact_keys",
+        other: object,
+        *others: object,
+        alignment: str = "exact",
+        key: str | None = None,
+        key_output_mode: str | None = None,
+        match_on: str | Iterable[str] | None = None,
+        multi_input_collection_policy: str = "exactly_one",
+        multi_input_map_policy: str = "exact_keys",
     ):
 
         from . import Add
@@ -105,16 +131,17 @@ class CalculateMixin:
             multi_input_map_policy=multi_input_map_policy,
         )
 
+    @validate_types
     def subtract(
         self,
-        other,
-        *others,
-        alignment="exact",
-        key=None,
-        key_output_mode=None,
-        match_on=None,
-        multi_input_collection_policy="exactly_one",
-        multi_input_map_policy="exact_keys",
+        other: object,
+        *others: object,
+        alignment: str = "exact",
+        key: str | None = None,
+        key_output_mode: str | None = None,
+        match_on: str | Iterable[str] | None = None,
+        multi_input_collection_policy: str = "exactly_one",
+        multi_input_map_policy: str = "exact_keys",
         ):
     
         from . import Subtract
@@ -131,16 +158,17 @@ class CalculateMixin:
             multi_input_map_policy=multi_input_map_policy,
         )
 
+    @validate_types
     def multiply_by(
         self,
-        other,
-        *others,
-        alignment="exact",
-        key=None,
-        key_output_mode=None,
-        match_on=None,
-        multi_input_collection_policy="exactly_one",
-        multi_input_map_policy="exact_keys",
+        other: object,
+        *others: object,
+        alignment: str = "exact",
+        key: str | None = None,
+        key_output_mode: str | None = None,
+        match_on: str | Iterable[str] | None = None,
+        multi_input_collection_policy: str = "exactly_one",
+        multi_input_map_policy: str = "exact_keys",
         ):
     
         from . import Multiply
@@ -157,16 +185,17 @@ class CalculateMixin:
             multi_input_map_policy=multi_input_map_policy,
         )
 
+    @validate_types
     def divide_by(
         self,
-        other,
-        *others,
-        alignment="exact",
-        key=None,
-        key_output_mode=None,
-        match_on=None,
-        multi_input_collection_policy="exactly_one",
-        multi_input_map_policy="exact_keys",
+        other: object,
+        *others: object,
+        alignment: str = "exact",
+        key: str | None = None,
+        key_output_mode: str | None = None,
+        match_on: str | Iterable[str] | None = None,
+        multi_input_collection_policy: str = "exactly_one",
+        multi_input_map_policy: str = "exact_keys",
         ):
     
         from . import Divide
@@ -183,13 +212,31 @@ class CalculateMixin:
             multi_input_map_policy=multi_input_map_policy,
         )
 
-    def reduce(self, dim, method="mean", key=None, key_output_mode=None):
+    @validate_types
+    def reduce(
+        self,
+        dim: str | Iterable[str] | None,
+        *,
+        method: str = "mean",
+        key: str | None = None,
+        key_output_mode: str | None = None,
+    ):
         from . import ReduceDim
 
-        return ReduceDim(dim, method)(self, key=key, key_output_mode=key_output_mode)
+        return ReduceDim(dim, method=method)(
+            self,
+            key=key,
+            key_output_mode=key_output_mode,
+        )
 
+    @validate_types
     def normalize(
-        self, method="rms", *, dim=None, key=None, key_output_mode=None
+        self,
+        method: str = "rms",
+        *,
+        dim: str | Iterable[str] | None = None,
+        key: str | None = None,
+        key_output_mode: str | None = None,
     ):
         from . import Normalize
 
@@ -197,12 +244,13 @@ class CalculateMixin:
             self, key=key, key_output_mode=key_output_mode
         )
 
+    @validate_types
     def median_filter(
         self,
-        kernel_sizes,
+        kernel_sizes: Mapping[str, int],
         *,
-        key=None,
-        key_output_mode=None,
+        key: str | None = None,
+        key_output_mode: str | None = None,
     ):
         from . import MedianFilter
 
@@ -210,7 +258,8 @@ class CalculateMixin:
             self, key=key, key_output_mode=key_output_mode
         )
 
-    def filter(self, method, **kwargs):
+    @validate_types
+    def filter(self, method: str, **kwargs: object):
         methods = {
             "iir_notch": self.iir_notch,
             "median": self.median_filter,
@@ -225,15 +274,16 @@ class CalculateMixin:
 
         return filter_method(**kwargs)
 
+    @validate_types
     def iir_notch(
         self,
         *,
-        f_lo,
-        f_hi,
-        notch_Q=None,
-        dim="time",
-        key=None,
-        key_output_mode=None,
+        f_lo: Real,
+        f_hi: Real,
+        notch_Q: Real | None = None,
+        dim: str = "time",
+        key: str | None = None,
+        key_output_mode: str | None = None,
     ):
         from . import Filter
 
@@ -247,7 +297,8 @@ class CalculateMixin:
             self, key=key, key_output_mode=key_output_mode
         )
 
-    def spectrogram(self, method, **kwargs):
+    @validate_types
+    def spectrogram(self, method: str, **kwargs: object):
         methods = {"multitaper": self.multitaper_spectrogram}
         try:
             spectrogram_method = methods[method]
@@ -260,16 +311,17 @@ class CalculateMixin:
 
         return spectrogram_method(**kwargs)
 
+    @validate_types
     def multitaper_spectrogram(
         self,
         *,
-        freqs,
-        decim,
-        n_cycles,
-        time_bandwidth,
-        output="power",
-        key=None,
-        key_output_mode=None,
+        freqs: Iterable[Real] | np.ndarray,
+        decim: int,
+        n_cycles: Real | Iterable[Real] | np.ndarray,
+        time_bandwidth: Real,
+        output: str = "power",
+        key: str | None = None,
+        key_output_mode: str | None = None,
     ):
         from . import Spectrogram
 
@@ -282,8 +334,14 @@ class CalculateMixin:
             output=output,
         )(self, key=key, key_output_mode=key_output_mode)
 
+    @validate_types
     def threshold(
-        self, comparison, threshold, *, key=None, key_output_mode=None
+        self,
+        comparison: str,
+        threshold: Real | pint.Quantity,
+        *,
+        key: str | None = None,
+        key_output_mode: str | None = None,
     ):
         from . import Threshold
 
@@ -291,7 +349,15 @@ class CalculateMixin:
             self, key=key, key_output_mode=key_output_mode
         )
 
-    def apply_mask(self, mask, *, tolerance_decimals=9, key=None, key_output_mode=None):
+    @validate_types
+    def apply_mask(
+        self,
+        mask: object,
+        *,
+        tolerance_decimals: int = 9,
+        key: str | None = None,
+        key_output_mode: str | None = None,
+    ):
         from . import ApplyMask
 
         return ApplyMask(tolerance_decimals=tolerance_decimals)(
@@ -301,14 +367,15 @@ class CalculateMixin:
             key_output_mode=key_output_mode
         )
 
+    @validate_types
     def fwhm(
         self,
         *,
-        dim="sample",
-        include_valleys=True,
-        peak_selection="prominence",
-        key=None,
-        key_output_mode=None,
+        dim: str = "sample",
+        include_valleys: bool = True,
+        peak_selection: str = "prominence",
+        key: str | None = None,
+        key_output_mode: str | None = None,
     ):
         from . import FWHM
 
@@ -318,19 +385,33 @@ class CalculateMixin:
             peak_selection=peak_selection,
         )(self, key=key, key_output_mode=key_output_mode)
 
+    @validate_types
     def count(
         self,
         *,
-        bins=None,
-        bin_size=None,
-        hist_range=None,
-        stat="count",
-        density=False,
-        dim="time",
-        range_source="data",
-        bin_coord="left",
-        key=None,
-        key_output_mode=None,
+        bins: (
+            int
+            | Sequence[Real | pint.Quantity]
+            | np.ndarray
+            | pint.Quantity
+            | Callable[..., object]
+            | None
+        ) = None,
+        bin_size: Real | pint.Quantity | Callable[..., object] | None = None,
+        hist_range: (
+            Sequence[Real | pint.Quantity]
+            | np.ndarray
+            | pint.Quantity
+            | Callable[..., object]
+            | None
+        ) = None,
+        stat: str = "count",
+        density: bool = False,
+        dim: str = "time",
+        range_source: str = "data",
+        bin_coord: str = "left",
+        key: str | None = None,
+        key_output_mode: str | None = None,
     ):
         from . import Histogram
 
@@ -348,30 +429,33 @@ class CalculateMixin:
 
 
 class IntersectionMixin:
-    def intersection(self, *others, tolerance_decimals=9):
+    @validate_types
+    def intersection(
+        self,
+        *others: object,
+        tolerance_decimals: int = 9,
+    ):
         from . import Intersection
 
         return Intersection(tolerance_decimals=tolerance_decimals)(self, *others)
 
 
 class PointProcessMixin:
+    @validate_types
     def rate(
         self,
         *,
-        intervals=None,
-        exclude_initial=None,
-        key=None,
-        key_output_mode=None,
+        key: str | None = None,
+        key_output_mode: str | None = None,
     ):
         from . import Rate
 
-        return Rate(intervals=intervals, exclude_initial=exclude_initial)(
-            self, key=key, key_output_mode=key_output_mode
-        )
+        return Rate()(self, key=key, key_output_mode=key_output_mode)
 
 
 class StackMixin:
-    def stack_signals(self, dim=None):
+    @validate_types
+    def stack_signals(self, dim: str | None = None):
         from . import StackSignals
 
         return StackSignals(dim=dim)(self)
@@ -385,7 +469,14 @@ class UnstackMixin:
 
 
 class SignalMeanMixin:
-    def mean(self, dim=None, *, key=None, key_output_mode=None):
+    @validate_types
+    def mean(
+        self,
+        dim: str | Iterable[str] | None = None,
+        *,
+        key: str | None = None,
+        key_output_mode: str | None = None,
+    ):
         from . import ReduceDim
 
         return ReduceDim(dim, method="mean")(
@@ -395,30 +486,28 @@ class SignalMeanMixin:
 
 class AggregateMixin:    
 
+    @validate_types
     def mean(
         self,
-        across=None,
+        across: str | Iterable[str] | None = None,
         *,
-        group_by=None,
-        preserve_groups=False,
-        order="sequential",
+        group_by: str | Iterable[str] | None = None,
+        preserve_groups: bool = False,
+        order: str = "sequential",
     ):
         if order not in {"sequential", "simultaneous"}:
             raise ValueError(
                 "mean() order must be 'sequential' or 'simultaneous'."
             )
-        
+        if order == "simultaneous":
+            raise NotImplementedError(
+                "Simultaneous averaging has not been implemented."
+            )
+
+        across = self._normalize_mean_names("across", across)
+        group_by = self._normalize_mean_names("group_by", group_by)
+
         planned_data_schema = self.get_planned_data_schema()
-
-        if group_by is None:
-            group_by = []
-        elif isinstance(group_by, str):
-            group_by = [group_by]
-
-        if across is None:
-            across = []
-        elif isinstance(across, str):
-            across = [across]
 
         # Any dims that are not in the xarray data at the time of execution must 
         # exist as metadata on the signal object. 
@@ -434,23 +523,30 @@ class AggregateMixin:
                 preserve_groups = preserve_groups, 
                 )(self, planned_input_schema=planned_data_schema)
             
-            if not len(across):
+            if not across:
                 across = ["signal"]
         else:
             signal = self
 
         self._validate_params_on_aggregate(across, group_by, signal.data_schema)
 
-        if order == "simultaneous": 
-            raise NotImplementedError(
-                    "Simultaneous averaging has not been implemented."
-                )
-           
         stages = self._create_stages(group_by, across, signal.data_schema)
     
         signal = self._group_and_reduce_in_stages(signal, stages)
 
         return signal
+
+    def _normalize_mean_names(self, parameter, value):
+        if value is None:
+            return []
+        names = [value] if isinstance(value, str) else list(value)
+        validate_string_values(
+            "mean()",
+            parameter,
+            names,
+            unique=True,
+        )
+        return names
     
     def _validate_params_on_aggregate(self, across, group_by, data_schema):
         for coord in group_by:

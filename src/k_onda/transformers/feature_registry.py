@@ -37,14 +37,10 @@ def fwhm(
 def firing_rate(
     input,
     *,
-    intervals=None,
-    exclude_initial=None,
     key=None,
     key_output_mode=None,
 ):
     return input.rate(
-        intervals=intervals,
-        exclude_initial=exclude_initial,
         key=key,
         key_output_mode=key_output_mode,
     ).mean()

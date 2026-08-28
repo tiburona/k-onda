@@ -1,11 +1,12 @@
 from k_onda.central import type_registry as tr
+from ..classifier_calculators import SklearnKMeans
 
 
 def classify_neurons(
         neuron_collection, 
         spec=None,
         func=None,
-        order="ascending",
+        order=None,
         labels=None,
         sort_by=None,
         ):
@@ -29,7 +30,7 @@ def classify_neurons(
         .unstack_signals()
         .extract_features("fwhm", "firing_rate", group_by="neuron")
         .normalize(method="zscore", dim="index")
-        .kmeans(n_clusters=2, random_state=0)
+        .kmeans(2, implementation=SklearnKMeans(random_state=0))
         .classify(
             "neuron_type", 
             spec=spec,

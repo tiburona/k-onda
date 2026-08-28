@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 import inspect
+from numbers import Real
 
 import numpy as np
 from scipy.signal import iirnotch, medfilt, sosfilt, sosfiltfilt, tf2sos
@@ -11,7 +12,7 @@ import pint
 from k_onda.central import DimBounds, DimPair
 from .core import Calculator, PaddingCalculator
 
-from  k_onda.utils import scalar, is_unitful
+from k_onda.utils import scalar, is_unitful, ValidationMixin
 
 
 class FilterRegistry:
@@ -49,10 +50,29 @@ filter_registry = FilterRegistry()
 
 @filter_registry.register("iir_notch")
 @dataclass(frozen=True)
-class IIRNotchDesigner:
-    f_lo: float
-    f_hi: float
-    notch_Q: float | None = None
+class IIRNotchDesigner(ValidationMixin):
+    f_lo: Real
+    f_hi: Real
+    notch_Q: Real | None = None
+
+    def __post_init__(self):
+        self.validate_type_hints()
+        self.validate_number("f_lo", self.f_lo, minimum=0, finite=True)
+        self.validate_number(
+            "f_hi", self.f_hi, minimum=0, nonzero=True, finite=True
+        )
+        if self.f_hi <= self.f_lo:
+            raise ValueError(
+                f"{self.format_call()}: f_hi must be greater than f_lo."
+            )
+        if self.notch_Q is not None:
+            self.validate_number(
+                "notch_Q",
+                self.notch_Q,
+                minimum=0,
+                nonzero=True,
+                finite=True,
+            )
 
     @lru_cache(maxsize=32)
     def design_sos(self, fs):
@@ -67,13 +87,16 @@ class Filter(PaddingCalculator):
     name = "filter"
     accepted_data_types = (xr.DataArray,)
 
-    def __init__(self, method, *, dim="time", **kwargs):
-        if not isinstance(dim, str):
-            raise TypeError(f"{self.format_call()}: dim must be a string.")
-        if not dim:
-            raise ValueError(
-                f"{self.format_call()}: dim cannot be an empty string."
-            )
+    def __init__(
+        self,
+        method: str,
+        *,
+        dim: str = "time",
+        **kwargs: object,
+    ):
+        self.validate_type_hints()
+        self.validate_parameter("method", method, nonempty_string=True)
+        self.validate_parameter("dim", dim, nonempty_string=True)
         if dim != "time":
             raise NotImplementedError(
                 f"{self.format_call()}: filtering is currently implemented only "
@@ -124,12 +147,8 @@ class Filter(PaddingCalculator):
 
         return DimBounds({"time": DimPair([-pad_seconds, pad_seconds])})
 
-    def _apply_inner(self, data, designed_filter, data_schema=None, *args, **kwargs):
-        concrete_dim = (
-            data_schema.concrete_dim_from(self.dim)
-            if data_schema is not None
-            else self.dim
-        )
+    def _apply_inner(self, data, designed_filter, data_schema, *args, **kwargs):
+        concrete_dim = data_schema.concrete_dim_from(self.dim)
 
         axis = data.get_axis_num(concrete_dim)
         result = sosfiltfilt(designed_filter, data, axis=axis)
@@ -148,33 +167,23 @@ class MedianFilter(Calculator):
     require_all_finite = True
     accepted_data_types = (xr.DataArray,)
 
-    def __init__(self, kernel_sizes):
+    def __init__(self, kernel_sizes: Mapping[str, int]):
+        self.validate_type_hints()
         self._validate_configuration(kernel_sizes)
         self.kernel_sizes = dict(kernel_sizes)
 
     def _validate_configuration(self, kernel_sizes):
-        if not isinstance(kernel_sizes, Mapping):
-            raise TypeError(
-                f"{self.format_call()}: kernel_sizes must be a mapping from "
-                "dimensions to kernel sizes."
-            )
-        if not kernel_sizes:
-            raise ValueError(
-                f"{self.format_call()}: kernel_sizes cannot be empty."
-            )
+        self.validate_parameter("kernel_sizes", kernel_sizes, nonempty=True)
+        self.validate_string_iterable("kernel dimension", kernel_sizes)
 
         for dim, size in kernel_sizes.items():
-            if not isinstance(dim, str):
-                raise TypeError(
-                    f"{self.format_call()}: kernel dimension names must be strings; "
-                    f"received {dim!r}."
-                )
-            if isinstance(size, bool) or not isinstance(size, int):
-                raise TypeError(
-                    f"{self.format_call()}: kernel size for {dim!r} must be an "
-                    "integer."
-                )
-            if size < 1 or size % 2 == 0:
+            self.validate_number(
+                f"kernel size for {dim!r}",
+                size,
+                number_type=int,
+                minimum=1,
+            )
+            if size % 2 == 0:
                 raise ValueError(
                     f"{self.format_call()}: kernel size for {dim!r} must be a "
                     "positive odd integer."
@@ -217,7 +226,7 @@ class MedianFilter(Calculator):
 
         super()._validate_data(data, **kwargs)
 
-    def _apply_inner(self, data, data_schema=None, *args, **kwargs):
+    def _apply_inner(self, data, data_schema, *args, **kwargs):
         resolved_sizes = self._resolved_kernel_sizes(data_schema)
         for dim, size in resolved_sizes.items():
             if size > data.sizes[dim]:
@@ -232,6 +241,3 @@ class MedianFilter(Calculator):
         filtered = medfilt(values, kernel_size=kernel_size)
         filtered = filtered * units if units is not None else filtered
         return data.copy(data=filtered)
-
-    def _wrap_result(self, result, data):
-        return super()._wrap_result(result)

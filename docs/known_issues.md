@@ -51,8 +51,6 @@ I'm missing dispatch over `SignalMap` for `Transformer` and the `select` mixin.
 
 `Spectrogram` currently assumes it's computed over time; that should be generalized.
 
-`Spectrogram` currently tests `if isinstance(n_cycles, np.ndarray):`. This is only working because the only way anyone has run spectrogram is after defining config variables in Python; it will break as soon as config comes from a string source -- need to test for iterables more generally.
-
 The only filter currently supported is sos; this needs to be expanded.
 
 `MedianFilter` currently delegates to `scipy.signal.medfilt`, which treats values
@@ -72,6 +70,8 @@ Check the behavior of the various key modes (particularly "rename") and make sur
 but select normalizes user input before passing object types the fluent method user won't recognize to
 the transformer, so it needs validation that reflect the inputs the user passes, while the transformer
 needs validation that reflect its configured inputs.
+
+Disjoint time selection doesn't provide an observation duration for downstream calculations. `SliceSelection.start_and_duration()` stores tuples of per-bound starts and durations, but `Rate` requires one scalar denominator.
 
 `DimBounds` is written such that it could have multiple dims, but loci and the selector logic are not.  Multiple dim select should be restored. 
 

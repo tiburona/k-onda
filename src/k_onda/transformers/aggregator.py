@@ -2,7 +2,7 @@ import xarray as xr
 from pint_xarray import PintIndex
 import numpy as np
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable
 from xarray.core.groupby import DataArrayGroupBy
 from dataclasses import replace
 
@@ -10,7 +10,7 @@ from .core import Transformer, KeySpec, Calculator
 from k_onda.central import type_registry, AxisInfo, AxisKind, CoordInfo
 
 
-REDUCTION_METHODS = {
+REDUCTION_METHODS = (
     "all",
     "any",
     "count",
@@ -22,7 +22,7 @@ REDUCTION_METHODS = {
     "std",
     "sum",
     "var",
-}
+)
 WEIGHTED_REDUCTION_METHODS = {"mean", "std", "sum", "var"}
 
 
@@ -53,19 +53,9 @@ class AssembleArray(Transformer):
 
     def _validate_configuration(self, collection_coords, preserve_groups):
         if not callable(collection_coords):
-            if any(
-                not isinstance(coord, str) or not coord
-                for coord in collection_coords
-            ):
-                raise TypeError(
-                    f"{self.format_call()}: every collection coordinate must be "
-                    "a non-empty string."
-                )
-            if len(set(collection_coords)) != len(collection_coords):
-                raise ValueError(
-                    f"{self.format_call()}: collection coordinates cannot be "
-                    "repeated."
-                )
+            self.validate_string_iterable(
+                "collection coordinate", collection_coords, unique=True
+            )
         if not isinstance(preserve_groups, bool):
             raise TypeError(
                 f"{self.format_call()}: preserve_groups must be a boolean."
@@ -77,15 +67,6 @@ class AssembleArray(Transformer):
             raise NotImplementedError(
                 f"{self.format_call()}: key access is not yet implemented."
             )
-
-        if planned_input_schema is not None:
-            if not isinstance(
-                planned_input_schema, (type_registry.Schema, type_registry.DatasetSchema)
-                ):
-                raise TypeError(
-                    f"{self.format_call()}: planned_input_schema must be a Schema, a DatasetSchema "
-                    f"or None. Received type {type(planned_input_schema).__name__}."
-                )
 
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
@@ -124,7 +105,7 @@ class AssembleArray(Transformer):
         
     def _call_on_collection(self, collection, planned_input_schema, key_spec=None):
 
-        inputs = self._validate_collection(collection, planned_input_schema)
+        inputs = self._validate_collection(collection)
 
         if self.collection_coords: 
             if callable(self.collection_coords):
@@ -132,11 +113,6 @@ class AssembleArray(Transformer):
             else:
                 grouping_func = self.build_grouping_func(self.collection_coords)
             labels_and_factors = [grouping_func(sig) for sig in collection.signals]
-            if any(not isinstance(factors, Mapping) for factors in labels_and_factors):
-                raise TypeError(
-                    f"{self.format_call()}: a collection_coords callable must "
-                    "return a mapping for every signal."
-                )
         else:
             labels_and_factors = []
              
@@ -175,7 +151,7 @@ class AssembleArray(Transformer):
             schema_kwargs=schema_kwargs
         )
 
-    def _validate_collection(self, collection, planned_input_schema):
+    def _validate_collection(self, collection):
         inputs = tuple(collection.signals)
         if not inputs:
             raise ValueError(
@@ -187,14 +163,6 @@ class AssembleArray(Transformer):
             raise ValueError(
                 f"{self.format_call()}: all assembled signals must have matching "
                 "data schemas."
-            )
-
-        if planned_input_schema is not None and isinstance(
-            planned_input_schema, type_registry.DatasetSchema
-        ) != isinstance(reference_schema, type_registry.DatasetSchema):
-            raise TypeError(
-                f"{self.format_call()}: planned_input_schema and the assembled "
-                "signals must describe the same data type."
             )
         return inputs
     
@@ -455,17 +423,8 @@ class GroupBy(Transformer):
             ) from None
 
     def _validate_configuration(self, coords):
-        if not coords:
-            raise ValueError(f"{self.format_call()}: coords cannot be empty.")
-        if any(not isinstance(coord, str) or not coord for coord in coords):
-            raise TypeError(
-                f"{self.format_call()}: every coordinate must be a non-empty "
-                "string."
-            )
-        if len(set(coords)) != len(coords):
-            raise ValueError(
-                f"{self.format_call()}: coordinates cannot be repeated."
-            )
+        self.validate_parameter("coords", coords, nonempty=True)
+        self.validate_string_iterable("coordinate", coords, unique=True)
 
     def _validate_data_schema(self, input_schema):
         super()._validate_data_schema(input_schema)
@@ -498,56 +457,45 @@ class GroupBy(Transformer):
 class ReduceDim(Calculator):
     name = "reduce_dim"
 
-    def __init__(self, dims, method="mean", weights=None):
-        normalized_dims = self._normalize_dims(dims)
+    def __init__(
+        self,
+        dim: str | Iterable[str] | None,
+        *,
+        method: str = "mean",
+        weights: xr.DataArray | None = None,
+    ):
+        self.validate_type_hints()
+        normalized_dims = self._normalize_dims(dim)
         self._validate_configuration(normalized_dims, method, weights)
 
         self.dims = normalized_dims
         self.method = method
         self.weights = weights
 
-    def _normalize_dims(self, dims):
-        if dims is None:
+    def _normalize_dims(self, dim):
+        if dim is None:
             return None
-        if isinstance(dims, str):
-            return [dims]
+        if isinstance(dim, str):
+            return [dim]
 
         try:
-            return list(dims)
+            return list(dim)
         except TypeError:
             raise TypeError(
-                f"{self.format_call()}: dims must be None, a string, or an "
+                f"{self.format_call()}: dim must be None, a string, or an "
                 "iterable of strings."
             ) from None
 
     def _validate_configuration(self, dims, method, weights):
         if dims is not None:
-            if not dims:
-                raise ValueError(
-                    f"{self.format_call()}: dims cannot be an empty collection."
-                )
-            if any(not isinstance(dim, str) or not dim for dim in dims):
-                raise TypeError(
-                    f"{self.format_call()}: every dimension must be a non-empty "
-                    "string."
-                )
-            if len(set(dims)) != len(dims):
-                raise ValueError(
-                    f"{self.format_call()}: dimensions cannot be repeated."
-                )
+            self.validate_parameter("dim", dims, nonempty=True)
+            self.validate_string_iterable("dimension", dims, unique=True)
 
-        if not isinstance(method, str):
-            raise TypeError(f"{self.format_call()}: method must be a string.")
-        if method not in REDUCTION_METHODS:
-            known_methods = ", ".join(sorted(REDUCTION_METHODS))
-            raise ValueError(
-                f"{self.format_call()}: unknown reduction method {method!r}. "
-                f"Available methods: {known_methods}."
-            )
-        if weights is not None and not isinstance(weights, xr.DataArray):
-            raise TypeError(
-                f"{self.format_call()}: weights must be an xarray DataArray."
-            )
+        self.validate_parameter(
+            "method",
+            method,
+            choices=REDUCTION_METHODS,
+        )
         if weights is not None and method not in WEIGHTED_REDUCTION_METHODS:
             known_methods = ", ".join(sorted(WEIGHTED_REDUCTION_METHODS))
             raise ValueError(

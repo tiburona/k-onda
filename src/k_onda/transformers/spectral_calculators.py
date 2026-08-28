@@ -1,3 +1,6 @@
+from collections.abc import Iterable
+from numbers import Real
+
 from mne.time_frequency import tfr_array_multitaper
 import numpy as np
 import xarray as xr
@@ -7,7 +10,7 @@ from dataclasses import dataclass
 
 from k_onda.central import DimBounds, DimPair, AxisInfo, AxisKind, type_registry as tr
 from .core import PaddingCalculator
-from ..utils import scalar
+from ..utils import scalar, ValidationMixin
 
 
 class SpectrogramCalculatorRegistry:
@@ -46,12 +49,88 @@ spectrogram_registry = SpectrogramCalculatorRegistry()
 
 @spectrogram_registry.register("multitaper")
 @dataclass(frozen=True)
-class MultitaperSpectrogram:
-    n_cycles: int | float | list | tuple | np.ndarray
-    freqs: tuple | list | np.ndarray
+class MultitaperSpectrogram(ValidationMixin):
+    n_cycles: Real | Iterable[Real] | np.ndarray
+    freqs: Iterable[Real] | np.ndarray
     decim: int
-    time_bandwidth: int
+    time_bandwidth: Real
     output: str = "power"
+
+    output_modes = (
+        "complex",
+        "power",
+        "phase",
+        "avg_power",
+        "itc",
+        "avg_power_itc",
+    )
+
+    def __post_init__(self):
+        self.validate_type_hints()
+
+        freqs = self._normalize_positive_array("freqs", self.freqs)
+        n_cycles = self._normalize_n_cycles(self.n_cycles, len(freqs))
+        object.__setattr__(self, "freqs", freqs)
+        object.__setattr__(self, "n_cycles", n_cycles)
+
+        self.validate_number("decim", self.decim, number_type=int, minimum=1)
+        self.validate_number(
+            "time_bandwidth", self.time_bandwidth, minimum=2, finite=True
+        )
+        self.validate_parameter("output", self.output, choices=self.output_modes)
+        if self.output != "power":
+            raise NotImplementedError(
+                f"{self.format_call()}: output={self.output!r} is supported by "
+                "MNE, but K-Onda does not yet represent its result shape."
+            )
+
+    def _normalize_positive_array(self, name, values):
+        try:
+            values = values if isinstance(values, np.ndarray) else list(values)
+        except TypeError:
+            raise TypeError(
+                f"{self.format_call()}: {name} must be an iterable of real numbers."
+            ) from None
+
+        array = np.asarray(values, dtype=object)
+        if array.ndim != 1:
+            raise ValueError(f"{self.format_call()}: {name} must be one-dimensional.")
+        if array.size == 0:
+            raise ValueError(f"{self.format_call()}: {name} cannot be empty.")
+        if any(
+            isinstance(value, (bool, np.bool_)) or not isinstance(value, Real)
+            for value in array
+        ):
+            raise TypeError(
+                f"{self.format_call()}: every value in {name} must be a real "
+                "number, not a boolean."
+            )
+
+        array = array.astype(float)
+        if not np.isfinite(array).all():
+            raise ValueError(f"{self.format_call()}: {name} must contain finite values.")
+        if np.any(array <= 0):
+            raise ValueError(f"{self.format_call()}: {name} values must be positive.")
+        return array
+
+    def _normalize_n_cycles(self, n_cycles, frequency_count):
+        if isinstance(n_cycles, Real) and not isinstance(n_cycles, (bool, np.bool_)):
+            self.validate_number(
+                "n_cycles",
+                n_cycles,
+                nonzero=True,
+                minimum=0,
+                finite=True,
+            )
+            return n_cycles
+
+        n_cycles = self._normalize_positive_array("n_cycles", n_cycles)
+        if len(n_cycles) != frequency_count:
+            raise ValueError(
+                f"{self.format_call()}: n_cycles must be a scalar or contain one "
+                "value per frequency."
+            )
+        return n_cycles
 
     def compute_spectrogram(self, data_3d, fs):
         power = tfr_array_multitaper(
@@ -66,17 +145,11 @@ class MultitaperSpectrogram:
         return power
 
     def compute_padlen(self):
-        n_cycles = (
-            np.asarray(self.n_cycles) 
-            if isinstance(self.n_cycles, (list, tuple)) 
-            else self.n_cycles
-            )
-        freqs = self.freqs
         f_min = self.freqs[0]
-        if isinstance(n_cycles, np.ndarray):
-            pad_needed = np.max(n_cycles / freqs) / 2
+        if isinstance(self.n_cycles, np.ndarray):
+            pad_needed = np.max(self.n_cycles / self.freqs) / 2
         else:
-            pad_needed = n_cycles / (2 * f_min)
+            pad_needed = self.n_cycles / (2 * f_min)
         pad_seconds = pad_needed * pint.application_registry.seconds
         return pad_seconds
 
@@ -85,7 +158,9 @@ class Spectrogram(PaddingCalculator):
     name = "spectrogram"
     accepted_data_types = (xr.DataArray,)
 
-    def __init__(self, method, **kwargs):
+    def __init__(self, method: str, **kwargs: object):
+        self.validate_type_hints()
+        self.validate_parameter("method", method, nonempty_string=True)
         self.method = method
         try:
             self.spectrogram_calculator = spectrogram_registry.create_calculator(method, **kwargs)
@@ -120,7 +195,7 @@ class Spectrogram(PaddingCalculator):
     def _get_extra_apply_kwargs(self, parent):
         return {"fs": scalar(parent.sampling_rate)}
 
-    def _apply_inner(self, data, fs, data_schema=None, **kwargs):
+    def _apply_inner(self, data, fs, data_schema, **kwargs):
         
         time_dim = data_schema.concrete_dim_from("time")
         leading_dims = [d for d in data.dims if d != time_dim]

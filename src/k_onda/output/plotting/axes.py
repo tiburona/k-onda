@@ -116,12 +116,9 @@ class AxisSpec(ValidationMixin):
 
 
 @dataclass
-class AxesSpec(ValidationMixin):
+class AxesSpec:
     x: AxisSpec = field(default_factory=AxisSpec)
     y: AxisSpec = field(default_factory=AxisSpec)
-
-    def __post_init__(self):
-        self.validate_type_hints()
 
 
 

@@ -336,16 +336,6 @@ class SliceSelection(Calculator):
             is_trim=False,
             trim_bounds=None
             ):
-        self._validate_configuration(
-            mode,
-            locus,
-            new_dim,
-            window,
-            padlen,
-            is_trim,
-            trim_bounds,
-        )
-
         self.mode = mode
         self.locus = locus
         self.new_dim = new_dim
@@ -355,67 +345,6 @@ class SliceSelection(Calculator):
         self.trim_bounds = trim_bounds
         self.multi_select = isinstance(locus, IntervalSet)
         self.selection_bounds = self.compute_selection_bounds()
-
-    def _validate_configuration(
-        self,
-        mode,
-        locus,
-        new_dim,
-        window,
-        padlen,
-        is_trim,
-        trim_bounds,
-    ):
-        if mode not in ("local", "pushdown"):
-            raise ValueError(
-                f"{self.format_call()}: mode must be 'local' or 'pushdown'."
-            )
-        if not isinstance(locus, (type_registry.Locus, type_registry.LocusSet)):
-            raise TypeError(
-                f"{self.format_call()}: locus must be a Locus or LocusSet."
-            )
-        if not hasattr(locus, "dim_bounds"):
-            raise NotImplementedError(
-                f"{self.format_call()}: selection of a point locus without a "
-                "window is not implemented."
-            )
-        if new_dim is not None and (
-            not isinstance(new_dim, str) or not new_dim.strip()
-        ):
-            raise TypeError(
-                f"{self.format_call()}: new_dim must be a non-empty string or "
-                "None."
-            )
-        if new_dim is not None and not isinstance(locus, type_registry.LocusSet):
-            raise ValueError(
-                f"{self.format_call()}: new_dim requires a LocusSet whose members "
-                "supply the values along the new dimension."
-            )
-        for name, bounds in (
-            ("window", window),
-            ("padlen", padlen),
-            ("trim_bounds", trim_bounds),
-        ):
-            if bounds is not None and not isinstance(bounds, DimBounds):
-                raise TypeError(
-                    f"{self.format_call()}: {name} must be DimBounds or None."
-                )
-        if not isinstance(is_trim, bool):
-            raise TypeError(f"{self.format_call()}: is_trim must be a boolean.")
-        if is_trim and trim_bounds is None:
-            raise ValueError(
-                f"{self.format_call()}: trim_bounds is required when is_trim is True."
-            )
-        if not is_trim and trim_bounds is not None:
-            raise ValueError(
-                f"{self.format_call()}: trim_bounds can only be provided when "
-                "is_trim is True."
-            )
-        if is_trim and (window is not None or padlen is not None):
-            raise ValueError(
-                f"{self.format_call()}: a trim selection cannot also receive "
-                "window or padlen."
-            )
 
     def _call_on_signal(self, signal, key_spec=None):
         output_signal = super()._call_on_signal(signal, key_spec=key_spec)

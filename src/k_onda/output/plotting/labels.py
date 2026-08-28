@@ -193,12 +193,9 @@ class Label(ValidationMixin):
 
 
 @dataclass
-class LabelPlan(ValidationMixin):
+class LabelPlan:
     explicit: list[Label] = field(default_factory=list)
     infer_missing: bool = False
-
-    def __post_init__(self):
-        self.validate_type_hints()
 
 
 class AddLabel(PlotDirective):
@@ -351,8 +348,6 @@ class LabelRenderer:
                     panel_ax_map,
                     role_source_map,
                 )
-            else:
-                raise ValueError(f"Unknown value {label.scope} for label scope.")
 
     def add_figure_label(self, label, data, fig, role_source_map):
         text = self.resolve_label_text(label, data, role_source_map)
@@ -433,4 +428,3 @@ class LabelRenderer:
                 for panel in row
                 if panel.col == len(row) - 1
             ]
-        raise ValueError(f"Unknown value for where {where}")

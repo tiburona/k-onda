@@ -11,16 +11,15 @@ class StackSignals(Transformer):
 
     """Concatenate component signals so downstream calculations can be vectorized."""
 
-    def __init__(self, dim=None):
+    def __init__(self, dim: str | None = None):
+        self.validate_type_hints()
         self._validate_configuration(dim)
         self.adds_member_dim = dim is None
         self.dim = dim or "member"
 
     def _validate_configuration(self, dim):
-        if dim is not None and not isinstance(dim, str):
-            raise TypeError(f"{self.format_call()}: dim must be a string or None.")
-        if isinstance(dim, str) and not dim.strip():
-            raise ValueError(f"{self.format_call()}: dim cannot be an empty string.")
+        if dim is not None:
+            self.validate_parameter("dim", dim, nonempty_string=True)
 
     def _validate_input(self, collection):
         if not isinstance(collection, tr.Collection):
@@ -51,7 +50,13 @@ class StackSignals(Transformer):
             )
         return stack_schema(input_schemas[0])
 
-    def __call__(self, collection, *, key=None, key_output_mode=None):
+    def __call__(
+        self,
+        collection: object,
+        *,
+        key: str | None = None,
+        key_output_mode: str | None = None,
+    ):
 
         if key is not None or key_output_mode is not None:
             raise NotImplementedError(
@@ -150,17 +155,6 @@ class UnstackSignals(Transformer):
                 f"{type(signal_stack).__name__}."
             )
 
-        schemas = (
-            signal_stack.data_schema.values()
-            if isinstance(signal_stack.data_schema, DatasetSchema)
-            else (signal_stack.data_schema,)
-        )
-        if any(not schema.has_name(signal_stack.stack_dim) for schema in schemas):
-            raise ValueError(
-                f"{self.format_call()}: input schema does not contain stacking "
-                f"dimension {signal_stack.stack_dim!r}."
-            )
-
     def output_schema(self, input_schema, stacking_dim, stack_dim_was_added):
         if not stack_dim_was_added:
             return input_schema
@@ -235,5 +229,7 @@ class UnstackSignals(Transformer):
         start, end = boundaries[idx], boundaries[idx + 1]
         selection = start if stack_dim_was_added else slice(start, end)
         selected_data = data.isel({dim: selection})
+        if stack_dim_was_added:
+            selected_data = selected_data.drop_vars(dim)
         selected_data.attrs = attrs
         return selected_data

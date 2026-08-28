@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from numbers import Real
 
 import numpy as np
 import pandas as pd
@@ -16,15 +16,17 @@ from k_onda.central import type_registry as tr
 XrData = xr.DataArray | xr.Dataset
 Indexers = dict[str, np.ndarray]
 
-if TYPE_CHECKING:
-    from k_onda.signals import Signal
-
 
 class Threshold(Calculator):
     name = "threshold"
-    comparisons = {">", "<", ">=", "<="}
+    comparisons = (">", "<", ">=", "<=")
 
-    def __init__(self, comparison, threshold):
+    def __init__(
+        self,
+        comparison: str,
+        threshold: Real | pint.Quantity,
+    ):
+        self.validate_type_hints()
         self._validate_configuration(comparison, threshold)
 
         self.threshold = threshold
@@ -37,20 +39,13 @@ class Threshold(Calculator):
         }
 
     def _validate_configuration(self, comparison, threshold):
-        if not isinstance(comparison, str):
-            raise TypeError(
-                f"{self.format_call()}: comparison must be a string."
-            )
-        if comparison not in self.comparisons:
-            known_comparisons = ", ".join(sorted(self.comparisons))
-            raise ValueError(
-                f"{self.format_call()}: unknown comparison {comparison!r}. "
-                f"Available comparisons: {known_comparisons}."
-            )
-        if threshold is None:
-            raise TypeError(
-                f"{self.format_call()}: threshold cannot be None."
-            )
+        self.validate_parameter("comparison", comparison, choices=self.comparisons)
+        self.validate_number(
+            "threshold",
+            threshold,
+            finite=True,
+            allow_quantity=True,
+        )
 
     @property
     def fixed_output_class(self):
@@ -66,16 +61,12 @@ class BinaryCalculatorMixin:
     accepted_data_types = (xr.DataArray,)
 
     def _validate_configuration(self, tolerance_decimals):
-        if isinstance(tolerance_decimals, bool) or not isinstance(
-            tolerance_decimals, int
-        ):
-            raise TypeError(
-                f"{self.format_call()}: tolerance_decimals must be an integer."
-            )
-        if tolerance_decimals < 0:
-            raise ValueError(
-                f"{self.format_call()}: tolerance_decimals cannot be negative."
-            )
+        self.validate_number(
+            "tolerance_decimals",
+            tolerance_decimals,
+            number_type=int,
+            minimum=0,
+        )
     
     @staticmethod
     def _coord_values(coord: xr.DataArray) -> tuple[np.ndarray, pint.Unit]:
@@ -192,12 +183,7 @@ class BinaryCalculatorMixin:
                 "coordinate values are not unique at the selected matching precision",
             )
 
-        try:
-            other_positions = other_index.get_indexer(reference_index)
-        except pd.errors.InvalidIndexError as error:
-            raise self._mismatched_grid_error(
-                dim, "coordinate matching is ambiguous"
-            ) from error
+        other_positions = other_index.get_indexer(reference_index)
 
         reference_indices = np.flatnonzero(other_positions >= 0)
         if not len(reference_indices):
@@ -328,12 +314,6 @@ class BinaryCalculatorMixin:
             other_overlap = other_overlap.pint.quantify(aligned_units)
         return reference_overlap, other_overlap
 
-    def validate_sig_types(self, signals: Sequence[Signal]) -> None:
-
-        for signal in signals:
-            if not isinstance(signal, tr.BinarySignal):
-                raise TypeError(f"{signal} is not of type BinarySignal.")
-
     def _get_extra_apply_kwargs(self, *inputs):
         apply_kwargs = super()._get_extra_apply_kwargs(*inputs)
         apply_kwargs["data_schemas"] = [input.data_schema for input in inputs]
@@ -344,7 +324,8 @@ class Intersection(BinaryCalculatorMixin, Calculator):
     name = "intersection"
     arity = "two_or_more"
 
-    def __init__(self, *, tolerance_decimals=9):
+    def __init__(self, *, tolerance_decimals: int = 9):
+        self.validate_type_hints()
         self._validate_configuration(tolerance_decimals)
         self.tolerance_decimals = tolerance_decimals
 
@@ -377,7 +358,8 @@ class ApplyMask(BinaryCalculatorMixin, Calculator):
     name = "apply_mask"
     arity = "two"
 
-    def __init__(self, *, tolerance_decimals=9):
+    def __init__(self, *, tolerance_decimals: int = 9):
+        self.validate_type_hints()
         self._validate_configuration(tolerance_decimals)
         self.tolerance_decimals = tolerance_decimals
 

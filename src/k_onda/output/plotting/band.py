@@ -150,7 +150,7 @@ class BandRenderer:
         if (
             isinstance(where, (tuple, list)) 
             and len(where) == 2
-            and all(isinstance(val, int) for val in where)
+            and all(isinstance(val, Integral) for val in where)
             ):
             cell = tuple(where)
             return [panel for panel in flat_panels if cell == (panel.row, panel.col)]
@@ -163,7 +163,6 @@ class BandRenderer:
                 if all(key in panel.coords and where[key] == panel.coords[key] 
                        for key in where)
                 ]
-        raise ValueError(f"Unknown value for where {where}")
 
     def resolve_config(self, band_spec):
 
@@ -213,5 +212,3 @@ class BandRenderer:
             )
             ax.add_patch(rect)
             return rect
-
-        raise ValueError("A band requires an x or y interval.")

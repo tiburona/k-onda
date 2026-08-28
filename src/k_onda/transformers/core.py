@@ -58,6 +58,8 @@ class Transformer(ValidationMixin):
         multi_input_map_policy="exact_keys",
         ):
 
+        self._validate_arity(len(inputs))
+
         key_spec = KeySpec(input_name=key, output_mode=key_output_mode)
 
         multi_spec = MultiSpec(
@@ -112,9 +114,9 @@ class Transformer(ValidationMixin):
 
     def _multi_input_call_on_collection_map(self, *inputs, key_spec=None, multi_spec=None):
         if not all(isinstance(input, tr.CollectionMap) for input in inputs):
-            raise ValueError(
+            raise TypeError(
                 f"{self.format_call()}: received a CollectionMap and another input "
-                " type as arguments."
+                "type as arguments."
                 )
         if multi_spec.map_policy == "exact_keys":
             if not all(input.keys() == inputs[0].keys() for input in inputs[1:]):
@@ -136,7 +138,7 @@ class Transformer(ValidationMixin):
         else:
             raise NotImplementedError(
                 f"{self.format_call()} was called with multi_input_map_policy " 
-                "{self.multi_input_map_policy} but this policy has not been implemented. "
+                f"{multi_spec.map_policy!r}, but this policy has not been implemented. "
                 "Use 'exact_keys'."
             )  
 
@@ -161,11 +163,17 @@ class Transformer(ValidationMixin):
 
     def _multi_input_call_on_collection(self, *inputs, key_spec=None, multi_spec=None):
 
+        if not all(isinstance(input, tr.Collection) for input in inputs):
+            raise TypeError(
+                f"{self.format_call()}: received a Collection and another input "
+                "type as arguments."
+            )
+
         if multi_spec.collection_policy != "exactly_one":
             raise NotImplementedError(
                 f"{self.format_call()} was called with multi_input_collection_policy " 
-                "{multi_spec.collection_policy} but this policy has not been implemented. "
-                    "Use 'exactly_one'."
+                f"{multi_spec.collection_policy!r}, but this policy has not been "
+                "implemented. Use 'exactly_one'."
                 )  
 
         first_member = inputs[0].members[0]
@@ -197,7 +205,7 @@ class Transformer(ValidationMixin):
             if len(matching_members) != 1:
                 raise ValueError(
                     f"{self.format_call()}: found {len(matching_members)} for "
-                    "{member.display_id} but the match policy is exactly_one."
+                    f"{member.display_id} but the match policy is exactly_one."
                 )
                 
             else:
@@ -322,13 +330,29 @@ class Transformer(ValidationMixin):
     def _infer_output_class(self, entity):
         return getattr(entity, "output_class", type(entity))
 
-    def _validate_input(self, *inputs, **kwargs):
-        if (self.arity in [1, "1", "one"] and len(inputs) != 1 or
-            self.arity in [2, "2", "two"] and len(inputs) != 2 or
-            self.arity in ["one_or_more", ">=1"] and len(inputs) < 1 or
-            self.arity in ["two_or_more", ">=2"] and len(inputs) < 2 
+    def _validate_arity(self, input_count):
+        if (self.arity in [1, "1", "one"] and input_count != 1 or
+            self.arity in [2, "2", "two"] and input_count != 2 or
+            self.arity in ["one_or_more", ">=1"] and input_count < 1 or
+            self.arity in ["two_or_more", ">=2"] and input_count < 2
             ):
-                raise ValueError(f"{self.format_call()}: takes {self.arity} inputs.")
+            arity_description = {
+                1: "one input",
+                "1": "one input",
+                "one": "one input",
+                2: "two inputs",
+                "2": "two inputs",
+                "two": "two inputs",
+                "one_or_more": "one or more inputs",
+                ">=1": "one or more inputs",
+                "two_or_more": "two or more inputs",
+                ">=2": "two or more inputs",
+            }[self.arity]
+            raise ValueError(
+                f"{self.format_call()}: takes {arity_description}."
+            )
+
+    def _validate_input(self, *inputs, **kwargs):
 
         if "key_spec" in kwargs and kwargs["key_spec"].input_name is not None:
             if not any(isinstance(input.data_schema, tr.DatasetSchema) for input in inputs):
@@ -474,18 +498,12 @@ class Calculator(Transformer):
 
     def _validate_input(self, *inputs, **kwargs):
         super()._validate_input(*inputs, **kwargs)
-        acceptable_types = [
-            tr.Signal,
-            tr.SignalStack,
-            tr.Collection,
-            tr.CollectionMap,
-            tr.DataIdentity,
-        ]
         for input in inputs:
-            if not any([isinstance(input, typ) for typ in acceptable_types]):
-                raise ValueError(
-                    f"{self.format_call()}: Calculators can't operate on type {type(input)}"
-                    )
+            if not isinstance(input, (tr.Signal, tr.SignalStack)):
+                raise TypeError(
+                    f"{self.format_call()}: calculator inputs must resolve to "
+                    f"Signals, not {type(input).__name__}."
+                )
     
     def _get_apply_kwargs(self, *inputs, key_spec):
         schema = inputs[0].data_schema

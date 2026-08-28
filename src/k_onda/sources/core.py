@@ -19,6 +19,7 @@ from k_onda.transformers import SelectMixin
 from k_onda.signals import Signal
 from k_onda.mixins import DictDelegator, ConfigSetter, FactorMixin
 from k_onda.transformers import feature_registry
+from k_onda.utils import validate_types
 from k_onda.provenance import ProvenanceContext
 from k_onda.central import type_registry, Schema
 from k_onda.utils import OrderedSet
@@ -214,7 +215,13 @@ class DataIdentity(AnnotatorMixin, SelectMixin, FactorMixin):
 
 
 class FeatureMixin:
-    def extract_features(self, *features, registry=feature_registry, group_by=None):
+    @validate_types
+    def extract_features(
+        self,
+        *features: str,
+        registry: Mapping[str, Callable[..., object]] = feature_registry,
+        group_by: str | Callable[[object], object] | None = None,
+    ):
         from k_onda.transformers import ExtractFeatures
 
         return ExtractFeatures(*features, registry=registry, group_by=group_by)(self)
@@ -337,15 +344,28 @@ class Collection(
             self, 
             spec=None, 
             func=None, 
-            order="ascending", 
+            order=None,
             sort_by=None, 
             labels=None, 
             recipe=None
             ):
         from k_onda.transformers.recipes import classification_registry
 
-        if recipe is None and isinstance(self.members[0], type_registry.Neuron):
-            recipe = "classify_neurons"
+        if not self.members:
+            raise ValueError("classify(): cannot classify an empty Collection.")
+        if recipe is None:
+            if isinstance(self.members[0], type_registry.Neuron):
+                recipe = "classify_neurons"
+            else:
+                raise ValueError(
+                    "classify(): recipe is required for a Collection that does "
+                    "not contain Neurons."
+                )
+        if recipe not in classification_registry:
+            raise ValueError(
+                f"classify(): unknown recipe {recipe!r}; registered recipes are "
+                f"{sorted(classification_registry)!r}."
+            )
         return classification_registry[recipe](
             self,   
             spec=spec,

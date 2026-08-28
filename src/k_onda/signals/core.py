@@ -1,6 +1,5 @@
 import numpy as np
-import xarray as xr
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Sequence
 from copy import deepcopy
 
 from ..transformers.transformer_mixins import (
@@ -13,6 +12,7 @@ from k_onda.transformers import SelectMixin
 from k_onda.graph.traversal import build_generations, list_nodes, rebuild_tree
 from k_onda.central.registry import type_registry
 from k_onda.output import PlotMixin
+from k_onda.utils import validate_types
 
 @type_registry.register
 class Signal(
@@ -172,18 +172,17 @@ class Signal(
             if self._transform is None and self.transformer is None:
                 raise ValueError("A non-source Signal needs either a concrete " \
                 "transform or a transformer recipe.")
-        return True
 
-    def __add__(self, other):
+    def __add__(self, other: object):
         return self.add(other)
 
-    def __sub__(self, other):
+    def __sub__(self, other: object):
         return self.subtract(other)
 
-    def __mul__(self, other):
+    def __mul__(self, other: object):
         return self.multiply_by(other)
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: object):
         return self.divide_by(other)
 
     def __deepcopy__(self, memo):
@@ -282,16 +281,11 @@ class ScalarSignal(Signal):
 
 @type_registry.register
 class DatasetSignal(Signal):
-    def __init__(self, inputs, **kwargs):
-        super().__init__(inputs, **kwargs)
-
     def __getitem__(self, key):
         return self.payload(key)
 
     def payload(self, key):
         def transform(data):
-            if not isinstance(data, (xr.Dataset, dict)):
-                raise TypeError("`data` must be a dictionary or xarray Dataset")
             return data[key]
 
         return type(self)(
@@ -512,21 +506,37 @@ class AggregatedSignal(Signal):
 @type_registry.register
 class IndexedSignal(Signal):
 
-    def kmeans(self, n_clusters=8, **kwargs):
+    @validate_types
+    def kmeans(
+        self,
+        n_clusters: int = 8,
+        *,
+        implementation: Callable[..., tuple[object, object]] | None = None,
+    ):
         from k_onda.transformers import KMeans
 
-        return KMeans(n_clusters=n_clusters, **kwargs)(self)
+        return KMeans(n_clusters, implementation=implementation)(self)
 
     def classify(
-            self, 
-            label_name, 
-            spec=None, 
-            func=None, 
-            order="ascending", 
-            labels=None,
-            sort_by=None,
-            ):
+        self,
+        label_name: str,
+        *,
+        spec: dict[str, object] | None = None,
+        func: Callable[..., Iterable[object]] | None = None,
+        order: str | None = None,
+        sort_by: str | None = None,
+        labels: Sequence[object] | None = None,
+    ):
         from k_onda.sinks import Classify
+
+        classifier = Classify(
+            label_name,
+            spec=spec,
+            func=func,
+            order=order,
+            sort_by=sort_by,
+            labels=labels,
+        )
 
         node = self.compile()
         chain = []
@@ -534,21 +544,11 @@ class IndexedSignal(Signal):
             chain.append(node)
             node = node.inputs[0] if node.inputs else None
 
-        return Classify(
-            label_name, 
-            spec=spec, 
-            func=func,
-            order=order,
-            sort_by=sort_by,
-            labels=labels
-            )(*chain)
+        return classifier(*chain)
 
 
 @type_registry.register
 class SelectorSignal(Signal):
-    def __init__(self, inputs, **kwargs):
-        super().__init__(inputs, **kwargs)
-
     @property
     def output_class(self):
         return getattr(self.inputs[0], "output_class", type(self.inputs[0]))

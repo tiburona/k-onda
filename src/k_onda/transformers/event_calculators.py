@@ -1,7 +1,6 @@
 import numpy as np
 import xarray as xr
 
-import pint
 from .core import Calculator
 
 from k_onda.central import type_registry as tr
@@ -10,16 +9,6 @@ from k_onda.central import type_registry as tr
 class Rate(Calculator):
     name = "rate"
     key_mode = "standalone"
-
-    def __init__(self, *, intervals=None, exclude_initial=None):
-        if intervals is not None and exclude_initial is not None:
-            raise ValueError(
-                f"{self.format_call()}: provide at most one of intervals and "
-                "exclude_initial."
-            )
-
-        self.intervals = intervals
-        self.exclude_initial = exclude_initial
 
     @property
     def fixed_output_class(self):
@@ -31,7 +20,6 @@ class Rate(Calculator):
         from ..signals import BinarySignal
 
         return {
-            "start": parent.start,
             "duration": parent.duration,
             "is_binary": isinstance(parent, BinarySignal),
         }
@@ -62,27 +50,34 @@ class Rate(Calculator):
         from ..signals import BinarySignal, PointProcessSignal
 
         if not isinstance(input, (PointProcessSignal, BinarySignal)):
-            raise ValueError("Rate can only operate on EventSignal or BinarySignal.")
+            raise TypeError(
+                f"{self.format_call()}: input must be a PointProcessSignal or "
+                "BinarySignal."
+            )
 
-    def _prepare_rate_inputs(self, data, data_schema, intervals, exclude_initial):
+    def _resolve_rate_data(self, data, data_schema):
         if isinstance(data_schema, tr.DatasetSchema):
             time_key = data_schema.default_variable_for("time")
             data = data[time_key]
-            data_schema = data_schema[time_key]
+        return data
 
-        concrete_dim = data_schema.concrete_dim_from("time")
-
-        intervals = intervals(data) if callable(intervals) else intervals
-        exclude_initial = (
-            exclude_initial(data) if callable(exclude_initial) else exclude_initial
+    def _validate_duration(self, duration):
+        if duration is None:
+            raise ValueError(
+                f"{self.format_call()}: input duration is required for this rate "
+                "calculation."
+            )
+        self.validate_number(
+            "input duration",
+            duration,
+            minimum=0,
+            nonzero=True,
+            finite=True,
+            allow_quantity=True,
         )
-        return data, data_schema, concrete_dim, intervals, exclude_initial
 
     @staticmethod
     def _count_binary_events(data):
-        if isinstance(data, xr.Dataset):
-            data = next(iter(data.data_vars.values()))
-
         try:
             mag = data.pint.magnitude
         except Exception:
@@ -97,61 +92,20 @@ class Rate(Calculator):
     def _apply_inner(
         self,
         data,
-        start=None,
-        duration=None,
-        is_binary=False,
-        data_schema=None,
         *args,
+        duration,
+        is_binary,
+        data_schema,
         **kwargs,
     ):
 
+        self._validate_duration(duration)
+        data = self._resolve_rate_data(data, data_schema)
         if is_binary:
-            if self.intervals is not None or self.exclude_initial is not None:
-                raise ValueError(
-                    "Cannot select data with `intervals` or `exclude_initial` for BinarySignal."
-                )
-            return self._count_binary_events(data) / duration
-
-        selected_data, data_schema, concrete_dim, intervals, exclude_initial = (
-            self._prepare_rate_inputs(
-                data, data_schema, self.intervals, self.exclude_initial
-            )
-        )
-        search_data = (
-            selected_data.data
-            if isinstance(selected_data, xr.DataArray)
-            else selected_data
-        )
-
-        if exclude_initial is not None:
-            if start is None:
-                raise ValueError(
-                    "Rate cannot apply exclude_initial because the input has no "
-                    "start time."
-                )
-            cutoff = start + exclude_initial
-            index = np.searchsorted(search_data, cutoff)
-            selected_data = selected_data[index:]
-            num_events = len(selected_data)
-            duration = duration - exclude_initial
-            return num_events / duration
-
-        if intervals is not None:
-            ureg = pint.get_application_registry()
-            starts = np.searchsorted(
-                search_data, [interval[0] for interval in intervals]
-            )
-            stops = np.searchsorted(
-                search_data,
-                [interval[1] + 10 ** (-9) * ureg.s for interval in intervals],
-            )
-            num_events = sum(
-                len(selected_data[start:stop]) for start, stop in zip(starts, stops)
-            )
-            duration = sum([interval[1] - interval[0] for interval in intervals])
-            return num_events / duration
-
-        return len(selected_data) / duration
+            event_count = self._count_binary_events(data)
+        else:
+            event_count = len(data)
+        return event_count / duration
 
     def _wrap_result(self, result, *args):
         result = xr.DataArray(result)

@@ -11,7 +11,7 @@ from .selector import SpecifySelection, SelectMixin, SliceSelection, PlanSelecti
 from .aggregator import AssembleArray, GroupBy, ReduceDim
 from .feature_registry import feature_registry
 from .feature_transformers import ExtractFeatures
-from .classifier_calculators import KMeans
+from .classifier_calculators import KMeans, SklearnKMeans
 
 __all__ = [
     "Transform",
@@ -43,6 +43,7 @@ __all__ = [
     "feature_registry",
     "ExtractFeatures",
     "KMeans",
+    "SklearnKMeans",
     "SliceSelection",
     "PlanSelection"
 ]

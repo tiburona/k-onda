@@ -12,6 +12,15 @@ prioritized or promised. Broad, prioritized directions belong in the
 - Support normalization within groups defined by repeated values of an arbitrary
   user-named coordinate.
 
+### Histograms
+
+- Support weighted histograms after deciding how data-aligned weights enter the
+  API. Prefer treating weights as a second aligned Signal, with possible
+  Dataset-key convenience, rather than embedding a potentially large array in
+  calculator configuration. A previously dormant internal path handled either
+  one weight per value on the histogrammed axis or a full-shape weight array,
+  but no public API could reach it.
+
 ## Schema infrastructure
 
 - Let coordinate schemas declare a value-type family, such as numeric, datetime,
@@ -32,6 +41,13 @@ prioritized or promised. Broad, prioritized directions belong in the
   dimensions, dtypes, and units without printing full data values. Avoid adding a
   materialization note for every downstream node unless a future verbose mode
   explicitly requests the complete graph path.
+
+
+## Selection
+
+- I removed intervals and exclude initial from `Rate` because I decided they should be
+  `select`'s responsibility. These parameters used to accept callables. Eventually
+  it would be nice if `select` could accept a callable.
 
 ## Plotting
 

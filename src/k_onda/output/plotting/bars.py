@@ -32,11 +32,6 @@ class BarRenderer:
         role_source_map,
         style_rules,
     ):
-        if plot_type not in self.supported_plot_types:
-            raise NotImplementedError(
-                f"Plot type {plot_type!r} is not implemented."
-            )
-
         x_source = role_source_map["x"]
         panel_data = self.get_panel_data(panel, data)
         x = panel_data.coords[x_source.name].pint.magnitude

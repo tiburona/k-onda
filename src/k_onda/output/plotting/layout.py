@@ -58,11 +58,7 @@ class SetLayout(PlotDirective):
     def _validate_configuration(self, by, panels):
         if by is not None:
             self.validate_parameter("by", by, nonempty=True)
-            self.validate_string_iterable("value in by", by)
-            if len(set(by)) != len(by):
-                raise ValueError(
-                    f"{self.format_call()}: condition names in by cannot be repeated."
-                )
+            self.validate_string_iterable("value in by", by, unique=True)
 
         self.validate_parameter("panels", panels, nonempty_string=True)
 
