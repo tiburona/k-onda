@@ -12,27 +12,26 @@ Experiment inherits from AnnotatorMixin, but is not currently setting an annotat
 
 ## Coordinates and schemas
 
-K-Onda does not yet have a general, unit-aware policy for coordinate tolerance.
-Operations currently vary between exact coordinate equality and tolerances expressed
-as a number of decimal places. Decimal places do not describe a stable physical
-tolerance because their meaning changes when the same coordinate is represented in
-seconds, milliseconds, or another compatible unit. Coordinate schemas and shared
-comparison utilities should eventually express tolerances with units or derive them
-from a declared grid resolution, convert compatible units before comparison, and
-distinguish trivial floating-point differences from genuinely different grids that
-require alignment or resampling.
+Right now the only way to express tolerance for floating point differences across a number of calculators is 
+with the parameter tolerance_decimals. This is unsatisfactory -- the meaning of a decimal changes with the unit.
+I need some kind of general, unit-aware approach to this.  
 
-K-Onda also lacks a general policy for propagating coordinates through operations
-that align multiple inputs. Arithmetic currently returns the primary input's schema,
-but xarray drops non-index coordinates whose values conflict between operands. For
-example, subtracting tone and pretone data preserves their shared relative-time
-coordinates but drops absolute time and condition coordinates, while the arithmetic
-output schema still declares those coordinates. Multi-input operations need to track
-which coordinates are required to align, which are preserved because they agree,
-which are transformed, and which are intentionally dropped, and then apply the same
-decisions to the output schema. Arithmetic is the known concrete case, but all
-transformers that rely on xarray's implicit coordinate propagation should be audited
-for the same data/schema divergence.
+Arithmetic calculators compute which coordinates are non-matching and appropriately drop them,
+but any calculator that can take more than one input needs to do the same. (Right now this is basically
+Intersection and ApplyMask, but this is a foundational issue that should be addressed for all multi-input 
+transformers.)  Also right now absolute coordinates are automatically assumed to differ
+in a multi input operation, but that's not always so.  For example, you could have decide you wanted to 
+subtract delta from theta over the same time range.  I need a way to infer that the absolute time
+coordinates are safe (probably using the provenance info of the signal to figure out that it came 
+from the same source.) 
+
+`Intersection` does not yet support signals sampled on genuinely different grids
+(for example, a 30 fps video-derived mask and power calculated every 0.01 seconds).
+It needs an alignment/resampling policy and a decision about the output
+grid. `Intersection` should also support locations described by multiple paired
+coordinates (for example, repeated observations with `x` and `y` coordinates).  This is probably a 
+broader issue, and is another one of those things that needs to be centrally addressed for all multi
+unit calculators.  
 
 
 ## Graph and Signals
@@ -47,19 +46,6 @@ I had `PointProcessSignal` stop inheriting from DatasetSignal because a `PointPr
 
 Right now `payload` is guaranteed to return a signal of the same type for `DatasetSignal`s and I don't think that's right.
 
-`Intersection` and `ApplyMask`'s `__call__`s need to be evaluated for how they're working with keys, how they apply to stacks, and in general to be brought up-to-date with the code base.  
-
-`Intersection` does not yet support signals sampled on genuinely different grids
-(for example, a 30 fps video-derived mask and power calculated every 0.01 seconds).
-It needs an explicit alignment/resampling policy and a decision about the output
-grid. Coordinate tolerance should handle only trivial floating-point differences
-between grids that are otherwise equivalent. It should eventually be possible to
-specify that tolerance with units rather than only as a number of decimal places.
-`Intersection` should also support locations described by multiple paired
-coordinates (for example, repeated observations with `x` and `y` coordinates),
-and define pairing semantics for repeated coordinates that cannot be matched
-unambiguously by position.
-
 
 ## Loci
 
@@ -69,8 +55,6 @@ There are some forbidden names for loci conditions (e.g., 'time', 'frequency'). 
 
 
 ## Transformers
-
-I should go through all the calculators and make sure that rather than have generic config dictionaries they have separate arguments for the sake of inspectable signatures (or alternatively a params DataClass that would be inspectable), but I should also give them a generic config dictionary or some kind of callable that sweeps up all their params into one object for the sake of pretty printing the graph.
 
 I'm missing dispatch over `SignalMap` for `Transformer` and the `select` mixin.
 
@@ -88,6 +72,8 @@ fixed or user-configurable.
 
 Check the behavior of the various key modes (particularly "rename") and make sure the names here aren't misleading.
 
+`Intersection` and `ApplyMask`'s `__call__`s need to be evaluated for how they're working with keys, how they apply to stacks, and in general to be brought up-to-date with the code base.  
+
 
 ## Selection
 
@@ -104,14 +90,6 @@ of disjoint or overlapping regions on the original axis, including whether to
 drop or mask gaps. It also needs to prevent downstream calculations from assuming
 it is regularly sampled.
 
-`SliceSelection` constructs a relative coordinate by subtracting each selection's
-absolute starting coordinate. Mathematically identical relative grids can therefore
-differ by floating-point noise and fail later exact alignment. Rounding the relative
-coordinate to a fixed number of decimal places is only a provisional workaround,
-because the resulting tolerance depends on the coordinate's current unit. Selection
-should instead produce a canonical relative grid by using the broader unit-aware
-coordinate-tolerance or grid-resolution policy.
-
 `DimBounds` is written such that it could have multiple dims, but loci and the selector logic are not.  Multiple dim select should be restored. 
 
 You can't `select_point_process` yet because there's not yet support for ragged arrays.
@@ -120,15 +98,9 @@ The only kind of filtering by condition you can do is by equality; needs expansi
 
 SpecifySelection transformers should probably be edited out of the graph after Slicer placement.
 
-Compiled and uncompiled selection pipelines currently expose schemas from different
-planning stages and therefore cannot reliably be composed as operands. An uncompiled
-`SpecifySelection` still reports its input schema, while compilation replaces it with
-`SliceSelection`, whose schema includes the planned ordinal and relative-coordinate
-dimensions. Two otherwise equivalent pipelines can consequently appear structurally
-incompatible when one has been compiled and the other has not. Until selection's
-planned output schema is available consistently before compilation, callers must keep
-both operands symbolic and compile the combined expression, or compile both operands
-before combining them.
+Right now if you have a compiled signal and an uncompiled signal that you'd at a glance think would be 
+compatible for a multi-signal operation, the compiled one, which may have already had SliceSelectors place, 
+might have a different schema.  Need to decide what to do about this. Maybe just accept and document it.
 
 When making a new ordinal dim during selection, the program should validate and raise if the new loci belong to more than one earlier ordinal dim.  
 
