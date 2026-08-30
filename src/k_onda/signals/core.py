@@ -5,9 +5,9 @@ from copy import deepcopy
 from ..transformers.transformer_mixins import (
     CalculateMixin,
     UnstackMixin,
-    IntersectionMixin,
-    SignalMeanMixin,
+    IntersectionMixin
 )
+
 from k_onda.transformers import SelectMixin
 from k_onda.graph.traversal import build_generations, list_nodes, rebuild_tree
 from k_onda.central.registry import type_registry
@@ -17,7 +17,6 @@ from k_onda.utils import validate_types
 @type_registry.register
 class Signal(
     CalculateMixin,
-    SignalMeanMixin,
     SelectMixin,
     IntersectionMixin,
     PlotMixin,
@@ -366,7 +365,7 @@ class ValidityMask(BinarySignal):
 
 
 @type_registry.register
-class SignalStack(CalculateMixin, SignalMeanMixin, UnstackMixin):
+class SignalStack(CalculateMixin, UnstackMixin):
     def __init__(
         self,
         inputs,

@@ -30,7 +30,7 @@ def fwhm(
             key_output_mode=key_output_mode,
         )
         .reduce(reduce_dim)
-        .mean()
+        .aggregate()
     )
 
 
@@ -43,7 +43,7 @@ def firing_rate(
     return input.rate(
         key=key,
         key_output_mode=key_output_mode,
-    ).mean()
+    ).aggregate()
 
 
 feature_registry["fwhm"] = fwhm

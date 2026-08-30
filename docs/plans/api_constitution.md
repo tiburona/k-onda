@@ -28,20 +28,12 @@ loci.where(conditions={"treatment": "drug"})
 4. When a fluent method directly applies one transformer, the transformer's
 constructor should mirror the fluent method's configuration parameters.
 Parameters that control how the transformer is applied, including additional
-data inputs, instead mirror parameters to the transformer's `__call__`.
+data inputs, mirror parameters to the transformer's `__call__`.
 
-Some fluent methods are planners rather than direct transformer wrappers. They
+5. Some fluent methods are planners rather than direct transformer wrappers. They
 may normalize public syntax, inspect the planned schema, and compose multiple
-transformers or directives. `select()`, collection `mean()`, and the plotting
-methods that convert public dictionaries or keyword arguments into plot-spec
-records are current examples. Their signatures should describe the public
-operation rather than mirror any one internal transformer or directive. These
-methods validate their public syntax at the API boundary; the objects they
-configure still validate their own normalized configuration. Planning is
-permitted here, but numerical calculation and rendering remain in the configured
-objects.
+transformers or directives. `select()` and collection `aggregate()` are current examples.
+Their signatures should describe the public operation rather than mirror any one 
+internal transformer or directive.
 
-Constructor parameters used only for developer-facing dependency injection are
-not operation configuration and need not appear in a fluent method. They remain
-keyword-only. `Render`'s resolver and renderer collaborators are the current
-example.
+6. Constructor parameters used only for dependency injection are not operation configuration and shouldn't appear in a fluent method. `Render`'s resolvers and renderers are the current example.

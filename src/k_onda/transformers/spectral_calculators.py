@@ -240,7 +240,7 @@ class Spectrogram(PaddingCalculator):
         # auxiliary time coords
         def get_time_coords(coord):
             time_coord_base = np.arange(result.shape[-1]) * dt
-            is_relative = data_schema.coord_by_name(coord).is_relative
+            is_relative = data_schema.coord_by_name(coord).reference_frame == "relative"
             
             if is_relative:
                 time_dim_coord = time_coord_base 

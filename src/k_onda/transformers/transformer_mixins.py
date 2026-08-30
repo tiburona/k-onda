@@ -242,6 +242,34 @@ class CalculateMixin:
         )
 
     @validate_types
+    def mean(
+        self,
+        dim: str | Iterable[str] | None = None,
+        *,
+        key: str | None = None,
+        key_output_mode: str | None = None,
+    ):
+        from . import ReduceDim
+
+        return ReduceDim(dim, method="mean")(
+            self, key=key, key_output_mode=key_output_mode
+        )
+
+    @validate_types
+    def std(
+        self,
+        dim: str | Iterable[str] | None = None,
+        *,
+        key: str | None = None,
+        key_output_mode: str | None = None,
+    ):
+        from . import ReduceDim
+
+        return ReduceDim(dim, method="std")(
+            self, key=key, key_output_mode=key_output_mode
+        )
+
+    @validate_types
     def normalize(
         self,
         method: str = "rms",
@@ -480,29 +508,14 @@ class UnstackMixin:
         return UnstackSignals()(self)
 
 
-class SignalMeanMixin:
-    @validate_types
-    def mean(
-        self,
-        dim: str | Iterable[str] | None = None,
-        *,
-        key: str | None = None,
-        key_output_mode: str | None = None,
-    ):
-        from . import ReduceDim
-
-        return ReduceDim(dim, method="mean")(
-            self, key=key, key_output_mode=key_output_mode
-        )
-
-
 class AggregateMixin:    
 
     @validate_types
-    def mean(
+    def aggregate(
         self,
-        across: str | Iterable[str] | None = None,
+        across: str | Iterable[str] = "signal",
         *,
+        method: str = "mean",
         group_by: str | Iterable[str] | None = None,
         preserve_groups: bool = False,
         order: str = "sequential",
@@ -516,8 +529,8 @@ class AggregateMixin:
                 "Simultaneous averaging has not been implemented."
             )
 
-        across = self._normalize_mean_names("across", across)
-        group_by = self._normalize_mean_names("group_by", group_by)
+        across = self._normalize_aggregate_names("across", across)
+        group_by = self._normalize_aggregate_names("group_by", group_by)
 
         planned_data_schema = self.get_planned_data_schema()
 
@@ -544,11 +557,11 @@ class AggregateMixin:
 
         stages = self._create_stages(group_by, across, signal.data_schema)
     
-        signal = self._group_and_reduce_in_stages(signal, stages)
+        signal = self._group_and_reduce_in_stages(signal, stages, method=method)
 
         return signal
 
-    def _normalize_mean_names(self, parameter, value):
+    def _normalize_aggregate_names(self, parameter, value):
         if value is None:
             return []
         names = [value] if isinstance(value, str) else list(value)
@@ -615,12 +628,12 @@ class AggregateMixin:
 
         return stages
         
-    def _group_and_reduce_in_stages(self, signal, stages):
+    def _group_and_reduce_in_stages(self, signal, stages, method="mean"):
 
         for stage in stages:
             if stage.get("group_by"):
                 signal = tr.GroupBy(coords=stage["group_by"])(signal)
-            signal = tr.ReduceDim(stage["reduce_dim"])(signal)
+            signal = tr.ReduceDim(stage["reduce_dim"], method=method)(signal)
         
         return signal
     

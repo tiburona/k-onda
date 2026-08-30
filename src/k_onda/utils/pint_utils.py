@@ -7,6 +7,7 @@ import xarray as xr
 from k_onda.central import type_registry as tr
 
 DIM_DEFAULT_UNITS = {"time": "s", "frequency": "Hz"}
+ureg = pint.get_application_registry()
 
 
 def is_unitful(value):
@@ -16,7 +17,8 @@ def is_unitful(value):
         return True
     if isinstance(value, xr.DataArray):
         if hasattr(value, 'pint') and hasattr(value.pint, 'units'):
-            return value.pint.units not in ('dimensionless', None)
+            units = value.pint.units
+            return units is not None and units != ureg.dimensionless
     if isinstance(value, Iterable):
         if all([isinstance(v, pint.Quantity) for v in value]):
             return True

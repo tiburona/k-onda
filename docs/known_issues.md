@@ -120,6 +120,16 @@ The only kind of filtering by condition you can do is by equality; needs expansi
 
 SpecifySelection transformers should probably be edited out of the graph after Slicer placement.
 
+Compiled and uncompiled selection pipelines currently expose schemas from different
+planning stages and therefore cannot reliably be composed as operands. An uncompiled
+`SpecifySelection` still reports its input schema, while compilation replaces it with
+`SliceSelection`, whose schema includes the planned ordinal and relative-coordinate
+dimensions. Two otherwise equivalent pipelines can consequently appear structurally
+incompatible when one has been compiled and the other has not. Until selection's
+planned output schema is available consistently before compilation, callers must keep
+both operands symbolic and compile the combined expression, or compile both operands
+before combining them.
+
 When making a new ordinal dim during selection, the program should validate and raise if the new loci belong to more than one earlier ordinal dim.  
 
 In a true DAG (i.e., not a tree, with consumers that share an upstream node), `walk_graph` will create multiple SelectionSlicers.  At some point it's consumer named argument needs to be more expressive to prevent this kind of duplication.
