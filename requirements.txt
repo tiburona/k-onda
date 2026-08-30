@@ -400,6 +400,8 @@ traitlets==5.15.0
     #   nbclient
     #   nbconvert
     #   nbformat
+typeguard==4.6.0
+    # via k-onda
 typing-extensions==4.15.0
     # via
     #   anyio
@@ -409,6 +411,7 @@ typing-extensions==4.15.0
     #   ipython
     #   pint
     #   referencing
+    #   typeguard
 tzdata==2025.3
     # via
     #   arrow
