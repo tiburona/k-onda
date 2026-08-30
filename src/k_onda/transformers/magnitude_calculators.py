@@ -46,14 +46,42 @@ class Arithmetic(Calculator):
     def output_schema(self, *input_schemas):
         if len(input_schemas) == 1:
             return input_schemas[0]
-        last_schema = input_schemas[0]
-        for schema in input_schemas[1:]:
-            if not last_schema.is_superset_of(schema):
+        first_schema = input_schemas[0]
+        other_schemas = input_schemas[1:]
+        for schema in other_schemas:
+            if not first_schema.axes_are_compatible_with(schema):
                 raise ValueError(
                     f"{self.format_call()}: Operands have incompatible data schemas."
                 )
-        return input_schemas[0]
+        return self._derive_output_schema(first_schema, other_schemas)
 
+    def _derive_output_schema(self, first_schema, other_schemas):
+        schema = first_schema.copy()
+        for axis in first_schema.axes:
+            for coord in axis.coords:
+                if not self._keep_coord(other_schemas, coord):
+                    schema = schema.drop_coord_from_axis(axis, coord)
+        return schema
+
+    def _keep_coord(self, other_schemas, coord):
+        if coord.role == "index":
+            return True
+        other_coords = [
+            other_coord
+            for schema in other_schemas
+            if (other_coord := schema.coord_by_name(coord.name)) is not None
+        ]
+        if not other_coords:
+            return True
+        if (
+            coord.is_condition and 
+            all(other.values_sequence == coord.values_sequence for other in other_coords)
+            ):
+            return True
+        if coord.reference_frame == "relative":
+            return True
+        return False
+        
     def _apply_inner(self, *input_data, **kwargs):
         return xr.align(*input_data, join=self.alignment)
   

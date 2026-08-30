@@ -175,48 +175,64 @@ class Transformer(ValidationMixin):
                 f"{multi_spec.collection_policy!r}, but this policy has not been "
                 "implemented. Use 'exactly_one'."
                 )  
-
-        first_member = inputs[0].members[0]
         
         return tr.Collection(
             [
-                self._call_on_collection_members(member, inputs, first_member, key_spec, multi_spec) 
+                self._call_on_collection_members(member, inputs, key_spec, multi_spec) 
                 for member in inputs[0].members
                 ]
         )
 
-    def _construct_conditions(self, signal, multi_spec):
-        if multi_spec.match_on is not None:
-            return {
-                condition: getattr(signal, condition, None) 
-                for condition in multi_spec.match_on
-                }
-        else:
-            return {
-                "subject": getattr(signal, "subject", None),
-                "data_identity": getattr(signal, "data_identity", "None")
-                }
+    def _construct_conditions(self, member, multi_spec):
+        if isinstance(member, tr.Collection):
 
-    def _call_on_collection_members(self, member, collections, first_member, key_spec, multi_spec):
+            member_conditions = [
+                self._construct_conditions(child, multi_spec) for child in member
+            ]
+            reference = member_conditions[0]
+
+            if any(conditions != reference for conditions in member_conditions[1:]):
+                raise ValueError(
+                    "Nested Collection members do not share one matching identity."
+                )
+
+            return reference
+
+        names = multi_spec.match_on or ("subject", "data_identity")
+        return {
+            name: self._resolve_match_value(member, name)
+            for name in names
+        }
+
+    def _resolve_match_value(self, member, name):
+        if name == "data_identity" and isinstance(member, tr.DataIdentity):
+            return member
+        return getattr(member, name, None)
+
+    def _call_on_collection_members(self, member, collections, key_spec, multi_spec):
+       
         inputs = [member]
         for collection in collections[1:]:
-            matching_members = collection.where(condition=self._construct_conditions(member, multi_spec))
-        
+            reference = self._construct_conditions(member, multi_spec)
+            matching_members = [
+                m for m in collection if self._construct_conditions(m, multi_spec) == reference
+                ]
+
             if len(matching_members) != 1:
                 raise ValueError(
-                    f"{self.format_call()}: found {len(matching_members)} for "
-                    f"{member.display_id} but the match policy is exactly_one."
+                    f"{self.format_call()}: found {len(matching_members)} for collection "
+                    f"but the match policy is exactly_one."
                 )
                 
             else:
                 inputs.extend(matching_members)
 
-        if isinstance(first_member, tr.Collection):
+        if isinstance(member, tr.Collection):
             return self._multi_input_call_on_collection(
                 *inputs, key_spec=key_spec, multi_spec=multi_spec
                 )
             
-        elif isinstance(first_member, tr.DataIdentity):
+        elif isinstance(member, tr.DataIdentity):
             return self._multi_input_call_on_data_identity(*inputs, key_spec=key_spec)
         
         else:
@@ -414,7 +430,7 @@ class Transformer(ValidationMixin):
                 schemas.append(input_schema)
 
         
-        new_key_schema = self.output_schema(*schemas)
+        new_key_schema = self.output_schema(*schemas, **schema_kwargs)
         primary_input_schema = input_schemas[0]
 
         if isinstance(primary_input_schema, tr.DatasetSchema) and key is not None:
@@ -430,7 +446,7 @@ class Transformer(ValidationMixin):
             return new_key_schema
 
     # this gets overridden
-    def output_schema(self, *input_schemas):
+    def output_schema(self, *input_schemas, **schema_kwargs):
         return input_schemas[0].copy()
     
     def resolve_target_data(self, data, key):

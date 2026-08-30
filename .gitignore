@@ -15,6 +15,7 @@ wheels/
 scratch*
 workpad*
 bugs/
+/to_investigate.md
 
 # Local grant/application figure drafts
 grant_figures/

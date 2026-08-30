@@ -233,7 +233,12 @@ class SpikeCluster(DataComponent):
                     coords=(CoordInfo(name="spike", scale="ordinal"),),
                     item_unit=ureg.spike
                 ),
-                AxisInfo("sample", AxisKind.AXIS, metadim="time"),
+                AxisInfo(
+                    "sample", 
+                    AxisKind.AXIS, 
+                    metadim="time", 
+                    coords=(CoordInfo(name="sample", reference_frame="relative"),)
+                ),
             ]
         
         if self.has_electrode_dim:

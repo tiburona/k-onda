@@ -178,10 +178,13 @@ class UnstackSignals(Transformer):
         self._validate_input(signal_stack)
 
         signals = []
-        output_schema = self.output_schema(
+        schema_kwargs = {
+            "stacking_dim": signal_stack.stack_dim,
+            "stack_dim_was_added": signal_stack.stack_dim_was_added,
+        }
+        output_schema = self.make_output_schema(
             signal_stack.data_schema,
-            signal_stack.stack_dim,
-            signal_stack.stack_dim_was_added,
+            **schema_kwargs,
         )
 
         for i in range(len(signal_stack.signals)):
@@ -200,6 +203,7 @@ class UnstackSignals(Transformer):
                 duration=signal_stack.signals[i].duration,
                 context=signal_stack.signals[i].context,
                 last_stack_index=i,
+                schema_kwargs=schema_kwargs,
             )
             signals.append(signal)
 

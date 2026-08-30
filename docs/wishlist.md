@@ -42,6 +42,24 @@ prioritized or promised. Broad, prioritized directions belong in the
   materialization note for every downstream node unless a future verbose mode
   explicitly requests the complete graph path.
 
+- Make dimension-related errors explain the relevant schema history. In
+  particular, when `ExtractFeatures` receives a non-scalar feature result, report
+  the feature name, group or member when available, and the result's remaining
+  dimension names and sizes. Add a reusable diagnostic helper that can walk
+  backward through a signal graph, compare input and output schemas, and report
+  where an unexpected dimension was introduced or inherited. Phrase this as
+  dimension provenance rather than automatically blaming the introducing
+  transformer; a downstream calculator may instead have failed to reduce the
+  dimension. For example, the diagnostic could report that a remaining
+  `"spikes"` dimension was introduced by `StackSignals(dim="spikes")`.
+
+- Make exact-alignment failures report the operands that disagree. An xarray
+  error such as `AlignmentError: cannot align objects with join='exact' where
+  index/labels/sizes are not equal along ... 'spike'` identifies the affected
+  dimension but does not show each operand's size, coordinate values or compact
+  coordinate summary, signal identity, or relevant dimension provenance. K-Onda
+  should add that context while preserving the original alignment exception.
+
 
 ## Selection
 

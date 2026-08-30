@@ -365,13 +365,16 @@ class SliceSelection(Calculator):
             metadim_axis = arr_schema.axes_by_metadim(metadim)[0]
             coords = (
                 CoordInfo(
-                    name=self._new_dim_coord(), metadim=metadim, is_relative=True
+                    name=self._new_dim_coord(), metadim=metadim, reference_frame="relative"
                 ),
             )
             if f"relative_{metadim}" not in arr_schema.coord_names:
                 coords += (
                     CoordInfo(
-                        name=f"relative_{metadim}", metadim=metadim, is_relative=True
+                        name=f"relative_{metadim}", 
+                        metadim=metadim, 
+                        reference_frame="relative", 
+                        role="auxiliary"
                     ),
                 )
             arr_schema = arr_schema.add_coords_to_axis(metadim_axis, coords=coords)
@@ -383,13 +386,24 @@ class SliceSelection(Calculator):
                 created_from_dim=self.locus.dim,
                 created_from_metadim=metadim,
                 coords=(
-                    CoordInfo(name=self.new_dim, ordering="increasing"),
-                    CoordInfo(f"{self.new_dim}_start_{metadim}", metadim=metadim),
-                    CoordInfo(f"{self.new_dim}_stop_{metadim}", metadim=metadim),
+                    CoordInfo(name=self.new_dim, ordering="increasing", role="index"),
+                    CoordInfo(
+                        f"{self.new_dim}_start_{metadim}", 
+                        metadim=metadim, 
+                        role="auxiliary", 
+                        reference_frame="absolute"
+                        ),
+                    CoordInfo(
+                        f"{self.new_dim}_stop_{metadim}", 
+                        metadim=metadim, 
+                        role="auxiliary", 
+                        reference_frame="absolute"),
                     *[CoordInfo(
                         name=condition,
                         is_condition=True, 
-                        levels=self.locus.levels_of_shared_member_conditions[condition]
+                        role="auxiliary",
+                        levels=self.locus.levels_of_shared_member_conditions[condition],
+                        values_sequence=tuple(loc.conditions[condition] for loc in self.locus)
                         ) for condition in self.locus.levels_of_shared_member_conditions]
                     )
             )
@@ -468,6 +482,17 @@ class SliceSelection(Calculator):
                 "not yet implemented."
             )
 
+        if (
+            self.multi_select
+            and self.new_dim is None
+            and not input_schema.is_point_process()
+        ):
+            raise NotImplementedError(
+                f"{self.format_call()}: selecting a LocusSet from continuous "
+                "data without new_dim is not implemented; pass new_dim to "
+                "preserve the selected loci as separate rows."
+            )
+
     def _get_apply_kwargs(self, input, **kwargs):
 
         return {"data_schema": getattr(input, "data_schema")}
@@ -519,7 +544,7 @@ class SliceSelection(Calculator):
             return False
         
         coord = data_schema.coord_by_name(self.locus.dim)
-        if coord and coord.is_relative:
+        if coord and coord.reference_frame == "relative":
             return False
         
         if not data_schema.ordinal_axes_created_from(self.locus.metadim):
@@ -968,7 +993,7 @@ class SliceSelection(Calculator):
                     arr.coords[self.locus.dim] - 
                     arr.coords[self.locus.dim][0] + 
                     self.coord_correction()
-                )
+                ).round(decimals=12)
           
             # every arr will have coord relative_foo
             arr = arr.assign_coords(

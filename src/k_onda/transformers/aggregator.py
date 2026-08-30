@@ -459,7 +459,7 @@ class ReduceDim(Calculator):
 
     def __init__(
         self,
-        dim: str | Iterable[str] | None,
+        dim: str | Iterable[str] | None = None,
         *,
         method: str = "mean",
         weights: xr.DataArray | None = None,

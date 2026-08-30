@@ -158,7 +158,7 @@ class DataComponent(CalculateMixin, SelectMixin):
 
 
 @type_registry.register
-class DataIdentity(AnnotatorMixin, SelectMixin, FactorMixin):
+class DataIdentity(AnnotatorMixin, CalculateMixin, SelectMixin, FactorMixin):
     name = "identity"
     _snapshot_fields = ("component_ids",)
     factor_fields = ("neuron_type",)

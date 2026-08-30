@@ -173,18 +173,6 @@ class Signal(
                 raise ValueError("A non-source Signal needs either a concrete " \
                 "transform or a transformer recipe.")
 
-    def __add__(self, other: object):
-        return self.add(other)
-
-    def __sub__(self, other: object):
-        return self.subtract(other)
-
-    def __mul__(self, other: object):
-        return self.multiply_by(other)
-
-    def __truediv__(self, other: object):
-        return self.divide_by(other)
-
     def __deepcopy__(self, memo):
         
         cls = type(self)

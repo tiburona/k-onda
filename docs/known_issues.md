@@ -10,6 +10,31 @@ This is more of a question than an issue, and probably not an answerable one unt
 Experiment inherits from AnnotatorMixin, but is not currently setting an annotation upon adding a subject.
 
 
+## Coordinates and schemas
+
+K-Onda does not yet have a general, unit-aware policy for coordinate tolerance.
+Operations currently vary between exact coordinate equality and tolerances expressed
+as a number of decimal places. Decimal places do not describe a stable physical
+tolerance because their meaning changes when the same coordinate is represented in
+seconds, milliseconds, or another compatible unit. Coordinate schemas and shared
+comparison utilities should eventually express tolerances with units or derive them
+from a declared grid resolution, convert compatible units before comparison, and
+distinguish trivial floating-point differences from genuinely different grids that
+require alignment or resampling.
+
+K-Onda also lacks a general policy for propagating coordinates through operations
+that align multiple inputs. Arithmetic currently returns the primary input's schema,
+but xarray drops non-index coordinates whose values conflict between operands. For
+example, subtracting tone and pretone data preserves their shared relative-time
+coordinates but drops absolute time and condition coordinates, while the arithmetic
+output schema still declares those coordinates. Multi-input operations need to track
+which coordinates are required to align, which are preserved because they agree,
+which are transformed, and which are intentionally dropped, and then apply the same
+decisions to the output schema. Arithmetic is the known concrete case, but all
+transformers that rely on xarray's implicit coordinate propagation should be audited
+for the same data/schema divergence.
+
+
 ## Graph and Signals
 
 That graph nodes and signals are synonymous is persistently confusing. There needs to be a refactor in which Signal is renamed to Node and Signal either inherits Node or  Signal becomes a Dataclass attached to Node with truly Signal-specific attributes, like sampling rate. 
@@ -72,6 +97,20 @@ the transformer, so it needs validation that reflect the inputs the user passes,
 needs validation that reflect its configured inputs.
 
 Disjoint time selection doesn't provide an observation duration for downstream calculations. `SliceSelection.start_and_duration()` stores tuples of per-bound starts and durations, but `Rate` requires one scalar denominator.
+
+Selecting a `LocusSet` from continuous data without `new_dim` is not yet
+implemented. The operation needs a policy for representing the union
+of disjoint or overlapping regions on the original axis, including whether to
+drop or mask gaps. It also needs to prevent downstream calculations from assuming
+it is regularly sampled.
+
+`SliceSelection` constructs a relative coordinate by subtracting each selection's
+absolute starting coordinate. Mathematically identical relative grids can therefore
+differ by floating-point noise and fail later exact alignment. Rounding the relative
+coordinate to a fixed number of decimal places is only a provisional workaround,
+because the resulting tolerance depends on the coordinate's current unit. Selection
+should instead produce a canonical relative grid by using the broader unit-aware
+coordinate-tolerance or grid-resolution policy.
 
 `DimBounds` is written such that it could have multiple dims, but loci and the selector logic are not.  Multiple dim select should be restored. 
 

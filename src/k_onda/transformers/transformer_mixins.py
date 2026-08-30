@@ -64,6 +64,18 @@ def _operand_kind(
 
 class CalculateMixin:
 
+    def __add__(self, other: object):
+        return self.add(other)
+
+    def __sub__(self, other: object):
+        return self.subtract(other)
+
+    def __mul__(self, other: object):
+        return self.multiply_by(other)
+
+    def __truediv__(self, other: object):
+        return self.divide_by(other)
+
     def _arithmetic(
         self,
         calculator_class,
@@ -215,7 +227,7 @@ class CalculateMixin:
     @validate_types
     def reduce(
         self,
-        dim: str | Iterable[str] | None,
+        dim: str | Iterable[str] | None = None,
         *,
         method: str = "mean",
         key: str | None = None,

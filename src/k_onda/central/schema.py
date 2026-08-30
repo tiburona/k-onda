@@ -21,7 +21,8 @@ class AxisKind(Enum):
 class CoordInfo:
     name: str
     metadim: str | None = None
-    is_relative: str | bool = False
+    role: str | None = "index"  # "index" | "auxiliary" | None
+    reference_frame: str | None = None  # "absolute" | "relative" | None
     is_grouping: bool = False
     is_condition: bool = False
     scale: str | None = None
@@ -29,6 +30,7 @@ class CoordInfo:
     ndim: int = 1
     ordering: str | None = None
     is_unique: bool | None = None
+    values_sequence: tuple | None = None
 
     def __post_init__(self):
         ordering = self.ordering
@@ -435,6 +437,15 @@ class Schema:
         ax = self.axis_by_name(ax_name)
         return self.add_coords_to_axis(ax, coords)
 
+    def drop_coord_from_axis(self, ax, coord):
+        new_schema = copy(self)
+        coords = [c for c in copy(ax.coords) if c.name != coord.name]
+        new_ax = replace(ax, coords=coords)
+        new_schema = new_schema.without(ax.name)
+        new_schema = new_schema.with_added(new_ax)
+        return new_schema
+
+
     def update_coords(self, coord_name, new_coord_param):
         axis = self.axis_by_coord_name(coord_name)
         if axis is None:
@@ -478,6 +489,22 @@ class Schema:
     def is_superset_of(self, other):
         for their_axis in other.axes:
             if not any(our_axis == their_axis for our_axis in self.axes):
+                return False
+        return True
+
+    def axes_are_compatible(self, our_axis, their_axis):
+        attributes = ("name", "kind", "metadim", "item_unit")
+        return all(
+            getattr(our_axis, attribute, None) == getattr(their_axis, attribute, None) 
+            for attribute in attributes
+            )
+
+    def axes_are_compatible_with(self, other):
+        for their_axis in other.axes:
+            our_axis = self.axis_by_name(their_axis.name)
+            if not our_axis:
+                return False
+            if not self.axes_are_compatible(our_axis, their_axis):
                 return False
         return True
          
@@ -711,3 +738,14 @@ class DatasetSchema(MutableMapping):
             if not self[key].is_superset_of(other[key]):
                 return False
         return True
+
+    def axes_are_compatible_with(self, other):
+        for key in other:
+            if key not in self:
+                return False
+            if not self[key].axes_are_compatible_with(other[key]):
+                return False
+        return True
+
+    
+
