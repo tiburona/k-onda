@@ -9,6 +9,11 @@ from ..transformers.transformer_mixins import (
 )
 
 from k_onda.transformers import SelectMixin
+from k_onda.execution_diagnostics import (
+    add_execution_note,
+    build_materialization_context,
+    has_execution_note,
+)
 from k_onda.graph.traversal import build_generations, list_nodes, rebuild_tree
 from k_onda.central.registry import type_registry
 from k_onda.output import PlotMixin
@@ -210,11 +215,26 @@ class Signal(
                 "the .data property."
             )
         if self._cache is None:
-            input_data = [input.data for input in self.inputs]
-            result = self.transform(*input_data)
-            if self.is_source and self._data_schema is not None:
-                self._data_schema.validate_data(result)
-            self._cache = result
+            phase = "materialize input signals"
+            result = None
+            try:
+                input_data = [input.data for input in self.inputs]
+                phase = "load source data" if self.is_source else "run transform"
+                result = self.transform(*input_data)
+                if self.is_source and self._data_schema is not None:
+                    phase = "validate source data against schema"
+                    self._data_schema.validate_data(result)
+                self._cache = result
+            except Exception as error:
+                if not has_execution_note(error, "materialize"):
+                    add_execution_note(
+                        error,
+                        stage="materialize",
+                        phase=phase,
+                        context=build_materialization_context(self),
+                        output_data=result,
+                    )
+                raise
         return self._cache
 
     @property
@@ -455,8 +475,23 @@ class SignalStack(CalculateMixin, UnstackMixin):
             )
 
         if self._cache is None:
-            input_data = [inp.data for inp in self.inputs]
-            self._cache = self.transform(*input_data)
+            phase = "materialize input signals"
+            result = None
+            try:
+                input_data = [inp.data for inp in self.inputs]
+                phase = "run transform"
+                result = self.transform(*input_data)
+                self._cache = result
+            except Exception as error:
+                if not has_execution_note(error, "materialize"):
+                    add_execution_note(
+                        error,
+                        stage="materialize",
+                        phase=phase,
+                        context=build_materialization_context(self),
+                        output_data=result,
+                    )
+                raise
         return self._cache
 
     @property

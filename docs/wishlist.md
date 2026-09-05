@@ -31,17 +31,6 @@ prioritized or promised. Broad, prioritized directions belong in the
 
 ## Execution diagnostics
 
-- After the n-ary transformer work is complete, add structured context to errors
-  raised during lazy graph execution. Use `Exception.add_note()` so the original
-  exception type, message, and traceback remain intact. The shared machinery
-  should distinguish the `apply_inner`, `apply`, and `materialize` stages, report
-  the phase within `apply` or `materialize`, and deduplicate notes by stage rather
-  than suppressing all later context. Notes should include compact information
-  such as `format_call()`, key routing, signal identity, and input names,
-  dimensions, dtypes, and units without printing full data values. Avoid adding a
-  materialization note for every downstream node unless a future verbose mode
-  explicitly requests the complete graph path.
-
 - Make dimension-related errors explain the relevant schema history. In
   particular, when `ExtractFeatures` receives a non-scalar feature result, report
   the feature name, group or member when available, and the result's remaining

@@ -497,7 +497,7 @@ class SliceSelection(Calculator):
 
         return {"data_schema": getattr(input, "data_schema")}
 
-    def _apply(self, data, data_schema=None):
+    def _apply(self, data, data_schema=None, diagnostic_context=None):
 
         if isinstance(data_schema, type_registry.DatasetSchema):
             return self.select_point_process(data, data_schema)

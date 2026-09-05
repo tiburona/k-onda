@@ -5,6 +5,7 @@ import xarray as xr
 from copy import deepcopy
 
 from k_onda.central import type_registry as tr
+from k_onda.execution_diagnostics import add_execution_note, build_transform_context
 from k_onda.utils import ValidationMixin
 
 
@@ -318,7 +319,38 @@ class Transformer(ValidationMixin):
             apply_kwargs=apply_kwargs
         )
 
-        return Transform(partial(self._apply, **apply_kwargs), **transform_kwargs)
+        diagnostic_context = build_transform_context(self, inputs, key_spec)
+        return Transform(
+            partial(
+                self._apply_with_diagnostics,
+                apply_kwargs=apply_kwargs,
+                diagnostic_context=diagnostic_context,
+            ),
+            **transform_kwargs,
+        )
+
+    def _diagnostic_apply_kwargs(self, diagnostic_context):
+        return {}
+
+    def _apply_with_diagnostics(
+        self,
+        *input_data,
+        apply_kwargs,
+        diagnostic_context,
+    ):
+        kwargs = dict(apply_kwargs)
+        kwargs.update(self._diagnostic_apply_kwargs(diagnostic_context))
+        try:
+            return self._apply(*input_data, **kwargs)
+        except Exception as error:
+            add_execution_note(
+                error,
+                stage="apply",
+                phase="run transformer application",
+                context=diagnostic_context,
+                data=input_data,
+            )
+            raise
 
     def resolve_dataset_defaults(self, key_spec, signal, output_class):
         input_name = key_spec.input_name
@@ -534,49 +566,12 @@ class Calculator(Transformer):
         result = {
             "key_spec": key_spec,
             "data_schema": schema,
-            "diagnostic_context": self._build_diagnostic_context(inputs[0], key_spec),
         }
         result.update(self._get_extra_apply_kwargs(*inputs))
         return result
 
-    @staticmethod
-    def _diagnostic_identifier(entity):
-        if entity is None:
-            return None
-
-        for attribute in ("display_id", "label", "id", "uid"):
-            value = getattr(entity, attribute, None)
-            if value is not None:
-                return str(value)
-        return type(entity).__name__
-
-    def _build_diagnostic_context(self, input, key_spec):
-        context = {"signal": type(input).__name__}
-        entities = {
-            "data identity": getattr(input, "data_identity", None),
-            "origin": getattr(input, "origin", None),
-            "subject": getattr(input, "subject", None),
-            "session": getattr(input, "session", None),
-        }
-        for name, entity in entities.items():
-            identifier = self._diagnostic_identifier(entity)
-            if identifier is not None:
-                context[name] = identifier
-
-        conditions = getattr(input, "conditions", None)
-        if conditions:
-            context["conditions"] = repr(conditions)
-        if key_spec is not None and key_spec.input_name is not None:
-            context["key"] = key_spec.input_name
-
-        return context
-
-    @staticmethod
-    def _format_diagnostic_context(context, data):
-        details = [f"{name}={value}" for name, value in context.items()]
-        if isinstance(data, (xr.DataArray, xr.Dataset)):
-            details.append(f"dimensions={dict(data.sizes)}")
-        return ", ".join(details)
+    def _diagnostic_apply_kwargs(self, diagnostic_context):
+        return {"diagnostic_context": diagnostic_context}
 
     def _get_transform_kwargs(self, *inputs, apply_kwargs):
         input = inputs[0]
@@ -601,41 +596,56 @@ class Calculator(Transformer):
         return deepcopy(apply_kwargs)
 
     def _apply(self, *input_data, key_spec=None, diagnostic_context=None, **kwargs):
-       
-        if key_spec is not None and key_spec.input_name is not None:
-            data_for_apply = tuple(
-                data if not isinstance(data, xr.Dataset) 
-                else self.resolve_target_data(data, key=key_spec.input_name) 
-                for data in input_data 
-                )
-        else:
-            data_for_apply = input_data
-
-        self._validate_data(*data_for_apply, **kwargs)
-
+        data_for_apply = input_data
+        phase = "resolve dataset input key"
         try:
-            result = self._apply_inner(*data_for_apply, **kwargs)
-        except ZeroDivisionError as error:
-            if diagnostic_context:
-                context = self._format_diagnostic_context(
-                    diagnostic_context, *data_for_apply
+            if key_spec is not None and key_spec.input_name is not None:
+                data_for_apply = tuple(
+                    data
+                    if not isinstance(data, xr.Dataset)
+                    else self.resolve_target_data(data, key=key_spec.input_name)
+                    for data in input_data
                 )
-                raise ZeroDivisionError(
-                    f"{error}\nInput context: {context}"
-                ) from None
+
+            phase = "validate materialized inputs"
+            self._validate_data(*data_for_apply, **kwargs)
+
+            phase = "run _apply_inner"
+            try:
+                result = self._apply_inner(*data_for_apply, **kwargs)
+            except Exception as error:
+                add_execution_note(
+                    error,
+                    stage="apply_inner",
+                    phase="calculate result",
+                    context=diagnostic_context,
+                    data=data_for_apply,
+                )
+                raise
+
+            phase = "interpret calculator result"
+            if isinstance(result, tuple):
+                result, wrap_kwargs = result
+            else:
+                wrap_kwargs = {}
+
+            phase = "wrap calculator result"
+            result = self._wrap_result(result, *data_for_apply, **wrap_kwargs)
+
+            if key_spec is not None and key_spec.input_name is not None:
+                phase = "merge dataset output"
+                result = self.merge_keys(input_data[0], result, key_spec)
+
+            return result
+        except Exception as error:
+            add_execution_note(
+                error,
+                stage="apply",
+                phase=phase,
+                context=diagnostic_context,
+                data=data_for_apply,
+            )
             raise
-
-        if isinstance(result, tuple):
-            result, wrap_kwargs = result
-        else:
-            wrap_kwargs = {}
-
-        result = self._wrap_result(result, *data_for_apply, **wrap_kwargs)
-        
-        if key_spec is not None and key_spec.input_name is not None:
-            result = self.merge_keys(input_data[0], result, key_spec)
-
-        return result
 
     def _validate_data(self, *input_data, **kwargs):
 

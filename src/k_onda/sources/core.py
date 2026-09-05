@@ -17,6 +17,11 @@ from k_onda.transformers.transformer_mixins import (
 )
 from k_onda.transformers import SelectMixin
 from k_onda.signals import Signal
+from k_onda.execution_diagnostics import (
+    add_execution_note,
+    build_materialization_context,
+    has_execution_note,
+)
 from k_onda.mixins import DictDelegator, ConfigSetter, FactorMixin
 from k_onda.transformers import feature_registry
 from k_onda.utils import validate_types
@@ -405,7 +410,17 @@ class SignalMap(MapMixin):
                 "the .data property."
             )
         if self._cache is None:
-            self._cache = {k: signal.data for k, signal in self.map.items()}
+            try:
+                self._cache = {k: signal.data for k, signal in self.map.items()}
+            except Exception as error:
+                if not has_execution_note(error, "materialize"):
+                    add_execution_note(
+                        error,
+                        stage="materialize",
+                        phase="materialize mapped signals",
+                        context=build_materialization_context(self),
+                    )
+                raise
         return self._cache
 
 

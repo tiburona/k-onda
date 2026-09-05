@@ -24,6 +24,12 @@ The fundamental pipeline node. Holds `inputs` (upstream signals), a `transform` 
 **`Transformer` / `Calculator`** ([transformers/core.py](../src/k_onda/transformers/core.py))
 Callable objects that consume a `Signal` and return a new `Signal`. Many transformers can also operate on a `Collection` or `CollectionMap`; dispatch is handled internally. `Transformer` carries the `key_spec` mechanism for operating on named variables inside `xr.Dataset`-backed signals; `Calculator` adds data validation and shared calculation behavior.
 
+**Execution diagnostics** ([execution_diagnostics.py](../src/k_onda/execution_diagnostics.py))
+Adds compact contextual notes to exceptions raised during lazy execution while
+preserving the original exception and traceback. Notes identify the failing
+execution stage and include transformer, signal, experimental-identity, key-routing,
+and xarray structure summaries without including full data values.
+
 **`Schema` / `DatasetSchema`** ([schema.py](../src/k_onda/central/schema.py))
 Dimension metadata that travels with signals through the pipeline without
 materializing data.

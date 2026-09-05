@@ -1,8 +1,7 @@
 from copy import deepcopy
-from functools import partial
 import xarray as xr
 
-from .core import Transformer, Transform, KeySpec
+from .core import Transformer, KeySpec
 from k_onda.central import DatasetSchema, AxisInfo, AxisKind, type_registry as tr
 
 
@@ -69,7 +68,10 @@ class StackSignals(Transformer):
 
         input_schemas = [s.data_schema for s in collection.signals]
         output_schema = self.output_schema(*input_schemas)
-        transform = self._get_transform()
+        transform = self._get_transform(
+            *collection.signals,
+            key_spec=key_spec,
+        )
         return tr.SignalStack(
             collection,
             data_schema=output_schema,
@@ -79,9 +81,6 @@ class StackSignals(Transformer):
             stack_dim=self.dim,
             stack_dim_was_added=self.adds_member_dim,
         )
-
-    def _get_transform(self, *args, **kwargs):
-        return Transform(self._apply)
 
     def _ensure_stack_coord(self, data):
         if self.dim not in data.coords:
@@ -210,11 +209,11 @@ class UnstackSignals(Transformer):
         return self.resolve_output_class()(signals)
 
     def build_transform_for(self, signal):
-        return self._get_transform(signal.last_stack_index)
-
-    def _get_transform(self, idx):
-        apply_kwargs = self._get_apply_kwargs(idx)
-        return Transform(partial(self._apply, **apply_kwargs))
+        return super()._get_transform(
+            *signal.inputs,
+            key_spec=signal.key_spec,
+            apply_kwargs=self._get_apply_kwargs(signal.last_stack_index),
+        )
 
     def _get_apply_kwargs(self, idx):
         return {"idx": idx}
