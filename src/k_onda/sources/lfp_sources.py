@@ -3,7 +3,7 @@ import pint
 from k_onda.central import make_time_series, Schema
 from  k_onda.signals import TimeSeriesSignal
 from .core import DataComponent, DataIdentity, GenericSource
-from k_onda.central import AxisInfo, AxisKind
+from k_onda.central import AxisInfo, AxisKind, CoordInfo
 from k_onda.utils import is_unitful
 
 
@@ -73,8 +73,19 @@ class LFPChannel(DataComponent):
     @property
     def data_schema(self):
         return Schema(
-            axes=[AxisInfo("time", kind=AxisKind.AXIS, metadim="time")], 
-            value_metadim='V'
+            axes=[
+                AxisInfo(
+                    "time", 
+                    kind=AxisKind.AXIS, 
+                    metadim="time", 
+                    coords=(
+                        CoordInfo(
+                            name="time", 
+                            is_regularly_sampled=True
+                            ),
+                        )
+                )], 
+            value_metadim="V" 
         )
     
     @property

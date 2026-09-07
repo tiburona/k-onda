@@ -25,11 +25,11 @@ class CoordInfo:
     reference_frame: str | None = None  # "absolute" | "relative" | None
     is_grouping: bool = False
     is_condition: bool = False
-    scale: str | None = None
     levels: tuple[str, ...] | None = None
     ndim: int = 1
     ordering: str | None = None
     is_unique: bool | None = None
+    is_regularly_sampled: bool | None = None
     values_sequence: tuple | None = None
 
     def __post_init__(self):
@@ -129,24 +129,13 @@ class AxisInfo:
         object.__setattr__(self, "coords", coords)
 
     def _default_coord_for_axis(self):
-        scale = None
         ordering = None
-
-        if self.kind == AxisKind.AXIS and self.metadim in {"time", "frequency"}:
-            scale = "continuous"
-        elif self.kind in (
-            AxisKind.ORDINAL_INDEX, 
-            AxisKind.OBSERVATION_INDEX, 
-            AxisKind.POINT_PROCESS_INDEX
-            ):
-            scale = "ordinal"
         if self.kind == AxisKind.ORDINAL_INDEX:
             ordering = "increasing"
 
         return CoordInfo(
             name=self.name,
             metadim=self.metadim,
-            scale=scale,
             ordering=ordering,
         )
         
@@ -748,4 +737,3 @@ class DatasetSchema(MutableMapping):
         return True
 
     
-

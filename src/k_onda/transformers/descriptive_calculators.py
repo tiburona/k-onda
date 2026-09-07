@@ -144,14 +144,34 @@ class Histogram(Calculator):
     def output_schema(self, input_schema):
         schema = input_schema.without_dim(self.dim)
         metadim = input_schema.metadim_from(self.dim) or input_schema.value_metadim
+        if isinstance(self.bins, int) or self.bin_size:
+            is_regularly_sampled = True
+        elif isinstance(self.bins, Callable):
+            is_regularly_sampled = None
+        else:
+            try:
+                bin_arr = np.asarray(self.bins.magnitude)
+            except AttributeError:
+                bin_arr = np.asarray(self.bins)
+            diffs = np.diff(bin_arr)
+            is_regularly_sampled = np.allclose(diffs, diffs[0], rtol=10**-5)
+            
         schema = schema.with_added(
             AxisInfo(
                 f"{self.dim}_bins",
                 AxisKind.AXIS,
                 metadim=metadim or self.dim,
                 coords=(
-                    CoordInfo(name=f"{self.dim}_bins", metadim=metadim, scale="continuous"),
-                    CoordInfo(name=self.dim, metadim=metadim, scale="continuous"),
+                    CoordInfo(
+                        name=f"{self.dim}_bins", 
+                        metadim=metadim, 
+                        is_regularly_sampled=is_regularly_sampled
+                        ),
+                    CoordInfo(
+                        name=self.dim,
+                        metadim=metadim, 
+                        is_regularly_sampled=is_regularly_sampled
+                        ),
                 ),
             )
         )

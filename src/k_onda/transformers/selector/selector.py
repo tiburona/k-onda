@@ -38,14 +38,21 @@ from k_onda.utils import is_monotonic_increasing, is_one_dimensional
 class SpecifySelection(Transformer):
     name = "selector"
 
-    def __init__(self, mode="local", locus=None, new_dim=None, window=None):
+    def __init__(
+            self, 
+            mode="local", 
+            locus=None, 
+            new_dim=None, 
+            window=None, 
+            ragged=None,
+            ):
         mode = "local" if mode is None else mode
         self._validate_configuration(mode, locus, new_dim, window)
-
         self.mode = mode
         self.locus = locus
         self.new_dim = new_dim
         self.window = window
+        self.ragged = ragged or {}
 
     def _validate_configuration(self, mode, locus, new_dim, window):
         if mode not in ("local", "pushdown"):
@@ -303,7 +310,8 @@ class PlanSelection(Transformer):
             window,
             padlen=padlen,
             is_trim=is_trim,
-            trim_bounds=trim_bounds
+            trim_bounds=trim_bounds,
+            ragged=selector.ragged
         )
 
         slicer_plan[id(node)].append(slicer)
@@ -332,19 +340,22 @@ class SliceSelection(Calculator):
             locus, 
             new_dim, 
             window, 
+            ragged,
             padlen=None, 
             is_trim=False,
-            trim_bounds=None
+            trim_bounds=None,
             ):
         self.mode = mode
         self.locus = locus
         self.new_dim = new_dim
         self.window = window
+        self.ragged = ragged
         self.padlen = padlen
         self.is_trim = is_trim
         self.trim_bounds = trim_bounds
         self.multi_select = isinstance(locus, IntervalSet)
         self.selection_bounds = self.compute_selection_bounds()
+        
 
     def _call_on_signal(self, signal, key_spec=None):
         output_signal = super()._call_on_signal(signal, key_spec=key_spec)
@@ -363,18 +374,24 @@ class SliceSelection(Calculator):
 
             # update coords on the old dim
             metadim_axis = arr_schema.axes_by_metadim(metadim)[0]
+            is_regularly_sampled = arr_schema.coord_by_name(self.locus.dim).is_regularly_sampled
             coords = (
                 CoordInfo(
-                    name=self._new_dim_coord(), metadim=metadim, reference_frame="relative"
+                    name=self._new_dim_coord(), 
+                    metadim=metadim, 
+                    reference_frame="relative", 
+                    is_regularly_sampled=is_regularly_sampled
                 ),
             )
             if f"relative_{metadim}" not in arr_schema.coord_names:
+                
                 coords += (
                     CoordInfo(
                         name=f"relative_{metadim}", 
                         metadim=metadim, 
                         reference_frame="relative", 
-                        role="auxiliary"
+                        role="auxiliary",
+                        is_regularly_sampled=is_regularly_sampled
                     ),
                 )
             arr_schema = arr_schema.add_coords_to_axis(metadim_axis, coords=coords)
@@ -575,7 +592,10 @@ class SliceSelection(Calculator):
         return indices_of_parent_intervals
 
     def get_parent_interval_masks(self, data, data_schema, selection_bounds):
-    
+
+        # find the ordinal axes created from the same metadim (e.g. if the metadim we are selecting on 
+        # is 'time', find any ordinal axes with metadim time.  If we are currently selecting events,
+        # that ordinal axis might have been created by an epoch selection.)
         parent_axes = data_schema.ordinal_axes_created_from(self.locus.metadim)
 
         ordinal_axis_masks = []
@@ -588,7 +608,8 @@ class SliceSelection(Calculator):
                 start=start_coord, stop=stop_coord, dim=self.locus.dim
             )
 
-            # a list of len selection_bounds
+            # find the containing parent interval for each selection_bounds
+            # the result will be a list of len selection_bounds
             if getattr(self.locus[0], "anchor", None):
                 indices_of_parent_intervals = ordinal_bounds.containing_indices(
                     [interval.anchor.value for interval in self.locus], self.locus.dim
@@ -599,7 +620,6 @@ class SliceSelection(Calculator):
                     )
             
             # filter
-
             empty_mask = xr.full_like(data.coords[ord_ax.name], False, dtype=bool)
 
             ordinal_bounds_mask = [
@@ -609,8 +629,11 @@ class SliceSelection(Calculator):
                 for ind in indices_of_parent_intervals
             ]
 
+            # ordinal_axis_masks is shaped ordinal_axes -> selection_bounds -> boolean mask
+
             ordinal_axis_masks.append(ordinal_bounds_mask)
 
+        # the zip transoposes so we return something shaped selection_bounds -> ordinal_axes -> boolean mask
         return list(zip(*ordinal_axis_masks))
         
     @staticmethod   
@@ -832,16 +855,58 @@ class SliceSelection(Calculator):
 
         return selected
 
+    def _pad_ragged_array_if_necessary(self, selected, data_schema):
+        comparison_slice = selected[0]
+        needs_padding = False
+
+        selection_coord_name = self.locus.dim
+        concrete_xarray_dim = data_schema.concrete_dim_from(selection_coord_name)
+        
+        needs_padding = any(
+            sliced.sizes[concrete_xarray_dim] != comparison_slice.sizes[concrete_xarray_dim] 
+            for sliced in selected
+            ) 
+
+        selection_coord = data_schema.coord_by_name(selection_coord_name)
+
+        if not needs_padding:
+            return selected, None
+
+        if not self.ragged:
+            raise ValueError(
+                "Encountered ragged arrays but `ragged` is Falsey.  " \
+                "Consider defining `ragged`."
+            )
+
+        if not selection_coord.is_regularly_sampled:
+            raise ValueError(
+                "Selection has not produced a regular grid, and the selection coordinate " \
+                "is not regularly sampled. Padding would be ambiguous."
+            )
+
+        max_idx, max_arr = max(enumerate(selected), key=lambda x: x[1].sizes[concrete_xarray_dim])
+        target_size = max_arr.sizes[concrete_xarray_dim]
+
+        padded_slices = []
+
+        for sliced in selected:
+            current_size = sliced.sizes[concrete_xarray_dim]
+            total_pad = target_size - current_size
+            padding = {concrete_xarray_dim: (0, max(0, total_pad))}
+            padded_slice = sliced.pad(**padding, **self.ragged)
+            padded_slices.append(padded_slice)
+
+        return padded_slices, max_idx             
 
     def select_continuous(self, data, data_schema):
 
-        original_dim = data_schema.concrete_dim_from(self.locus.dim)
+        concrete_xarray_dim = data_schema.concrete_dim_from(self.locus.dim)
 
         selection_bounds = self.selection_bounds.to_array()
 
-        select_by_parent_intervals = self.select_by_parent_intervals(data_schema)
+        do_select_by_parent_intervals = self.select_by_parent_intervals(data_schema)
 
-        if select_by_parent_intervals:
+        if do_select_by_parent_intervals:
             ordinal_bounds = self.get_parent_interval_masks(data, data_schema, selection_bounds)
 
         selected = []
@@ -862,6 +927,9 @@ class SliceSelection(Calculator):
             return isel_within_parent_result
         
         can_isel = is_one_dimensional(coord) & is_monotonic_increasing(coord)
+
+        def slice_is_empty(sliced, exclude_dim=None):
+            return any(size == 0 for d, size in sliced.sizes.items() if d != exclude_dim)
         
         for i, bounds in enumerate(selection_bounds):
 
@@ -876,33 +944,38 @@ class SliceSelection(Calculator):
 
             else:
                 mask = self.make_bounds_mask_over_dims(data, bounds)
-                if select_by_parent_intervals:
+                if do_select_by_parent_intervals:
                     for ob_mask in ordinal_bounds[i]:
                         mask = mask & ob_mask
 
                 sliced = data.where(mask, drop=True)
 
-            if any(size == 0 for size in sliced.sizes.values()):
-                continue
+            if slice_is_empty(sliced): 
+                if not self.ragged:
+                    continue
+                if slice_is_empty(sliced, exclude_dim=concrete_xarray_dim):
+                    continue
 
             for d in list(sliced.dims):
-                if d != original_dim and sliced.sizes[d] == 1:
+                if d != concrete_xarray_dim and sliced.sizes[d] == 1:
                     sliced = sliced.squeeze(d)
             selected.append(sliced)
             kept_indices.append(i)
 
-        if not selected:
+        if not selected or all(slice_is_empty(sliced) for sliced in selected):
             raise ValueError(
                 "Selection produced no data in the current `selection_bounds`."
             )
-
+        
         if not self.new_dim:
             selected = self.concat_or_extract(selected, kept_indices)
             return selected
-        
+
+        selected, idx_of_longest_arr = self._pad_ragged_array_if_necessary(selected, data_schema)
+  
         parent_coords = self.parent_metadata_coords(data, data_schema)
 
-        selected = self.attach_continuous_relative_coords(selected)
+        selected = self.attach_continuous_relative_coords(selected, idx_of_longest_arr)
         selected = self.swap_coords(selected)
         selected = self.concat_or_extract(selected, kept_indices)
         selected = self.restore_ordinal_dims(selected, data_schema, parent_coords)
@@ -957,14 +1030,14 @@ class SliceSelection(Calculator):
         ]
 
         if not parent_ordinal_coords:
-            arr = arr.assign_coords(parent_coords)
             return arr
 
         # inner index: position within each unique tuple of parent ordinal coords
         keys = list(zip(*[arr.coords[poc].data for poc in parent_ordinal_coords]))
         counts = {}
         index_within_parent_ordinal_coords = np.empty(len(keys), dtype=int)
-        for i, k in enumerate(keys):
+    
+        for i, k in enumerate(keys):   
             counts[k] = counts.get(k, -1) + 1
             index_within_parent_ordinal_coords[i] = counts[k]
 
@@ -985,15 +1058,17 @@ class SliceSelection(Calculator):
     def _new_dim_coord(self):
         return f"{self.new_dim}_{self.locus.metadim}"  # e.g., epoch_time
 
-    def attach_continuous_relative_coords(self, selected_data):
+    def attach_continuous_relative_coords(self, selected_data, idx_of_longest_coord):
+        idx_of_longest_coord = idx_of_longest_coord or 0
+        reference_arr = selected_data[idx_of_longest_coord]
+        relative_coord = (
+            reference_arr.coords[self.locus.dim] - 
+            reference_arr.coords[self.locus.dim][0] + 
+            self.coord_correction()
+        ).round(decimals=12)
         result = []
-        for i, arr in enumerate(selected_data):
-            if i == 0:
-                relative_coord = (
-                    arr.coords[self.locus.dim] - 
-                    arr.coords[self.locus.dim][0] + 
-                    self.coord_correction()
-                ).round(decimals=12)
+
+        for arr in selected_data:
           
             # every arr will have coord relative_foo
             arr = arr.assign_coords(

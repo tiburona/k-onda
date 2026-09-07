@@ -16,6 +16,7 @@ class SelectParams:
     units: str | object | None = None
     window: tuple | list | None = None
     metadim: str | None = None
+    ragged: dict | None = None
     kwargs: dict | None = None
 
 
@@ -29,6 +30,7 @@ class SelectMixin:
         units=None,
         window=None,
         metadim=None,
+        ragged=None,
         **kwargs,
     ):
 
@@ -37,7 +39,7 @@ class SelectMixin:
         # selection, the resolution of the string into a Locus/LocusSet (like EpochSet) will be different
 
         params = SelectParams(
-            selection, new_dim, mode, conditions, units, window, metadim, kwargs
+            selection, new_dim, mode, conditions, units, window, metadim, ragged, kwargs
         )
 
         if isinstance(self, tr.Signal):
@@ -75,7 +77,7 @@ class SelectMixin:
 
     def select_on_signal(self, signal, params):
 
-        selection, new_dim, mode, conditions, units, window, metadim, kwargs = astuple(
+        selection, new_dim, mode, conditions, units, window, metadim, ragged, kwargs = astuple(
             params
         )
 
@@ -140,7 +142,7 @@ class SelectMixin:
                 selection = selection.to_intervals(window_span)
                 window = DimBounds({selection.metadim: window_span})
 
-        return SpecifySelection(mode, selection, new_dim, window)(signal)
+        return SpecifySelection(mode, selection, new_dim, window, ragged)(signal)
 
     def parse_select_kwargs(self, kwargs, selection, conditions):
 

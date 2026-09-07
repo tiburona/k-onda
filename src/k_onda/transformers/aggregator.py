@@ -127,8 +127,13 @@ class AssembleArray(Transformer):
                     coord_levels[coord_name].append(level)
 
         coord_infos = tuple(
-            CoordInfo(name=name, scale="nominal", is_condition=True, levels=tuple(levels))
-                      for name, levels in coord_levels.items())
+            CoordInfo(
+                name=name, 
+                is_condition=True, 
+                levels=tuple(levels)
+                ) 
+            for name, levels in coord_levels.items()
+            )
 
         schema_kwargs = {
             "coord_infos": coord_infos,

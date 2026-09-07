@@ -217,7 +217,6 @@ class SpikeCluster(DataComponent):
                 AxisInfo(
                     "spike",
                     kind=AxisKind.POINT_PROCESS_INDEX,
-                    coords=(CoordInfo(name="spike", scale="ordinal"),),
                     item_unit=ureg.spike
                 )
             ],
@@ -230,14 +229,20 @@ class SpikeCluster(DataComponent):
                     "spike",
                     AxisKind.POINT_PROCESS_INDEX,
                     metadim=None,
-                    coords=(CoordInfo(name="spike", scale="ordinal"),),
+                    coords=(CoordInfo(
+                        name="spike", 
+                        is_regularly_sampled=False
+                        ),),
                     item_unit=ureg.spike
                 ),
                 AxisInfo(
                     "sample", 
                     AxisKind.AXIS, 
                     metadim="time", 
-                    coords=(CoordInfo(name="sample", reference_frame="relative"),)
+                    coords=(CoordInfo(
+                        name="sample", 
+                        reference_frame="relative"
+                        ),)
                 ),
             ]
         
@@ -246,8 +251,7 @@ class SpikeCluster(DataComponent):
                 AxisInfo(
                     "electrode", 
                     AxisKind.AXIS, 
-                    metadim=None,
-                    coords=(CoordInfo(name="electrode", scale="ordinal"),)
+                    metadim=None
                     )
                 )
         

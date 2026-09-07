@@ -93,7 +93,6 @@ class ExtractFeatures(Transformer):
                     coords=(
                         CoordInfo(
                             name="feature",
-                            scale="nominal",
                             ordering="unordered",
                         ),
                     ),
