@@ -1,6 +1,7 @@
 from .select_mixin import SelectMixin
-
-from .selector import SpecifySelection, PlanSelection, SliceSelection
+from .planner import PlanSelection
+from .slicer import SliceSelection
+from .specification import SpecifySelection
 
 __all__ = [
     "SelectMixin",

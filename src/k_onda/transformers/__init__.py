@@ -7,7 +7,10 @@ from .waveform_calculators import FWHM
 from .filter_calculators import Filter, MedianFilter, filter_registry
 from .mask_calculators import ApplyMask, Intersection, Threshold
 from .spectral_calculators import Spectrogram
-from .selector import SpecifySelection, SelectMixin, SliceSelection, PlanSelection
+from .selector.planner import PlanSelection
+from .selector.select_mixin import SelectMixin
+from .selector.slicer import SliceSelection
+from .selector.specification import SpecifySelection
 from .aggregator import AssembleArray, GroupBy, ReduceDim
 from .feature_registry import feature_registry
 from .feature_transformers import ExtractFeatures

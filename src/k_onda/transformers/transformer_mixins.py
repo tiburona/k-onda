@@ -639,7 +639,7 @@ class AggregateMixin:
     
     def get_planned_data_schema(self):
 
-        from .selector import PlanSelection
+        from .selector.planner import PlanSelection
         
         planned_obj = PlanSelection()(self)
 

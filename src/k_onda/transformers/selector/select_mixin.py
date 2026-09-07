@@ -4,7 +4,8 @@ from k_onda.central import type_registry as tr
 from k_onda.central import DimBounds, PadDimPair
 from k_onda.utils import w_units
 
-from .selector import SpecifySelection, PlanSelection
+from .planner import PlanSelection
+from .specification import SpecifySelection
 
 
 @dataclass
