@@ -9,7 +9,6 @@ from k_onda.central import (
     Schema,
     DatasetSchema,
     type_registry,
-    DimBounds,
     DimBoundsArray,
     AxisInfo,
     AxisKind,
