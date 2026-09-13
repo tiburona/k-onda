@@ -113,7 +113,7 @@ class SliceSelection(Calculator):
                     )
             )
             arr_schema = arr_schema.with_axis(new_axis, if_exists="error")
-            if not arr_schema.is_point_process:
+            if not arr_schema.is_point_process():
                 arr_schema = arr_schema.rename_axis(
                     arr_schema.concrete_dim_from(self.locus.dim), self._new_index_coord(data_schema)
                     )
@@ -764,7 +764,7 @@ class SliceSelection(Calculator):
         return arr
 
     def _new_index_coord(self, data_schema):
-        if data_schema.is_point_process: 
+        if data_schema.is_point_process(): 
             axis = data_schema.point_process_axis()
             if data_schema.axis_by_coord_name(self.locus.dim) == axis:
                 return f"{self.new_dim}_{axis.metadim}"  # e.g., epoch_spike

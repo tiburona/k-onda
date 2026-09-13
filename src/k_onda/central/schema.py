@@ -364,7 +364,7 @@ class Schema:
         return [name for name in self.dim_names if name not in used_axis_names]
 
     def is_point_process(self) -> bool:
-        return bool(self.point_process_axis())
+        return bool([ax for ax in self.axes if ax.kind == AxisKind.POINT_PROCESS_INDEX])
 
     def is_point_process_essential(self, dim) -> bool:
         for ax in self.axes:
