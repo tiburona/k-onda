@@ -142,7 +142,7 @@ class Histogram(Calculator):
             )
 
     def output_schema(self, input_schema):
-        schema = input_schema.without_dim(self.dim)
+        schema = input_schema.without_axis_for(self.dim)
         metadim = input_schema.metadim_from(self.dim) or input_schema.value_metadim
         if isinstance(self.bins, int) or self.bin_size:
             is_regularly_sampled = True
@@ -176,7 +176,7 @@ class Histogram(Calculator):
             )
         )
         if input_schema.value_metadim:
-            schema.value_metadim = f"{input_schema.value_metadim}_{self.stat}" 
+            schema.value_metadim = f"{input_schema.value_metadim}_{self.stat}"
         return schema
 
     def _get_extra_apply_kwargs(self, input):
@@ -310,7 +310,7 @@ class Histogram(Calculator):
         )
         result = result.pint.quantify({new_dim: bin_unit, self.dim: bin_unit})
 
-        source_axis = input_schema.ax_with_dim(self.dim)
+        source_axis = input_schema.axis_with_dim(self.dim)
         ureg = pint.get_application_registry()
         count_unit = getattr(source_axis, "item_unit", ureg.dimensionless)
 

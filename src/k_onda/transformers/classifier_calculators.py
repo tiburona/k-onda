@@ -124,7 +124,7 @@ class KMeans(Calculator):
             )
 
     def output_schema(self, input_schema):
-        return input_schema.without("feature")
+        return input_schema.without_axis_named("feature")
 
     def _apply_inner(self, data, *args, **kwargs):
         feature_matrix = data.transpose("index", "feature")

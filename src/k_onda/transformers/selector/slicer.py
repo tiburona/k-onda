@@ -19,6 +19,9 @@ from k_onda.loci import IntervalSet
 from k_onda.utils import is_monotonic_increasing, is_one_dimensional
 from ..core import Calculator
 
+
+# TODO: do I need to reassign index or auxiliary coord status when I make the new data schema?
+
 class SliceSelection(Calculator):
     def __init__(
             self, 
@@ -63,7 +66,7 @@ class SliceSelection(Calculator):
             is_regularly_sampled = arr_schema.coord_by_name(self.locus.dim).is_regularly_sampled
             coords = (
                 CoordInfo(
-                    name=self._new_dim_coord(), 
+                    name=self._new_index_coord(data_schema), 
                     metadim=metadim, 
                     reference_frame="relative", 
                     is_regularly_sampled=is_regularly_sampled
@@ -111,9 +114,16 @@ class SliceSelection(Calculator):
                     )
             )
             arr_schema = arr_schema.with_axis(new_axis, if_exists="error")
-            arr_schema = arr_schema.rename_axis(
-                arr_schema.concrete_dim_from(self.locus.dim), self._new_dim_coord()
-                )
+            if not arr_schema.is_point_process:
+                arr_schema = arr_schema.rename_axis(
+                    arr_schema.concrete_dim_from(self.locus.dim), self._new_index_coord(data_schema)
+                    )
+            else:
+                point_process_axis = arr_schema.point_process_axis()
+                new_dim_coord = f"{self.new_dim}_{point_process_axis.metadim}"
+                arr_schema = arr_schema.rename_axis(point_process_axis.name, new_dim_coord)
+
+          
             
             dim_order = self.output_dim_order(arr_schema.dim_names, arr_schema)
             arr_schema = arr_schema.reorder_axes(dim_order)
@@ -202,15 +212,31 @@ class SliceSelection(Calculator):
 
     def _apply(self, data, data_schema=None, diagnostic_context=None):
 
-        if isinstance(data_schema, type_registry.DatasetSchema):
-            return self.select_point_process(data, data_schema)
+        selected, kept_indices = self.select(data, data_schema)
+        if not self.new_dim:
+            selected = self.concat_or_extract(selected, kept_indices)
+            return selected
+    
+        selected, idx_of_longest_arr = self._pad_ragged_array_if_necessary(selected, data_schema)
+    
+        parent_coords = self.parent_metadata_coords(data, data_schema)
+
+        if self.new_dim:
+            selected = self.attach_relative_coords(selected, data_schema, idx_of_longest_arr)
+        
+        selected = self.swap_coords(selected, data_schema)
+        selected = self.concat_or_extract(selected, kept_indices)
+        selected = self.restore_ordinal_dims(selected, data_schema, parent_coords)
+        selected = self.attach_condition_coords(selected, kept_indices)
+        selected = self.transpose(selected, data_schema)
+
+        return selected 
+
+    def attach_relative_coords(self, selected, data_schema, idx_of_longest_arr):
+        if data_schema.is_point_process():
+            return self.attach_point_process_relative_coords(selected, data_schema)
         else:
-            if data_schema.is_point_process():
-                return self.select_point_process(data, data_schema)
-            else:
-                if self.is_trim:
-                    return self.trim_continuous(data)
-                return self.select_continuous(data, data_schema)
+            return self.attach_continuous_relative_coords(selected, data_schema, idx_of_longest_arr)
             
     def trim_continuous(self, data):
         selection_bounds = self.selection_bounds.to_array_of_dicts()
@@ -564,7 +590,10 @@ class SliceSelection(Calculator):
                 "Consider defining `ragged`."
             )
 
-        if not selection_coord.is_regularly_sampled:
+        is_point_process = (
+            data_schema.axis_by_coord_name(concrete_xarray_dim).kind == AxisKind.POINT_PROCESS_INDEX,
+            )
+        if not selection_coord.is_regularly_sampled and not is_point_process:
             raise ValueError(
                 "Selection has not produced a regular grid, and the selection coordinate " \
                 "is not regularly sampled. Padding would be ambiguous."
@@ -580,14 +609,24 @@ class SliceSelection(Calculator):
             total_pad = target_size - current_size
             padding = {concrete_xarray_dim: (0, max(0, total_pad))}
             padded_slice = sliced.pad(**padding, **self.ragged)
+            if data_schema.is_point_process():
+                index_coord = [
+                    c for c in data_schema.point_process_axis().coords 
+                    if c.metadim == data_schema.point_process_axis().metadim
+                    ][-1]
+                index_coord_name = index_coord.name
+                coord_data = sliced.coords[index_coord_name]
+                indices = np.arange(coord_data[0], coord_data[0] + target_size).astype(int)
+                padded_slice = padded_slice.assign_coords(
+                    {index_coord_name: (coord_data.dims, indices)}
+                )
             padded_slices.append(padded_slice)
 
-        return padded_slices, max_idx             
+        return padded_slices, max_idx   
 
-    def select_continuous(self, data, data_schema):
-
+    def select(self, data, data_schema):   
         concrete_xarray_dim = data_schema.concrete_dim_from(self.locus.dim)
-
+        
         selection_bounds = self.selection_bounds.to_array()
 
         do_select_by_parent_intervals = self.select_by_parent_intervals(data_schema)
@@ -652,23 +691,7 @@ class SliceSelection(Calculator):
             raise ValueError(
                 "Selection produced no data in the current `selection_bounds`."
             )
-        
-        if not self.new_dim:
-            selected = self.concat_or_extract(selected, kept_indices)
-            return selected
-
-        selected, idx_of_longest_arr = self._pad_ragged_array_if_necessary(selected, data_schema)
-  
-        parent_coords = self.parent_metadata_coords(data, data_schema)
-
-        selected = self.attach_continuous_relative_coords(selected, idx_of_longest_arr)
-        selected = self.swap_coords(selected)
-        selected = self.concat_or_extract(selected, kept_indices)
-        selected = self.restore_ordinal_dims(selected, data_schema, parent_coords)
-        selected = self.attach_condition_coords(selected, kept_indices)
-        selected = self.transpose(selected, data_schema)
-
-        return selected
+        return selected, kept_indices
     
     def attach_condition_coords(self, selected, kept_indices):
 
@@ -741,10 +764,64 @@ class SliceSelection(Calculator):
 
         return arr
 
-    def _new_dim_coord(self):
+    def _new_index_coord(self, data_schema):
+        if data_schema.is_point_process: 
+            axis = data_schema.point_process_axis()
+            if data_schema.axis_by_coord_name(self.locus.dim) == axis:
+                return f"{self.new_dim}_{axis.metadim}"  # e.g., epoch_spike
         return f"{self.new_dim}_{self.locus.metadim}"  # e.g., epoch_time
 
-    def attach_continuous_relative_coords(self, selected_data, idx_of_longest_coord):
+    def attach_point_process_relative_coords(self, selected_data, data_schema):
+
+        result = []
+        axis = data_schema.axis_by_coord_name(self.locus.dim)
+        selection_was_on_pp_dim = axis.kind == AxisKind.POINT_PROCESS_INDEX
+
+        for arr in selected_data:
+
+            if selection_was_on_pp_dim:
+                # start with new index coord
+                coords_to_assign = {}
+                self.compute_relative_coord(
+                    arr, 
+                    axis.index_coord.name, 
+                    self._new_index_coord(data_schema), 
+                    axis.metadim, 
+                    coords_to_assign, 
+                    coord_correct=False
+                )
+
+                # now move on to creating relative coords for each unique metadim on the point process index
+                processed_metadims = [axis.metadim]
+
+                for coord in axis.coords:
+                    if not coord.metadim or coord.metadim in processed_metadims:
+                        continue
+                    processed_metadims.append(coord.metadim)
+                    new_coord_name = f"{self.new_dim}_{coord.metadim}"
+                    self.compute_relative_coord(
+                        arr, coord.name, new_coord_name, coord.metadim, coords_to_assign
+                    )
+                   
+            else:
+                coords_to_assign = {}
+                self.compute_relative_coord(
+                    arr, self.locus.dim, new_coord_name, self.locus.metadim, coords_to_assign
+                    )
+
+            arr = arr.assign_coords(coords_to_assign)
+            result.append(arr)
+        return result
+
+    def compute_relative_coord(self, arr, old, new, metadim, coords_to_assign, coord_correct=True):
+        relative_coord = arr.coords[old] - arr.coords[old][0] 
+        if coord_correct:
+            relative_coord = relative_coord + self.coord_correction()
+        coords_to_assign[new] = (relative_coord.dims, relative_coord.data)
+        coords_to_assign[f"relative_{metadim}"] = (relative_coord.dims, relative_coord.data)
+
+
+    def attach_continuous_relative_coords(self, selected_data, data_schema, idx_of_longest_coord):
         idx_of_longest_coord = idx_of_longest_coord or 0
         reference_arr = selected_data[idx_of_longest_coord]
         relative_coord = (
@@ -767,26 +844,27 @@ class SliceSelection(Calculator):
             )
 
             # for example, if dim is time new_dim is block, now every block will have coord block_time
-            if self.new_dim:
-                arr = arr.assign_coords(
-                    {self._new_dim_coord(): (relative_coord.dims, relative_coord.data)}
-                )
+           
+            arr = arr.assign_coords(
+                {self._new_index_coord(data_schema): (relative_coord.dims, relative_coord.data)}
+            )
 
             result.append(arr)
 
         return result
 
-    def swap_coords(self, selected_data):
+    def swap_coords(self, selected_data, data_schema):
         # If you've created a new_dim 'block', the main time dim becomes 'block_time', the
         # time relative to the block, and 'time', the absolute time relative to the session
         # becomes an auxiliary coordinate.
 
-        new_dim_coord = self._new_dim_coord()
+        new_dim_coord = self._new_index_coord(data_schema)
+
         swapped = []
 
         for arr in selected_data:
-            old_dim = arr.coords[new_dim_coord].dims[0]
-            units = arr.coords[new_dim_coord].pint.units
+            old_dim = arr.coords[self.locus.dim].dims[0]
+            units = arr.coords[self.locus.dim].pint.units
 
             arr = arr.swap_dims({old_dim: new_dim_coord})
 
@@ -800,8 +878,7 @@ class SliceSelection(Calculator):
             swapped.append(arr)
 
         return swapped
-    
-    
+     
     def assign_ordinal_coordinates(self, data, kept_indices):
         new_dim = self.new_dim or "interval"
 
@@ -823,15 +900,6 @@ class SliceSelection(Calculator):
 
     def concat_or_extract(self, data, kept_indices):
 
-        for i, arr in enumerate(data):
-            if i == 0:
-                canonical_shape = arr.shape
-            if arr.shape != canonical_shape:
-                raise ValueError(
-                    "You are calling a method on a ragged array "
-                    "that is designed for a uniform one."
-                )
-
         if self.multi_select:
 
             selected_data = xr.concat(
@@ -849,43 +917,9 @@ class SliceSelection(Calculator):
             selected_data = data[0]
         return selected_data
 
-    def select_point_process(self, data, data_schema):
+    def point_process_concat_or_extract(self, data, kept_indices):
+        pass
 
-        dim_source_map = {}
-
-        for dim in self.selection_bounds:
-            if data_schema.is_value_metadim(dim):
-                if isinstance(data_schema, type_registry.DatasetSchema):
-                    source = data[data_schema.variable_for_metadim(dim)]
-                else:
-                    source = data
-
-            else:
-                source = data.coords[data_schema.concrete_dim_from(dim)]
-            dim_source_map[dim] = source
-
-        selection_bounds = self.selection_bounds.to_array_of_dicts()
-
-        selected = []
-
-        for bounds in selection_bounds:
-            mask = reduce(
-                and_,
-                [
-                    (source >= bounds[dim][0]) & (source < bounds[dim][1])
-                    for dim, source in dim_source_map.items()
-                ],
-            )
-            selected.append(data.where(mask, drop=True))
-
-        selected = self.concat_or_extract(selected)
-
-        if self.new_dim:
-            selected = self.attach_point_process_relative_coords(
-                selected, selection_bounds
-            )
-
-        return selected
     
     def output_dim_order(self, dims, data_schema):
         ordinal_dims =  data_schema.names_by_axis_kind(AxisKind.ORDINAL_INDEX)
@@ -893,13 +927,13 @@ class SliceSelection(Calculator):
         feature_dims = [
             dim for dim in dims
             if dim not in ordinal_dims
-            and dim != self._new_dim_coord()
+            and dim != self._new_index_coord(data_schema)
         ]
 
         ordered = (
             feature_dims
             + [dim for dim in ordinal_dims if dim in dims]
-            + [self._new_dim_coord()]
+            + [self._new_index_coord(data_schema)]
         )
 
         return ordered
@@ -909,17 +943,3 @@ class SliceSelection(Calculator):
         arr = arr.transpose(*[dim for dim in ordered if dim in arr.dims])
         return arr
 
-    def attach_point_process_relative_coords(self, data, selection_bounds):
-
-        # say we've selected on time, and created dim epoch.
-        # the arrays now need dim epoch_spikes, epochs
-        # there needs to be a key spike_times, and a key epoch_spike_times
-
-        # this can probably be the same logic as attach_continuous_relative_coords
-        # except if you've selected on `time` you effectively need a dataset with
-        # a new key: `relative_spike_times`
-        # in point of fact select point process isn't going to work at all until
-        # I implement some kind of solution for ragged arrays so maybe I should
-        # just hold off implementing this until then
-
-        pass

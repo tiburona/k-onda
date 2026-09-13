@@ -23,6 +23,12 @@ prioritized or promised. Broad, prioritized directions belong in the
 
 ## Schema infrastructure
 
+- Consider explicit preferences in `DatasetSchema.default_variable_for()` when
+  inferring a Dataset key. For example, histogramming time could prefer a variable
+  whose values represent time (spike timestamps) over one with a time axis
+  (waveforms). Decide how preferences depend on the operation and when unresolved
+  ambiguity should require an explicit key, rather than choosing the first match.
+
 - Let coordinate schemas declare a value-type family, such as numeric, datetime,
   categorical, or string. Define compatibility between type families centrally so
   operations can determine whether two coordinates are comparable from their
@@ -51,6 +57,10 @@ prioritized or promised. Broad, prioritized directions belong in the
 
 
 ## Selection
+
+- Default point-process epoch selection to NaN padding, while preserving an
+  explicit way to forbid padding. Keep this change narrow; leave schema-level
+  dtype metadata for a separate demonstrated need.
 
 - I removed intervals and exclude initial from `Rate` because I decided they should be
   `select`'s responsibility. These parameters used to accept callables. Eventually

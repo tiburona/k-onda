@@ -97,4 +97,4 @@ class FWHM(Calculator):
         return super()._wrap_result(result)
 
     def output_schema(self, input_schema):
-        return input_schema.without_dim(self.dim)
+        return input_schema.without_axis_for(self.dim)

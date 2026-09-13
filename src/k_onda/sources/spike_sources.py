@@ -217,7 +217,12 @@ class SpikeCluster(DataComponent):
                 AxisInfo(
                     "spike",
                     kind=AxisKind.POINT_PROCESS_INDEX,
-                    item_unit=ureg.spike
+                    item_unit=ureg.spike,
+                    event_value_ordering="increasing",
+                    coords=(
+                        CoordInfo(name="time", is_regularly_sampled=False, role="auxiliary"),
+                    ),
+                    metadim="spike"
                 )
             ],
             value_metadim="time"
@@ -228,12 +233,13 @@ class SpikeCluster(DataComponent):
                 AxisInfo(
                     "spike",
                     AxisKind.POINT_PROCESS_INDEX,
-                    metadim=None,
-                    coords=(CoordInfo(
-                        name="spike", 
-                        is_regularly_sampled=False
-                        ),),
-                    item_unit=ureg.spike
+                    event_value_ordering="increasing",
+                    coords=(
+                        CoordInfo(name="spike", is_regularly_sampled=False),
+                        CoordInfo(name="time", is_regularly_sampled=False, role="auxiliary")
+                        ),
+                    item_unit=ureg.spike,
+                    metadim="spike"
                 ),
                 AxisInfo(
                     "sample", 
@@ -271,19 +277,22 @@ class SpikeCluster(DataComponent):
         return signal
 
     def data_loader(self):
+        ureg = pint.get_application_registry()
         spike_times = self.data_source.spike_times_from_cluster(self.cluster_id)
-        spike_coord =  ("spike", np.arange(len(spike_times)))
+        unitful_times = spike_times * pint.application_registry.s
+        spike_coord =  ("spike", np.arange(len(spike_times)) * ureg.spike)
         spike_times = xr.DataArray(
-            spike_times * pint.application_registry.s, 
+            unitful_times, 
             dims=("spike",), 
-            coords={"spike": spike_coord}
+            coords={"spike": spike_coord, "time": ("spike", unitful_times)}
         )
 
         waveforms = self.data_source.waveforms_from_cluster(self.cluster_id)
         waveform_dims = ("spike", "sample")
         waveform_coords = {
             "spike": spike_coord,
-            "sample": ("sample", np.arange(waveforms.shape[1]))
+            "time": ("spike", unitful_times),
+            "sample": ("sample", np.arange(waveforms.shape[1]),)
         }
 
         if self.has_electrode_dim:

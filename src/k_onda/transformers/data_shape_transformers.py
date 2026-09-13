@@ -161,12 +161,12 @@ class UnstackSignals(Transformer):
         if isinstance(input_schema, DatasetSchema):
             return DatasetSchema(
                 {
-                    key: schema.without(stacking_dim)
+                    key: schema.without_axis_named(stacking_dim)
                     for key, schema in input_schema.items()
                 }
             )
 
-        return input_schema.without(stacking_dim)
+        return input_schema.without_axis_named(stacking_dim)
 
     def resolve_output_class(self):
         from ..sources import Collection

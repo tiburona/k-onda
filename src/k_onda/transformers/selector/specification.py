@@ -83,13 +83,6 @@ class SpecifySelection(Transformer):
                 f"{self.format_call()}: input schema cannot be selected on "
                 f"{self.locus.dim!r}."
             )
-        if input_schema.is_point_process() and isinstance(
-            self.locus, type_registry.LocusSet
-        ):
-            raise NotImplementedError(
-                f"{self.format_call()}: this operation would produce a ragged "
-                "array, and "
-                "support for that is not yet implemented."
-            )
+  
 
 

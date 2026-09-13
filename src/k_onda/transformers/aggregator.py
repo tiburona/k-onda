@@ -541,7 +541,7 @@ class ReduceDim(Calculator):
                     )
                 ) 
             
-            output_schema = output_schema.without(dim)
+            output_schema = output_schema.without_axis_named(dim)
 
         return output_schema
 

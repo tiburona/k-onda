@@ -12,6 +12,16 @@ Experiment inherits from AnnotatorMixin, but is not currently setting an annotat
 
 ## Coordinates and schemas
 
+`DatasetSchema` does not validate shared-coordinate consistency at construction.
+When a coordinate name appears in multiple variable schemas, conflicting coordinate
+definitions or dimension associations should be rejected there, rather than checked
+repeatedly during coordinate lookup. This does not require the coordinate to appear
+in every variable schema, or the entire containing `AxisInfo` objects to be identical.
+
+`DatasetSchema.coord_by_name()` and `DatasetSchema.axis_by_coord_name()` use
+different strategies for resolving ambiguity across variable schemas. Their
+ambiguity-resolution policies should be made consistent.
+
 Right now the only way to express tolerance for floating point differences across a number of calculators is 
 with the parameter tolerance_decimals. This is unsatisfactory -- the meaning of a decimal changes with the unit.
 I need some kind of general, unit-aware approach to this.  
@@ -81,6 +91,12 @@ Check the behavior of the various key modes (particularly "rename") and make sur
 but select normalizes user input before passing object types the fluent method user won't recognize to
 the transformer, so it needs validation that reflect the inputs the user passes, while the transformer
 needs validation that reflect its configured inputs.
+
+Creating `new_dim` currently also creates relative coordinates. These behaviors
+need to be separated: organizing selections along a new dimension does not
+inherently require subtracting a coordinate origin. Nominal or ordinal label
+selections should be able to create a new dimension while preserving their labels,
+without assuming that coordinate differences are meaningful.
 
 Disjoint time selection doesn't provide an observation duration for downstream calculations. `SliceSelection.start_and_duration()` stores tuples of per-bound starts and durations, but `Rate` requires one scalar denominator.
 

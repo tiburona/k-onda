@@ -85,7 +85,7 @@ class LFPChannel(DataComponent):
                             ),
                         )
                 )], 
-            value_metadim="V" 
+            value_metadim="V"
         )
     
     @property

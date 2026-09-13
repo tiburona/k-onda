@@ -115,6 +115,11 @@ class AxisInfo:
     created_from_metadim: str | None = None  # these coords are provenance 
     created_from_dim: str | None = None  # metadata specific to ordinal axes 
     item_unit: object | None = None  # the unit of an item represented by a point process index 
+    event_value_ordering: str | None = None # the ordering of values in a point process index
+
+    @property
+    def index_coord(self):
+        return [coord for coord in self.coords if coord.name == self.name][0]
  
     def __post_init__(self):
         coords = tuple(self.coords)
@@ -138,8 +143,6 @@ class AxisInfo:
             metadim=self.metadim,
             ordering=ordering,
         )
-        
-
 
 @type_registry.register
 @dataclass
@@ -246,7 +249,6 @@ class Schema:
                 name: self.coord_by_name(name).levels for name in self.coord_names if name in names
                 }
 
-     
     def ax_coord_map(self, coords=None) -> dict:
         if not coords:
             return {ax.name: self.coord_names_by_dim(ax.name) for ax in self.axes}
@@ -258,17 +260,16 @@ class Schema:
                 for ax in self.axes
                 }
 
-    def without(self, name) -> Schema:
-        new_schema = copy(self)
-        new_schema.axes = [ax for ax in self.axes if ax.name != name]
-        return new_schema
-
-    def without_dim(self, dim) -> Schema:
-        new_schema = copy(self)
-        new_schema.axes = [
-            ax for ax in self.axes if ax is not self.ax_with_dim(dim)
-        ]
-        return new_schema
+    def without_axis_named(self, name) -> Schema:
+        # Requires exact dim name
+        return replace(self, axes=[ax for ax in self.axes if ax.name != name])
+        
+    def without_axis_for(self, name) -> Schema:
+        # Will find the axis that belongs to the supplied name
+        return replace(
+            self, 
+            axes=[ax for ax in self.axes if ax is not self.axis_with_dim(name)]
+            )
     
     def with_axis(self, axis, *, if_exists="keep"):
         if self.has_name(axis.name):
@@ -279,13 +280,12 @@ class Schema:
         return self.with_added(axis)
 
     def with_added(self, axis) -> Schema:
-        new_schema = copy(self)
-        new_schema.axes = [*self.axes, axis]
-        return new_schema
+        return replace(self, axes=[*self.axes, axis])
 
     def rename_axis(self, old_name, name):
         new_schema = self.copy()
         old_axis = self.axis_by_name(old_name)
+        
         new_axis = replace(old_axis, name=name)
         for i, axis in enumerate(new_schema.axes):
             if axis.name == old_name:
@@ -362,10 +362,9 @@ class Schema:
         for coord_name in coord_names:
             used_axis_names.append(getattr(self.axis_by_coord_name(coord_name), 'name', None)) 
         return [name for name in self.dim_names if name not in used_axis_names]
-        
 
     def is_point_process(self) -> bool:
-        return any(ax.kind == AxisKind.POINT_PROCESS_INDEX for ax in self.axes)
+        return bool(self.point_process_axis())
 
     def is_point_process_essential(self, dim) -> bool:
         for ax in self.axes:
@@ -376,7 +375,14 @@ class Schema:
             return True
         return False
 
-    def ax_with_dim(self, dim) -> AxisInfo:
+    def point_process_axis(self) -> AxisInfo:
+        return [ax for ax in self.axes if ax.kind == AxisKind.POINT_PROCESS_INDEX][0]
+
+    def is_coord_on_point_process_essential_dim(self, coord_name):
+        axis = self.axis_by_coord_name(coord_name)
+        return axis.kind == AxisKind.POINT_PROCESS_INDEX
+
+    def axis_with_dim(self, dim) -> AxisInfo:
         # 1. exact dim match
         if self.has_name(dim):
             return self.axis_by_name(dim)
@@ -392,7 +398,7 @@ class Schema:
             return None
 
     def concrete_dim_from(self, dim) -> str:
-        axis = self.ax_with_dim(dim)
+        axis = self.axis_with_dim(dim)
         return axis if axis is None else axis.name
 
     def axis_position_from(self, name) -> int | None:
@@ -418,7 +424,7 @@ class Schema:
         new_schema = copy(self)
         coords = copy(ax.coords) + coords
         new_ax = replace(ax, coords=coords)
-        new_schema = new_schema.without(ax.name)
+        new_schema = new_schema.without_axis_named(ax.name)
         new_schema = new_schema.with_added(new_ax)
         return new_schema
     
@@ -430,10 +436,9 @@ class Schema:
         new_schema = copy(self)
         coords = [c for c in copy(ax.coords) if c.name != coord.name]
         new_ax = replace(ax, coords=coords)
-        new_schema = new_schema.without(ax.name)
+        new_schema = new_schema.without_axis_named(ax.name)
         new_schema = new_schema.with_added(new_ax)
         return new_schema
-
 
     def update_coords(self, coord_name, new_coord_param):
         axis = self.axis_by_coord_name(coord_name)
@@ -446,15 +451,14 @@ class Schema:
         )
 
         new_axis = replace(axis, coords=new_coords)
-
-        return self.without(axis.name).with_added(new_axis)
+        return self.without_axis_named(axis.name).with_added(new_axis)
 
     def with_coord_grouping(self, coord_name, *, is_grouping=True):
         return self.update_coords(coord_name, {"is_grouping": is_grouping})
         
     def add_levels_to_coord(self, coord_name, levels):
        return self.update_coords(coord_name, {"levels": levels})
-    
+
     def is_grouping_coord(self, coord_name) -> bool:
         coord = self.coord_by_name(coord_name)
         return coord is not None and coord.is_grouping
@@ -465,8 +469,8 @@ class Schema:
         by_name = {ax.name: ax for ax in self.axes}
         return type(self)(
             axes=tuple(by_name[name] for name in axis_names),
-              value_metadim=self.value_metadim
-              )
+            value_metadim=self.value_metadim
+            )
 
     def get_common_metadim(self, our_coord, other_schema, other_coord):
         metadim = self.metadim_from(our_coord)
@@ -587,6 +591,10 @@ class DatasetSchema(MutableMapping):
         else:
             return all(s.is_point_process() for s in self.key_schemas.values())
 
+    def point_process_axis(self):
+        representative_schema = list(self.values())[0]
+        return representative_schema.point_process_axis()
+
     def is_point_process_essential(self, dim):
         # axis-level match in any sub-schema
         if any(s.is_point_process_essential(dim) for s in self.key_schemas.values()):
@@ -595,6 +603,10 @@ class DatasetSchema(MutableMapping):
         if dim in self.key_schemas:
             return True
         return False
+
+    def is_coord_on_point_process_essential_dim(self, coord_name):
+        axis = self.axis_by_coord_name(coord_name)
+        return axis.kind == AxisKind.POINT_PROCESS_INDEX
 
     def is_value_metadim(self, dim) -> bool:
         return any(s.is_value_metadim(dim) for s in self.values())
@@ -613,7 +625,7 @@ class DatasetSchema(MutableMapping):
 
     def concrete_dim_from(self, dim):
         for s in self.values():
-            ax = s.ax_with_dim(dim)
+            ax = s.axis_with_dim(dim)
             if ax is not None:
                 return ax.name
         return None
@@ -644,6 +656,9 @@ class DatasetSchema(MutableMapping):
 
     def with_axis(self, axis, *, if_exists="keep"):
         return self.map_schemas(lambda s: s.with_axis(axis, if_exists=if_exists))
+
+    def copy(self):
+        return self.map_schemas(lambda s: s.copy())
     
     @property
     def coord_names(self):
@@ -711,6 +726,33 @@ class DatasetSchema(MutableMapping):
             "is not yet implemented.")
         else:
             raise ValueError(f"Unknown mode {mode}")
+
+    def coord_by_name(self, name):
+        schemas = list(self.values())
+        if not any(name in s.coord_names for s in schemas):
+            return None
+        if not all(name in s.coord_names for s in schemas):
+            raise ValueError(
+                "{name} not present in all data schemas in a keyed dataset schema.  You might " \
+                "want to select a particulary data schema by key."
+                )
+        return schemas[0].coord_by_name(name)
+
+    def ordinal_axes_created_from(self, metadim):
+        ordinal_axes = []
+        ordinal_axes_names = []
+
+        for schema in self.values():
+            for ax in schema.ordinal_axes_created_from(metadim):
+                if ax.name not in ordinal_axes_names:
+                    ordinal_axes_names.append(ax.name)
+                    ordinal_axes.append(ax)
+
+        return ordinal_axes
+              
+          
+        
+        
         
     def add_coords_to_axis_with_name(self, ax_name, coords):
         return self.map_schemas(lambda s: s.add_coords_to_axis_with_name(ax_name, coords))
