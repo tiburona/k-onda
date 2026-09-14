@@ -10,7 +10,7 @@ def parent_signal():
     _, _, _, data_source, data_identity, _ = make_lineage()
     component = FakeDataComponent(data_source, data_identity=data_identity)
     component.data_schema = Schema(
-        axes=[AxisInfo("time", AxisKind.AXIS, metadim="time")]
+        axes=[AxisInfo("time", AxisKind.AXIS, default_metadim="time")]
     )
     return component.to_signal()
 experiment, subject, session, data_source, data_identity, _ = make_lineage()
@@ -35,4 +35,3 @@ class TestCalculatorSignalConstruction:
         assert parent_signal.data_schema is parent_schema
         assert parent_signal.data_schema.has_name("time")
         assert not child.data_schema.has_name("time")
-

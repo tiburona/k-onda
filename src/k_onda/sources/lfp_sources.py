@@ -77,10 +77,10 @@ class LFPChannel(DataComponent):
                 AxisInfo(
                     "time", 
                     kind=AxisKind.AXIS, 
-                    metadim="time", 
                     coords=(
                         CoordInfo(
                             name="time", 
+                            metadim="time",
                             is_regularly_sampled=True
                             ),
                         )

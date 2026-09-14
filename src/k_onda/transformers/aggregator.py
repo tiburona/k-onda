@@ -536,7 +536,6 @@ class ReduceDim(Calculator):
                     AxisInfo(
                         name=coord.name,
                         kind=AxisKind.AXIS,
-                        metadim=coord.metadim,
                         coords=(replace(coord, is_grouping=False),)
                     )
                 ) 
@@ -549,7 +548,7 @@ class ReduceDim(Calculator):
     def _validate_data_schema(self, input_schema):
         super()._validate_data_schema(input_schema)
         if self.dims is not None:
-            missing = [dim for dim in self.dims if not input_schema.has_dim(dim)]
+            missing = [dim for dim in self.dims if not input_schema.has_name(dim)]
             if missing:
                 raise ValueError(
                     f"{self.format_call()}: cannot reduce missing dimensions: "
@@ -558,7 +557,7 @@ class ReduceDim(Calculator):
 
         if self.weights is not None:
             missing_weight_dims = [
-                dim for dim in self.weights.dims if not input_schema.has_dim(dim)
+                dim for dim in self.weights.dims if not input_schema.has_name(dim)
             ]
             if missing_weight_dims:
                 raise ValueError(

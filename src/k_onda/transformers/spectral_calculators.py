@@ -185,7 +185,7 @@ class Spectrogram(PaddingCalculator):
             )
 
     def output_schema(self, input_schema):
-        new_axis = AxisInfo(name="frequency", metadim="frequency", kind=AxisKind.AXIS)
+        new_axis = AxisInfo(name="frequency", default_metadim="frequency", kind=AxisKind.AXIS)
         return input_schema.with_added(new_axis)
 
     def _compute_padlen(self, _, apply_kwargs):

@@ -110,7 +110,7 @@ class CoordInfo:
 class AxisInfo:
     name: str  # concrete dim or variable name
     kind: AxisKind  # structural: how the machinery treats it
-    metadim: str | None = None  # semantic: what physical quantity it represents
+    default_metadim: str | None = None  # used only when creating the default index coordinate
     coords: tuple[CoordInfo, ...] = ()  # all the coords available on the axis
     created_from_metadim: str | None = None  # these coords are provenance 
     created_from_dim: str | None = None  # metadata specific to ordinal axes 
@@ -120,6 +120,11 @@ class AxisInfo:
     @property
     def index_coord(self):
         return [coord for coord in self.coords if coord.name == self.name][0]
+
+    @property
+    def metadim(self) -> str | None:
+        """The quantity represented by the current index coordinate."""
+        return self.index_coord.metadim
  
     def __post_init__(self):
         coords = tuple(self.coords)
@@ -140,7 +145,7 @@ class AxisInfo:
 
         return CoordInfo(
             name=self.name,
-            metadim=self.metadim,
+            metadim=self.default_metadim,
             ordering=ordering,
         )
 
@@ -367,13 +372,9 @@ class Schema:
         return bool([ax for ax in self.axes if ax.kind == AxisKind.POINT_PROCESS_INDEX])
 
     def is_point_process_essential(self, dim) -> bool:
-        for ax in self.axes:
-            if ax.kind == AxisKind.POINT_PROCESS_INDEX:
-                if ax.name == dim or ax.metadim == dim:
-                    return True
-        if self.value_metadim == dim:
-            return True
-        return False
+        if not self.is_point_process():
+            return False
+        return dim == self.point_process_axis().name
 
     def point_process_axis(self) -> AxisInfo:
         return [ax for ax in self.axes if ax.kind == AxisKind.POINT_PROCESS_INDEX][0]
@@ -414,8 +415,8 @@ class Schema:
         return None
 
     def metadim_from(self, coord_name) -> str | None:
-        axis = self.axis_by_coord_name(coord_name)
-        return axis if axis is None else axis.metadim
+        coord = self.coord_by_name(coord_name)
+        return coord if coord is None else coord.metadim
 
     def is_value_metadim(self, dim) -> bool:
         return self.value_metadim == dim
@@ -557,6 +558,9 @@ class DatasetSchema(MutableMapping):
     def has_dim(self, dim):
         return any([key_schema.has_dim(dim) for key_schema in self.key_schemas.values()])
 
+    def has_name(self, name):
+        return any([key_schema.has_name(name) for key_schema in self.key_schemas.values()])
+    
     def replace_key(self, key, new_schema):
         return DatasetSchema({**self.key_schemas, key: new_schema})
 

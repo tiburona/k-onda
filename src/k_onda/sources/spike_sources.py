@@ -220,9 +220,15 @@ class SpikeCluster(DataComponent):
                     item_unit=ureg.spike,
                     event_value_ordering="increasing",
                     coords=(
-                        CoordInfo(name="time", is_regularly_sampled=False, role="auxiliary"),
+                        CoordInfo(name="spike", is_regularly_sampled=False, metadim="spike"),
+                        CoordInfo(
+                            name="time", 
+                            is_regularly_sampled=False, 
+                            role="auxiliary", 
+                            metadim="time"
+                            ),
                     ),
-                    metadim="spike"
+                    default_metadim="spike"
                 )
             ],
             value_metadim="time"
@@ -235,19 +241,24 @@ class SpikeCluster(DataComponent):
                     AxisKind.POINT_PROCESS_INDEX,
                     event_value_ordering="increasing",
                     coords=(
-                        CoordInfo(name="spike", is_regularly_sampled=False),
-                        CoordInfo(name="time", is_regularly_sampled=False, role="auxiliary")
+                        CoordInfo(name="spike", is_regularly_sampled=False, metadim="spike"),
+                        CoordInfo(
+                            name="time", 
+                            is_regularly_sampled=False, 
+                            metadim="time", 
+                            role="auxiliary"
+                            )
                         ),
                     item_unit=ureg.spike,
-                    metadim="spike"
+                    default_metadim="spike"
                 ),
                 AxisInfo(
                     "sample", 
-                    AxisKind.AXIS, 
-                    metadim="time", 
+                    AxisKind.AXIS,  
                     coords=(CoordInfo(
                         name="sample", 
-                        reference_frame="relative"
+                        reference_frame="relative",
+                        metadim="time"
                         ),)
                 ),
             ]
@@ -257,7 +268,7 @@ class SpikeCluster(DataComponent):
                 AxisInfo(
                     "electrode", 
                     AxisKind.AXIS, 
-                    metadim=None
+                    default_metadim=None
                     )
                 )
         

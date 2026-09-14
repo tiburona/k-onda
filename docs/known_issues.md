@@ -12,6 +12,14 @@ Experiment inherits from AnnotatorMixin, but is not currently setting an annotat
 
 ## Coordinates and schemas
 
+`AxisInfo.metadim` now derives from the current index coordinate; `CoordInfo.metadim`
+is the authoritative declaration. Remaining callers need to distinguish index
+metadims from auxiliary-coordinate metadims when coordinates on one axis represent
+different quantities (for example, spike position and event time). Substituting
+the containing axis's metadim for a requested coordinate's has caused time
+histogram schemas to be labeled as spike position. Audit coordinate resolution
+and relative-coordinate creation for this distinction.
+
 `DatasetSchema` does not validate shared-coordinate consistency at construction.
 When a coordinate name appears in multiple variable schemas, conflicting coordinate
 definitions or dimension associations should be rejected there, rather than checked

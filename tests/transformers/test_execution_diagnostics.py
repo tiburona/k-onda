@@ -61,7 +61,7 @@ class RaiseWhileMerging(Calculator):
 
 
 def _schema(dim="time"):
-    return Schema(axes=[AxisInfo(dim, AxisKind.AXIS, metadim=dim)])
+    return Schema(axes=[AxisInfo(dim, AxisKind.AXIS, default_metadim=dim)])
 
 
 def _source_signal(data, schema=None, *, conditions=None):

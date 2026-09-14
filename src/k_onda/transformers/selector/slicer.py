@@ -61,7 +61,7 @@ class SliceSelection(Calculator):
             metadim = arr_schema.metadim_from(self.locus.dim)
 
             # update coords on the old dim
-            metadim_axis = arr_schema.axes_by_metadim(metadim)[0]
+            selection_axis = arr_schema.axis_by_coord_name(self.locus.dim)
             is_regularly_sampled = arr_schema.coord_by_name(self.locus.dim).is_regularly_sampled
             coords = (
                 CoordInfo(
@@ -82,7 +82,7 @@ class SliceSelection(Calculator):
                         is_regularly_sampled=is_regularly_sampled
                     ),
                 )
-            arr_schema = arr_schema.add_coords_to_axis(metadim_axis, coords=coords)
+            arr_schema = arr_schema.add_coords_to_axis(selection_axis, coords=coords)
 
             # add the new dim
             new_axis = AxisInfo(
@@ -211,25 +211,10 @@ class SliceSelection(Calculator):
 
     def _apply(self, data, data_schema=None, diagnostic_context=None):
 
-        selected, kept_indices = self.select(data, data_schema)
-        if not self.new_dim:
-            selected = self.concat_or_extract(selected, kept_indices)
-            return selected
-    
-        selected, idx_of_longest_arr = self._pad_ragged_array_if_necessary(selected, data_schema)
-    
-        parent_coords = self.parent_metadata_coords(data, data_schema)
+        if self.is_trim:
+            return self.trim(data)
 
-        if self.new_dim:
-            selected = self.attach_relative_coords(selected, data_schema, idx_of_longest_arr)
-        
-        selected = self.swap_coords(selected, data_schema)
-        selected = self.concat_or_extract(selected, kept_indices)
-        selected = self.restore_ordinal_dims(selected, data_schema, parent_coords)
-        selected = self.attach_condition_coords(selected, kept_indices)
-        selected = self.transpose(selected, data_schema)
-
-        return selected 
+        return self.select(data, data_schema)
 
     def attach_relative_coords(self, selected, data_schema, idx_of_longest_arr):
         if data_schema.is_point_process():
@@ -237,7 +222,7 @@ class SliceSelection(Calculator):
         else:
             return self.attach_continuous_relative_coords(selected, data_schema, idx_of_longest_arr)
             
-    def trim_continuous(self, data):
+    def trim(self, data):
         selection_bounds = self.selection_bounds.to_array_of_dicts()
 
         mask = reduce(
@@ -625,7 +610,7 @@ class SliceSelection(Calculator):
 
     def select(self, data, data_schema):   
         concrete_xarray_dim = data_schema.concrete_dim_from(self.locus.dim)
-        
+
         selection_bounds = self.selection_bounds.to_array()
 
         do_select_by_parent_intervals = self.select_by_parent_intervals(data_schema)
@@ -690,7 +675,23 @@ class SliceSelection(Calculator):
             raise ValueError(
                 "Selection produced no data in the current `selection_bounds`."
             )
-        return selected, kept_indices
+        if not self.new_dim:
+            selected = self.concat_or_extract(selected, kept_indices)
+            return selected
+    
+        selected, idx_of_longest_arr = self._pad_ragged_array_if_necessary(selected, data_schema)
+    
+        parent_coords = self.parent_metadata_coords(data, data_schema)
+
+        if self.new_dim:
+            selected = self.attach_relative_coords(selected, data_schema, idx_of_longest_arr)
+        
+        selected = self.swap_coords(selected, data_schema)
+        selected = self.concat_or_extract(selected, kept_indices)
+        selected = self.restore_ordinal_dims(selected, data_schema, parent_coords)
+        selected = self.attach_condition_coords(selected, kept_indices)
+        selected = self.transpose(selected, data_schema)
+        return selected
     
     def attach_condition_coords(self, selected, kept_indices):
 
@@ -922,17 +923,18 @@ class SliceSelection(Calculator):
     
     def output_dim_order(self, dims, data_schema):
         ordinal_dims =  data_schema.names_by_axis_kind(AxisKind.ORDINAL_INDEX)
+        selection_dim = data_schema.axis_by_coord_name(self.locus.dim).name
         
         feature_dims = [
             dim for dim in dims
             if dim not in ordinal_dims
-            and dim != self._new_index_coord(data_schema)
+            and dim != selection_dim
         ]
 
         ordered = (
             feature_dims
             + [dim for dim in ordinal_dims if dim in dims]
-            + [self._new_index_coord(data_schema)]
+            + [selection_dim]
         )
 
         return ordered
@@ -941,4 +943,3 @@ class SliceSelection(Calculator):
         ordered = self.output_dim_order(arr.dims, data_schema)
         arr = arr.transpose(*[dim for dim in ordered if dim in arr.dims])
         return arr
-

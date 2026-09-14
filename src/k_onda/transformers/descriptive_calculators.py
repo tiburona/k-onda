@@ -143,7 +143,7 @@ class Histogram(Calculator):
 
     def output_schema(self, input_schema):
         schema = input_schema.without_axis_for(self.dim)
-        metadim = input_schema.metadim_from(self.dim) or input_schema.value_metadim
+        metadim = input_schema.coord_by_name(self.dim).metadim 
         if isinstance(self.bins, int) or self.bin_size:
             is_regularly_sampled = True
         elif isinstance(self.bins, Callable):
@@ -160,7 +160,6 @@ class Histogram(Calculator):
             AxisInfo(
                 f"{self.dim}_bins",
                 AxisKind.AXIS,
-                metadim=metadim or self.dim,
                 coords=(
                     CoordInfo(
                         name=f"{self.dim}_bins", 
